@@ -1,16 +1,42 @@
 # 知识模型
 
-状态：Stage 0 概念定义，不设计存储字段、检索实现或访问控制技术。依据 [PRODUCT_SPEC.md](../product/PRODUCT_SPEC.md) 的 FR-03、FR-04、FR-05、FR-07、FR-17 至 FR-20、FR-22、FR-23。
+状态：保留 Stage 0 语义；C-003A 实现 KnowledgeAssertion / Observation 领域值与不变量，不实现存储、检索、权限执行或知识传播。依据 [PRODUCT_SPEC.md](../product/PRODUCT_SPEC.md) 的 FR-03、FR-04、FR-05、FR-07、FR-17 至 FR-20、FR-22、FR-23，以及已接受的 [Architecture Review 001](ARCHITECTURE_REVIEW_001.md)。
 
 ## 1. 三种不同的语义
 
 | 概念 | 含义 | 不能等同于 |
 | --- | --- | --- |
 | WorldTruth | 世界中真实成立的事实，是“发生了什么、什么为真”的依据 | 所有参与者已经知道的内容 |
-| Character Knowledge | 归属于某个角色的已知内容 | 世界的全知视角、其他角色的知识或玩家知识 |
+| CharacterBelief / Character Knowledge | 归属于某个角色的认知，可以错误或不确定 | 世界的全知视角、其他角色的知识或玩家知识 |
 | Player Knowledge | 产品中归属于玩家已知范围的内容 | 后台全部事实、用户在产品外知道的全部信息 |
 
-Knowledge 是知识内容的概念；KnowledgeOwnership 描述知识归属于谁。角色与玩家可以知道同一件事，但一方知道并不自动证明另一方也知道。是否以及如何纳入错误认知、传闻与不确定认知待确认；不能用“某角色相信它”为依据改写 WorldTruth。
+Knowledge 是知识内容的概念；KnowledgeOwnership 描述知识归属于谁。角色与玩家可以知道同一件事，但一方知道并不自动证明另一方也知道。C-003A 已明确允许 CharacterBelief 与 WorldTruth 冲突，不自动纠正；传闻、不确定认知的获得与纠正政策仍待确认。不能用“某角色相信它”为依据改写 WorldTruth。
+
+## C-003A 领域定义
+
+实现见 [knowledge.py](../../services/core/src/livingworld/domain/knowledge.py)，共享时间与身份见 [DOMAIN_MODEL.md](DOMAIN_MODEL.md)。
+
+### KnowledgeAssertion 与归属
+
+| scope | owner 不变量 |
+| --- | --- |
+| `truth` | 必须为 None，世界事实没有 Character / Player owner |
+| `character_belief` | 必须是一个 CharacterId，不能为 PlayerId、None 或主体集合 |
+| `player_knowledge` | 必须是一个 PlayerId，不能为 CharacterId、None 或主体集合 |
+
+断言包含独立 `KnowledgeAssertionId`、`world_id`、scope、owner、subject、predicate、结构化 value、epistemic_status、confidence、valid_from/to、provenance_event_id、source_assertion_id 和 Revision。自身身份、owner、来源事件和来源断言的世界归属必须一致。
+
+subject / predicate 是必填非空语义标签；value 接收有限 JSON 数据并防御性复制、递归冻结，不是自由文本 Memory 列表。epistemic_status 是必填非空扩展标签，不冻结推理状态机。confidence 是有限 Decimal 的 [0, 1] 或 None，不把置信度当作事实权威，也不比较不同主体的值来自动纠正信念。
+
+**时间表示歧义已解决：** `valid_from: WorldTime`、`valid_to: WorldTime | None`，均属于世界时间线，不是 UTC。拒绝 `valid_to < valid_from`；None 表示未指定终点。不实现有效期查询，亦不冻结终点是否包含。不同分支在同一 WorldTime 可有不同认知；C-003A 不实现分支继承。
+
+### Observation
+
+Observation 定义 `world_id`、`principal_id: CharacterId | PlayerId`、`target_id: EventId | KnowledgeAssertionId`、channel、`observed_at: WorldTime`。可选 `created_at` 仅用于系统审计，必须是 aware datetime 并归一化 UTC，拒绝 naive。
+
+channel 必须为 ObservationChannel 的 `witnessed / told / message / news / document / inferred` 之一；不接受未知渠道或未解析的原始字符串。主体与目标必须在同一世界。该对象记录一个显式观察，不自动授予检索权限、不传播/复制断言，也不因 inactive 玩家仍在某地点而创建见证记录。
+
+权限过滤必须先于 semantic retrieval / prompt assembly，这是已接受的架构边界；C-003A 只验证 scope / owner，不实现检索或权限服务。错误所有权抛出 InvalidKnowledgeOwnershipError，跨世界引用抛出 CrossWorldReferenceError。
 
 ## 2. 已冻结的边界
 
@@ -46,7 +72,7 @@ Knowledge 是知识内容的概念；KnowledgeOwnership 描述知识归属于谁
 | 问题 | 需要明确的边界 |
 | --- | --- |
 | 玩家何时算“知道” | 在场、收到、阅读、转述等情境如何处理 |
-| 传闻、谎言和误认 | 与真实事实的区别、来源和不确定性的表达 |
+| 传闻、谎言和误认 | 错误 CharacterBelief 已允许；获得、转述、来源及呈现政策仍待明确 |
 | 知识修正与遗忘 | 新证据、错误消息、记忆变化是否及如何影响已知内容 |
 | 初始知识 | World / Character Draft 与导入内容如何分配给各拥有者 |
 | 跨分支知识 | Checkpoint 恢复、Timeline Branch 和玩家产品外记忆的边界 |

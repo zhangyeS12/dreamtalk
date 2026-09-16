@@ -8,9 +8,11 @@ LivingWorld 是持久化、事件驱动的多角色 AI 世界，不是普通聊�
 
 ## 开发状态
 
-当前阶段：**Stage 1 — C-002 Final Engineering Foundation**。已建立共享 React UI、Tauri v2 Windows 开发壳、Python Core 启停协议、系统 API、SQLite 迁移元数据、结构化日志和 CI。页面仅显示 Core Connecting / Ready / Failed。
+当前阶段：**Stage 2 — C-003A Domain Foundation**。已建立世界、地点、参与者、单一物理位置、有向关系、不可变事件、知识归属、显式观察及命令回执的领域模型和不变量。世界逻辑时间使用整数微秒 WorldTime，现实时间使用 UTC-aware datetime；详见 [领域模型](docs/architecture/DOMAIN_MODEL.md)。
 
-Director、Character Agent、世界模拟、World/Character 业务表和最终 UI 尚未实现。冻结规则和 P-01 至 P-19 不变，见 [PRODUCT_SPEC.md](docs/product/PRODUCT_SPEC.md)。Stage 0 审查见 [ARCHITECTURE_REVIEW_001.md](docs/architecture/ARCHITECTURE_REVIEW_001.md)，本阶段实现边界见 [RUNTIME_FOUNDATION.md](docs/architecture/RUNTIME_FOUNDATION.md)。
+C-002 运行时基础继续沿用：共享 React UI、Tauri v2 Windows 开发壳、Python Core 启停协议、系统 API、SQLite 迁移元数据、结构化日志和 CI。页面仅显示 Core Connecting / Ready / Failed。
+
+Director、Character Agent、世界模拟、领域持久化/事件回放、World/Character 业务表和最终 UI 尚未实现。冻结产品规则保持不变；双时间表示歧义已按用户决策解决，P-01 的推进政策及其余待确认问题仍保留，见 [PRODUCT_SPEC.md](docs/product/PRODUCT_SPEC.md)。Stage 0 审查见 [ARCHITECTURE_REVIEW_001.md](docs/architecture/ARCHITECTURE_REVIEW_001.md)，运行时边界见 [RUNTIME_FOUNDATION.md](docs/architecture/RUNTIME_FOUNDATION.md)。
 
 ## 开发环境与运行
 

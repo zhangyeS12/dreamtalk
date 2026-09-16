@@ -1,6 +1,6 @@
 # LivingWorld 领域概念模型
 
-状态：Stage 0 / C-001。本文定义领域语言和责任边界，不代表任何对象已经实现。
+状态：Stage 0 领域语言保留；C-003A 已实现下述领域模型与不变量。其余概念仍是产品/架构定义，不代表已实现。C-003A 不实现持久化、事件提交/回放、Director、Agent、业务 HTTP API 或世界模拟。
 
 ## 阅读约定
 
@@ -9,6 +9,48 @@
 - 已冻结规则保持明确约束；尚未冻结的具体语义以“待确认”标出，不在本文中替产品作决定。
 - Director 与 Character Agent 是职责角色：Director 改变世界、调度活动；Character Agent 负责自己拥有的记忆、人格表达及与玩家对话。Director 不能直接替 Character Agent 编写最终对玩家台词。
 - Event Reservoir 指 World Plan 所关联的候选事件集合及其待执行上下文；在本阶段作为关联概念说明，不新增实现对象。
+
+## C-003A 实现基线
+
+### 双时间决策：已解决
+
+用户已确认严格分离世界逻辑时间与现实时间，时间表示的歧义已解决：
+
+- [`WorldTime`](../../services/core/src/livingworld/domain/values.py) 是独立不可变值对象，用 Python 整数表示相对所属世界逻辑纪元的微秒位置，拒绝浮点、布尔值、字符串和 `datetime`。坐标可位于纪元之前；不选择数据库整数范围。
+- `WorldTime` 只表示世界内的时间位置，不是 UTC，不包含世界/分支/事件身份，不隐式转换现实时间。不同分支可以在相同 `WorldTime` 拥有不同历史；事件身份仍由独立 `EventId` 表示。
+- 所有现实系统时间字段必须接收 timezone-aware `datetime` 并归一化到 UTC；naive `datetime` 一律拒绝。世界时间与现实时间字段不能互换，也不跨时间轴比较大小。
+- `WorldClock` 定义 `logical_time: WorldTime`、`observed_wall_time_utc: datetime`、精确十进制 `time_scale`、`running/paused` 状态和 `Revision`。比例只校验有限且非负，不推导推进、暂停或离线行为。
+- `WorldEvent.occurred_at`、知识有效期和 `Observation.observed_at` 使用 `WorldTime`；事件创建时间、可选观察审计时间、命令回执创建/完成时间使用 UTC-aware `datetime`。
+- 本任务只定义类型和时钟快照，不实现推进、catch-up、日历、WorldDate、虚构月份、调度或 `Day 17 · 20:43` 转换。P-01 的现实/世界时间映射与离线推进政策仍需后续定义；时间表示的选择已经解决。
+
+### 代码范围与职责
+
+领域代码位于 `services/core/src/livingworld/domain/`，只依赖 Python 标准库与本领域包；沿用现有 frozen dataclass 风格。模型为不可变快照，可变概念通过独立版本和新快照表达。
+
+| 模块 | 已实现模型 / 值 | 当前职责 |
+| --- | --- | --- |
+| [identifiers.py](../../services/core/src/livingworld/domain/identifiers.py) | WorldId、LocationId、PlayerId、CharacterId、EventId、KnowledgeAssertionId、CorrelationId、PrincipalId | UUID 的具体类型；地点/参与者/事件/断言引用携带 WorldId；PrincipalId 为 CharacterId 或 PlayerId |
+| [values.py](../../services/core/src/livingworld/domain/values.py) | WorldTime、Revision、不可变 JSON 值、UTC 校验 | 两条时间轴、版本检查、嵌套结构的防御性复制 |
+| [world.py](../../services/core/src/livingworld/domain/world.py) | World、WorldClock、Location、LocationConnection | 世界身份、双时间时钟快照、地点及有序拓扑连接；不定义移动耗时或通行策略 |
+| [participants.py](../../services/core/src/livingworld/domain/participants.py) | Player、PlayerPresence、Character、CharacterState | 静态定义和运行状态分离；玩家单一位置、activity 与 Busy/Available 独立 |
+| [relationships.py](../../services/core/src/livingworld/domain/relationships.py) | Relationship | 同世界两个主体的有向关系及版本；无亲密度维度或玩家数值接口 |
+| [events.py](../../services/core/src/livingworld/domain/events.py) | WorldEvent | 独立事件身份、双时间、版本化不可变 payload 和因果/关联/幂等元数据 |
+| [knowledge.py](../../services/core/src/livingworld/domain/knowledge.py) | KnowledgeAssertion、Observation | scope/owner 约束、结构化断言、世界有效期、来源和显式观察渠道 |
+| [commands.py](../../services/core/src/livingworld/domain/commands.py) | CommandReceipt | 复用 [contracts.py](../../services/core/src/livingworld/domain/contracts.py) 的 RequestId，定义未来回执元数据；不执行命令或去重 |
+| [errors.py](../../services/core/src/livingworld/domain/errors.py) | DomainInvariantError、CrossWorldReferenceError、InvalidKnowledgeOwnershipError、InvalidPresenceError、ConcurrencyConflictError | 对本任务不变量失败提供明确错误 |
+
+### 已验证的不变量与边界
+
+- 每个世界对象显式关联一个 `WorldId`，自身 ID 及所有世界内引用必须属于该世界。原始 UUID 不能替代具体身份类型；跨世界的地点、主体、因果事件、知识来源、观察目标和回执结果均拒绝。
+- `PlayerPresence` 必须持有一个 `LocationId`，拒绝 null、错误身份和多位置集合。inactive 保留物理位置，不自动赋予见证资格；activity 与 Busy/Available 独立。一个快照没有容纳第二物理位置的字段。
+- `Character` 仅定义身份/名称，`CharacterState` 独立持有位置和版本；没有目标、日程、记忆或情绪系统。
+- `Relationship(source_id, target_id)` 有方向，A→B 与 B→A 独立；允许 Player / Character 主体，但不新增群体关系政策或数值维度。
+- 未来可修改的世界/定义/状态/关系/断言/回执带 `Revision`。`Revision.advance(expected)` 只在版本匹配时返回 +1；presence 更新返回重新校验的新快照，失败不改变旧值。不实现数据库并发控制。
+- 事件和结构化值防御性复制并深度冻结；事件没有 update/delete 操作。知识 scope/owner 的组合必须合法，错误信念允许与真相冲突。
+- ID 校验保证引用类型及世界归属，不查询目标是否已创建，也不维护世界实体注册表。未来应用/持久化层负责存在性、同一实体当前快照唯一性、分支归属与 Kernel 授权；本任务不假装已执行这些职责。
+- `epistemic_status` 与回执 `status` 为必填非空语义标签，只定义扩展接口，不冻结状态机。`confidence` 为有限 Decimal 的 [0, 1] 或 None；知识有效期只拒绝倒序，不定义查询端点的包含性或自动失效。
+
+测试见 [tests/domain](../../tests/domain/)；领域依赖约束由 [架构测试](../../tests/core/test_architecture.py) 验证。详细事件和知识定义见下方相关文档。
 
 ## 1. World
 
@@ -56,7 +98,7 @@
 ### Important invariants
 
 - Director 负责时间调度（FR-02）。
-- 世界时间与现实时间的映射、推进粒度、离线推进及暂停机制均待确认。
+- 世界逻辑时间采用 WorldTime，现实观察时间采用 UTC-aware datetime；时间表示已确认。映射、推进粒度、离线推进及暂停政策仍待确认，C-003A 不实现推进。
 - Checkpoint 与 Timeline Branch 如何影响时钟，以及分支之间如何比较时间，待确认（FR-22）。
 
 ## 3. WorldState
@@ -252,7 +294,7 @@
 
 - Character Knowledge、Player Knowledge 与世界真实事实必须分离（FR-04）。
 - 某角色知道某事，不意味着玩家或另一角色也知道（FR-04、FR-05）。
-- 是否包含传闻、误解、推测以及知识纠正机制，待确认；这些未定语义不能取消知识隔离。
+- C-003A 以 CharacterBelief 表达角色信念，允许与 WorldTruth 冲突且不自动纠正。传闻/推测的具体获得与纠正机制仍待确认，不能取消知识隔离。
 
 ## 11. KnowledgeOwnership
 
@@ -325,7 +367,7 @@ Knowledge 与其知情主体之间的归属边界，以及判断某内容是否�
 
 - 关系后台存在，但不能向普通玩家展示数值（FR-07）。
 - Director 负责关系变化调度（FR-02）。
-- 关系是否有方向、是否对称、可否涉及群体及如何形成可感知的非数值反馈，待确认。
+- C-003A 已确认关系有方向，A→B 与 B→A 独立，不假定对称。群体关系与可感知的非数值反馈方式仍待确认。
 
 ## 14. RelationshipEvent
 
@@ -594,6 +636,7 @@ Knowledge 与其知情主体之间的归属边界，以及判断某内容是否�
 - 世界支持 Timeline Branch（FR-22）。
 - 某条分支中的事实与其他分支如何隔离、分支是否能合并，以及切换分支后的玩家认知如何解释，待确认。
 - 分支行为仍须遵守世界事实与角色、玩家知识分离，以及玩家单一物理地点约束（FR-04、FR-06）。
+- WorldTime 是逻辑坐标，不是历史身份；不同分支在同一坐标可以有不同事件，不能按时间坐标合并 EventId。C-003A 不实现 Timeline 或分支归属。
 
 ## 25. DirectorProfile
 
@@ -700,7 +743,7 @@ Token、Latency 和 Cost 的使用记录含义，以及这些使用记录与模�
 3. Busy / Available 的控制方式；“必要主动联系”的范围；同一理由、一次发送与多角色 Episode 的对应关系。
 4. Planning Window 的尺度、耗尽判定和“大量失效”阈值；候选激活冲突与失败的处理边界。
 5. Draft → Preview → Commit 的适用对象边界：运行时台词、WorldPlan、事件生成及记忆摘要等是否适用，以及如何衔接、按什么粒度审核；不能自行将原规则缩窄到 Builder。
-6. Knowledge 的获得、传闻、误解与修正；Memory 的分类、遗忘和修正；Relationship 的方向与非数值反馈。
+6. Knowledge 的获得、传闻与修正（错误 CharacterBelief 已明确允许）；Memory 的分类、遗忘和修正；Relationship 的非数值反馈（方向已确认为有向）。
 7. Checkpoint 的恢复范围、Timeline Branch 的隔离/合并/切换语义，以及知识、记忆、消息、候选计划和费用的归属。
 8. DirectorProfile 的风格维度；模型路由、预算超限行为与 Token / Latency / Cost 的统计口径。
 

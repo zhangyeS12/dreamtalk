@@ -1,6 +1,6 @@
 # Event Model
 
-> 状态：Stage 0 概念定义。本文定义事件与事实的边界，不设计数据库字段、消息协议、状态枚举、执行算法或实现技术；事件机制尚未实现。
+> 状态：保留 Stage 0 概念边界；C-003A 实现不可变 WorldEvent 领域值及不变量。候选激活、Kernel 提交、持久化、ledger、projection、回放和业务事件目录均未实现。
 
 规则来源：[PRODUCT_SPEC.md](../product/PRODUCT_SPEC.md) 中的 FR-01、FR-02、FR-04 至 FR-15、FR-22 至 FR-24。规划责任见 [DIRECTOR_MODEL.md](DIRECTOR_MODEL.md)，信息归属见 [KNOWLEDGE_MODEL.md](KNOWLEDGE_MODEL.md)。
 
@@ -24,6 +24,29 @@ CandidateEvent 表达一个可能发生、尚待处理的世界事件；WorldEve
 | RelationshipEvent | 表达关系变化相关的事件概念 | 后台关系可以变化，但不能因此向普通玩家展示关系数值。 |
 
 WorldEvent、RelationshipEvent 与 WorldTruth 的关系属于概念分工。本文不由这些名字推导数据库表、继承关系、存储模型或事件溯源技术。
+
+## C-003A WorldEvent 合约
+
+实现见 [events.py](../../services/core/src/livingworld/domain/events.py)，时间与世界边界见 [DOMAIN_MODEL.md](DOMAIN_MODEL.md)。
+
+| 成员 | 领域含义 / 当前约束 |
+| --- | --- |
+| event_id / world_id | 独立 EventId 和所属 WorldId，归属必须相同 |
+| event_type | 必填非空事件语义标签；未定义业务事件目录 |
+| occurred_at | WorldTime，表示事件在世界内实际发生的逻辑位置 |
+| created_at | aware datetime，归一化 UTC，表示软件现实时间中的记录创建时间 |
+| payload / payload_version | JSON object 的防御性不可变副本，包括嵌套 object / array；版本必须是正整数，拒绝 bool、非有限数、非 JSON 值与循环结构 |
+| causation_id | 可选同世界 EventId 或现有 RequestId，区分事件原因与命令请求 |
+| correlation_id | 可选独立 UUID CorrelationId，用于关联一组工作，不等同于事件身份 |
+| idempotency_key | 可选非空语义键；本任务不执行去重 |
+
+**双时间表示歧义已解决。** occurred_at 不是 UTC；created_at 不是世界时间。两者刻意允许不同，尤其未来离线 catch-up 可记录较早的世界发生位置和较晚的现实创建时间；本任务不实现 catch-up 或持久化。naive created_at 一律拒绝，aware 的非 UTC 输入统一归一化 UTC，不隐式转换 occurred_at，也不跨轴比较大小。
+
+WorldTime 是逻辑坐标，不是全局事件 ID；两个 EventId 可以共享同一 WorldTime，未来分支也可以在同一坐标拥有不同历史。C-003A 不加入日历、调度或分支身份机制。
+
+WorldEvent 是 canonical history 的不可变领域表达，frozen snapshot 没有 update/delete 方法。外部原始 payload 后续修改不会改变事件；事件内部的嵌套结构也不能修改。此处创建 Python 值不意味着事件已由 Kernel 提交或世界事实已落库。只有未来 Deterministic World Kernel 能正式提交 canonical WorldEvent，Director 只提出批量计划。CandidateEvent 没有在 C-003A 实现，更不能通过构造候选提前写入事实。
+
+[CommandReceipt](../../services/core/src/livingworld/domain/commands.py) 定义未来请求幂等性接口：现有 RequestId、world_id、command_type、非空 status 标签、可选同世界结果引用、UTC 创建/完成时间及 Revision。完成时间不能早于创建时间。回执没有执行、保存、重试或去重行为；同一个 key 构造多个事件不会在此层自动合并。
 
 ## 2. 候选的语义生命周期
 
@@ -87,7 +110,7 @@ WorldEvent、RelationshipEvent 与 WorldTruth 的关系属于概念分工。本�
 - Developer Mode 能查看 Director、Agent、Memory、LLM 使用等决策 Trace（FR-23）。候选激活、延期、取消与 Replan 的依据属于需要说明的决策范围；Trace 的具体内容和保留方式未确定。
 - 产品必须记录 Token、Latency 和 Cost，并支持预算与模型路由（FR-24）。候选执行与 LLM 调用是不同概念，不能将每个普通小事件处理都推导成一次 LLM 调用。
 
-上述要求不意味着已选定事件总线、队列、数据库、事务机制或持久化方式。
+持久化方向见 [Architecture Review 001](ARCHITECTURE_REVIEW_001.md)；C-003A 不实现事件总线、队列、数据库业务、事务提交或持久化。
 
 ## 7. 待确认的产品定义
 

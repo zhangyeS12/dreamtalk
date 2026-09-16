@@ -25,7 +25,7 @@ dev = [
 packages = ["services/core/src/livingworld"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests/core"]
+testpaths = ["tests/core", "tests/domain"]
 addopts = "-ra"
 
 [tool.ruff]
