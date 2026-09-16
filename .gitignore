@@ -14,4 +14,16 @@ Desktop.ini
 !.env.example
 !.env.template
 
-# 未确定实现技术，暂不加入语言、框架或数据库专用忽略规则。
+# Stage 1 开发环境、缓存和构建产物
+.venv/
+.cache/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+node_modules/
+dist/
+target/
+artifacts/
+apps/desktop/src-tauri/gen/
+*.tsbuildinfo

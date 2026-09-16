@@ -1,0 +1,33 @@
+{
+  "name": "livingworld",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": ["apps/web", "apps/desktop", "packages/api-client"],
+  "engines": { "node": ">=24.0.0" },
+  "scripts": {
+    "dev:web": "node scripts/dev-web.mjs",
+    "dev:ui": "npm run dev --workspace @livingworld/web -- --host 127.0.0.1 --port 1420 --strictPort",
+    "dev:desktop": "npm exec --workspace @livingworld/desktop -- tauri dev",
+    "dev:core": "uv run python scripts/run-core.py",
+    "lint": "eslint apps/web/src packages/api-client/src scripts/*.mjs && tsc --noEmit",
+    "test": "vitest run",
+    "test:web-smoke": "uv run --frozen --group browser-test python scripts/browser-smoke.py",
+    "build:web": "npm run build --workspace @livingworld/web",
+    "build:desktop": "npm exec --workspace @livingworld/desktop -- tauri build --debug --no-bundle --features custom-protocol",
+    "build:core": "uv build --wheel --out-dir artifacts/core",
+    "test:desktop": "cargo test --locked --manifest-path apps/desktop/src-tauri/Cargo.toml",
+    "test:desktop-smoke": "uv run python scripts/desktop-smoke.py"
+  },
+  "devDependencies": {
+    "vite": "^8.3.0",
+    "@eslint/js": "^10.0.0",
+    "eslint": "^10.0.0",
+    "globals": "^17.0.0",
+    "typescript": "~5.9.0",
+    "typescript-eslint": "^8.0.0",
+    "vitest": "^5.0.0",
+    "jsdom": "^30.0.0",
+    "@testing-library/react": "^16.0.0"
+  }
+}
