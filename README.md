@@ -1,5 +1,7 @@
 # LivingWorld
 
+All engineering agents must read AGENTS.md before modifying the repository.
+
 ## 项目定位
 
 LivingWorld 是持久化、事件驱动的多角色 AI 世界，不是普通聊天机器人。Director 负责世界与宏观剧情调度，Character Agent 主要负责自己拥有的记忆、人格表达和与玩家对话；世界真实事实、角色知识和玩家知识相互分离。
