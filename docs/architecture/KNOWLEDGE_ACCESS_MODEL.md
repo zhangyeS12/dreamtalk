@@ -1,6 +1,6 @@
 # C-003D：Knowledge Access Isolation
 
-状态：已实现 Python 内部端口、SQL 权限隔离与显式获知事务；没有业务 HTTP API、Memory、RAG、Director、Agent 或自动推理。
+状态：已实现 Python 内部端口、SQL 权限隔离与显式获知事务，C-003E2 增加独立主观信念形成入口。没有业务 HTTP API、Memory、RAG、Director、Agent 或自动推理。
 
 ## 1. 能力绑定与信任边界
 
@@ -35,6 +35,27 @@ AssertWorldTruth 仅由可信内部应用提交，经 [CommandHandler](../../ser
 subject/predicate/value、明确认知标签、精确 confidence、WorldTime 有效期进入语义事件。provenance_event_id 指向该事件。创建断言本身不向任何角色/玩家赋予知情。
 
 ## 3. 显式获知桥梁
+
+### C-003E2：内部形成与暴露渠道分离（已确认）
+
+```text
+FormCharacterBelief（可信内部命令，非玩家 API）
+→ 世界、现存 Character owner、新 AssertionId、可选同世界 source/provenance 校验
+→ ordinal 0 CharacterBeliefFormed
+→ KnowledgeAssertion(scope=character_belief, owner=单一 Character)
+→ CommandReceipt
+→ 同一事务 commit
+```
+
+此入口允许没有 source、没有对应 Truth 或与 Truth 矛盾的命题；推断/猜测/误认可由未来调用方提供，当前不实现形成这些判断的算法。复用 subject/predicate/value、现有 epistemic_status 与 Decimal confidence，显式 WorldTime valid_from / 可选 valid_to，optional source/provenance 原样保存，缺省 None。
+
+来源提供时只验证存在且同世界，不要求 proposition 一致；来源的私有 owner 不改变接收角色的权限。显式 provenance 引用必须是既有同世界 event。两类引用不授予来源存储的 reader，事件仍是内部 canonical history。
+
+该 exact provenance 校验由独立内部 EventReferenceReader 完成，不为角色/玩家增加全局事件读取能力；EventAppender 的 append-only API 保持不变。
+
+**FormCharacterBelief 不自动创建 Observation**：内部形成不是默认 exposure channel。断言是新 immutable epistemic record，不引入 expected revision、修改既有信念或自动纠正。AcquireKnowledge 继续保持下述 source → Observation → receiver-owned assertion；它可以将 Alice 的 false belief 转述给 Billy，而不改写 WorldTruth。
+
+Stage 2 验收以 AssertWorldTruth `door=locked` + FormCharacterBelief `Alice: door=unlocked` 创建两条 canonical state，隔离读者在重建前后仍分别返回 locked/unlocked。历史 stale Truth 可成为未来过时认知的一种来源，但不是本验收的 canonical 主观根机制。
 
 AcquireKnowledge 表示权威应用已经确认渠道合法；当前消费者没有自行调用来扩权的公开 API，也不把地点、inactive Presence 或收到消息自动解释为获知证据。
 
@@ -72,4 +93,6 @@ principal authorization
 
 严禁 global semantic search 后过滤，或全局断言加 Prompt secrecy。当前只实现 SQL 归属读取，不实现后面三层。
 
-[知识集成测试](../../tests/application/test_knowledge_access.py) 验证 Billy/Banyue/Belle/Player 秘密、私有 canary、SQL WHERE/绑定参数及拒绝 ID 无领域 materialization、角色转述、矛盾信念、玩家知识、跨世界、事件只追加、多个 flush 后故障回滚与重启幂等。[Observation 迁移测试](../../tests/persistence/test_observation_migration.py) 验证旧语义无损、确定性、迁移表替换后故障回滚；[映射测试](../../tests/persistence/test_mapping.py) 验证同坐标不同身份共存及 typed ID round-trip。私有/矛盾信念初始数据为隔离测试 fixture，不增加生产写入 API。
+[知识集成测试](../../tests/application/test_knowledge_access.py) 保留秘密、私有 canary、SQL WHERE/绑定参数、拒绝 ID 无领域 materialization、角色转述、玩家知识、跨世界与回滚回归。旧隔离/映射测试的私有与矛盾 fixture 不作为 Stage 2 最终验收创建路径。
+
+[信念形成测试](../../tests/application/test_belief_formation.py) 覆盖无源/无 Truth 根、矛盾命题、false belief 转述、optional 私有 source/provenance、完整 metadata 回放、无 Observation、重启幂等与故障回滚。[Stage 2 验收](STAGE_2_ACCEPTANCE.md) 只用受支持命令创建秘密及矛盾信念，证明 replay 前后 owner/world 隔离。[Observation 迁移测试](../../tests/persistence/test_observation_migration.py) 验证旧语义与确定性；[映射测试](../../tests/persistence/test_mapping.py) 验证同坐标不同 occurrence 与 typed ID round-trip。

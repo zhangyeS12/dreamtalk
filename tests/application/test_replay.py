@@ -89,12 +89,22 @@ async def snapshot(env, tables, world=None):
 async def complete_history(env):
     await env.initialize()
     await env.handler.execute(
-        env.command(MovePlayer, player_id=env.player, destination_id=env.cafe)
+        env.command(
+            MovePlayer,
+            expected_presence_revision=Revision(),
+            player_id=env.player,
+            destination_id=env.cafe,
+        )
     )
     for character, locations in ((env.alice, (env.home, env.cafe)), (env.bob, (env.park,))):
-        for location in locations:
+        for index, location in enumerate(locations):
             await env.handler.execute(
-                env.command(PlaceCharacter, character_id=character, location_id=location)
+                env.command(
+                    PlaceCharacter,
+                    expected_state_revision=None if index == 0 else Revision(index - 1),
+                    character_id=character,
+                    location_id=location,
+                )
             )
     for source, target, deltas in (
         (env.alice, env.bob, (7, 3, 9)),
@@ -105,6 +115,7 @@ async def complete_history(env):
         await env.handler.execute(
             env.command(
                 ChangeRelationship,
+                expected_relationship_revision=Revision(1) if deltas == (-2, 4, 1) else None,
                 source_id=source,
                 target_id=target,
                 affinity_delta=deltas[0],
@@ -326,11 +337,17 @@ def test_world_isolation_and_knowledge_secret_after_replay(environment):
                 command(CreateCharacter, character_id=other_character, name="Other character")
             )
             await env.handler.execute(
-                command(PlaceCharacter, character_id=other_character, location_id=other_location)
+                command(
+                    PlaceCharacter,
+                    expected_state_revision=None,
+                    character_id=other_character,
+                    location_id=other_location,
+                )
             )
             await env.handler.execute(
                 command(
                     ChangeRelationship,
+                    expected_relationship_revision=None,
                     source_id=other_player,
                     target_id=other_character,
                     affinity_delta=7,

@@ -13,16 +13,21 @@ from livingworld.application.commands import (
     CreateLocation,
     CreatePlayer,
     CreateWorld,
+    FormCharacterBelief,
     MovePlayer,
     PlaceCharacter,
     WorldCommand,
 )
-from livingworld.application.errors import EntityAlreadyExistsError, EntityNotFoundError
+from livingworld.application.errors import (
+    EntityAlreadyExistsError,
+    EntityNotFoundError,
+    IdempotencyConflictError,
+)
 from livingworld.application.fingerprints import command_fingerprint, decimal_input, id_input
 from livingworld.application.ports import UnitOfWork, WallClock
 from livingworld.application.results import CommandResult, EntityReference, RelationshipReference
 from livingworld.domain.commands import CommandReceipt
-from livingworld.domain.errors import DomainInvariantError
+from livingworld.domain.errors import ConcurrencyConflictError, DomainInvariantError
 from livingworld.domain.events import WorldEvent
 from livingworld.domain.identifiers import (
     CharacterId,
@@ -82,6 +87,19 @@ def metrics_payload(metrics: RelationshipMetrics) -> dict[str, int]:
     }
 
 
+def expect_revision(
+    kind: str, identity: object, actual: Revision | None, expected: Revision | None
+) -> None:
+    if actual != expected:
+        raise ConcurrencyConflictError(
+            f"{kind} does not match expected existence/revision",
+            resource_kind=kind,
+            resource_identity=identity,
+            expected_revision=expected,
+            actual_revision=actual,
+        )
+
+
 class CommandHandler:
     def __init__(self, uow_factory: Callable[[], UnitOfWork], clock: WallClock):
         self._uow_factory = uow_factory
@@ -89,6 +107,18 @@ class CommandHandler:
 
     async def execute(self, command: WorldCommand) -> CommandResult:
         fingerprint = command_fingerprint(command)
+        try:
+            return await self._transaction(command, fingerprint)
+        except (ConcurrencyConflictError, EntityAlreadyExistsError, IdempotencyConflictError):
+            # The failed UoW has exited/rolled back. Resolve a possible committed duplicate
+            # exactly once from a fresh transaction; NEVER execute the mutation again.
+            async with self._uow_factory() as uow:
+                existing = await uow.receipts.existing(command.request_id, fingerprint)
+                if existing is not None:
+                    return replace(existing, replayed=True)
+            raise
+
+    async def _transaction(self, command: WorldCommand, fingerprint: str) -> CommandResult:
         async with self._uow_factory() as uow:
             existing = await uow.receipts.existing(command.request_id, fingerprint)
             if existing is not None:
@@ -214,8 +244,14 @@ class CommandHandler:
                 before = await uow.players.presence(command.player_id)
                 if before is None:
                     raise EntityNotFoundError("PlayerPresence does not exist")
+                expect_revision(
+                    "PlayerPresence",
+                    command.player_id,
+                    before.revision,
+                    command.expected_presence_revision,
+                )
                 after = before.at_location(
-                    command.destination_id, expected_revision=before.revision
+                    command.destination_id, expected_revision=command.expected_presence_revision
                 )
                 events = [
                     (
@@ -233,7 +269,7 @@ class CommandHandler:
                 reference, revision = after.player_id, after.revision
 
                 async def apply() -> None:
-                    await uow.players.replace_presence(after)
+                    await uow.players.replace_presence(after, command.expected_presence_revision)
 
             case CreateCharacter():
                 character = Character(world.world_id, command.character_id, command.name)
@@ -260,7 +296,17 @@ class CommandHandler:
                     raise EntityNotFoundError("Character does not exist")
                 await self._location(uow, world, command.location_id)
                 before = await uow.characters.state(command.character_id)
-                revision = before.revision.advance(before.revision) if before else Revision()
+                expect_revision(
+                    "CharacterState",
+                    command.character_id,
+                    before.revision if before else None,
+                    command.expected_state_revision,
+                )
+                revision = (
+                    before.revision.advance(command.expected_state_revision)
+                    if before
+                    else Revision()
+                )
                 state = CharacterState(
                     world.world_id, command.character_id, command.location_id, revision
                 )
@@ -280,7 +326,7 @@ class CommandHandler:
                 reference = state.character_id
 
                 async def apply() -> None:
-                    await uow.characters.put_state(state)
+                    await uow.characters.put_state(state, command.expected_state_revision)
 
             case ChangeRelationship():
                 same_world(world.world_id, command.source_id, command.target_id)
@@ -293,6 +339,12 @@ class CommandHandler:
                     if participant is None:
                         raise EntityNotFoundError("Relationship participant does not exist")
                 before = await uow.relationships.get(command.source_id, command.target_id)
+                expect_revision(
+                    "Relationship",
+                    RelationshipReference(command.source_id, command.target_id),
+                    before.revision if before else None,
+                    command.expected_relationship_revision,
+                )
                 initial = before or Relationship(
                     world.world_id, command.source_id, command.target_id
                 )
@@ -300,7 +352,9 @@ class CommandHandler:
                     command.affinity_delta,
                     command.trust_delta,
                     command.familiarity_delta,
-                    expected_revision=initial.revision,
+                    expected_revision=(
+                        command.expected_relationship_revision if before else initial.revision
+                    ),
                 )
                 events = [
                     (
@@ -334,7 +388,43 @@ class CommandHandler:
                 revision = after.revision
 
                 async def apply() -> None:
-                    await uow.relationships.put(after)
+                    await uow.relationships.put(after, command.expected_relationship_revision)
+
+            case FormCharacterBelief():
+                if await uow.characters.get(command.character_id) is None:
+                    raise EntityNotFoundError("Belief owner does not exist")
+                if await uow.knowledge.get(command.assertion_id) is not None:
+                    raise EntityAlreadyExistsError("KnowledgeAssertion already exists")
+                if (
+                    command.source_assertion_id is not None
+                    and await uow.knowledge.get(command.source_assertion_id) is None
+                ):
+                    raise EntityNotFoundError("Source KnowledgeAssertion does not exist")
+                if (
+                    command.provenance_event_id is not None
+                    and not await uow.event_references.exists(command.provenance_event_id)
+                ):
+                    raise EntityNotFoundError("Provenance WorldEvent does not exist")
+                assertion = KnowledgeAssertion(
+                    command.assertion_id,
+                    world.world_id,
+                    KnowledgeScope.CHARACTER_BELIEF,
+                    command.character_id,
+                    command.subject,
+                    command.predicate,
+                    command.value,
+                    command.epistemic_status,
+                    command.confidence,
+                    command.valid_from,
+                    command.valid_to,
+                    provenance_event_id=command.provenance_event_id,
+                    source_assertion_id=command.source_assertion_id,
+                )
+                events = [("CharacterBeliefFormed", assertion_payload(assertion))]
+                reference, revision = assertion.assertion_id, assertion.revision
+
+                async def apply() -> None:
+                    await uow.knowledge.add(assertion)
 
             case AssertWorldTruth():
                 if await uow.knowledge.get(command.assertion_id) is not None:

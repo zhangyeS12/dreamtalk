@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from sqlalchemy import event
-from sqlalchemy.engine import URL
+from sqlalchemy.engine import URL, Connection
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async_engine
 
 from livingworld.application import ports
@@ -58,8 +58,13 @@ class Database:
                 raise RuntimeError("wal_unavailable")
 
         @event.listens_for(self.engine.sync_engine, "begin")
-        def begin_transaction(connection: object) -> None:
-            connection.exec_driver_sql("BEGIN")  # type: ignore[attr-defined]
+        def begin_transaction(connection: Connection) -> None:
+            statement = (
+                "BEGIN IMMEDIATE"
+                if connection.get_execution_options().get("livingworld_write_intent")
+                else "BEGIN"
+            )
+            connection.exec_driver_sql(statement)
 
         self._sessions = async_sessionmaker(self.engine, expire_on_commit=False)
 

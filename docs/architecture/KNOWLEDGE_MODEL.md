@@ -60,6 +60,16 @@ WorldTruthReader 仅返回绑定世界的 truth；CharacterKnowledgeReader 仅�
 
 ## 2. 已冻结的边界
 
+### C-003E2：独立 CharacterBelief 形成歧义已解决
+
+FormCharacterBelief 是可信内部 application command，复用 KnowledgeAssertion，scope=character_belief，owner 恰为一个现存同世界 Character；没有 Player owner、WorldTruth 写入或自动 Observation。完整 proposition / epistemic metadata / validity / 可选 source/provenance 经 fingerprint、canonical CharacterBeliefFormed、投影、receipt 同事务提交。
+
+信念不要求匹配 Truth，甚至可无对应 Truth 或 source。提供 source/provenance 时只要求既有同世界合法引用并原样保存，不继承源主体私有知识读取权限，也不要求源 proposition 等于当前信念。未提供时保存 None，不生成伪观察或 provenance。新 immutable 断言无 expected revision。
+
+AcquireKnowledge 不变：既有源 → 显式渠道 Observation → 接收方派生 assertion，复制 source proposition。false belief 因而可被转述，但不会变成 Truth。Stage 2 的矛盾验收使用 AssertWorldTruth `door=locked` 与 FormCharacterBelief `Alice: door=unlocked`，重建前后各 reader 返回自身 scope/owner 的命题，不覆盖或自动调和。历史 stale Truth 不是这一路径的替代。
+
+仅明确 canonical 主观入口；自动 inference、误导检测、belief revision/reconciliation、Observation→Belief 推断和后续产品呈现均未实现。测试和完整验收见 [STAGE_2_ACCEPTANCE.md](STAGE_2_ACCEPTANCE.md)。
+
 1. 世界真实事实、Character Knowledge 和 Player Knowledge 分离（FR-04）。
 2. 后台发生但玩家不知道的事件不能直接展示给玩家（FR-05）。
 3. Character Agent 主要负责自己拥有的记忆、人格表达和与玩家对话（FR-03）；不能仅因 Director 知道某事实，就把该事实视作角色已知内容。

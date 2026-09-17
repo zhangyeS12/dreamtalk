@@ -1,6 +1,6 @@
-# SQLite Persistence Mapping & C-003E1 Canonical Ledger
+# SQLite Persistence, Canonical Ledger & Resource CAS
 
-状态：C-003B 建立 SQLite/Alembic，C-003C 建立命令事务和持久化幂等，C-003D 增加主体知识隔离与独立 ObservationId，C-003E1 增加世界内 canonical 顺序与原子投影重建。未实现完整乐观并发执行、自动传播、语义检索或世界模拟。产品冻结规则不变，见 [COMMAND_MODEL.md](COMMAND_MODEL.md)、[KNOWLEDGE_ACCESS_MODEL.md](KNOWLEDGE_ACCESS_MODEL.md) 与 [REPLAY_MODEL.md](REPLAY_MODEL.md)。
+状态：Stage 2 SQLite/Alembic、持久化幂等、主体知识隔离、canonical ledger、原子投影重建及资源级 CAS 已实现。C-003E2 的内部信念形成复用既有 KnowledgeAssertion 存储。自动传播、语义检索与世界模拟未实现。产品冻结规则不变，见 [COMMAND_MODEL.md](COMMAND_MODEL.md)、[KNOWLEDGE_ACCESS_MODEL.md](KNOWLEDGE_ACCESS_MODEL.md) 与 [REPLAY_MODEL.md](REPLAY_MODEL.md)。
 
 ## 1. 边界与生命周期
 
@@ -102,7 +102,7 @@ Repeat startup 正常调用 Alembic upgrade head，不重放 revision、不重�
 - Knowledge 的 truth 没有 owner；character_belief 必须且只能有 Character owner；player_knowledge 必须且只能有 Player owner。来源与 owner 复合 FK 保持世界隔离，有效期不能倒序。错误信念与事实可以分别存储，不自动纠正或传播。
 - Observation 的渠道 CHECK 与同世界主体/目标 FK 保留明确观察语义，不自动授予知识或查询权限。
 - Receipt 沿用 (world_id, request_id) 主键、完整结果引用 CHECK 和完成时间检查。新命令 fingerprint/result_payload 成对保存且要求 committed、完成时间与事件引用。旧回执没有指纹时不视为可验证成功；新管线全局查找 RequestId，相同语义返回原结果，变化语义显式冲突。
-- Revision 在 DB 中非负。没有 expected-revision UPDATE、冲突重试或乐观并发执行。
+- Revision 在 DB 中非负。C-003E2 的 focused repository 使用完整 PK + expected revision 的 SQL UPDATE；rowcount=0 明确 ConcurrencyConflictError，不 merge 或无条件覆盖。期待缺失使用 INSERT，PK/UNIQUE 竞争明确归类为该领域冲突，不把 FK/CHECK 失败误判为竞争。
 
 额外索引有 world_events 的 (world_id, occurred_at, event_id)、事件幂等 unique、knowledge 的 world/scope/character-owner 与 world/scope/player-owner，以及 C-003C 新回执 request_id partial unique；当前状态通过主键查找。未创建向量、Memory 或计划表。
 
@@ -114,7 +114,7 @@ Repeat startup 正常调用 Alembic upgrade head，不重放 revision、不重�
 
 权限过滤必须先于 semantic retrieval / prompt assembly；C-003D 的 list/get SQL 强制 world/scope/owner 条件，见 [knowledge_readers.py](../../services/core/src/livingworld/infrastructure/persistence/knowledge_readers.py)。内部 exact-source repository 与 snapshot inspection 不分发给角色/玩家；返回 source_assertion_id 也不授予源读取权限。CommandReceipt 的 versioned JSON 结果新增可选 typed ObservationId，兼容旧结果无此 key，不需额外回执 schema 迁移。
 
-C-003C 回归见 [命令集成测试](../../tests/application/test_commands.py) 和 [0003 迁移回归](../../tests/persistence/test_command_migration.py)；C-003D 验证见 [知识访问集成测试](../../tests/application/test_knowledge_access.py) 和 [Observation 迁移回归](../../tests/persistence/test_observation_migration.py)。C-003E1 见 [ledger 测试](../../tests/application/test_ledger.py)、[0005 迁移测试](../../tests/persistence/test_ledger_migration.py) 与 [重建测试](../../tests/application/test_replay.py)。完整乐观并发、Timeline/Checkpoint、预算与智能层仍未实现。
+C-003C 回归见 [命令集成测试](../../tests/application/test_commands.py) 和 [0003 迁移回归](../../tests/persistence/test_command_migration.py)；C-003D 验证见 [知识访问集成测试](../../tests/application/test_knowledge_access.py) 和 [Observation 迁移回归](../../tests/persistence/test_observation_migration.py)。C-003E1 见 [ledger 测试](../../tests/application/test_ledger.py)、[0005 迁移测试](../../tests/persistence/test_ledger_migration.py) 与 [重建测试](../../tests/application/test_replay.py)。C-003E2 的竞争/回滚和完整验收见 [STAGE_2_ACCEPTANCE.md](STAGE_2_ACCEPTANCE.md)。Timeline/Checkpoint、预算与智能层仍未实现。
 
 ## 7. Canonical 分配与投影重建
 
@@ -125,3 +125,15 @@ C-003C 回归见 [命令集成测试](../../tests/application/test_commands.py) 
 重建 adapter 在同一事务读取 ledger、仅清理目标世界的 replayable projections、写回纯 fold 的值并验证约束。世界 identity 行保留为事件/回执/游标的 FK anchor，但其 name/revision 和整个 WorldClock 从事件恢复，绝不借用旧状态补偿 payload。事务临时 defer 外键检查，foreign_keys 始终 ON；最终检查目标世界，包括保留的回执和地点连接引用。所有表清理均有 world_id 条件，任何失败回滚。
 
 可回放 World/WorldClock、Location、Player/Presence、Character/State、Relationship、KnowledgeAssertion、Observation；**CommandReceipt 不从事件重建**。world_events、world_ledger_cursors、审计与迁移表、运行元数据不重建。location_connections 当前没有 canonical 创建事件，保持原样；引用若无法由 ledger 恢复，显式失败，不复制旧 Location 补救。详见 [REPLAY_MODEL.md](REPLAY_MODEL.md)。
+
+## 8. C-003E2 并发与信念存储
+
+三个 mutable repository 的端口显式接收 typed expected revision；Presence 要求 Revision，CharacterState / Relationship 接收 Revision 或 None。更新 WHERE 必须限定 world、完整资源身份和 expected revision，写入恰好下一版本。状态首次 revision=0，有向关系首次 delta 后 revision=1；不存在与零版本严格区分。没有全局 World revision。
+
+SQLite command UoW 在读取前通过集中 begin hook 的 `livingworld_write_intent` execution option 使用 BEGIN IMMEDIATE；其他连接仍 BEGIN。连接取得写入资格前失败会关闭 session。此举处理 SQLite 物理 writer contention，不改变资源级语义、不自动重试，也不能替代 CAS；未来非 SQLite adapter 必须实现等价 CAS 和身份竞争归类。busy_timeout 仍为既有 5000ms，超过等待限度的非语义运行故障不宣称命令成功。
+
+失败 transaction 先 rollback/close，handler 才可使用一次新事务查证原 RequestId 的已提交 receipt。无回执则仍失败；有不同 fingerprint 则幂等冲突；匹配返回原结果。不会重新运行 command。位置分配仍和 event/projection/receipt 同事务，CAS=0 或 INSERT 冲突均不会遗留 cursor advance、事件或成功回执。
+
+FormCharacterBelief 不需要新表、列或索引：复用 knowledge_assertions 的 ownership CHECK、source/provenance 同世界 FK、Decimal/JSON/WorldTime 编码。新断言 revision=0，source/provenance 可 SQL NULL，提供时原样保存；不要求对应 Truth 或 Observation。没有 semantic 去重、命题唯一约束或自动调和。
+
+**C-003E2 无 schema 变更，Alembic head 保持 0005_canonical_ledger；不创建 0006。** schema_version=1 和旧 migration_history 仍为兼容审计证据，Alembic 是唯一 cursor；旧事件、回执和审计不改写，实际 app-data 数据库未用于验收。

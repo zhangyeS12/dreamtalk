@@ -94,6 +94,7 @@ class _EventFold:
             ("CharacterPlaced", 1): self._character_placed,
             ("RelationshipChanged", 1): self._relationship_changed,
             ("WorldTruthAsserted", 1): self._truth_asserted,
+            ("CharacterBeliefFormed", 1): self._character_belief_formed,
             ("ObservationRecorded", 1): self._observation_recorded,
             ("KnowledgeAcquired", 1): self._knowledge_acquired,
         }
@@ -291,7 +292,7 @@ class _EventFold:
         )
         self.relationships[source, target] = after
 
-    def _assertion(self, event) -> KnowledgeAssertion:
+    def _assertion(self, event, *, self_provenance: bool = True) -> KnowledgeAssertion:
         value = event.payload
         confidence = value["confidence"]
         _check(
@@ -310,17 +311,34 @@ class _EventFold:
             Decimal(confidence) if confidence is not None else None,
             WorldTime(_integer(value["valid_from"])),
             WorldTime(_integer(value["valid_to"])) if value["valid_to"] is not None else None,
-            self._id(EventId, value["provenance_event_id"]),
+            self._id(EventId, value["provenance_event_id"])
+            if value["provenance_event_id"] is not None
+            else None,
             self._id(KnowledgeAssertionId, value["source_assertion_id"])
             if value["source_assertion_id"] is not None
             else None,
             Revision(_integer(value["revision"])),
         )
         _check(
-            assertion.provenance_event_id == event.event_id and assertion.revision.value == 0,
+            (not self_provenance or assertion.provenance_event_id == event.event_id)
+            and assertion.revision.value == 0,
             "Assertion provenance/revision mismatch",
         )
         return assertion
+
+    def _character_belief_formed(self, event):
+        assertion = self._assertion(event, self_provenance=False)
+        _check(
+            assertion.scope is KnowledgeScope.CHARACTER_BELIEF,
+            "Formation must create one character-owned belief",
+        )
+        self._participant(assertion.owner)
+        if assertion.source_assertion_id is not None:
+            _check(assertion.source_assertion_id in self.knowledge, "Missing belief source")
+        if assertion.provenance_event_id is not None:
+            _check(assertion.provenance_event_id in self._event_ids, "Missing belief provenance")
+        # Neither proposition matching nor an Observation is required for internal formation.
+        self._new(self.knowledge, assertion.assertion_id, assertion)
 
     def _truth_asserted(self, event):
         assertion = self._assertion(event)

@@ -96,3 +96,37 @@ def test_replay_ports_do_not_grant_canonical_mutation_capabilities():
     assert not hasattr(CanonicalEventReader, "append")
     assert "events" not in ProjectionRebuildUnitOfWork.__annotations__
     assert "receipts" not in ProjectionRebuildUnitOfWork.__annotations__
+
+
+def test_cas_contracts_use_existing_revision_and_focused_ports():
+    from inspect import Parameter, signature
+    from typing import get_type_hints
+
+    from livingworld.application.commands import (
+        ChangeRelationship,
+        FormCharacterBelief,
+        MovePlayer,
+        PlaceCharacter,
+    )
+    from livingworld.application.ports import (
+        CharacterRepository,
+        PlayerRepository,
+        RelationshipRepository,
+    )
+    from livingworld.domain.values import Revision
+
+    for command, field, kind in (
+        (MovePlayer, "expected_presence_revision", Revision),
+        (PlaceCharacter, "expected_state_revision", Revision | None),
+        (ChangeRelationship, "expected_relationship_revision", Revision | None),
+    ):
+        assert get_type_hints(command)[field] == kind
+        assert signature(command).parameters[field].default is Parameter.empty
+    for method, kind in (
+        (PlayerRepository.replace_presence, Revision),
+        (CharacterRepository.put_state, Revision | None),
+        (RelationshipRepository.put, Revision | None),
+    ):
+        assert get_type_hints(method)["expected_revision"] == kind
+        assert signature(method).parameters["expected_revision"].default is Parameter.empty
+    assert not any("expected" in field for field in get_type_hints(FormCharacterBelief))

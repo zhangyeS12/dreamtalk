@@ -11,6 +11,7 @@ from livingworld.domain.contracts import RequestId
 from livingworld.domain.events import WorldEvent
 from livingworld.domain.identifiers import (
     CharacterId,
+    EventId,
     KnowledgeAssertionId,
     LocationId,
     PlayerId,
@@ -20,6 +21,7 @@ from livingworld.domain.identifiers import (
 from livingworld.domain.knowledge import KnowledgeAssertion, Observation
 from livingworld.domain.participants import Character, CharacterState, Player, PlayerPresence
 from livingworld.domain.relationships import Relationship
+from livingworld.domain.values import Revision
 from livingworld.domain.world import Location, World
 
 
@@ -41,23 +43,33 @@ class PlayerRepository(Protocol):
     async def get(self, player_id: PlayerId) -> Player | None: ...
     async def presence(self, player_id: PlayerId) -> PlayerPresence | None: ...
     async def add(self, player: Player, presence: PlayerPresence) -> None: ...
-    async def replace_presence(self, presence: PlayerPresence) -> None: ...
+    async def replace_presence(
+        self, presence: PlayerPresence, expected_revision: Revision
+    ) -> None: ...
 
 
 class CharacterRepository(Protocol):
     async def get(self, character_id: CharacterId) -> Character | None: ...
     async def state(self, character_id: CharacterId) -> CharacterState | None: ...
     async def add(self, character: Character) -> None: ...
-    async def put_state(self, state: CharacterState) -> None: ...
+    async def put_state(
+        self, state: CharacterState, expected_revision: Revision | None
+    ) -> None: ...
 
 
 class RelationshipRepository(Protocol):
     async def get(self, source: PrincipalId, target: PrincipalId) -> Relationship | None: ...
-    async def put(self, relationship: Relationship) -> None: ...
+    async def put(self, relationship: Relationship, expected_revision: Revision | None) -> None: ...
 
 
 class EventAppender(Protocol):
     async def append(self, event: WorldEvent) -> None: ...
+
+
+class EventReferenceReader(Protocol):
+    """Trusted exact-reference validation; no global ledger/knowledge query capability."""
+
+    async def exists(self, event_id: EventId) -> bool: ...
 
 
 class WorldTruthReader(Protocol):
@@ -108,6 +120,7 @@ class UnitOfWork(Protocol):
     knowledge: KnowledgeMutationRepository
     observations: ObservationAppender
     events: EventAppender
+    event_references: EventReferenceReader
     receipts: CommandReceiptRepository
 
     async def __aenter__(self) -> Self: ...

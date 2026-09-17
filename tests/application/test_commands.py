@@ -108,7 +108,12 @@ def test_move_persistent_idempotency_original_result_and_internal_time(environme
         env = environment
         try:
             await env.initialize()
-            command = env.command(MovePlayer, player_id=env.player, destination_id=env.cafe)
+            command = env.command(
+                MovePlayer,
+                expected_presence_revision=Revision(),
+                player_id=env.player,
+                destination_id=env.cafe,
+            )
             result = await env.handler.execute(command)
             assert result.resulting_revision == Revision(1)
             events = [
@@ -145,7 +150,12 @@ def test_move_persistent_idempotency_original_result_and_internal_time(environme
             assert await env.snapshot() == state
             # An original result is durable even if a later independent command moves again.
             await env.handler.execute(
-                env.command(MovePlayer, player_id=env.player, destination_id=env.park)
+                env.command(
+                    MovePlayer,
+                    expected_presence_revision=Revision(1),
+                    player_id=env.player,
+                    destination_id=env.park,
+                )
             )
             later = await env.snapshot()
             assert await env.handler.execute(command) == replace(result, replayed=True)
@@ -173,11 +183,17 @@ def test_focused_commands_and_duplicate_results(environment, kind):
                 )
                 event_type = "CharacterCreated"
             elif kind == "placement":
-                command = env.command(PlaceCharacter, character_id=env.alice, location_id=env.cafe)
+                command = env.command(
+                    PlaceCharacter,
+                    expected_state_revision=None,
+                    character_id=env.alice,
+                    location_id=env.cafe,
+                )
                 event_type = "CharacterPlaced"
             else:
                 command = env.command(
                     ChangeRelationship,
+                    expected_relationship_revision=None,
                     source_id=env.alice,
                     target_id=env.bob,
                     affinity_delta=3,
@@ -195,7 +211,12 @@ def test_focused_commands_and_duplicate_results(environment, kind):
             assert await env.snapshot() == state
             if kind == "placement":
                 await env.handler.execute(
-                    env.command(PlaceCharacter, character_id=env.alice, location_id=env.park)
+                    env.command(
+                        PlaceCharacter,
+                        expected_state_revision=Revision(),
+                        character_id=env.alice,
+                        location_id=env.park,
+                    )
                 )
                 async with env.database.unit_of_work() as uow:
                     state = await uow.characters.state(env.alice)
@@ -212,11 +233,16 @@ def test_directional_relationship_creation_change_payload_and_limits(environment
         try:
             await env.initialize()
             reverse = env.command(
-                ChangeRelationship, source_id=env.bob, target_id=env.alice, trust_delta=1
+                ChangeRelationship,
+                expected_relationship_revision=None,
+                source_id=env.bob,
+                target_id=env.alice,
+                trust_delta=1,
             )
             await env.handler.execute(reverse)
             command = env.command(
                 ChangeRelationship,
+                expected_relationship_revision=None,
                 source_id=env.alice,
                 target_id=env.bob,
                 affinity_delta=100,
@@ -250,13 +276,21 @@ def test_directional_relationship_creation_change_payload_and_limits(environment
             with pytest.raises(DomainInvariantError, match="affinity"):
                 await env.handler.execute(
                     env.command(
-                        ChangeRelationship, source_id=env.alice, target_id=env.bob, affinity_delta=1
+                        ChangeRelationship,
+                        expected_relationship_revision=Revision(1),
+                        source_id=env.alice,
+                        target_id=env.bob,
+                        affinity_delta=1,
                     )
                 )
             assert await env.snapshot() == state
             await env.handler.execute(
                 env.command(
-                    ChangeRelationship, source_id=env.alice, target_id=env.bob, affinity_delta=-1
+                    ChangeRelationship,
+                    expected_relationship_revision=Revision(1),
+                    source_id=env.alice,
+                    target_id=env.bob,
+                    affinity_delta=-1,
                 )
             )
             async with env.database.unit_of_work() as uow:
@@ -274,7 +308,12 @@ def test_move_failure_rolls_back_and_same_request_retries(environment, monkeypat
         env = environment
         try:
             await env.initialize()
-            command = env.command(MovePlayer, player_id=env.player, destination_id=env.cafe)
+            command = env.command(
+                MovePlayer,
+                expected_presence_revision=Revision(),
+                player_id=env.player,
+                destination_id=env.cafe,
+            )
             before = await env.snapshot()
             with monkeypatch.context() as patch:
                 if failure_point == "after_event":
@@ -398,7 +437,10 @@ def test_cross_world_rejected_without_writes(environment, kind):
             with pytest.raises(CrossWorldReferenceError):
                 if kind == "move":
                     command = env.command(
-                        MovePlayer, player_id=env.player, destination_id=LocationId(other, uuid4())
+                        MovePlayer,
+                        expected_presence_revision=Revision(),
+                        player_id=env.player,
+                        destination_id=LocationId(other, uuid4()),
                     )
                 elif kind == "player":
                     command = env.command(
@@ -410,6 +452,7 @@ def test_cross_world_rejected_without_writes(environment, kind):
                 elif kind == "relationship":
                     command = env.command(
                         ChangeRelationship,
+                        expected_relationship_revision=None,
                         source_id=env.alice,
                         target_id=CharacterId(other, uuid4()),
                         affinity_delta=1,
@@ -417,6 +460,7 @@ def test_cross_world_rejected_without_writes(environment, kind):
                 else:
                     command = env.command(
                         PlaceCharacter,
+                        expected_state_revision=None,
                         character_id=env.alice,
                         location_id=LocationId(other, uuid4()),
                     )
@@ -454,23 +498,33 @@ def test_missing_references_rejected_without_writes(environment, kind):
                 )
             elif kind == "player":
                 command = env.command(
-                    MovePlayer, player_id=PlayerId(env.world, uuid4()), destination_id=env.cafe
+                    MovePlayer,
+                    expected_presence_revision=Revision(),
+                    player_id=PlayerId(env.world, uuid4()),
+                    destination_id=env.cafe,
                 )
             elif kind == "presence":
                 # DB corruption simulation uses raw SQL only in this invariant test.
                 async with env.database.engine.begin() as connection:
                     await connection.execute(text("DELETE FROM player_presences"))
                 before = await env.snapshot()
-                command = env.command(MovePlayer, player_id=env.player, destination_id=env.cafe)
+                command = env.command(
+                    MovePlayer,
+                    expected_presence_revision=Revision(),
+                    player_id=env.player,
+                    destination_id=env.cafe,
+                )
             elif kind == "character":
                 command = env.command(
                     PlaceCharacter,
+                    expected_state_revision=None,
                     character_id=CharacterId(env.world, uuid4()),
                     location_id=env.cafe,
                 )
             else:
                 command = env.command(
                     ChangeRelationship,
+                    expected_relationship_revision=None,
                     source_id=env.alice,
                     target_id=CharacterId(env.world, uuid4()),
                     affinity_delta=1,
@@ -518,6 +572,7 @@ def test_invalid_relationship_delta_no_event_or_new_edge(environment, deltas):
             with pytest.raises(DomainInvariantError):
                 command = env.command(
                     ChangeRelationship,
+                    expected_relationship_revision=None,
                     source_id=env.alice,
                     target_id=env.bob,
                     affinity_delta=deltas[0],
@@ -595,7 +650,12 @@ def test_request_identity_conflict_across_command_types_and_worlds(environment):
         env = environment
         try:
             await env.initialize()
-            command = env.command(MovePlayer, player_id=env.player, destination_id=env.cafe)
+            command = env.command(
+                MovePlayer,
+                expected_presence_revision=Revision(),
+                player_id=env.player,
+                destination_id=env.cafe,
+            )
             await env.handler.execute(command)
             before = await env.snapshot()
             changed_type = CreateCharacter(

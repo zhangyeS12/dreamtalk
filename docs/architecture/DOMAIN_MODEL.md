@@ -1,6 +1,15 @@
 # LivingWorld 领域概念模型
 
-状态：Stage 0 领域语言保留；C-003A 实现领域模型，C-003B 增加独立 SQLite ORM 映射，C-003C 增加 RelationshipMetrics 与确定性 Command 事务，C-003D 按用户确认增加独立 ObservationId、主体知识隔离与显式获知。见 [COMMAND_MODEL.md](COMMAND_MODEL.md)、[PERSISTENCE_MODEL.md](PERSISTENCE_MODEL.md) 和 [KNOWLEDGE_ACCESS_MODEL.md](KNOWLEDGE_ACCESS_MODEL.md)。其余概念仍是定义；回放、完整乐观并发处理、Director、Agent、业务 HTTP API 与世界模拟未实现。
+状态：Stage 0 领域语言保留；Stage 2 已建立领域模型、SQLite 映射、命令事务、知识隔离、canonical ledger、回放及资源级乐观并发。C-003E2 按用户确认增加内部 CharacterBelief 形成路径，复用已有 KnowledgeAssertion。见 [COMMAND_MODEL.md](COMMAND_MODEL.md)、[PERSISTENCE_MODEL.md](PERSISTENCE_MODEL.md) 和 [STAGE_2_ACCEPTANCE.md](STAGE_2_ACCEPTANCE.md)。其余概念仍是定义；Director、Agent、业务 HTTP API 与世界模拟未实现。
+
+## C-003E2 已确认的边界
+
+Stage 2 已建立 canonical ledger、内部回放及资源级乐观并发；Director、Agent、业务 HTTP API 与世界模拟仍未实现。验收见 [STAGE_2_ACCEPTANCE.md](STAGE_2_ACCEPTANCE.md)。
+
+- mutable projection 各自由 Revision 保护，Presence / CharacterState / 有向 Relationship 独立，无全局 World revision；期待不存在用 None，不等同 Revision(0)。CAS 在基础设施实现，领域继续不知道 SQLAlchemy 或数据库。
+- 现有 ConcurrencyConflictError 增加可选内部 resource kind、typed identity、expected/actual Revision 信息；Revision.advance 的既有调用仍有效。
+- CharacterBelief 的 canonical 形成入口明确为内部 FormCharacterBelief：新 immutable KnowledgeAssertion、单一 Character owner、optional source/provenance，可无 Truth 或与 Truth 矛盾；没有 expected revision 或自动 Observation。完整语义事件可恢复原身份与所有 metadata。
+- AcquireKnowledge 继续按 exposure channel 复制源 proposition，source/provenance 不授予读取源 owner 私有存储的权限。没有推理、自动校正、belief revision、Memory 或智能层。
 
 ## 阅读约定
 

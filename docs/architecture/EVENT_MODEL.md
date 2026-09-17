@@ -1,6 +1,6 @@
 # Event Model
 
-> 状态：保留 Stage 0 概念边界；C-003A/B 定义不可变 WorldEvent 和只追加存储，C-003C 建立 Command→event→projection→receipt 原子提交，C-003D 增加内部真相与显式获知事件。候选激活、回放、完整乐观并发执行和模拟仍未实现。
+> 状态：保留 Stage 0 概念边界；Stage 2 已建立不可变事件、命令原子提交、知识隔离、canonical ledger、回放及资源级 CAS。C-003E2 增加 CharacterBeliefFormed v1。候选激活、世界模拟、Director 与 Agent 未实现。
 
 规则来源：[PRODUCT_SPEC.md](../product/PRODUCT_SPEC.md) 中的 FR-01、FR-02、FR-04 至 FR-15、FR-22 至 FR-24。规划责任见 [DIRECTOR_MODEL.md](DIRECTOR_MODEL.md)，信息归属见 [KNOWLEDGE_MODEL.md](KNOWLEDGE_MODEL.md)。
 
@@ -66,7 +66,15 @@ WorldTruthAsserted 的 provenance 指自身事件；派生断言 provenance 指 
 
 事件 payload 属内部 canonical history，不直接作为玩家/角色通知。角色获知仅创建自有信念，玩家获知仅创建自有知识；世界真相不因此修改。观察来源指针不是跨主体读取权限。没有自动 inferred 事件、知识广播、Memory 或 RAG。
 
-### C-003C 首批事件合约
+### C-003E2 CharacterBeliefFormed v1
+
+FormCharacterBelief 固定 ordinal 0 发出此 semantic canonical event。payload 完整保存 assertion_id、scope=character_belief、typed Character owner、subject/predicate/value、epistemic_status、精确 confidence、WorldTime valid_from/to、可空 source_assertion_id / provenance_event_id、revision=0。
+
+形成事件不是 KnowledgeRowInserted，也不声明命题为 WorldTruth。信念可无 source、无对应 Truth 或与之矛盾；source/provenance 有则保存已验证的既有同世界引用，无则保留 None。该命令不发 ObservationRecorded，不创建 exposure。回放按 `(CharacterBeliefFormed, 1)` 恢复所有原身份与元数据，不重新生成 ID、推理或 reconciliation；原 Truth/Acquire 的 self-event provenance 规则保持不变。
+
+Source 指针不赋予 source owner 的知识读取权限。AcquireKnowledge 仍可用该信念作来源，通过原 ObservationRecorded + KnowledgeAcquired 路径复制 false proposition，不修改 Truth。
+
+### C-003C 首批事件目录
 
 所有下列 payload_version=1，显式语义字段不保存完整 ORM/domain dump。world_id、双时间、因果与关联身份位于统一事件 envelope。
 
@@ -87,9 +95,11 @@ WorldTruthAsserted 的 provenance 指自身事件；派生断言 provenance 指 
 
 事件 key 固定 `request_id:ordinal`；EventId 为基于 RequestId/world/ordinal 的 UUIDv5，身份独立于 WorldTime。顶层 causation=RequestId，correlation=CorrelationId(RequestId.value)。occurred_at 来自当前 WorldClock（创建世界使用初始值），created_at 来自注入 UTC WallClock。多事件 ordinal 是命令内部身份约定，**不是跨命令 canonical replay position**；不按 WorldTime/created_at 选择唯一回放顺序。
 
-只在事件、投影、回执均成功后 commit；异常全部 rollback，同一未提交请求可重试。成功重试包含进程/engine 重启，不产生第二组事件或额外 revision。C-003E1 已建立 canonical 顺序与投影重建；完整乐观并发约束仍待后续任务。
+只在事件、投影、回执均成功后 commit；异常全部 rollback，同一未提交请求可由调用方明确重试。成功重试包含进程/engine 重启，不产生第二组事件或额外 revision。C-003E1 已建立 canonical 顺序与投影重建，C-003E2 已建立资源级乐观并发；没有自动 semantic retry。
 
 ## C-003E1 Canonical Ledger Position
+
+C-003E2 再次审计 PlayerMoved、CharacterPlaced、RelationshipChanged：此前 fold 提供 previous revision，现有 resulting revision 与前态字段足以验证转换，保留 v1 不改写历史。新增信念事件后目录共 12 类 v1。并发 loser 不进入 ledger，winner 重建结果等于已提交状态；完整验收见 [STAGE_2_ACCEPTANCE.md](STAGE_2_ACCEPTANCE.md)。CAS 或 INSERT 冲突时，事件、分配游标、投影和成功 receipt 同事务完整回滚，不发“attempted but conflicted” canonical event。
 
 `ledger_position != WorldTime != created_at != event_id`。
 

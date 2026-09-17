@@ -13,12 +13,14 @@ from livingworld.application.commands import (
     CreateLocation,
     CreatePlayer,
     CreateWorld,
+    FormCharacterBelief,
     MovePlayer,
     PlaceCharacter,
     WorldCommand,
 )
 from livingworld.domain.identifiers import (
     CharacterId,
+    EventId,
     KnowledgeAssertionId,
     LocationId,
     ObservationId,
@@ -28,7 +30,13 @@ from livingworld.domain.identifiers import (
 
 
 def id_input(
-    identity: WorldId | LocationId | PlayerId | CharacterId | KnowledgeAssertionId | ObservationId,
+    identity: WorldId
+    | LocationId
+    | PlayerId
+    | CharacterId
+    | KnowledgeAssertionId
+    | ObservationId
+    | EventId,
 ) -> dict[str, str]:
     result = {"kind": type(identity).__name__, "id": str(identity.value)}
     if not isinstance(identity, WorldId):
@@ -69,6 +77,7 @@ def semantic_input(command: WorldCommand) -> dict:
             details = {
                 "player_id": id_input(command.player_id),
                 "destination_id": id_input(command.destination_id),
+                "expected_presence_revision": command.expected_presence_revision.value,
             }
         case CreateCharacter():
             details = {"character_id": id_input(command.character_id), "name": command.name}
@@ -76,6 +85,9 @@ def semantic_input(command: WorldCommand) -> dict:
             details = {
                 "character_id": id_input(command.character_id),
                 "location_id": id_input(command.location_id),
+                "expected_state_revision": command.expected_state_revision.value
+                if command.expected_state_revision is not None
+                else None,
             }
         case ChangeRelationship():
             details = {
@@ -84,8 +96,11 @@ def semantic_input(command: WorldCommand) -> dict:
                 "affinity_delta": command.affinity_delta,
                 "trust_delta": command.trust_delta,
                 "familiarity_delta": command.familiarity_delta,
+                "expected_relationship_revision": command.expected_relationship_revision.value
+                if command.expected_relationship_revision is not None
+                else None,
             }
-        case AssertWorldTruth():
+        case AssertWorldTruth() | FormCharacterBelief():
             details = {
                 "assertion_id": id_input(command.assertion_id),
                 "subject": command.subject,
@@ -98,6 +113,16 @@ def semantic_input(command: WorldCommand) -> dict:
                 else None,
                 "valid_to": command.valid_to.microseconds if command.valid_to is not None else None,
             }
+            if isinstance(command, FormCharacterBelief):
+                details |= {
+                    "character_id": id_input(command.character_id),
+                    "source_assertion_id": id_input(command.source_assertion_id)
+                    if command.source_assertion_id is not None
+                    else None,
+                    "provenance_event_id": id_input(command.provenance_event_id)
+                    if command.provenance_event_id is not None
+                    else None,
+                }
         case AcquireKnowledge():
             details = {
                 "assertion_id": id_input(command.assertion_id),

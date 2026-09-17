@@ -3,6 +3,7 @@
 Never imported by production. It deliberately bypasses commands to probe the DB.
 """
 
+from livingworld.application.errors import IdempotencyConflictError
 from livingworld.domain.events import WorldEvent
 from livingworld.infrastructure.persistence.errors import PersistenceConflictError
 from livingworld.infrastructure.persistence.mapping import to_record
@@ -19,7 +20,7 @@ class SnapshotFixtureStore(PersistenceStore):
                     await EventAppender(session).append(entity)
                 else:
                     session.add(to_record(entity))
-        except IntegrityError:
+        except (IntegrityError, IdempotencyConflictError):
             raise PersistenceConflictError("persistence_insert_conflict") from None
 
 

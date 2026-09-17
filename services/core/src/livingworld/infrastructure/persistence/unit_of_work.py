@@ -1,22 +1,25 @@
 """SQLAlchemy capabilities sharing exactly one command transaction/session."""
 
 import json
+from sqlite3 import SQLITE_CONSTRAINT_PRIMARYKEY, SQLITE_CONSTRAINT_UNIQUE
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.dialects.sqlite import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import selectinload
 
-from livingworld.application.errors import IdempotencyConflictError
+from livingworld.application.errors import EntityAlreadyExistsError, IdempotencyConflictError
 from livingworld.application.fingerprints import canonical_json, id_input
 from livingworld.application.results import CommandResult, RelationshipReference
 from livingworld.domain.commands import CommandReceipt
 from livingworld.domain.contracts import RequestId
+from livingworld.domain.errors import ConcurrencyConflictError, DomainInvariantError
 from livingworld.domain.events import WorldEvent
 from livingworld.domain.identifiers import (
     CharacterId,
+    EventId,
     KnowledgeAssertionId,
     LocationId,
     ObservationId,
@@ -43,9 +46,45 @@ from livingworld.infrastructure.persistence.models import (
     PlayerPresenceRecord,
     PlayerRecord,
     RelationshipRecord,
+    WorldEventRecord,
     WorldLedgerCursorRecord,
     WorldRecord,
 )
+
+
+async def _add_unique(session: AsyncSession, record: object, conflict: Exception) -> None:
+    session.add(record)
+    try:
+        await session.flush()
+    except IntegrityError as error:
+        # Only an actual identity UNIQUE/PK collision has these semantics.
+        # Foreign-key, CHECK and other failures remain infrastructure errors.
+        if getattr(error.orig, "sqlite_errorcode", None) in (
+            SQLITE_CONSTRAINT_PRIMARYKEY,
+            SQLITE_CONSTRAINT_UNIQUE,
+        ):
+            raise conflict from None
+        raise
+
+
+def _conflict(kind: str, identity: object, expected: Revision | None) -> ConcurrencyConflictError:
+    return ConcurrencyConflictError(
+        f"{kind} does not match expected existence/revision",
+        resource_kind=kind,
+        resource_identity=identity,
+        expected_revision=expected,
+    )
+
+
+def _result_revision(resulting: Revision, expected: Revision) -> None:
+    if resulting != expected.advance(expected):
+        raise DomainInvariantError("CAS must persist exactly the next revision")
+
+
+async def _cas(session: AsyncSession, statement, conflict: ConcurrencyConflictError) -> None:
+    result = await session.execute(statement.execution_options(synchronize_session=False))
+    if result.rowcount != 1:
+        raise conflict
 
 
 class WorldRepository:
@@ -63,8 +102,9 @@ class WorldRepository:
         return to_domain(record) if record is not None else None
 
     async def add(self, world: World) -> None:
-        self._session.add(to_record(world))
-        await self._session.flush()
+        await _add_unique(
+            self._session, to_record(world), EntityAlreadyExistsError("World already exists")
+        )
 
 
 class LocationRepository:
@@ -78,8 +118,9 @@ class LocationRepository:
         return to_domain(record) if record is not None else None
 
     async def add(self, location: Location) -> None:
-        self._session.add(to_record(location))
-        await self._session.flush()
+        await _add_unique(
+            self._session, to_record(location), EntityAlreadyExistsError("Location already exists")
+        )
 
 
 class PlayerRepository:
@@ -97,14 +138,31 @@ class PlayerRepository:
         return to_domain(record) if record is not None else None
 
     async def add(self, player: Player, presence: PlayerPresence) -> None:
-        self._session.add(to_record(player))
-        await self._session.flush()
+        await _add_unique(
+            self._session, to_record(player), EntityAlreadyExistsError("Player already exists")
+        )
         self._session.add(to_record(presence))
         await self._session.flush()
 
-    async def replace_presence(self, presence: PlayerPresence) -> None:
-        await self._session.merge(to_record(presence))
-        await self._session.flush()
+    async def replace_presence(self, presence: PlayerPresence, expected_revision: Revision) -> None:
+        _result_revision(presence.revision, expected_revision)
+        row = PlayerPresenceRecord
+        await _cas(
+            self._session,
+            update(row)
+            .where(
+                row.world_id == presence.world_id.value,
+                row.player_id == presence.player_id.value,
+                row.revision == expected_revision.value,
+            )
+            .values(
+                location_id=presence.location_id.value,
+                activity=presence.activity.value,
+                availability=presence.availability.value,
+                revision=presence.revision.value,
+            ),
+            _conflict("PlayerPresence", presence.player_id, expected_revision),
+        )
 
 
 class CharacterRepository:
@@ -124,12 +182,32 @@ class CharacterRepository:
         return to_domain(record) if record is not None else None
 
     async def add(self, character: Character) -> None:
-        self._session.add(to_record(character))
-        await self._session.flush()
+        await _add_unique(
+            self._session,
+            to_record(character),
+            EntityAlreadyExistsError("Character already exists"),
+        )
 
-    async def put_state(self, state: CharacterState) -> None:
-        await self._session.merge(to_record(state))
-        await self._session.flush()
+    async def put_state(self, state: CharacterState, expected_revision: Revision | None) -> None:
+        conflict = _conflict("CharacterState", state.character_id, expected_revision)
+        if expected_revision is None:
+            if state.revision != Revision():
+                raise DomainInvariantError("New CharacterState must start at revision zero")
+            await _add_unique(self._session, to_record(state), conflict)
+        else:
+            _result_revision(state.revision, expected_revision)
+            row = CharacterStateRecord
+            await _cas(
+                self._session,
+                update(row)
+                .where(
+                    row.world_id == state.world_id.value,
+                    row.character_id == state.character_id.value,
+                    row.revision == expected_revision.value,
+                )
+                .values(location_id=state.location_id.value, revision=state.revision.value),
+                conflict,
+            )
 
 
 def relationship_key(source: PrincipalId, target: PrincipalId) -> tuple:
@@ -150,9 +228,50 @@ class RelationshipRepository:
         record = await self._session.get(RelationshipRecord, relationship_key(source, target))
         return to_domain(record) if record is not None else None
 
-    async def put(self, relationship: Relationship) -> None:
-        await self._session.merge(to_record(relationship))
-        await self._session.flush()
+    async def put(self, relationship: Relationship, expected_revision: Revision | None) -> None:
+        conflict = _conflict(
+            "Relationship",
+            RelationshipReference(relationship.source_id, relationship.target_id),
+            expected_revision,
+        )
+        if expected_revision is None:
+            if relationship.revision != Revision(1):
+                raise DomainInvariantError("First relationship delta must produce revision one")
+            await _add_unique(self._session, to_record(relationship), conflict)
+        else:
+            _result_revision(relationship.revision, expected_revision)
+            row = RelationshipRecord
+            key = relationship_key(relationship.source_id, relationship.target_id)
+            await _cas(
+                self._session,
+                update(row)
+                .where(
+                    row.world_id == key[0],
+                    row.source_kind == key[1],
+                    row.source_id == key[2],
+                    row.target_kind == key[3],
+                    row.target_id == key[4],
+                    row.revision == expected_revision.value,
+                )
+                .values(
+                    revision=relationship.revision.value,
+                    affinity=relationship.metrics.affinity,
+                    trust=relationship.metrics.trust,
+                    familiarity=relationship.metrics.familiarity,
+                ),
+                conflict,
+            )
+
+
+class EventReferenceReader:
+    def __init__(self, session: AsyncSession):
+        self._session = session
+
+    async def exists(self, event_id: EventId) -> bool:
+        return (
+            await self._session.get(WorldEventRecord, (event_id.world_id.value, event_id.value))
+            is not None
+        )
 
 
 class EventAppender:
@@ -173,8 +292,11 @@ class EventAppender:
         position = (await self._session.execute(statement)).scalar_one()
         record = to_record(event)
         record.ledger_position = position
-        self._session.add(record)
-        await self._session.flush()
+        await _add_unique(
+            self._session,
+            record,
+            IdempotencyConflictError("Canonical event identity already committed"),
+        )
 
 
 class KnowledgeMutationRepository:
@@ -190,8 +312,11 @@ class KnowledgeMutationRepository:
         return to_domain(record) if record is not None else None
 
     async def add(self, assertion: KnowledgeAssertion) -> None:
-        self._session.add(to_record(assertion))
-        await self._session.flush()
+        await _add_unique(
+            self._session,
+            to_record(assertion),
+            EntityAlreadyExistsError("KnowledgeAssertion already exists"),
+        )
 
 
 class ObservationAppender:
@@ -289,8 +414,11 @@ class CommandReceiptRepository:
         record = to_record(receipt)
         record.command_fingerprint = fingerprint
         record.result_payload = _encode_result(result)
-        self._session.add(record)
-        await self._session.flush()
+        await _add_unique(
+            self._session,
+            record,
+            IdempotencyConflictError("CommandReceipt identity already committed"),
+        )
 
 
 class SqlAlchemyUnitOfWork:
@@ -299,7 +427,14 @@ class SqlAlchemyUnitOfWork:
 
     async def __aenter__(self):
         self._session = self._sessions()
-        await self._session.begin()
+        try:
+            await self._session.begin()
+            # Reserve SQLite's physical writer before any reads. CAS still protects each
+            # resource independently; this is not a World revision or semantic lock.
+            await self._session.connection(execution_options={"livingworld_write_intent": True})
+        except BaseException:
+            await self._session.close()
+            raise
         self.worlds = WorldRepository(self._session)
         self.locations = LocationRepository(self._session)
         self.players = PlayerRepository(self._session)
@@ -308,6 +443,7 @@ class SqlAlchemyUnitOfWork:
         self.knowledge = KnowledgeMutationRepository(self._session)
         self.observations = ObservationAppender(self._session)
         self.events = EventAppender(self._session)
+        self.event_references = EventReferenceReader(self._session)
         self.receipts = CommandReceiptRepository(self._session)
         return self
 
