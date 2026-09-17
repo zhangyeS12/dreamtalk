@@ -8,10 +8,12 @@ from typing import Protocol
 from livingworld.domain.content.identifiers import ContentAssetId, ContentId, RawImportId
 from livingworld.domain.content.models import (
     CanonicalContent,
+    CharacterDefinition,
     ContentAsset,
     ContentProvenance,
     ContentRevision,
     ContentSourceKind,
+    LoreCollection,
     LoreEntry,
 )
 from livingworld.domain.content.serialization import (
@@ -87,17 +89,37 @@ class ContentDraft:
         lore_ids = {
             content.content_id for content in self.contents if isinstance(content, LoreEntry)
         }
+        collections = {
+            content.content_id: content
+            for content in self.contents
+            if isinstance(content, LoreCollection)
+        }
+        owned = {identity: set() for identity in collections}
         for content in self.contents:
             if not isinstance(content, LoreEntry):
                 if not set(content.lore_entry_ids) <= lore_ids:
                     raise DomainInvariantError("Unresolved LoreEntryId in draft")
-                if any(ref.asset_id not in assets for ref in content.assets):
+                if (
+                    isinstance(content, CharacterDefinition)
+                    and not set(content.lore_collection_ids) <= collections.keys()
+                ):
+                    raise DomainInvariantError("Unresolved LoreCollectionId in draft")
+                if not isinstance(content, LoreCollection) and any(
+                    ref.asset_id not in assets for ref in content.assets
+                ):
                     raise DomainInvariantError("Unresolved ContentAssetId in draft")
+            elif content.collection_id is not None:
+                if content.collection_id not in collections:
+                    raise DomainInvariantError("Unresolved LoreCollectionId owner in draft")
+                owned[content.collection_id].add(content.content_id)
             provenance = content.provenance
             if provenance.raw_import_id is not None:
                 envelope = imports.get(provenance.raw_import_id)
                 if envelope is None or envelope.provenance != provenance:
                     raise DomainInvariantError("Unresolved or inconsistent raw provenance in draft")
+        for identity, collection in collections.items():
+            if set(collection.lore_entry_ids) != owned[identity]:
+                raise DomainInvariantError("LoreCollection entries must match exclusive ownership")
 
     def preview_hash(self) -> str:
         # Bundle order is administrative; authored arrays inside each root retain order.
@@ -167,4 +189,13 @@ class ContentService:
         require_type(preview, ContentPreview, "preview")
         if reviewed_hash != preview.preview_hash or reviewed_hash != preview.draft.preview_hash():
             raise DomainInvariantError("Commit requires the reviewed preview hash")
+        if not isinstance(expected_revisions, Mapping):
+            raise DomainInvariantError("Expected content revisions require a mapping")
+        for content in preview.draft.contents:
+            if (
+                isinstance(content, LoreEntry)
+                and content.collection_id is None
+                and expected_revisions.get(content.content_id) is None
+            ):
+                raise DomainInvariantError("New LoreEntry requires one LoreCollection")
         await self._repository.save(preview.draft, expected_revisions)

@@ -19,7 +19,8 @@ DOMAIN_BASELINE_REVISION = "0002_world_domain_persistence"
 COMMAND_REVISION = "0003_command_pipeline"
 OBSERVATION_REVISION = "0004_observation_identity"
 LEDGER_REVISION = "0005_canonical_ledger"
-HEAD_REVISION = "0006_canonical_content"
+CONTENT_REVISION = "0006_canonical_content"
+HEAD_REVISION = "0007_lore_collections"
 LEGACY_CHECKSUM = "0345ec9d50fd45b01ba0f97ff6f14a25f683fb8d01f08f04ff9dc4892ad1cac5"
 LEGACY_TABLES = {"schema_version", "migration_history"}
 DOMAIN_TABLES = set(Base.metadata.tables)
@@ -165,6 +166,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         COMMAND_REVISION,
         OBSERVATION_REVISION,
         LEDGER_REVISION,
+        CONTENT_REVISION,
         HEAD_REVISION,
     }:
         _fail("alembic_revision_unsupported")
@@ -174,16 +176,18 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
     domain_present = revision != LEGACY_REVISION
     if domain_present:
         expected |= DOMAIN_TABLES
-        if revision not in {LEDGER_REVISION, HEAD_REVISION}:
+        if revision not in {LEDGER_REVISION, CONTENT_REVISION, HEAD_REVISION}:
             expected -= {"world_ledger_cursors"}
-    if revision == HEAD_REVISION:
+    if revision in {CONTENT_REVISION, HEAD_REVISION}:
         expected |= CONTENT_TABLES
+        if revision == CONTENT_REVISION:
+            expected -= {"content_lore_collections"}
     if tables != expected:
         _fail("alembic_schema_state_mismatch")
     _validate_auxiliary_objects(connection, domain_present)
     if domain_present:
         _validate_domain_shape(connection, revision)
-    if revision == HEAD_REVISION:
+    if revision in {CONTENT_REVISION, HEAD_REVISION}:
         _validate_domain_shape(connection, revision, ContentBase.metadata)
 
 
@@ -220,8 +224,10 @@ def _validate_domain_shape(
         "ck_command_receipt_command_result",
     }
     for table in metadata.sorted_tables:
+        if revision == CONTENT_REVISION and table.name == "content_lore_collections":
+            continue
         if (
-            revision not in {LEDGER_REVISION, HEAD_REVISION}
+            revision not in {LEDGER_REVISION, CONTENT_REVISION, HEAD_REVISION}
             and table.name == "world_ledger_cursors"
         ):
             continue
@@ -239,9 +245,14 @@ def _validate_domain_shape(
                 and column.name == "observation_id"
             )
             and not (
-                revision not in {LEDGER_REVISION, HEAD_REVISION}
+                revision not in {LEDGER_REVISION, CONTENT_REVISION, HEAD_REVISION}
                 and table.name == "world_events"
                 and column.name == "ledger_position"
+            )
+            and not (
+                revision == CONTENT_REVISION
+                and table.name == "content_lore_entries"
+                and column.name == "collection_id"
             )
         ]
         if actual != expected:
@@ -266,6 +277,11 @@ def _validate_domain_shape(
                 tuple(element.column.name for element in foreign_key.elements),
             )
             for foreign_key in table.foreign_key_constraints
+            if not (
+                revision == CONTENT_REVISION
+                and table.name == "content_lore_entries"
+                and foreign_key.referred_table.name == "content_lore_collections"
+            )
         }
         actual_fks = {
             (tuple(fk["constrained_columns"]), fk["referred_table"], tuple(fk["referred_columns"]))
@@ -279,7 +295,7 @@ def _validate_domain_shape(
             if isinstance(constraint, CheckConstraint)
             and not (baseline and constraint.name in added_checks)
             and not (
-                revision not in {LEDGER_REVISION, HEAD_REVISION}
+                revision not in {LEDGER_REVISION, CONTENT_REVISION, HEAD_REVISION}
                 and constraint.name == "ck_world_event_ledger_position"
             )
         }
@@ -310,7 +326,7 @@ def _validate_domain_shape(
             for index in table.indexes
             if not (baseline and index.name == "uq_command_request_identity")
             and not (
-                revision not in {LEDGER_REVISION, HEAD_REVISION}
+                revision not in {LEDGER_REVISION, CONTENT_REVISION, HEAD_REVISION}
                 and index.name == "uq_world_event_ledger_position"
             )
         }

@@ -2,7 +2,7 @@
 
 from collections.abc import Mapping
 
-from sqlalchemy import update
+from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
@@ -11,6 +11,7 @@ from livingworld.domain.content.identifiers import (
     CharacterDefinitionId,
     ContentAssetId,
     ContentId,
+    LoreCollectionId,
     LoreEntryId,
     RawImportId,
     WorldContentId,
@@ -20,6 +21,8 @@ from livingworld.domain.content.models import (
     CharacterDefinition,
     ContentAsset,
     ContentRevision,
+    LoreCollection,
+    LoreEntry,
     WorldContent,
 )
 from livingworld.domain.content.serialization import (
@@ -37,6 +40,7 @@ from livingworld.domain.values import require_type
 from livingworld.infrastructure.persistence.content_models import (
     CharacterDefinitionRecord,
     ContentAssetRecord,
+    LoreCollectionRecord,
     LoreEntryRecord,
     RawImportRecord,
     WorldContentRecord,
@@ -47,6 +51,7 @@ _RECORDS = {
     CharacterDefinitionId: CharacterDefinitionRecord,
     WorldContentId: WorldContentRecord,
     LoreEntryId: LoreEntryRecord,
+    LoreCollectionId: LoreCollectionRecord,
 }
 
 
@@ -62,6 +67,8 @@ def _title(content: CanonicalContent) -> str:
         return content.display_name
     if isinstance(content, WorldContent):
         return content.title
+    if isinstance(content, LoreCollection):
+        return content.name
     return content.title
 
 
@@ -73,6 +80,11 @@ def _loaded(record: object, content_id: ContentId) -> CanonicalContent:
         or content.content_version != record.content_version
         or _title(content) != record.title
         or semantic_hash(content) != record.semantic_hash
+        or (
+            isinstance(content, LoreEntry)
+            and record.collection_id
+            != (content.collection_id.value if content.collection_id is not None else None)
+        )
     ):
         raise PersistenceDataError("stored_content_metadata_mismatch")
     return content
@@ -165,7 +177,11 @@ class SqlAlchemyContentRepository:
                         session.add(ContentAssetRecord(**values))
                     elif any(getattr(record, key) != value for key, value in values.items()):
                         raise ContentConflictError("Asset reference identity is immutable")
-                for content in draft.contents:
+                # The collection FK must exist before any owned entries are inserted.
+                roots = sorted(
+                    draft.contents, key=lambda root: not isinstance(root, LoreCollection)
+                )
+                for content in roots:
                     model = _record_type(content.content_id)
                     precondition = expected[content.content_id]
                     record = await session.get(model, content.content_id.value)
@@ -176,6 +192,16 @@ class SqlAlchemyContentRepository:
                         "semantic_hash": semantic_hash(content),
                         "canonical_json": serialize_content(content),
                     }
+                    if isinstance(content, LoreEntry):
+                        values["collection_id"] = (
+                            content.collection_id.value
+                            if content.collection_id is not None
+                            else None
+                        )
+                        if record is None and content.collection_id is None:
+                            raise DomainInvariantError("New LoreEntry requires one LoreCollection")
+                        if record is not None and record.collection_id != values["collection_id"]:
+                            raise ContentConflictError("LoreEntry ownership cannot be reassigned")
                     if precondition is None:
                         if record is not None or content.revision != ContentRevision():
                             raise ContentConflictError(
@@ -206,5 +232,20 @@ class SqlAlchemyContentRepository:
                         if result.rowcount != 1:
                             raise ContentConflictError("Content revision compare-and-swap failed")
                 await session.flush()
+                for collection in roots:
+                    if isinstance(collection, LoreCollection):
+                        persisted = set(
+                            (
+                                await session.scalars(
+                                    select(LoreEntryRecord.content_id).where(
+                                        LoreEntryRecord.collection_id == collection.content_id.value
+                                    )
+                                )
+                            ).all()
+                        )
+                        if persisted != {identity.value for identity in collection.lore_entry_ids}:
+                            raise ContentConflictError(
+                                "Persisted LoreCollection ownership mismatch"
+                            )
         except IntegrityError:
             raise ContentConflictError("Content persistence constraint conflict") from None

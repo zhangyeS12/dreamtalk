@@ -2,7 +2,7 @@
 
 from uuid import UUID
 
-from sqlalchemy import CheckConstraint, Integer, LargeBinary, String, Text
+from sqlalchemy import CheckConstraint, ForeignKey, Integer, LargeBinary, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from livingworld.infrastructure.persistence.types import UUIDStorage
@@ -48,11 +48,27 @@ class WorldContentRecord(_RootColumns, ContentBase):
 
 class LoreEntryRecord(_RootColumns, ContentBase):
     __tablename__ = "content_lore_entries"
+    collection_id: Mapped[UUID | None] = mapped_column(
+        UUIDStorage(),
+        ForeignKey("content_lore_collections.content_id"),
+        nullable=True,
+        sort_order=100,
+    )
     # Lore may have no authored title; use distinct checks for its nonempty body in JSON.
     __table_args__ = tuple(
         constraint
         for constraint in root_checks(__tablename__)
         if constraint.name != "ck_content_lore_entries_title"
+    )
+
+
+class LoreCollectionRecord(_RootColumns, ContentBase):
+    __tablename__ = "content_lore_collections"
+    # An external book may be unnamed, including a valid empty collection.
+    __table_args__ = tuple(
+        constraint
+        for constraint in root_checks(__tablename__)
+        if constraint.name != "ck_content_lore_collections_title"
     )
 
 

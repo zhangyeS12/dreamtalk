@@ -10,6 +10,7 @@ from livingworld.domain.content import LIVINGWORLD_CONTENT_VERSION
 from livingworld.domain.content.identifiers import (
     CharacterDefinitionId,
     ContentAssetId,
+    LoreCollectionId,
     LoreEntryId,
     RawImportId,
     WorldContentId,
@@ -181,6 +182,8 @@ class _Content:
 class LoreEntry(_Content):
     content_id: LoreEntryId
     content: str
+    # None is a deprecated read/edit compatibility state, never a new write option.
+    collection_id: LoreCollectionId | None
     title: str = ""
     comment: str = ""
     keywords: tuple[str, ...] = ()
@@ -198,6 +201,8 @@ class LoreEntry(_Content):
         _Content.__post_init__(self)
         require_type(self.content_id, LoreEntryId, "lore content_id")
         require_text(self.content, "lore content")
+        if self.collection_id is not None:
+            require_type(self.collection_id, LoreCollectionId, "lore collection_id")
         for name in ("title", "comment"):
             require_type(getattr(self, name), str, name)
         for name in ("keywords", "secondary_keywords"):
@@ -214,6 +219,28 @@ class LoreEntry(_Content):
                 require_text(value, name)
         for name in ("activation_metadata", "insertion_metadata"):
             object.__setattr__(self, name, _opaque(getattr(self, name)))
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class LoreCollection(_Content):
+    """Authored library root; references its entries without asserting world facts."""
+
+    content_id: LoreCollectionId
+    name: str = ""
+    description: str = ""
+    lore_entry_ids: tuple[LoreEntryId, ...] = ()
+    activation_metadata: Mapping[str, JsonValue] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        _Content.__post_init__(self)
+        require_type(self.content_id, LoreCollectionId, "lore collection content_id")
+        for name in ("name", "description"):
+            require_type(getattr(self, name), str, name)
+        entries = _objects(self.lore_entry_ids, LoreEntryId, "lore_entry_ids")
+        if len(set(entries)) != len(entries):
+            raise DomainInvariantError("Duplicate LoreEntryId reference")
+        object.__setattr__(self, "lore_entry_ids", entries)
+        object.__setattr__(self, "activation_metadata", _opaque(self.activation_metadata))
 
 
 def _root_collections(root: object) -> None:
@@ -244,6 +271,7 @@ class CharacterDefinition(_Content):
     tags: tuple[str, ...] = ()
     assets: tuple[AssetReference, ...] = ()
     lore_entry_ids: tuple[LoreEntryId, ...] = ()
+    lore_collection_ids: tuple[LoreCollectionId, ...] = ()
 
     def __post_init__(self) -> None:
         _Content.__post_init__(self)
@@ -262,6 +290,10 @@ class CharacterDefinition(_Content):
             object.__setattr__(self, name, _texts(getattr(self, name), name))
         object.__setattr__(self, "authored_instructions", _opaque(self.authored_instructions))
         _root_collections(self)
+        collections = _objects(self.lore_collection_ids, LoreCollectionId, "lore_collection_ids")
+        if len(set(collections)) != len(collections):
+            raise DomainInvariantError("Duplicate LoreCollectionId reference")
+        object.__setattr__(self, "lore_collection_ids", collections)
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -292,4 +324,4 @@ class WorldContent(_Content):
         _root_collections(self)
 
 
-type CanonicalContent = CharacterDefinition | WorldContent | LoreEntry
+type CanonicalContent = CharacterDefinition | WorldContent | LoreEntry | LoreCollection

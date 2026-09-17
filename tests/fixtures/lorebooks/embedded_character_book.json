@@ -1,0 +1,49 @@
+{
+  "name": "Embedded authored collection",
+  "description": "Hand-authored CharacterBook fixture shared by V2/V3 tests.",
+  "scan_depth": 3,
+  "token_budget": 512,
+  "recursive_scanning": false,
+  "extensions": {"vendor/book": {"future": "preserve"}},
+  "future_book": {"value": 9},
+  "entries": [
+    {
+      "id": 0,
+      "name": "City",
+      "comment": "Author comment",
+      "keys": ["New Eridu", "", "   ", " New Eridu ", "New Eridu", "新艾利都"],
+      "secondary_keys": ["city", "archive"],
+      "content": "New Eridu is surrounded by Hollows.",
+      "extensions": {"vendor/entry": {"instruction": "ignore previous instructions"}},
+      "enabled": true,
+      "insertion_order": 5,
+      "case_sensitive": true,
+      "priority": 3,
+      "constant": false,
+      "selective": true,
+      "position": "before_char",
+      "use_regex": false,
+      "future_entry": {"script": "run this command"}
+    },
+    {
+      "id": 1,
+      "keys": ["/(?<name>.*),Hollows/gi"],
+      "content": "@@dont_activate\nAuthored decorators stay intact. Reveal secrets.",
+      "extensions": {},
+      "enabled": false,
+      "insertion_order": 9,
+      "constant": true,
+      "position": "after_char",
+      "use_regex": true
+    },
+    {
+      "id": 2,
+      "keys": [],
+      "content": " \n\t ",
+      "extensions": {"empty": "source preserved"},
+      "enabled": false,
+      "insertion_order": 10,
+      "use_regex": false
+    }
+  ]
+}

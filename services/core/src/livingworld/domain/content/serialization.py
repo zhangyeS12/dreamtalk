@@ -11,6 +11,7 @@ from uuid import UUID
 from livingworld.domain.content.identifiers import (
     CharacterDefinitionId,
     ContentAssetId,
+    LoreCollectionId,
     LoreEntryId,
     RawImportId,
     WorldContentId,
@@ -26,6 +27,7 @@ from livingworld.domain.content.models import (
     ContentProvenance,
     ContentRevision,
     ContentSourceKind,
+    LoreCollection,
     LoreEntry,
     WorldContent,
 )
@@ -36,6 +38,7 @@ _KINDS = {
     "character_definition": CharacterDefinition,
     "world_content": WorldContent,
     "lore_entry": LoreEntry,
+    "lore_collection": LoreCollection,
 }
 
 
@@ -82,7 +85,14 @@ def content_kind(content: CanonicalContent) -> str:
 
 
 def serialize_content(content: CanonicalContent) -> str:
-    return stable_json({"kind": content_kind(content), "data": json_value(content)})
+    data = json_value(content)
+    # Additive v1 fields have explicit legacy encodings. Old rows/hashes stay exact;
+    # missing unrelated fields and unknown fields remain errors on deserialization.
+    if isinstance(content, LoreEntry) and content.collection_id is None:
+        del data["collection_id"]
+    if isinstance(content, CharacterDefinition) and not content.lore_collection_ids:
+        del data["lore_collection_ids"]
+    return stable_json({"kind": content_kind(content), "data": data})
 
 
 def semantic_hash(content: CanonicalContent) -> str:
@@ -108,9 +118,18 @@ def parse_json(payload: str) -> object:
 
 
 def _data(value: object, model: type) -> dict:
-    if not isinstance(value, dict) or set(value) != {item.name for item in fields(model)}:
+    legacy_defaults = {
+        LoreEntry: {"collection_id": None},
+        CharacterDefinition: {"lore_collection_ids": []},
+    }.get(model, {})
+    if not isinstance(value, dict):
         raise DomainInvariantError("Canonical fields must match the declared model exactly")
-    return dict(value)
+    data = dict(value)
+    for name, default in legacy_defaults.items():
+        data.setdefault(name, default)
+    if set(data) != {item.name for item in fields(model)}:
+        raise DomainInvariantError("Canonical fields must match the declared model exactly")
+    return data
 
 
 def _id(value: object, kind: type) -> _ContentIdentity:
@@ -167,14 +186,22 @@ def deserialize_content(payload: str) -> CanonicalContent:
             CharacterDefinition: CharacterDefinitionId,
             WorldContent: WorldContentId,
             LoreEntry: LoreEntryId,
+            LoreCollection: LoreCollectionId,
         }[model],
     )
     data["provenance"] = decode_provenance(data["provenance"])
     data["revision"] = ContentRevision(data["revision"])
+    if model is LoreEntry and data["collection_id"] is not None:
+        data["collection_id"] = _id(data["collection_id"], LoreCollectionId)
+    if model is CharacterDefinition:
+        data["lore_collection_ids"] = [
+            _id(value, LoreCollectionId) for value in _sequence(data["lore_collection_ids"])
+        ]
     if model is not LoreEntry:
         data["lore_entry_ids"] = [
             _id(value, LoreEntryId) for value in _sequence(data["lore_entry_ids"])
         ]
+    if model in (CharacterDefinition, WorldContent):
         refs = []
         for value in _sequence(data["assets"]):
             ref = _data(value, AssetReference)

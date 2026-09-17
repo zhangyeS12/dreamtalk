@@ -15,7 +15,7 @@
 | 较新 V3 | 解析已知结构、保留未知数据、Preview warning；结构不兼容则明确失败 |
 | V1 | 被选中的 V1-shaped payload 明确 unsupported_character_card_v1，不自动升级 |
 | CHARX | 明确不支持；解包/资产物化留给后续任务 |
-| embedded character_book | 保留、显示 deferred warning；C-004C 才规范化语义 |
+| embedded character_book | 卡片 parser 保留并 warning；C-004C1 normalizer 从该表示生成 LoreCollection/typed content reference，见下文 |
 | legacy embedded assets | 识别 tEXt namespace、记录位置/大小并保留 raw；不解码/提取 |
 | export / runtime instantiation | 未实现 |
 
@@ -47,7 +47,7 @@
 
 V3 版本采用有限 Decimal 数值比较，避免不必要浮点舍入；原始版本字符串仍保留。较新版本 warning，非标准但数值等于 3.0 的字符串也 warning；低于 3.0 或无法安全比较的版本明确失败。未知结构不自动转换为已知结构。
 
-嵌入书只检查外层 object 与 entries array-of-objects；内部 entry、激活、regex、插入和跨版本 Lorebook 语义完全延后，完整源数据不改写。多语言备注检查两位小写语言键形状与文本值，不做语言注册表查询、locale 选择或 prompt 使用。
+卡片 parser 对嵌入书只检查外层 object 与 entries array-of-objects，完整源数据不改写；C-004C1 独立 normalizer 解释 entry 兼容语义，运行激活/regex/插入仍不执行。多语言备注检查两位小写语言键形状与文本值，不做语言注册表查询、locale 选择或 prompt 使用。
 
 ## 4. PNG/APNG、优先级与损坏策略
 
@@ -73,4 +73,10 @@ ImportDraft/ImportPreview 从已冻结 Draft 的 livingworld.import 读取 warni
 
 受控手写 [fixtures](../../tests/fixtures/character_cards/README.md) 与 [兼容/安全/重启测试](../../tests/application/test_character_card_import.py) 覆盖所有容器、映射、来源/未知数据、blank tags、损坏/重复、双 chunk 优先级、离线资产、注入字符串、preview hash、原子回滚、重启及完整 runtime snapshot 不变。[架构测试](../../tests/core/test_architecture.py) 禁止 importer 引入 Kernel、网络/shell、LLM/Tauri/browser 能力；既有 Stage 2 和 C-004A 测试继续保留。
 
-下一任务 C-004C 的 Lorebook 语义规范化未开始；Builder、资产布局、导出、运行实例化与产品级重复导入体验仍未实现。
+## 7. C-004C1 embedded CharacterBook 边界
+
+[LorebookImporter.normalize_embedded](../../services/core/src/livingworld/infrastructure/imports/lorebooks.py) 接收尚未提交的 ImportDraft，直接消费 livingworld.character_card.character_book；不重解析卡片/PNG，不改变完整来源对象、raw envelope、asset reference 或 character identity。返回 Draft 增加 LoreCollection/owned LoreEntry，并以 CharacterDefinition.lore_collection_ids 保存 typed 内容引用，移除已完成规范化的 deferred warning。详见 [LOREBOOK_COMPATIBILITY.md](LOREBOOK_COMPATIBILITY.md)。
+
+合法空白正文条目只保留来源并 warning；V3 secondary_keys 单字符串原样保留并 warning，不 split；canonical 非空约束不放宽，Commit 可继续。引用不创建 Runtime Character/Knowledge，也不赋予集合内容 Truth 地位或角色知识权限。0007 只为集合与归属新增内容 schema；C-004B parser 自身依然没有存储权限。
+
+Builder、lore 运行激活、资产布局、导出、运行实例化与产品级重复导入体验仍未实现。

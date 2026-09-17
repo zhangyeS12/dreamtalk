@@ -32,6 +32,7 @@ CONTENT_TABLES = (
     "content_lore_entries",
     "content_assets",
     "content_raw_imports",
+    "content_lore_collections",
 )
 
 

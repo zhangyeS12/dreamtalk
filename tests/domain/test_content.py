@@ -11,6 +11,7 @@ from livingworld.domain.content import LIVINGWORLD_CONTENT_VERSION
 from livingworld.domain.content.identifiers import (
     CharacterDefinitionId,
     ContentAssetId,
+    LoreCollectionId,
     LoreEntryId,
     RawImportId,
     WorldContentId,
@@ -35,12 +36,14 @@ from livingworld.domain.world import World
 
 
 def test_content_is_independent_of_runtime_identity_and_state(canonical_draft):
-    character, world, lore = canonical_draft.contents
+    character, world, lore, collection = canonical_draft.contents
     runtime_id = CharacterId(WorldId(uuid4()), character.content_id.value)
     assert character.content_id != runtime_id
     assert not isinstance(character, Character)
     assert not isinstance(world, World)
-    assert len({character.content_id, world.content_id, lore.content_id}) == 3
+    assert (
+        len({character.content_id, world.content_id, lore.content_id, collection.content_id}) == 4
+    )
     for content in canonical_draft.contents:
         assert not {
             "world_id",
@@ -61,7 +64,7 @@ def test_content_is_independent_of_runtime_identity_and_state(canonical_draft):
         replace(world, revision=Revision())
 
 
-@pytest.mark.parametrize("index", [0, 1, 2])
+@pytest.mark.parametrize("index", [0, 1, 2, 3])
 def test_complete_canonical_roundtrip_and_sha256(canonical_draft, index):
     content = canonical_draft.contents[index]
     payload = serialize_content(content)
@@ -111,7 +114,15 @@ def test_repeated_authored_material_is_preserved(canonical_draft):
 
 
 @pytest.mark.parametrize(
-    "kind", [CharacterDefinitionId, WorldContentId, LoreEntryId, ContentAssetId, RawImportId]
+    "kind",
+    [
+        CharacterDefinitionId,
+        WorldContentId,
+        LoreEntryId,
+        LoreCollectionId,
+        ContentAssetId,
+        RawImportId,
+    ],
 )
 def test_content_ids_require_uuid_and_have_no_world_scope(kind):
     identity = kind(UUID(int=1))

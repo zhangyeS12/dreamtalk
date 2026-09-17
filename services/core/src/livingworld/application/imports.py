@@ -5,8 +5,11 @@ from datetime import datetime
 from typing import Protocol
 
 from livingworld.application.content import ContentDraft, ContentPreview
+from livingworld.domain.content.identifiers import LoreCollectionId
+from livingworld.domain.content.models import ContentProvenance, LoreCollection
 
 IMPORT_METADATA_KEY = "livingworld.import"
+LOREBOOK_METADATA_KEY = "livingworld.lorebook"
 
 
 class ContentImportError(ValueError):
@@ -23,6 +26,14 @@ class ImportWarning:
     code: str
     message: str
     path: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class LorebookSummary:
+    collection_id: LoreCollectionId
+    source_entry_count: int
+    canonical_entry_count: int
+    provenance: ContentProvenance
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,6 +59,19 @@ class ImportPreview:
     @property
     def warnings(self) -> tuple[ImportWarning, ...]:
         return ImportDraft(self.content.draft).warnings
+
+    @property
+    def lorebooks(self) -> tuple[LorebookSummary, ...]:
+        return tuple(
+            LorebookSummary(
+                root.content_id,
+                root.extensions[LOREBOOK_METADATA_KEY]["source_entry_count"],
+                len(root.lore_entry_ids),
+                root.provenance,
+            )
+            for root in self.content.draft.contents
+            if isinstance(root, LoreCollection) and LOREBOOK_METADATA_KEY in root.extensions
+        )
 
 
 class ContentImporter(Protocol):

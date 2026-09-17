@@ -9,6 +9,7 @@ from livingworld.application.content import ContentDraft, RawImportEnvelope
 from livingworld.domain.content.identifiers import (
     CharacterDefinitionId,
     ContentAssetId,
+    LoreCollectionId,
     LoreEntryId,
     RawImportId,
     WorldContentId,
@@ -21,6 +22,7 @@ from livingworld.domain.content.models import (
     ContentAsset,
     ContentProvenance,
     ContentSourceKind,
+    LoreCollection,
     LoreEntry,
     WorldContent,
 )
@@ -49,6 +51,7 @@ def canonical_draft():
     )
     lore = LoreEntry(
         content_id=LoreEntryId(identity),
+        collection_id=LoreCollectionId(UUID(int=20)),
         title="Door",
         comment="Authored fiction",
         content="The door is unlocked.",
@@ -97,7 +100,17 @@ def canonical_draft():
         provenance=provenance,
     )
     return ContentDraft(
-        contents=(character, world, lore),
+        contents=(
+            character,
+            world,
+            lore,
+            LoreCollection(
+                content_id=lore.collection_id,
+                name="Authored lore",
+                lore_entry_ids=(lore.content_id,),
+                provenance=provenance,
+            ),
+        ),
         assets=(asset,),
         raw_imports=(
             RawImportEnvelope(

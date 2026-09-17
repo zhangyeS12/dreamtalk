@@ -8,9 +8,9 @@ LivingWorld 是持久化、事件驱动的多角色 AI 世界，不是普通聊�
 
 ## 开发状态
 
-当前阶段：**Stage 3 — C-004B Character Card V2/V3 Import Compatibility**。在 C-004A 的独立内容模型、typed 身份、canonical JSON、来源/raw 保留和 SQLite 内容库上，已增加独立离线 Character Card V2/V3 JSON/PNG/APNG 导入、结构校验、兼容警告与 Draft/Preview/confirmed Commit。详见 [卡片兼容性](docs/architecture/CHARACTER_CARD_COMPATIBILITY.md)、[内容模型](docs/architecture/CONTENT_MODEL.md)、[导入边界](docs/architecture/IMPORT_MODEL.md) 和 [持久化模型](docs/architecture/PERSISTENCE_MODEL.md)。
+当前阶段：**Stage 3 — C-004C1 Lorebook Import & Canonical Normalization**。在独立内容模型与 Character Card V2/V3 JSON/PNG/APNG 导入基础上，已增加离线 ST World Info 导入、embedded CharacterBook 规范化、LoreCollection typed 内容根、角色定义内容引用、兼容警告与 Draft/Preview/confirmed Commit。详见 [Lorebook 兼容性](docs/architecture/LOREBOOK_COMPATIBILITY.md)、[卡片兼容性](docs/architecture/CHARACTER_CARD_COMPATIBILITY.md)、[内容模型](docs/architecture/CONTENT_MODEL.md)、[导入边界](docs/architecture/IMPORT_MODEL.md) 和 [持久化模型](docs/architecture/PERSISTENCE_MODEL.md)。
 
-Imported Content != Runtime State。保存内容不创建运行世界/角色，不断言 WorldTruth 或授予主体知识；prompt-like 导入文本只是不可信创作数据。嵌入 Lorebook 和资产只保留来源/引用，尚未实现 Lorebook 语义规范化、资产物化、V1、CHARX、卡片导出、AI Builder、LLM、prompt assembly、运行实例化或 .lworld archive。Stage 2 的资源级 CAS、持久化幂等、canonical ledger/rebuild 和主体知识隔离继续沿用，见 [Stage 2 验收](docs/architecture/STAGE_2_ACCEPTANCE.md)、[回放模型](docs/architecture/REPLAY_MODEL.md)、[事件模型](docs/architecture/EVENT_MODEL.md)、[知识访问模型](docs/architecture/KNOWLEDGE_ACCESS_MODEL.md) 和 [命令模型](docs/architecture/COMMAND_MODEL.md)。
+Imported Content != Runtime State。LoreCollection != WorldContent != Runtime World != WorldTruth。保存内容不创建运行世界/角色，不断言 WorldTruth 或授予主体知识；prompt-like 文本和 activation metadata 只保存为不可信数据，不执行。尚未实现 lore 运行激活、regex/概率/组/递归/timing 引擎、资产物化、V1、CHARX、导出、AI Builder、LLM、prompt assembly、运行实例化或 .lworld archive。Stage 2 的资源级 CAS、持久化幂等、canonical ledger/rebuild 和主体知识隔离继续沿用，见 [Stage 2 验收](docs/architecture/STAGE_2_ACCEPTANCE.md)、[回放模型](docs/architecture/REPLAY_MODEL.md)、[事件模型](docs/architecture/EVENT_MODEL.md)、[知识访问模型](docs/architecture/KNOWLEDGE_ACCESS_MODEL.md) 和 [命令模型](docs/architecture/COMMAND_MODEL.md)。
 
 C-002 运行时基础继续沿用：共享 React UI、Tauri v2 Windows 开发壳、Python Core 启停协议、系统 API、SQLite 迁移元数据、结构化日志和 CI。页面仅显示 Core Connecting / Ready / Failed。
 

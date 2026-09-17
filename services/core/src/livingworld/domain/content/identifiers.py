@@ -31,6 +31,11 @@ class LoreEntryId(_ContentIdentity):
 
 
 @dataclass(frozen=True, slots=True)
+class LoreCollectionId(_ContentIdentity):
+    pass
+
+
+@dataclass(frozen=True, slots=True)
 class ContentAssetId(_ContentIdentity):
     pass
 
@@ -40,4 +45,4 @@ class RawImportId(_ContentIdentity):
     pass
 
 
-type ContentId = CharacterDefinitionId | WorldContentId | LoreEntryId
+type ContentId = CharacterDefinitionId | WorldContentId | LoreEntryId | LoreCollectionId

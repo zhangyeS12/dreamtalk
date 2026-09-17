@@ -1,6 +1,6 @@
 # Import Boundary — C-004A
 
-状态：canonical 内容 Draft、原始导入 envelope、确定性校验和 Preview → confirmed Commit 已建立。C-004B 增加独立、离线的 Character Card V2/V3 JSON/PNG/APNG parser。Lorebook 语义规范化、文件选择 UI、Builder、web research、LLM 和最终 .lworld package 尚未实现。
+状态：canonical 内容 Draft、raw preservation、确定性校验和 Preview → confirmed Commit 已建立。C-004B 的离线 Character Card parser 继续沿用；C-004C1 新增 ST native World Info 和 embedded CharacterBook 规范化。lore 运行激活、文件选择 UI、Builder、web research、LLM 和最终 .lworld package 尚未实现。
 
 ```text
 external source (untrusted)
@@ -19,7 +19,7 @@ external source (untrusted)
 
 | 边界 | 回答的问题 | 数据 |
 | --- | --- | --- |
-| canonical root | LivingWorld 理解哪些内容？ | CharacterDefinition / WorldContent / LoreEntry 的 versioned semantic JSON |
+| canonical root | LivingWorld 理解哪些内容？ | CharacterDefinition / WorldContent / LoreEntry / LoreCollection 的 versioned semantic JSON |
 | opaque canonical metadata | 哪些兼容数据需要保留但尚未解释？ | JSON extensions、authored_instructions、activation/insertion metadata |
 | RawImportEnvelope | 原始外部文件究竟包含什么？ | typed RawImportId、完整 original_payload bytes、来源元数据及 opaque unknown_extensions |
 
@@ -45,7 +45,7 @@ Commit 必须传入与 Preview/Draft 一致的 reviewed_hash，以及准确覆�
 
 创建要求新 ID/revision=0；更新要求预期 ContentRevision 与下一版本，未变依赖明确复用。RawImportId/ContentAssetId 不允许同 ID 覆盖不同证据或元数据。没有按名称、raw hash 或 prompt 内容自动去重/合并，也不定义 P-11 的产品级冲突体验。
 
-Alembic 0006 只增加独立内容表，不改变既有 runtime projection、history、receipts 或 legacy audit。数据库仍位于既有 app data。细节见 [CONTENT_MODEL.md](CONTENT_MODEL.md) 与 [PERSISTENCE_MODEL.md](PERSISTENCE_MODEL.md)。
+Alembic 0006 建立独立内容表；0007 新增 LoreCollection 与 legacy-nullable collection FK，不改既有 runtime projection、history、receipts、legacy audit 或旧内容 JSON/hash/references。新写入必须有一个 collection，NULL 只保留旧数据兼容。数据库仍位于既有 app data。细节见 [CONTENT_MODEL.md](CONTENT_MODEL.md) 与 [PERSISTENCE_MODEL.md](PERSISTENCE_MODEL.md)。
 
 ## 4. 安全边界
 
@@ -57,7 +57,7 @@ Alembic 0006 只增加独立内容表，不改变既有 runtime projection、his
 - 不把作者描述当作 Truth 或玩家已知事实。未来 Agent context 仍需 permission filtering before semantic retrieval，不能用卡片 instruction 解除隔离。
 - 来源 ID 不授予外部资料可信性，也不授予其他主体知识读取权限。保留文件内容不意味着授权执行、发布或把它写入日志。
 
-独立 adapter 兼容 Character Card V2/V3、PNG/JSON、Lorebook 是冻结目标；不复制 SillyTavern 源码，也不需要 SillyTavern 运行。C-004B 的已实现范围见 [CHARACTER_CARD_COMPATIBILITY.md](CHARACTER_CARD_COMPATIBILITY.md)，Lorebook 规范化仍留给 C-004C。
+独立 adapter 兼容 Character Card V2/V3、PNG/JSON、Lorebook；不复制 SillyTavern 源码，也不需要 SillyTavern 运行。已实现范围见 [CHARACTER_CARD_COMPATIBILITY.md](CHARACTER_CARD_COMPATIBILITY.md) 和 [LOREBOOK_COMPATIBILITY.md](LOREBOOK_COMPATIBILITY.md)。activation metadata 和 regex-looking keys 只保存，不执行或编译。
 
 ## 5. C-004B 导入审阅
 
@@ -67,7 +67,15 @@ ImportDraft.preview() 返回 ImportPreview，其 content 是既有 ContentPrevie
 
 显式用户确认仍由可信调用方提供 reviewed_hash，并通过 ContentService.commit(preview.content, ...) 原子保存。解析和 Preview 都不写数据库。相同 bytes 的每次独立 parse 生成新的 typed content/raw/asset IDs，不按 hash 自动覆盖；所有原始 bytes、来源、兼容数据与引用复用 C-004A 的一个事务。无需新 migration 或新的数据库字段。
 
-## 6. 保留事项
+## 6. C-004C1 Lorebook 审阅
+
+LorebookImporter.parse 接收 native ST JSON bytes，生成 initially unbound LoreCollection（尚无角色引用）与 owned entries。normalize_embedded 消费 CharacterCardImporter 已保存的 character_book，产生同一角色定义的 typed collection reference；不重新读取 PNG/JSON，也不把集合对象复制到定义中。
+
+ImportPreview.lorebooks 提供源条目数、canonical 条目数、collection ID 和 provenance；warnings 仍与内容和完整 source_book 一起参与 preview_hash。合法空白正文条目只留完整来源并 warning，不创建 LoreEntry；V3 secondary_keys 单字符串保留并 warning，不 split。两者都允许 confirmed Commit。unknown/不支持语义完整保留；结构错误明确失败，不以 warning 修复损坏输入。
+
+新条目恰好一个 collection 的要求同时在应用 commit 和 repository 验证；legacy unbound 只允许引用/明确编辑，不猜集合、读时 re-home 或重写共享引用。无删除 cascade。测试见 [Lorebook import](../../tests/application/test_lorebook_import.py) 和 [migration/persistence](../../tests/persistence/test_lorebook_persistence.py)。
+
+## 7. 保留事项
 
 Character Card 字段映射、兼容 namespaces 和 parser 资源限制已在 C-004B 定义。重复导入的用户选择、来源冲突展示、AI Research → Evidence → Claim → Conflict 流程、runtime 初始知识分配、实例定义版本绑定、资产存储布局与 .lworld container 均未实现。它们不影响当前内容库与 runtime 状态分离的已验证边界。
 

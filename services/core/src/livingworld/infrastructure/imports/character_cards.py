@@ -2,7 +2,6 @@
 
 import base64
 import binascii
-import json
 import re
 from dataclasses import asdict, dataclass
 from datetime import datetime
@@ -29,8 +28,7 @@ from livingworld.domain.content.models import (
     ContentProvenance,
     ContentSourceKind,
 )
-from livingworld.domain.content.serialization import stable_json
-from livingworld.domain.errors import DomainInvariantError
+from livingworld.infrastructure.imports.json_input import read_json_object
 from livingworld.infrastructure.imports.png import PNG_SIGNATURE, read_png
 
 CARD_METADATA_KEY = "livingworld.character_card"
@@ -90,47 +88,14 @@ def _strings(value: object, path: str) -> list[str]:
     return value
 
 
-def _unique(pairs: list[tuple[str, object]]) -> dict:
-    result = {}
-    for key, value in pairs:
-        if key in result:
-            # Imported keys are untrusted; no key value appears in the error.
-            raise ContentImportError("duplicate_character_card_json_key")
-        result[key] = value
-    return result
-
-
 def _json(payload: bytes, limits: CharacterCardLimits) -> dict:
-    if len(payload) > limits.max_json_bytes:
-        raise ContentImportError("character_card_json_size_limit")
-    try:
-        text = payload.decode("utf-8")
-        # Bound nesting before the recursive JSON decoder (including unknown fields).
-        depth = 0
-        quoted = escaped = False
-        for char in text:
-            if quoted:
-                if escaped:
-                    escaped = False
-                elif char == "\\":
-                    escaped = True
-                elif char == '"':
-                    quoted = False
-            elif char == '"':
-                quoted = True
-            elif char in "[{":
-                depth += 1
-                if depth > limits.max_json_depth:
-                    raise ContentImportError("character_card_json_depth_limit")
-            elif char in "]}":
-                depth -= 1
-        document = json.loads(text, object_pairs_hook=_unique)
-        stable_json(document)  # Finite JSON, UTF-8 strings, no escaped lone surrogates.
-    except ContentImportError:
-        raise
-    except (ValueError, UnicodeError, RecursionError, DomainInvariantError):
-        raise ContentImportError("invalid_character_card_json") from None
-    return _object(document, "card")
+    return read_json_object(
+        payload,
+        max_bytes=limits.max_json_bytes,
+        max_depth=limits.max_json_depth,
+        prefix="character_card",
+        root_path="card",
+    )
 
 
 def _base64(payload: bytes, limits: CharacterCardLimits) -> dict:
