@@ -7,6 +7,7 @@ from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy import (
+    BigInteger,
     CheckConstraint,
     ForeignKey,
     ForeignKeyConstraint,
@@ -224,6 +225,8 @@ class WorldEventRecord(Base):
     correlation_id: Mapped[UUID | None] = mapped_column(UUIDStorage())
     idempotency_key: Mapped[str | None] = mapped_column(String)
     created_at: Mapped[datetime] = mapped_column(UTCTimestampStorage(), nullable=False)
+    # Retained SQLite ADD COLUMN default is migration compatibility, not allocation.
+    ledger_position: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default="1")
     __table_args__ = (
         ForeignKeyConstraint(
             ["world_id", "causation_event_id"], ["world_events.world_id", "world_events.event_id"]
@@ -235,6 +238,25 @@ class WorldEventRecord(Base):
         CheckConstraint("payload_version >= 1", name="ck_world_event_payload_version"),
         UniqueConstraint("world_id", "idempotency_key", name="uq_world_event_idempotency"),
         Index("ix_world_events_occurred", "world_id", "occurred_at", "event_id"),
+        CheckConstraint(
+            "typeof(ledger_position) = 'integer' AND ledger_position > 0",
+            name="ck_world_event_ledger_position",
+        ),
+        Index("uq_world_event_ledger_position", "world_id", "ledger_position", unique=True),
+    )
+
+
+class WorldLedgerCursorRecord(Base):
+    __tablename__ = "world_ledger_cursors"
+    world_id: Mapped[UUID] = mapped_column(
+        UUIDStorage(), ForeignKey("worlds.world_id"), primary_key=True
+    )
+    last_position: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    __table_args__ = (
+        CheckConstraint(
+            "typeof(last_position) = 'integer' AND last_position >= 0",
+            name="ck_world_ledger_cursor_position",
+        ),
     )
 
 

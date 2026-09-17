@@ -11,3 +11,15 @@ class EntityNotFoundError(ValueError):
 
 class EntityAlreadyExistsError(ValueError):
     """An explicit creation target already exists."""
+
+
+class ReplayError(Exception):
+    """Rebuild rejected; old projections remain usable."""
+
+
+class UnsupportedEventError(ReplayError):
+    pass
+
+
+class InvalidEventPayloadError(ReplayError):
+    pass

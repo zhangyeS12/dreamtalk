@@ -8,11 +8,11 @@ LivingWorld 是持久化、事件驱动的多角色 AI 世界，不是普通聊�
 
 ## 开发状态
 
-当前阶段：**Stage 2 — C-003D Knowledge Access Isolation**。沿用 C-003A 领域模型、C-003B SQLite/Alembic 与 C-003C 命令事务；现已建立按世界/主体绑定的知识读取端口、SQL 归属隔离、内部真相写入与显式获知命令。获知原子提交独立 Observation、主体自有断言、事件和回执，重试返回原结果。ObservationId 独立于请求和语义坐标；0004 保留旧记录并确定性回填身份。详见 [知识访问模型](docs/architecture/KNOWLEDGE_ACCESS_MODEL.md)、[命令模型](docs/architecture/COMMAND_MODEL.md)、[领域模型](docs/architecture/DOMAIN_MODEL.md) 和 [持久化模型](docs/architecture/PERSISTENCE_MODEL.md)。
+当前阶段：**Stage 2 — C-003E1 Canonical Ledger Position & Projection Replay**。沿用领域模型、SQLite/Alembic、命令事务和知识隔离；现已建立每世界原子分配的 canonical ledger_position，以及按类型/版本分发的内部投影重建。0005 为旧事件按每世界 rowid 升序一次性回填；之后只按 ledger_position 回放。重建不修改事件、回执或分配游标，失败完整回滚。详见 [回放模型](docs/architecture/REPLAY_MODEL.md)、[事件模型](docs/architecture/EVENT_MODEL.md)、[知识访问模型](docs/architecture/KNOWLEDGE_ACCESS_MODEL.md)、[命令模型](docs/architecture/COMMAND_MODEL.md) 和 [持久化模型](docs/architecture/PERSISTENCE_MODEL.md)。
 
 C-002 运行时基础继续沿用：共享 React UI、Tauri v2 Windows 开发壳、Python Core 启停协议、系统 API、SQLite 迁移元数据、结构化日志和 CI。页面仅显示 Core Connecting / Ready / Failed。
 
-Director、Character Agent、世界模拟、事件回放、完整乐观并发执行、业务 HTTP API、自动知识传播、语义检索及最终 UI 尚未实现。生产 snapshot store 只读，正式世界变更通过命令管线执行。冻结产品规则保持不变；双时间、关系指标、正常玩家创建及 Observation 身份语义已按用户决策明确，P-01 的推进政策及其余待确认问题仍保留，见 [PRODUCT_SPEC.md](docs/product/PRODUCT_SPEC.md)。Stage 0 审查见 [ARCHITECTURE_REVIEW_001.md](docs/architecture/ARCHITECTURE_REVIEW_001.md)，运行时边界见 [RUNTIME_FOUNDATION.md](docs/architecture/RUNTIME_FOUNDATION.md)。
+Director、Character Agent、世界模拟、完整乐观并发执行、业务 HTTP API、自动知识传播、语义检索及最终 UI 尚未实现。生产 snapshot store 只读，正式世界变更通过命令管线执行；投影恢复另用内部 ProjectionRebuilder。冻结产品规则保持不变；P-01 的推进政策及其余待确认问题仍保留，见 [PRODUCT_SPEC.md](docs/product/PRODUCT_SPEC.md)。Stage 0 审查见 [ARCHITECTURE_REVIEW_001.md](docs/architecture/ARCHITECTURE_REVIEW_001.md)，运行时边界见 [RUNTIME_FOUNDATION.md](docs/architecture/RUNTIME_FOUNDATION.md)。
 
 ## 开发环境与运行
 

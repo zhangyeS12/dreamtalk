@@ -109,7 +109,7 @@ def test_world_event_replace_also_rejected(tmp_path, objects, populate):
                             "SELECT world_id, event_id, 'changed', occurred_at, "
                             "payload, payload_version, causation_event_id, "
                             "causation_request_id, correlation_id, idempotency_key, "
-                            "created_at FROM world_events WHERE event_id=:event_id"
+                            "created_at, ledger_position FROM world_events WHERE event_id=:event_id"
                         ),
                         {"event_id": objects["event"].event_id.value.hex},
                     )

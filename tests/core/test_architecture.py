@@ -53,3 +53,46 @@ def test_command_wall_clock_is_injected_and_raw_store_is_read_only():
     from livingworld.infrastructure.persistence.store import PersistenceStore
 
     assert not hasattr(PersistenceStore, "add")
+
+
+def test_replay_has_no_external_effects_or_command_dispatch():
+    root = Path(__file__).resolve().parents[2] / "services/core/src/livingworld"
+    source = root / "application/replay.py"
+    tree = ast.parse(source.read_text(encoding="utf-8"))
+    forbidden_modules = {"os", "pathlib", "socket", "httpx", "requests", "sqlite3", "random"}
+    forbidden_calls = {
+        "now",
+        "utcnow",
+        "now_utc",
+        "uuid1",
+        "uuid4",
+        "uuid5",
+        "open",
+        "execute",
+        "append",
+        "send",
+        "write_text",
+        "write_bytes",
+        "unlink",
+    }
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            assert all(alias.name.split(".")[0] not in forbidden_modules for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            assert node.module.split(".")[0] not in forbidden_modules
+            assert "command_handler" not in node.module
+        elif isinstance(node, ast.Call):
+            name = (
+                node.func.attr
+                if isinstance(node.func, ast.Attribute)
+                else getattr(node.func, "id", "")
+            )
+            assert name not in forbidden_calls, (source, node.lineno, name)
+
+
+def test_replay_ports_do_not_grant_canonical_mutation_capabilities():
+    from livingworld.application.ports import CanonicalEventReader, ProjectionRebuildUnitOfWork
+
+    assert not hasattr(CanonicalEventReader, "append")
+    assert "events" not in ProjectionRebuildUnitOfWork.__annotations__
+    assert "receipts" not in ProjectionRebuildUnitOfWork.__annotations__

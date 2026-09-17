@@ -97,6 +97,7 @@ class Environment:
                 "character_states",
                 "relationships",
                 "world_events",
+                "world_ledger_cursors",
                 "command_receipts",
                 "knowledge_assertions",
                 "observations",

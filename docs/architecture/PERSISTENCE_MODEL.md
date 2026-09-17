@@ -1,6 +1,6 @@
-# SQLite Persistence Mapping & C-003D Knowledge Isolation
+# SQLite Persistence Mapping & C-003E1 Canonical Ledger
 
-状态：C-003B 建立 SQLite/Alembic，C-003C 建立命令事务和持久化幂等，C-003D 增加 SQL 主体知识隔离、显式获知事务和用户确认的 ObservationId。未实现完整乐观并发执行、回放、自动传播、语义检索或世界模拟。产品冻结规则不变，见 [COMMAND_MODEL.md](COMMAND_MODEL.md) 与 [KNOWLEDGE_ACCESS_MODEL.md](KNOWLEDGE_ACCESS_MODEL.md)。
+状态：C-003B 建立 SQLite/Alembic，C-003C 建立命令事务和持久化幂等，C-003D 增加主体知识隔离与独立 ObservationId，C-003E1 增加世界内 canonical 顺序与原子投影重建。未实现完整乐观并发执行、自动传播、语义检索或世界模拟。产品冻结规则不变，见 [COMMAND_MODEL.md](COMMAND_MODEL.md)、[KNOWLEDGE_ACCESS_MODEL.md](KNOWLEDGE_ACCESS_MODEL.md) 与 [REPLAY_MODEL.md](REPLAY_MODEL.md)。
 
 ## 1. 边界与生命周期
 
@@ -37,7 +37,8 @@ SQL echo 默认关闭，hide_parameters=True；结构化日志继续沿用 allow
 | characters | (world_id, character_id) | 静态身份/名称、Revision |
 | character_states | (world_id, character_id) | 唯一当前位置、Revision；与静态定义分离 |
 | relationships | (world_id, source_kind, source_id, target_kind, target_id) | 有向主体边、Revision、内部 affinity/trust/familiarity；A→B 与 B→A 独立 |
-| world_events | (world_id, event_id) | 类型、双时间、版本化 JSON payload、因果/关联/幂等信息 |
+| world_events | (world_id, event_id)；(world_id, ledger_position) unique index | 类型、双时间、版本化 JSON payload、因果/关联/幂等信息、不可变正整数 canonical position |
+| world_ledger_cursors | world_id，FK worlds | SQLite adapter 的 last_position；非负整数，分配操作与命令同事务 |
 | knowledge_assertions | (world_id, assertion_id) | scope/owner、subject/predicate/value、认知标签、confidence、世界有效期、来源、Revision |
 | observations | (world_id, observation_id) | 独立 occurrence 身份、显式观察坐标及可选 UTC 审计时间 |
 | command_receipts | (world_id, request_id)；新命令 request_id partial unique | 类型、status、结果事件引用、UTC 创建/完成时间、Revision、独立语义指纹与原始结果 |
@@ -68,19 +69,28 @@ WorldTime 是逻辑坐标，不是 UTC，也不是事件唯一键；相同 World
 | [0002_world_domain_persistence](../../services/core/src/livingworld/infrastructure/persistence/migrations/versions/0002_world_domain_persistence.py) | 创建 13 个领域表、复合 FK、CHECK、必要索引和不可变事件触发器；草稿经人工审查，历史迁移只使用原生 SQL 类型 |
 | [0003_command_pipeline](../../services/core/src/livingworld/infrastructure/persistence/migrations/versions/0003_command_pipeline.py) | 原生 ADD COLUMN 增加关系三项指标、integer/range CHECK，旧行默认 0；原回执增加可空指纹/原始结果与配对 CHECK、新命令 RequestId partial unique index；不触碰事件及旧审计行 |
 | [0004_observation_identity](../../services/core/src/livingworld/infrastructure/persistence/migrations/versions/0004_observation_identity.py) | 仅增加 ObservationId 并确定性回填，SQLite batch 替换原坐标主键为 (world_id, observation_id)，保留所有语义列、行、FK/CHECK；无坐标 UNIQUE |
+| [0005_canonical_ledger](../../services/core/src/livingworld/infrastructure/persistence/migrations/versions/0005_canonical_ledger.py) | 原生 ADD COLUMN 增加 ledger_position 与正整数 CHECK，按每世界旧 rowid 回填，创建 world/position unique index 与世界游标；保留旧事件语义及审计行 |
 
 启动行为：
 
-1. 空 DB：直接 Alembic upgrade head，依次执行 0001、0002、0003 与 0004。
+1. 空 DB：直接 Alembic upgrade head，依次执行 0001 至 0005。
 2. 无 Alembic cursor 的 C-002 DB：只接受精确 legacy 表/列/PK/DDL、schema_version=(1,1)、一条匹配名称与 checksum 的历史记录和合法 UTC 审计时间；验证通过后 stamp 0001，再正常 upgrade head。旧迁移不重跑，已有行原样保留。
 3. 已有 Alembic cursor：由该 revision 驱动升级；legacy 元数据只做一致性检查。不能用 schema_version 推算或选择待执行迁移。
 4. 未知版本、checksum 漂移、缺失/损坏历史、结构差异、部分领域表、cursor 冲突或未知额外 schema 对象：抛出 MigrationCompatibilityError，事务回滚并停止启动；不自动修复、drop/recreate 或 stamp head。
 
-**审计语义转换：** schema_version 继续保留 1，migration_history 保留旧基础迁移记录，即使 Alembic 已到 0004。两表是 C-002 兼容/历史证据，不反映当前领域 schema cursor；本阶段不追加或同步新 Alembic 审计记录。新库的 0001 建立等价基础记录，接管已有库时不改变 applied_at 或任何原有列。
+**审计语义转换：** schema_version 继续保留 1，migration_history 保留旧基础迁移记录，即使 Alembic 已到 0005。两表是 C-002 兼容/历史证据，不反映当前领域 schema cursor；本阶段不追加或同步新 Alembic 审计记录。新库的 0001 建立等价基础记录，接管已有库时不改变 applied_at 或任何原有列。
 
 0002 管理的数据库先按该历史 revision 的精确已知形状校验，再由 Alembic 执行 0003；结构检查不能自行选择或猜测迁移版本。部分增加指标或未知差异仍 fail closed。0003 的 downgrade 明确要求 review，因为删除已提交命令指纹会破坏重试安全，不自动丢弃幂等证据。
 
-0002/0003 的历史 observations 形状仍按旧坐标主键校验，再交给 Alembic 执行 0004；0004/head 要求新身份列及主键。旧 ID 回填仅在迁移中：原 world_id/principal_kind/principal_id/target_kind/target_id/channel/observed_at tuple 使用排序 key、紧凑 UTF-8 JSON，固定 namespace UUIDv5，相同旧行始终得到相同 ID，不随机生成。**legacy backfill identity != runtime identity generation**。本次 SQLite batch recreate 只针对 observations，事件触发器不解除，升级与回填/表替换同事务。0004 downgrade 明确要求 review，不能静默丢弃同坐标多 occurrence。
+0002/0003 的历史 observations 形状仍按旧坐标主键校验，再交给 Alembic 执行 0004；0004/0005 要求新身份列及主键。旧 ID 回填仅在迁移中：原 world_id/principal_kind/principal_id/target_kind/target_id/channel/observed_at tuple 使用排序 key、紧凑 UTF-8 JSON，固定 namespace UUIDv5，相同旧行始终得到相同 ID，不随机生成。**legacy backfill identity != runtime identity generation**。0004 的 SQLite batch recreate 只针对 observations，事件触发器不解除，升级与回填/表替换同事务。0004 downgrade 明确要求 review，不能静默丢弃同坐标多 occurrence。
+
+### 0005 legacy 顺序核验与回填
+
+实施前只读检查的开发/桌面 app-data 库均只有 C-002 元数据。隔离临时库运行 C-003D 命令后确认：world_events 是普通 rowid 表；正常追加顺序与 rowid 一致；0002 建表后，0003/0004 未重建事件表，生产路径只追加、无 VACUUM/重排路径。未对真实 app-data 库执行迁移。
+
+迁移先拒绝 WITHOUT ROWID、rowid 别名遮蔽、不可区分的 rowid 或追加保护不匹配。每世界按旧 `_rowid_ ASC` 回填 1..N，游标初始化为该世界已回填最大值，无事件世界为 0。**legacy migration order != future canonical replay semantics**：这只采纳已核验的旧插入证据；以后只能 `ORDER BY ledger_position ASC`，绝不以 WorldTime、created_at 或 UUID 补救未知旧顺序。
+
+原生 ADD COLUMN 保留旧 rowid 和原列。SQLite 为该非空新列保留 DEFAULT 1；它只是迁移兼容值，生产 appender 始终显式赋予事务分配值，不能把默认值当作分配器。为写入新列，迁移在同一 DDL 事务内暂时替换 UPDATE 触发器并立即恢复；DELETE 保护保持存在。竞争写事务不能观察中间状态，任一步失败连同列、回填、触发器及 Alembic cursor 全部回滚。**回放从不解除追加保护**。0005 downgrade 明确要求 review，不自动丢弃 canonical 顺序。
 
 Repeat startup 正常调用 Alembic upgrade head，不重放 revision、不重新 stamp、不重复插入审计记录。迁移接管与 DDL 同处一个事务，失败时旧库保持原状；不涉及实际用户库的自动修复工具。
 
@@ -104,4 +114,14 @@ Repeat startup 正常调用 Alembic upgrade head，不重放 revision、不重�
 
 权限过滤必须先于 semantic retrieval / prompt assembly；C-003D 的 list/get SQL 强制 world/scope/owner 条件，见 [knowledge_readers.py](../../services/core/src/livingworld/infrastructure/persistence/knowledge_readers.py)。内部 exact-source repository 与 snapshot inspection 不分发给角色/玩家；返回 source_assertion_id 也不授予源读取权限。CommandReceipt 的 versioned JSON 结果新增可选 typed ObservationId，兼容旧结果无此 key，不需额外回执 schema 迁移。
 
-C-003C 回归见 [命令集成测试](../../tests/application/test_commands.py) 和 [0003 迁移回归](../../tests/persistence/test_command_migration.py)；C-003D 验证见 [知识访问集成测试](../../tests/application/test_knowledge_access.py) 和 [Observation 迁移回归](../../tests/persistence/test_observation_migration.py)。replay、完整乐观并发、Timeline/Checkpoint、预算与智能层仍未实现。
+C-003C 回归见 [命令集成测试](../../tests/application/test_commands.py) 和 [0003 迁移回归](../../tests/persistence/test_command_migration.py)；C-003D 验证见 [知识访问集成测试](../../tests/application/test_knowledge_access.py) 和 [Observation 迁移回归](../../tests/persistence/test_observation_migration.py)。C-003E1 见 [ledger 测试](../../tests/application/test_ledger.py)、[0005 迁移测试](../../tests/persistence/test_ledger_migration.py) 与 [重建测试](../../tests/application/test_replay.py)。完整乐观并发、Timeline/Checkpoint、预算与智能层仍未实现。
+
+## 7. Canonical 分配与投影重建
+
+`ledger_position != WorldTime != created_at != event_id`。WorldEventRecord 保存 position，CHECK 要求正整数，world/position unique index 保证世界内唯一；原 UPDATE/DELETE/REPLACE 保护同时覆盖新列。位置由 EventAppender 的单条 SQLite INSERT ... ON CONFLICT UPDATE ... RETURNING 分配，读取/更新游标与事件、投影、回执共享同一 AsyncSession/事务；不使用运行时 MAX+1，也不向 Domain 暴露 allocator。WorldCreated 首次分配 1；失败没有 durable cursor，成功幂等重试不重新分配。允许间隙，世界之间无共享序列。
+
+内部 [CanonicalEvent](../../services/core/src/livingworld/application/ledger.py) 用不可变 envelope 保留事件及 position，Domain WorldEvent 继续表达事件语义；canonical reader 总是携带 position 并按它排序。诊断 snapshot reload 仍返回领域值，不是 canonical 顺序读取端口。读取 ledger 的内部能力不分发给角色/玩家知识上下文。
+
+重建 adapter 在同一事务读取 ledger、仅清理目标世界的 replayable projections、写回纯 fold 的值并验证约束。世界 identity 行保留为事件/回执/游标的 FK anchor，但其 name/revision 和整个 WorldClock 从事件恢复，绝不借用旧状态补偿 payload。事务临时 defer 外键检查，foreign_keys 始终 ON；最终检查目标世界，包括保留的回执和地点连接引用。所有表清理均有 world_id 条件，任何失败回滚。
+
+可回放 World/WorldClock、Location、Player/Presence、Character/State、Relationship、KnowledgeAssertion、Observation；**CommandReceipt 不从事件重建**。world_events、world_ledger_cursors、审计与迁移表、运行元数据不重建。location_connections 当前没有 canonical 创建事件，保持原样；引用若无法由 ledger 恢复，显式失败，不复制旧 Location 补救。详见 [REPLAY_MODEL.md](REPLAY_MODEL.md)。

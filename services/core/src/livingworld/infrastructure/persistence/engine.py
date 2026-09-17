@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async
 
 from livingworld.application import ports
 from livingworld.domain.identifiers import CharacterId, PlayerId, WorldId
-from livingworld.infrastructure.persistence import knowledge_readers
+from livingworld.infrastructure.persistence import knowledge_readers, replay
 from livingworld.infrastructure.persistence.migration import upgrade
 from livingworld.infrastructure.persistence.store import PersistenceStore
 from livingworld.infrastructure.persistence.unit_of_work import SqlAlchemyUnitOfWork
@@ -75,6 +75,14 @@ class Database:
 
     def unit_of_work(self) -> SqlAlchemyUnitOfWork:
         return SqlAlchemyUnitOfWork(self._sessions)
+
+    def canonical_event_reader(self, world_id: WorldId) -> ports.CanonicalEventReader:
+        return replay.CanonicalEventReader(self._sessions, world_id)
+
+    def projection_rebuild_unit_of_work(
+        self, world_id: WorldId
+    ) -> ports.ProjectionRebuildUnitOfWork:
+        return replay.SqlAlchemyProjectionRebuildUnitOfWork(self._sessions, world_id)
 
     def world_truth_reader(self, world_id: WorldId) -> ports.WorldTruthReader:
         """Trusted composition only; never supplied to principal contexts."""

@@ -16,7 +16,8 @@ from livingworld.infrastructure.persistence.models import Base
 LEGACY_REVISION = "0001_legacy_runtime_foundation"
 DOMAIN_BASELINE_REVISION = "0002_world_domain_persistence"
 COMMAND_REVISION = "0003_command_pipeline"
-HEAD_REVISION = "0004_observation_identity"
+OBSERVATION_REVISION = "0004_observation_identity"
+HEAD_REVISION = "0005_canonical_ledger"
 LEGACY_CHECKSUM = "0345ec9d50fd45b01ba0f97ff6f14a25f683fb8d01f08f04ff9dc4892ad1cac5"
 LEGACY_TABLES = {"schema_version", "migration_history"}
 DOMAIN_TABLES = set(Base.metadata.tables)
@@ -155,7 +156,13 @@ def _current_revision(connection: Connection) -> str:
 
 
 def _validate_managed_state(connection: Connection, revision: str) -> None:
-    if revision not in {LEGACY_REVISION, DOMAIN_BASELINE_REVISION, COMMAND_REVISION, HEAD_REVISION}:
+    if revision not in {
+        LEGACY_REVISION,
+        DOMAIN_BASELINE_REVISION,
+        COMMAND_REVISION,
+        OBSERVATION_REVISION,
+        HEAD_REVISION,
+    }:
         _fail("alembic_revision_unsupported")
     _validate_legacy_metadata(connection)
     tables = _table_names(connection)
@@ -163,6 +170,8 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
     domain_present = revision != LEGACY_REVISION
     if domain_present:
         expected |= DOMAIN_TABLES
+        if revision != HEAD_REVISION:
+            expected -= {"world_ledger_cursors"}
     if tables != expected:
         _fail("alembic_schema_state_mismatch")
     _validate_auxiliary_objects(connection, domain_present)
@@ -186,7 +195,7 @@ def _validate_domain_shape(connection: Connection, revision: str) -> None:
     """Detect partial/mismatched schemas; never infer a revision from them."""
 
     inspector = inspect(connection)
-    # Historical 0002 shape differs ONLY in these explicitly reviewed 0003 additions.
+    # Explicit reviewed deltas describe historical shapes for each Alembic cursor.
     # The Alembic cursor selects the expected shape; shape never selects migrations.
     baseline = revision == DOMAIN_BASELINE_REVISION
     legacy_observations = revision in {DOMAIN_BASELINE_REVISION, COMMAND_REVISION}
@@ -201,6 +210,8 @@ def _validate_domain_shape(connection: Connection, revision: str) -> None:
         "ck_command_receipt_command_result",
     }
     for table in Base.metadata.sorted_tables:
+        if revision != HEAD_REVISION and table.name == "world_ledger_cursors":
+            continue
         actual = [
             (column["name"], str(column["type"]).upper(), column["nullable"])
             for column in inspector.get_columns(table.name)
@@ -213,6 +224,11 @@ def _validate_domain_shape(connection: Connection, revision: str) -> None:
                 legacy_observations
                 and table.name == "observations"
                 and column.name == "observation_id"
+            )
+            and not (
+                revision != HEAD_REVISION
+                and table.name == "world_events"
+                and column.name == "ledger_position"
             )
         ]
         if actual != expected:
@@ -249,6 +265,9 @@ def _validate_domain_shape(connection: Connection, revision: str) -> None:
             for constraint in table.constraints
             if isinstance(constraint, CheckConstraint)
             and not (baseline and constraint.name in added_checks)
+            and not (
+                revision != HEAD_REVISION and constraint.name == "ck_world_event_ledger_position"
+            )
         }
         actual_checks = {
             (constraint["name"], _normalized_sql(constraint["sqltext"]))
@@ -276,6 +295,7 @@ def _validate_domain_shape(connection: Connection, revision: str) -> None:
             )
             for index in table.indexes
             if not (baseline and index.name == "uq_command_request_identity")
+            and not (revision != HEAD_REVISION and index.name == "uq_world_event_ledger_position")
         }
         actual_indexes = {
             (

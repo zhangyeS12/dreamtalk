@@ -4,6 +4,7 @@ import json
 from uuid import UUID
 
 from sqlalchemy import select
+from sqlalchemy.dialects.sqlite import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import selectinload
@@ -42,6 +43,7 @@ from livingworld.infrastructure.persistence.models import (
     PlayerPresenceRecord,
     PlayerRecord,
     RelationshipRecord,
+    WorldLedgerCursorRecord,
     WorldRecord,
 )
 
@@ -158,7 +160,20 @@ class EventAppender:
         self._session = session
 
     async def append(self, event: WorldEvent) -> None:
-        self._session.add(to_record(event))
+        cursor = WorldLedgerCursorRecord
+        # One SQLite atomic write: concurrent adapters cannot both allocate a position.
+        statement = (
+            insert(cursor)
+            .values(world_id=event.world_id.value, last_position=1)
+            .on_conflict_do_update(
+                index_elements=[cursor.world_id], set_={"last_position": cursor.last_position + 1}
+            )
+            .returning(cursor.last_position)
+        )
+        position = (await self._session.execute(statement)).scalar_one()
+        record = to_record(event)
+        record.ledger_position = position
+        self._session.add(record)
         await self._session.flush()
 
 

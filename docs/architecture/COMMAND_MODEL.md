@@ -1,6 +1,6 @@
-# Command Transaction & Idempotency Pipeline（C-003C / C-003D）
+# Command Transaction & Idempotency Pipeline（C-003C / C-003D / C-003E1）
 
-状态：已实现 Python application 层命令及 SQLite 事务管线，C-003D 新增内部真相写入与显式获知。业务 HTTP API、replay、完整乐观并发冲突处理、Director、Agent、自动知识传播与 catch-up 未实现。系统 API 与桌面协议不变。
+状态：已实现 Python application 层命令及 SQLite 事务管线，C-003D 新增内部真相写入与显式获知，C-003E1 新增世界内 canonical position 与独立投影重建。业务 HTTP API、完整乐观并发冲突处理、Director、Agent、自动知识传播与 catch-up 未实现。系统 API 与桌面协议不变。
 
 ## 1. 唯一生产变更入口
 
@@ -78,8 +78,8 @@ C-003D 结果新增 KnowledgeAssertionId 实体引用和可选 ObservationId，v
 
 ## 6. 明确的后续边界
 
-当前表是 projections/current state；Replay is not implemented yet. Full optimistic concurrency enforcement is not implemented yet.
+当前表是 projections/current state；C-003E1 的内部 ProjectionRebuilder 只从 canonical ledger 恢复可回放投影，不是第二个世界事实写入口，不调用命令 handler、不生成事件/回执。CommandReceipt 保持原样以继续保证成功请求重试。见 [REPLAY_MODEL.md](REPLAY_MODEL.md)。Full optimistic concurrency enforcement is not implemented yet.
 
-领域 Revision.advance 保持已有版本检查，MovePlayer/关系变更递增当前状态版本。DB 层 expected-revision 条件更新、并发冲突分类/重试和 canonical replay order 留给 C-003E；本阶段的当前快照写入不是最终 last-write-wins 政策。并发数据库写入失败显式失败并回滚，不自动重试或把不同命令当成成功。
+领域 Revision.advance 保持已有版本检查，MovePlayer/关系变更递增当前状态版本。DB 层 expected-revision 条件更新、并发冲突分类/重试留给 C-003E2；本阶段的当前快照写入不是最终 last-write-wins 政策。并发数据库写入失败显式失败并回滚，不自动重试或把不同命令当成成功。Canonical order 已由每世界事务游标提供，事件按 handler ordinal 顺序获得位置；失败游标、事件、投影和回执一起回滚，成功幂等重试不再分配。
 
 迁移与只追加触发器见 [PERSISTENCE_MODEL.md](PERSISTENCE_MODEL.md)。测试见 [命令集成测试](../../tests/application/test_commands.py)、[知识事务测试](../../tests/application/test_knowledge_access.py) 和 [迁移回归](../../tests/persistence/test_command_migration.py)。本阶段不增加业务 HTTP API、Director、Agent、语义检索、UI 或模拟。
