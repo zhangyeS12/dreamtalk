@@ -71,6 +71,15 @@ class KnowledgeAssertionId:
 
 
 @dataclass(frozen=True, slots=True)
+class ObservationId:
+    world_id: WorldId
+    value: UUID
+
+    def __post_init__(self) -> None:
+        _scoped(self.world_id, self.value)
+
+
+@dataclass(frozen=True, slots=True)
 class CorrelationId:
     """Groups related work; it is neither a world coordinate nor an event identity."""
 

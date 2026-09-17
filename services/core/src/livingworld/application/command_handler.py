@@ -3,9 +3,11 @@
 from collections.abc import Awaitable, Callable
 from dataclasses import replace
 from datetime import datetime
-from uuid import uuid5
+from uuid import uuid4, uuid5
 
 from livingworld.application.commands import (
+    AcquireKnowledge,
+    AssertWorldTruth,
     ChangeRelationship,
     CreateCharacter,
     CreateLocation,
@@ -16,18 +18,60 @@ from livingworld.application.commands import (
     WorldCommand,
 )
 from livingworld.application.errors import EntityAlreadyExistsError, EntityNotFoundError
-from livingworld.application.fingerprints import command_fingerprint, id_input
+from livingworld.application.fingerprints import command_fingerprint, decimal_input, id_input
 from livingworld.application.ports import UnitOfWork, WallClock
 from livingworld.application.results import CommandResult, EntityReference, RelationshipReference
 from livingworld.domain.commands import CommandReceipt
+from livingworld.domain.errors import DomainInvariantError
 from livingworld.domain.events import WorldEvent
-from livingworld.domain.identifiers import CharacterId, CorrelationId, EventId, LocationId
+from livingworld.domain.identifiers import (
+    CharacterId,
+    CorrelationId,
+    EventId,
+    LocationId,
+    ObservationId,
+)
+from livingworld.domain.knowledge import (
+    KnowledgeAssertion,
+    KnowledgeScope,
+    Observation,
+    ObservationChannel,
+)
 from livingworld.domain.participants import Character, CharacterState, Player, PlayerPresence
 from livingworld.domain.relationships import Relationship, RelationshipMetrics
 from livingworld.domain.values import Revision, WorldTime, same_world, utc_timestamp
 from livingworld.domain.world import Location, World, WorldClock
 
 EVENT_PAYLOAD_VERSION = 1
+
+
+def event_identity(command: WorldCommand, ordinal: int) -> EventId:
+    return EventId(
+        command.world_id,
+        uuid5(command.request_id.value, f"livingworld:{command.world_id.value}:{ordinal}"),
+    )
+
+
+def assertion_payload(assertion: KnowledgeAssertion) -> dict:
+    return {
+        "assertion_id": str(assertion.assertion_id.value),
+        "scope": assertion.scope.value,
+        "owner": id_input(assertion.owner) if assertion.owner is not None else None,
+        "subject": assertion.subject,
+        "predicate": assertion.predicate,
+        "value": assertion.value,
+        "epistemic_status": assertion.epistemic_status,
+        "confidence": decimal_input(assertion.confidence),
+        "valid_from": assertion.valid_from.microseconds,
+        "valid_to": assertion.valid_to.microseconds if assertion.valid_to is not None else None,
+        "source_assertion_id": str(assertion.source_assertion_id.value)
+        if assertion.source_assertion_id is not None
+        else None,
+        "provenance_event_id": str(assertion.provenance_event_id.value)
+        if assertion.provenance_event_id is not None
+        else None,
+        "revision": assertion.revision.value,
+    }
 
 
 def metrics_payload(metrics: RelationshipMetrics) -> dict[str, int]:
@@ -104,6 +148,7 @@ class CommandHandler:
     async def _mutate(
         self, uow: UnitOfWork, command: WorldCommand, fingerprint: str, now: datetime, world: World
     ) -> CommandResult:
+        observation_id = None
         match command:
             case CreateLocation():
                 location = Location(world.world_id, command.location_id, command.name)
@@ -291,6 +336,93 @@ class CommandHandler:
                 async def apply() -> None:
                     await uow.relationships.put(after)
 
+            case AssertWorldTruth():
+                if await uow.knowledge.get(command.assertion_id) is not None:
+                    raise EntityAlreadyExistsError("KnowledgeAssertion already exists")
+                assertion = KnowledgeAssertion(
+                    command.assertion_id,
+                    world.world_id,
+                    KnowledgeScope.TRUTH,
+                    None,
+                    command.subject,
+                    command.predicate,
+                    command.value,
+                    command.epistemic_status,
+                    command.confidence,
+                    command.valid_from
+                    if command.valid_from is not None
+                    else world.clock.logical_time,
+                    command.valid_to,
+                    provenance_event_id=event_identity(command, 0),
+                )
+                events = [("WorldTruthAsserted", assertion_payload(assertion))]
+                reference, revision = assertion.assertion_id, assertion.revision
+
+                async def apply() -> None:
+                    await uow.knowledge.add(assertion)
+
+            case AcquireKnowledge():
+                if command.channel is ObservationChannel.INFERRED:
+                    raise DomainInvariantError(
+                        "Inferred acquisition requires a future explicit reasoning policy"
+                    )
+                participant = (
+                    await uow.characters.get(command.receiver_id)
+                    if isinstance(command.receiver_id, CharacterId)
+                    else await uow.players.get(command.receiver_id)
+                )
+                if participant is None:
+                    raise EntityNotFoundError("Knowledge receiver does not exist")
+                source = await uow.knowledge.get(command.source_assertion_id)
+                if source is None:
+                    raise EntityNotFoundError("Source KnowledgeAssertion does not exist")
+                if await uow.knowledge.get(command.assertion_id) is not None:
+                    raise EntityAlreadyExistsError("KnowledgeAssertion already exists")
+                # Occurrence identity is independent of RequestId and all semantic coordinates.
+                observation_id = ObservationId(world.world_id, uuid4())
+                observation = Observation(
+                    world.world_id,
+                    command.receiver_id,
+                    source.assertion_id,
+                    command.channel,
+                    world.clock.logical_time,
+                    now,
+                    observation_id=observation_id,
+                )
+                assertion = KnowledgeAssertion(
+                    command.assertion_id,
+                    world.world_id,
+                    KnowledgeScope.CHARACTER_BELIEF
+                    if isinstance(command.receiver_id, CharacterId)
+                    else KnowledgeScope.PLAYER_KNOWLEDGE,
+                    command.receiver_id,
+                    source.subject,
+                    source.predicate,
+                    source.value,
+                    command.epistemic_status,
+                    command.confidence,
+                    world.clock.logical_time,
+                    provenance_event_id=event_identity(command, 1),
+                    source_assertion_id=source.assertion_id,
+                )
+                observation_payload = {
+                    "observation_id": str(observation_id.value),
+                    "receiver": id_input(command.receiver_id),
+                    "source_assertion_id": str(source.assertion_id.value),
+                    "channel": command.channel.value,
+                    "observed_at": observation.observed_at.microseconds,
+                    "created_at": now.isoformat(),
+                }
+                events = [
+                    ("ObservationRecorded", observation_payload),
+                    ("KnowledgeAcquired", assertion_payload(assertion) | observation_payload),
+                ]
+                reference, revision = assertion.assertion_id, assertion.revision
+
+                async def apply() -> None:
+                    await uow.observations.add(observation)
+                    await uow.knowledge.add(assertion)
+
             case _:
                 raise TypeError("Unsupported command type")
         return await self._finish(
@@ -303,6 +435,7 @@ class CommandHandler:
             reference,
             revision,
             apply,
+            observation_id,
         )
 
     async def _finish(
@@ -316,13 +449,11 @@ class CommandHandler:
         reference: EntityReference,
         revision: Revision,
         apply: Callable[[], Awaitable[None]] | None,
+        observation_id: ObservationId | None = None,
     ) -> CommandResult:
         event_ids = []
         for ordinal, (event_type, payload) in enumerate(events):
-            event_id = EventId(
-                command.world_id,
-                uuid5(command.request_id.value, f"livingworld:{command.world_id.value}:{ordinal}"),
-            )
+            event_id = event_identity(command, ordinal)
             event_ids.append(event_id)
             await uow.events.append(
                 WorldEvent(
@@ -340,7 +471,13 @@ class CommandHandler:
             )
         if apply is not None:
             await apply()
-        result = CommandResult(command.request_id, type(command).__name__, reference, revision)
+        result = CommandResult(
+            command.request_id,
+            type(command).__name__,
+            reference,
+            revision,
+            observation_id=observation_id,
+        )
         receipt = CommandReceipt(
             command.request_id,
             command.world_id,

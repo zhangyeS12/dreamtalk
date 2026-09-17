@@ -1,6 +1,6 @@
 # Event Model
 
-> 状态：保留 Stage 0 概念边界；C-003A 定义不可变 WorldEvent，C-003B 增加只追加存储，C-003C 实现首批确定性 Command→event→projection→receipt 原子提交及下述事件目录。候选激活、回放、完整乐观并发执行和模拟仍未实现。
+> 状态：保留 Stage 0 概念边界；C-003A/B 定义不可变 WorldEvent 和只追加存储，C-003C 建立 Command→event→projection→receipt 原子提交，C-003D 增加内部真相与显式获知事件。候选激活、回放、完整乐观并发执行和模拟仍未实现。
 
 规则来源：[PRODUCT_SPEC.md](../product/PRODUCT_SPEC.md) 中的 FR-01、FR-02、FR-04 至 FR-15、FR-22 至 FR-24。规划责任见 [DIRECTOR_MODEL.md](DIRECTOR_MODEL.md)，信息归属见 [KNOWLEDGE_MODEL.md](KNOWLEDGE_MODEL.md)。
 
@@ -53,6 +53,18 @@ WorldEvent 是 canonical history 的不可变领域表达，frozen snapshot 没�
 [PERSISTENCE_MODEL.md](PERSISTENCE_MODEL.md) 定义独立 WorldEventRecord 和显式 mapper。occurred_at 保存有符号 64 位整数微秒，created_at 保存规范 UTC 文本；payload_version、因果 EventId/RequestId 与 CorrelationId 完整还原，payload 返回领域时深度冻结。(world_id, idempotency_key) unique 只提供 DB 去重约束；None 允许多个事件，相同 WorldTime 不限制事件身份。
 
 EventAppender 只有 append，无事件 update/delete API。SQLite UPDATE/DELETE 触发器及 recursive_triggers 防止 INSERT OR REPLACE 绕过只追加边界。生产 snapshot store 只读，底层映射约束测试不能替代 canonical command 事务入口。
+
+### C-003D 知识事件合约
+
+| 事件 / 固定 ordinal | 语义 payload |
+| --- | --- |
+| WorldTruthAsserted / 0 | 独立 AssertionId、truth/owner=None、subject/predicate/value、epistemic_status/confidence、WorldTime 有效期、provenance_event_id、revision |
+| ObservationRecorded / 0 | 独立 ObservationId、typed receiver、source_assertion_id、channel、observed_at WorldTime、created_at UTC |
+| KnowledgeAcquired / 1 | 上述 Observation 语义及派生 AssertionId、owner/scope、完整 proposition、独立认知元数据、WorldTime 有效期、source_assertion_id、获知 provenance 与 revision |
+
+WorldTruthAsserted 的 provenance 指自身事件；派生断言 provenance 指 ordinal 1 KnowledgeAcquired。一个 AcquireKnowledge 原子提交两个事件、Observation、派生断言与单个 receipt，固定沿用 request_id:ordinal key 及既有确定性 EventId；ObservationId 则运行时独立 UUIDv4，不能从请求或事件 ID 推导。成功重试从持久化结果返回原 ObservationId，无新事件或观察；不同请求同坐标可独立发生。旧观察确定性 UUIDv5 仅用于迁移回填，见 [知识访问模型](KNOWLEDGE_ACCESS_MODEL.md)。
+
+事件 payload 属内部 canonical history，不直接作为玩家/角色通知。角色获知仅创建自有信念，玩家获知仅创建自有知识；世界真相不因此修改。观察来源指针不是跨主体读取权限。没有自动 inferred 事件、知识广播、Memory 或 RAG。
 
 ### C-003C 首批事件合约
 

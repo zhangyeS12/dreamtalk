@@ -1,6 +1,6 @@
-# C-003C：Command Transaction & Idempotency Pipeline
+# Command Transaction & Idempotency Pipeline（C-003C / C-003D）
 
-状态：已实现 Python application 层命令及 SQLite 事务管线。业务 HTTP API、replay、完整乐观并发冲突处理、Director、Agent、知识变更和 catch-up 未实现。系统 API 与桌面协议不变。
+状态：已实现 Python application 层命令及 SQLite 事务管线，C-003D 新增内部真相写入与显式获知。业务 HTTP API、replay、完整乐观并发冲突处理、Director、Agent、自动知识传播与 catch-up 未实现。系统 API 与桌面协议不变。
 
 ## 1. 唯一生产变更入口
 
@@ -31,6 +31,8 @@ Command
 | CreateCharacter | 建立角色静态身份，目标身份未使用 | 0: CharacterCreated |
 | PlaceCharacter | 同世界角色与地点存在；首次建立状态 revision=0，后续替换递增版本 | 0: CharacterPlaced |
 | ChangeRelationship | 双方存在且同世界；仅改变 source→target 的内部指标 | 0: RelationshipChanged |
+| AssertWorldTruth | 可信内部调用；世界存在，断言 ID 未使用，scope=truth/owner=None | 0: WorldTruthAsserted |
+| AcquireKnowledge | 可信内部合法渠道；世界/接收方/源断言存在且同世界，派生 ID 未使用 | 0: ObservationRecorded；1: KnowledgeAcquired |
 
 **玩家创建歧义已解决：** 成功创建的普通玩家必须有初始物理地点。命令接收 initial_location_id、activity_state、availability_state，复用 PlayerActivity/PlayerAvailability；默认 active/available。inactive 保留地点，不自动产生见证。指纹使用默认值解析后的完整语义值。
 
@@ -50,6 +52,10 @@ RequestId 标识一次命令操作。新管线全局查找回执；跨命令类�
 
 回执沿用领域 CommandReceipt。0003 在原表增加独立 command_fingerprint 和 versioned result_payload；指纹不藏在结果引用中。result_reference 指向该命令最后一个事件，原始实体/版本结果另行保存；多事件属于同一回执。
 
+C-003D 结果新增 KnowledgeAssertionId 实体引用和可选 ObservationId，versioned JSON 保存原 ID；旧结果没有 observation_id key 时兼容为 None。ObservationId 不从 RequestId 推导，运行时由每次新执行生成独立 UUIDv4；成功重试先读取 receipt，不生成新 occurrence。完全回滚可在后续合法执行生成新身份。
+
+知识指纹包含完整源/目标/接收方、渠道、已解析认知标签和明确 confidence；真相指纹还包含冻结 proposition 和有效期输入。witnessed 默认 observed，其余显式渠道默认 reported，构造命令时解析后再 fingerprint；confidence 默认 None。运行时生成的 ObservationId 不参与指纹。真相 valid_from 未提供时在新执行取现有世界逻辑时间；指纹记录“采用执行时世界时钟”的 None 输入，不读取当前时钟来重算已提交请求指纹。知识政策与权限边界见 [KNOWLEDGE_ACCESS_MODEL.md](KNOWLEDGE_ACCESS_MODEL.md)。
+
 ## 4. 事件身份、因果与双时间
 
 每个事件 payload_version=1，显式保存语义事实，不能倾倒整个领域/ORM 对象。事件目录和 payload 见 [EVENT_MODEL.md](EVENT_MODEL.md)。
@@ -64,7 +70,7 @@ RequestId 标识一次命令操作。新管线全局查找回执；跨命令类�
 
 ## 5. UnitOfWork 与原子失败
 
-[ports.py](../../services/core/src/livingworld/application/ports.py) 定义 World/Location/Player/Character/Relationship repository、EventAppender、CommandReceiptRepository、WallClock 和 UnitOfWork。仅暴露任务需要的操作，没有通用 save(anything)、SQL execute 或 session。
+[ports.py](../../services/core/src/livingworld/application/ports.py) 定义 World/Location/Player/Character/Relationship repository、内部 exact-source KnowledgeMutationRepository、ObservationAppender、EventAppender、CommandReceiptRepository、WallClock 和 UnitOfWork。主体查询另用只读绑定 reader，不获得内部 mutation repository。仅暴露任务需要的操作，没有通用 save(anything)、SQL execute 或 session。
 
 [SqlAlchemyUnitOfWork](../../services/core/src/livingworld/infrastructure/persistence/unit_of_work.py) 从 Database 的集中 session factory 创建一次执行的 session，所有能力共享它。handler 仅在事件、投影和回执均写入后显式 commit；异常或未提交退出 rollback，最后关闭 session。
 
@@ -76,4 +82,4 @@ RequestId 标识一次命令操作。新管线全局查找回执；跨命令类�
 
 领域 Revision.advance 保持已有版本检查，MovePlayer/关系变更递增当前状态版本。DB 层 expected-revision 条件更新、并发冲突分类/重试和 canonical replay order 留给 C-003E；本阶段的当前快照写入不是最终 last-write-wins 政策。并发数据库写入失败显式失败并回滚，不自动重试或把不同命令当成成功。
 
-迁移与只追加触发器见 [PERSISTENCE_MODEL.md](PERSISTENCE_MODEL.md)。测试见 [命令集成测试](../../tests/application/test_commands.py) 和 [迁移回归](../../tests/persistence/test_command_migration.py)。本阶段不增加业务 HTTP API、知识命令、Director、Agent、检索、UI 或模拟。
+迁移与只追加触发器见 [PERSISTENCE_MODEL.md](PERSISTENCE_MODEL.md)。测试见 [命令集成测试](../../tests/application/test_commands.py)、[知识事务测试](../../tests/application/test_knowledge_access.py) 和 [迁移回归](../../tests/persistence/test_command_migration.py)。本阶段不增加业务 HTTP API、Director、Agent、语义检索、UI 或模拟。

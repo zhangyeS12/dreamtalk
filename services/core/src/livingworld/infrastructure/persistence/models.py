@@ -292,17 +292,18 @@ class ObservationRecord(Base):
     world_id: Mapped[UUID] = mapped_column(
         UUIDStorage(), ForeignKey("worlds.world_id"), primary_key=True
     )
-    principal_kind: Mapped[str] = mapped_column(String(16), primary_key=True)
-    principal_id: Mapped[UUID] = mapped_column(UUIDStorage(), primary_key=True)
-    target_kind: Mapped[str] = mapped_column(String(24), primary_key=True)
-    target_id: Mapped[UUID] = mapped_column(UUIDStorage(), primary_key=True)
-    channel: Mapped[str] = mapped_column(String(16), primary_key=True)
-    observed_at: Mapped[WorldTime] = mapped_column(WorldTimeStorage(), primary_key=True)
+    principal_kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    principal_id: Mapped[UUID] = mapped_column(UUIDStorage(), nullable=False)
+    target_kind: Mapped[str] = mapped_column(String(24), nullable=False)
+    target_id: Mapped[UUID] = mapped_column(UUIDStorage(), nullable=False)
+    channel: Mapped[str] = mapped_column(String(16), nullable=False)
+    observed_at: Mapped[WorldTime] = mapped_column(WorldTimeStorage(), nullable=False)
     principal_character_id: Mapped[UUID | None] = mapped_column(UUIDStorage())
     principal_player_id: Mapped[UUID | None] = mapped_column(UUIDStorage())
     target_event_id: Mapped[UUID | None] = mapped_column(UUIDStorage())
     target_assertion_id: Mapped[UUID | None] = mapped_column(UUIDStorage())
     created_at: Mapped[datetime | None] = mapped_column(UTCTimestampStorage())
+    observation_id: Mapped[UUID] = mapped_column(UUIDStorage(), primary_key=True)
     __table_args__ = (
         ForeignKeyConstraint(
             ["world_id", "principal_character_id"],

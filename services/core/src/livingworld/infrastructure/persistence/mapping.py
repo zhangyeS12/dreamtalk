@@ -11,6 +11,7 @@ from livingworld.domain.identifiers import (
     EventId,
     KnowledgeAssertionId,
     LocationId,
+    ObservationId,
     PlayerId,
     PrincipalId,
     WorldId,
@@ -232,6 +233,7 @@ def to_record(entity: DomainObject) -> Base:
         )
         target_kind, target_id, target_event, target_assertion = _target_parts(entity.target_id)
         return ObservationRecord(
+            observation_id=entity.observation_id.value,
             world_id=entity.world_id.value,
             principal_kind=principal_kind,
             principal_id=principal_id,
@@ -378,6 +380,7 @@ def to_domain(record: Base) -> DomainObject:
             ObservationChannel(record.channel),
             record.observed_at,
             record.created_at,
+            observation_id=ObservationId(world, record.observation_id),
         )
     if isinstance(record, CommandReceiptRecord):
         result = (

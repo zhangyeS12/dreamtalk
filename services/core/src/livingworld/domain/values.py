@@ -16,11 +16,12 @@ from livingworld.domain.identifiers import (
     EventId,
     KnowledgeAssertionId,
     LocationId,
+    ObservationId,
     PlayerId,
     WorldId,
 )
 
-type ScopedId = LocationId | PlayerId | CharacterId | EventId | KnowledgeAssertionId
+type ScopedId = LocationId | PlayerId | CharacterId | EventId | KnowledgeAssertionId | ObservationId
 type JsonValue = None | bool | int | float | str | tuple[JsonValue, ...] | Mapping[str, JsonValue]
 
 
@@ -69,7 +70,7 @@ def same_world(world_id: WorldId, *references: ScopedId) -> None:
     for reference in references:
         require_type(
             reference,
-            (LocationId, PlayerId, CharacterId, EventId, KnowledgeAssertionId),
+            (LocationId, PlayerId, CharacterId, EventId, KnowledgeAssertionId, ObservationId),
             "world-scoped reference",
         )
         if reference.world_id != world_id:

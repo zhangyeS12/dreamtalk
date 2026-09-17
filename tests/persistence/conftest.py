@@ -12,6 +12,7 @@ from livingworld.domain.identifiers import (
     EventId,
     KnowledgeAssertionId,
     LocationId,
+    ObservationId,
     PlayerId,
     WorldId,
 )
@@ -140,13 +141,22 @@ def objects():
             None,
             time,
         ),
-        "observation": Observation(world, player, event_id, ObservationChannel.MESSAGE, time, now),
+        "observation": Observation(
+            world,
+            player,
+            event_id,
+            ObservationChannel.MESSAGE,
+            time,
+            now,
+            observation_id=ObservationId(world, uuid4()),
+        ),
         "assertion_observation": Observation(
             world,
             alice,
             truth_id,
             ObservationChannel.INFERRED,
             WorldTime(-1),
+            observation_id=ObservationId(world, uuid4()),
         ),
         "receipt": CommandReceipt(
             request,

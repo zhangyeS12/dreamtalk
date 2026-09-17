@@ -8,7 +8,13 @@ from uuid import uuid4
 import pytest
 from livingworld.domain.commands import CommandReceipt
 from livingworld.domain.contracts import RequestId
-from livingworld.domain.identifiers import CharacterId, EventId, KnowledgeAssertionId, PlayerId
+from livingworld.domain.identifiers import (
+    CharacterId,
+    EventId,
+    KnowledgeAssertionId,
+    ObservationId,
+    PlayerId,
+)
 from livingworld.domain.knowledge import ObservationChannel
 from livingworld.domain.values import Revision, WorldTime
 from livingworld.domain.world import ClockState
@@ -157,12 +163,43 @@ def test_observation_channels_roundtrip_without_propagation(tmp_path, objects, p
         try:
             await database.initialize()
             store = await populate(database)
-            observation = replace(objects["observation"], channel=channel, observed_at=WorldTime(1))
+            observation = replace(
+                objects["observation"],
+                channel=channel,
+                observed_at=WorldTime(1),
+                observation_id=ObservationId(objects["world"].world_id, uuid4()),
+            )
             await store.add(observation)
             assert await store.reload(observation) == observation
             async with database.engine.connect() as connection:
                 assert (
                     await connection.execute(text("SELECT COUNT(*) FROM knowledge_assertions"))
+                ).scalar_one() == 3
+        finally:
+            await database.close()
+
+    asyncio.run(run())
+
+
+def test_independent_observation_ids_coexist_at_identical_coordinates(tmp_path, objects, populate):
+    async def run():
+        database = Database(tmp_path)
+        try:
+            await database.initialize()
+            store = await populate(database)
+            original = objects["observation"]
+            independent = replace(
+                original, observation_id=ObservationId(original.world_id, uuid4())
+            )
+            await store.add(independent)
+            assert await store.reload(original) == original
+            assert await store.reload(independent) == independent
+            assert type((await store.reload(independent)).observation_id) is ObservationId
+            with pytest.raises(PersistenceConflictError):
+                await store.add(replace(original, observed_at=WorldTime(0)))
+            async with database.engine.connect() as connection:
+                assert (
+                    await connection.execute(text("SELECT COUNT(*) FROM observations"))
                 ).scalar_one() == 3
         finally:
             await database.close()

@@ -15,7 +15,8 @@ from livingworld.infrastructure.persistence.models import Base
 
 LEGACY_REVISION = "0001_legacy_runtime_foundation"
 DOMAIN_BASELINE_REVISION = "0002_world_domain_persistence"
-HEAD_REVISION = "0003_command_pipeline"
+COMMAND_REVISION = "0003_command_pipeline"
+HEAD_REVISION = "0004_observation_identity"
 LEGACY_CHECKSUM = "0345ec9d50fd45b01ba0f97ff6f14a25f683fb8d01f08f04ff9dc4892ad1cac5"
 LEGACY_TABLES = {"schema_version", "migration_history"}
 DOMAIN_TABLES = set(Base.metadata.tables)
@@ -154,7 +155,7 @@ def _current_revision(connection: Connection) -> str:
 
 
 def _validate_managed_state(connection: Connection, revision: str) -> None:
-    if revision not in {LEGACY_REVISION, DOMAIN_BASELINE_REVISION, HEAD_REVISION}:
+    if revision not in {LEGACY_REVISION, DOMAIN_BASELINE_REVISION, COMMAND_REVISION, HEAD_REVISION}:
         _fail("alembic_revision_unsupported")
     _validate_legacy_metadata(connection)
     tables = _table_names(connection)
@@ -188,6 +189,7 @@ def _validate_domain_shape(connection: Connection, revision: str) -> None:
     # Historical 0002 shape differs ONLY in these explicitly reviewed 0003 additions.
     # The Alembic cursor selects the expected shape; shape never selects migrations.
     baseline = revision == DOMAIN_BASELINE_REVISION
+    legacy_observations = revision in {DOMAIN_BASELINE_REVISION, COMMAND_REVISION}
     added_columns = {
         "relationships": {"affinity", "trust", "familiarity"},
         "command_receipts": {"result_payload", "command_fingerprint"},
@@ -207,12 +209,26 @@ def _validate_domain_shape(connection: Connection, revision: str) -> None:
             (column.name, column.type.compile(dialect=connection.dialect).upper(), column.nullable)
             for column in table.columns
             if not (baseline and column.name in added_columns.get(table.name, set()))
+            and not (
+                legacy_observations
+                and table.name == "observations"
+                and column.name == "observation_id"
+            )
         ]
         if actual != expected:
             _fail("alembic_schema_shape_mismatch")
-        if inspector.get_pk_constraint(table.name)["constrained_columns"] != [
-            column.name for column in table.primary_key.columns
-        ]:
+        expected_pk = [column.name for column in table.primary_key.columns]
+        if legacy_observations and table.name == "observations":
+            expected_pk = [
+                "world_id",
+                "principal_kind",
+                "principal_id",
+                "target_kind",
+                "target_id",
+                "channel",
+                "observed_at",
+            ]
+        if inspector.get_pk_constraint(table.name)["constrained_columns"] != expected_pk:
             _fail("alembic_schema_shape_mismatch")
         expected_fks = {
             (

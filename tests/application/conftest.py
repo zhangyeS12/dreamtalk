@@ -98,6 +98,8 @@ class Environment:
                 "relationships",
                 "world_events",
                 "command_receipts",
+                "knowledge_assertions",
+                "observations",
             )
         }
 

@@ -1,6 +1,6 @@
 # 知识模型
 
-状态：保留 Stage 0 语义；C-003A 实现 KnowledgeAssertion / Observation 领域值与不变量，C-003B 增加独立 ORM 存储、映射及数据库约束。不实现检索、查询权限服务或知识传播。依据 [PRODUCT_SPEC.md](../product/PRODUCT_SPEC.md) 的 FR-03、FR-04、FR-05、FR-07、FR-17 至 FR-20、FR-22、FR-23，以及已接受的 [Architecture Review 001](ARCHITECTURE_REVIEW_001.md)。
+状态：保留 Stage 0 语义；C-003A/B 建立领域与独立存储，C-003D 实现绑定主体的 SQL 隔离读取、内部 AssertWorldTruth/AcquireKnowledge 命令与独立 ObservationId。未实现自动传播、推理、Memory 或语义检索。访问与事务细节见 [KNOWLEDGE_ACCESS_MODEL.md](KNOWLEDGE_ACCESS_MODEL.md)。依据 [PRODUCT_SPEC.md](../product/PRODUCT_SPEC.md) 的 FR-03、FR-04、FR-05、FR-07、FR-17 至 FR-20、FR-22、FR-23，以及已接受的 [Architecture Review 001](ARCHITECTURE_REVIEW_001.md)。
 
 ## 1. 三种不同的语义
 
@@ -32,17 +32,31 @@ subject / predicate 是必填非空语义标签；value 接收有限 JSON 数据
 
 ### Observation
 
-Observation 定义 `world_id`、`principal_id: CharacterId | PlayerId`、`target_id: EventId | KnowledgeAssertionId`、channel、`observed_at: WorldTime`。可选 `created_at` 仅用于系统审计，必须是 aware datetime 并归一化 UTC，拒绝 naive。
+Observation 定义不可变 typed `observation_id: ObservationId`、`world_id`、`principal_id: CharacterId | PlayerId`、`target_id: EventId | KnowledgeAssertionId`、channel、`observed_at: WorldTime`。可选 `created_at` 仅用于系统审计，必须是 aware datetime 并归一化 UTC，拒绝 naive。
 
 channel 必须为 ObservationChannel 的 `witnessed / told / message / news / document / inferred` 之一；不接受未知渠道或未解析的原始字符串。主体与目标必须在同一世界。该对象记录一个显式观察，不自动授予检索权限、不传播/复制断言，也不因 inactive 玩家仍在某地点而创建见证记录。
 
-权限过滤必须先于 semantic retrieval / prompt assembly，这是已接受的架构边界；C-003A 只验证 scope / owner，不实现检索或权限服务。错误所有权抛出 InvalidKnowledgeOwnershipError，跨世界引用抛出 CrossWorldReferenceError。
+Observation 身份歧义已解决：自身 ID、主体、目标须同世界；相同 receiver/source/channel/observed_at 可以对应不同 observation_id，坐标不再是 UNIQUE 身份。RequestId 仅保护命令重试，成功重试返回已提交的原 ObservationId。新执行随机生成 UUIDv4；旧行仅在迁移时由原坐标规范序列化后 UUIDv5 回填：**legacy backfill identity != runtime identity generation**。
+
+权限过滤必须先于 semantic retrieval / prompt assembly；C-003D 在 SQL 中执行世界/scope/owner 条件。错误所有权抛出 InvalidKnowledgeOwnershipError，跨世界引用抛出 CrossWorldReferenceError。
 
 ### C-003B 存储约束
 
 详见 [PERSISTENCE_MODEL.md](PERSISTENCE_MODEL.md)。KnowledgeAssertionRecord 以 CHECK 强制上述 scope/owner 组合，复合外键保证 owner、来源事件和来源断言存在于同一 world；valid_from/to 保存整数 WorldTime，拒绝倒序。confidence 使用精确 Decimal 文本，value 以 JSON 保存并在返回领域时冻结；不同主体可保留相互冲突的认知。
 
-ObservationRecord 使用具体 principal/target 类型分支及同世界 FK，channel 限制为已定义枚举，observed_at 保存 WorldTime，可选 created_at 保留 aware UTC 语义。只保存显式观察，不复制断言、不自动授予知识或权限。数据库 ownership CHECK 不代替未来 permission filtering 服务。
+ObservationRecord 使用具体 principal/target 类型分支及同世界 FK，channel 限制为已定义枚举，observed_at 保存 WorldTime，可选 created_at 保留 aware UTC 语义。0004 改为 (world_id, observation_id) 主键，保留旧语义字段、所有行和 FK/CHECK，取消坐标唯一性。单独保存 Observation 不授予知识；AcquireKnowledge 原子建立接收方自有断言。数据库 ownership CHECK 与 SQL 读取授权共同保持边界。
+
+### C-003D 显式获知与读取
+
+**EXISTENCE IN DATABASE != KNOWLEDGE OF A PRINCIPAL**。
+
+WorldTruthReader 仅返回绑定世界的 truth；CharacterKnowledgeReader 仅返回绑定角色自有 character_belief；PlayerKnowledgeReader 仅返回绑定玩家自有 player_knowledge。list/get 均在 SQL 加世界、scope 和 owner 条件，不先读全集再过滤。知道来源 ID 不授予访问源断言、源主体其他断言或同 subject 断言的权限。
+
+可信内部 AssertWorldTruth 建立无 owner 的 truth。可信内部 AcquireKnowledge 读取一个同世界源断言，通过显式渠道创建 Observation 与新的角色信念/玩家知识；源可为 truth、CharacterBelief 或 PlayerKnowledge。subject/predicate/value 保留，身份、owner/scope、认知元数据与获知 provenance 独立，来源指针保留。事件、投影、回执同事务；玩家/角色没有自行授予知识的 HTTP API。
+
+最小政策：witnessed 默认 epistemic_status=observed，其他显式渠道默认 reported；允许调用方显式提供非空标签。confidence 默认 None，允许明确有限 Decimal [0,1]，不从来源继承或自动算概率，不把 observed/reported 当作真相权威。派生有效期从本次 WorldClock.logical_time 开始、终点未指定；来源的有效期不自动复制，也不据此实现有效期搜索。inferred 仍可表示领域观察，当前获知命令明确拒绝，推理政策留待后续。
+
+未来顺序必须是：**principal authorization → eligible assertion set → semantic/FTS/vector retrieval → ranking → context**。当前仅实现隔离读取；不实现搜索或上下文组装。未来 Director 可获内部 TruthReader，不因此读取私有信念；未来 Character Agent 只能接收其绑定 reader 的已授权结果，不能拿全局断言加“不要泄密”的 Prompt。
 
 ## 2. 已冻结的边界
 

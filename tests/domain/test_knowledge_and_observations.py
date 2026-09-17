@@ -1,4 +1,4 @@
-from dataclasses import replace
+from dataclasses import FrozenInstanceError, replace
 from decimal import Decimal
 from uuid import uuid4
 
@@ -8,7 +8,13 @@ from livingworld.domain.errors import (
     DomainInvariantError,
     InvalidKnowledgeOwnershipError,
 )
-from livingworld.domain.identifiers import CharacterId, EventId, KnowledgeAssertionId, PlayerId
+from livingworld.domain.identifiers import (
+    CharacterId,
+    EventId,
+    KnowledgeAssertionId,
+    ObservationId,
+    PlayerId,
+)
 from livingworld.domain.knowledge import KnowledgeScope, Observation, ObservationChannel
 from livingworld.domain.values import WorldTime
 
@@ -121,7 +127,12 @@ def test_explicit_observation_accepts_supported_channel_and_typed_target(
     world_id, player_id, channel, target_type
 ):
     observation = Observation(
-        world_id, player_id, target_type(world_id, uuid4()), channel, WorldTime(100)
+        world_id,
+        player_id,
+        target_type(world_id, uuid4()),
+        channel,
+        WorldTime(100),
+        observation_id=ObservationId(world_id, uuid4()),
     )
     assert observation.channel is channel and observation.observed_at == WorldTime(100)
     assert not hasattr(observation, "propagate")
@@ -130,7 +141,14 @@ def test_explicit_observation_accepts_supported_channel_and_typed_target(
 @pytest.mark.parametrize("channel", ["telepathy", "witnessed", None])
 def test_observation_requires_valid_channel_enum(world_id, player_id, channel):
     with pytest.raises(DomainInvariantError):
-        Observation(world_id, player_id, EventId(world_id, uuid4()), channel, WorldTime(1))
+        Observation(
+            world_id,
+            player_id,
+            EventId(world_id, uuid4()),
+            channel,
+            WorldTime(1),
+            observation_id=ObservationId(world_id, uuid4()),
+        )
 
 
 @pytest.mark.parametrize(
@@ -140,6 +158,7 @@ def test_observation_requires_valid_channel_enum(world_id, player_id, channel):
         ("principal_id", CharacterId),
         ("target_id", EventId),
         ("target_id", KnowledgeAssertionId),
+        ("observation_id", ObservationId),
     ],
 )
 def test_observation_cannot_bridge_worlds(
@@ -151,6 +170,7 @@ def test_observation_cannot_bridge_worlds(
         target_id=EventId(world_id, uuid4()),
         channel=ObservationChannel.TOLD,
         observed_at=WorldTime(1),
+        observation_id=ObservationId(world_id, uuid4()),
     )
     fields[field] = identity_type(other_world_id, uuid4())
     with pytest.raises(CrossWorldReferenceError):
@@ -165,9 +185,34 @@ def test_observation_uses_logical_time_and_optional_utc_audit(world_id, characte
         ObservationChannel.NEWS,
         WorldTime(1),
         created_at=wall_time,
+        observation_id=ObservationId(world_id, uuid4()),
     )
     assert observation.created_at.tzinfo is wall_time.tzinfo
     with pytest.raises(DomainInvariantError):
         replace(observation, created_at=wall_time.replace(tzinfo=None))
     with pytest.raises(DomainInvariantError):
         replace(observation, observed_at=wall_time)
+
+
+def test_observation_identity_is_typed_immutable_and_independent(world_id, player_id):
+    identity = ObservationId(world_id, uuid4())
+    with pytest.raises(FrozenInstanceError):
+        identity.value = uuid4()
+    with pytest.raises(DomainInvariantError):
+        ObservationId(world_id, "not-a-uuid")
+    original = Observation(
+        world_id,
+        player_id,
+        EventId(world_id, uuid4()),
+        ObservationChannel.MESSAGE,
+        WorldTime(1),
+        observation_id=identity,
+    )
+    independent = replace(original, observation_id=ObservationId(world_id, uuid4()))
+    assert original != independent
+    assert original.principal_id == independent.principal_id
+    assert original.target_id == independent.target_id
+    assert original.channel == independent.channel
+    assert original.observed_at == independent.observed_at
+    with pytest.raises(DomainInvariantError):
+        replace(original, observation_id=original.target_id)

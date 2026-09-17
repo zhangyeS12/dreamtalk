@@ -6,9 +6,24 @@ from uuid import UUID
 
 from livingworld.domain.contracts import RequestId
 from livingworld.domain.errors import DomainInvariantError
-from livingworld.domain.identifiers import CharacterId, LocationId, PlayerId, PrincipalId, WorldId
+from livingworld.domain.identifiers import (
+    CharacterId,
+    KnowledgeAssertionId,
+    LocationId,
+    PlayerId,
+    PrincipalId,
+    WorldId,
+)
+from livingworld.domain.knowledge import ObservationChannel
 from livingworld.domain.participants import PlayerActivity, PlayerAvailability
-from livingworld.domain.values import WorldTime, require_text, require_type, same_world
+from livingworld.domain.values import (
+    JsonValue,
+    WorldTime,
+    freeze_json,
+    require_text,
+    require_type,
+    same_world,
+)
 from livingworld.domain.world import ClockState
 
 
@@ -57,6 +72,40 @@ class Command:
                     for value in (self.affinity_delta, self.trust_delta, self.familiarity_delta)
                 ):
                     raise DomainInvariantError("Relationship deltas require integers")
+            case AssertWorldTruth():
+                require_type(self.assertion_id, KnowledgeAssertionId, "assertion_id")
+                same_world(self.world_id, self.assertion_id)
+                require_text(self.subject, "subject")
+                require_text(self.predicate, "predicate")
+                object.__setattr__(self, "value", freeze_json(self.value))
+                if self.valid_from is not None:
+                    require_type(self.valid_from, WorldTime, "valid_from")
+                if self.valid_to is not None:
+                    require_type(self.valid_to, WorldTime, "valid_to")
+                _epistemic_metadata(self.epistemic_status, self.confidence)
+            case AcquireKnowledge():
+                require_type(self.assertion_id, KnowledgeAssertionId, "assertion_id")
+                require_type(self.source_assertion_id, KnowledgeAssertionId, "source_assertion_id")
+                require_type(self.receiver_id, (CharacterId, PlayerId), "receiver_id")
+                same_world(
+                    self.world_id, self.assertion_id, self.source_assertion_id, self.receiver_id
+                )
+                require_type(self.channel, ObservationChannel, "channel")
+                if self.epistemic_status is None:
+                    object.__setattr__(
+                        self,
+                        "epistemic_status",
+                        "observed" if self.channel is ObservationChannel.WITNESSED else "reported",
+                    )
+                _epistemic_metadata(self.epistemic_status, self.confidence)
+
+
+def _epistemic_metadata(status: str, confidence: Decimal | None) -> None:
+    require_text(status, "epistemic_status")
+    if confidence is not None:
+        require_type(confidence, Decimal, "confidence")
+        if not confidence.is_finite() or not 0 <= confidence <= 1:
+            raise DomainInvariantError("confidence must be finite and between zero and one")
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -109,6 +158,32 @@ class ChangeRelationship(Command):
     familiarity_delta: int = 0
 
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class AssertWorldTruth(Command):
+    """Trusted internal creation; no public/player truth-write capability."""
+
+    assertion_id: KnowledgeAssertionId
+    subject: str
+    predicate: str
+    value: JsonValue
+    epistemic_status: str = "asserted"
+    confidence: Decimal | None = None
+    valid_from: WorldTime | None = None
+    valid_to: WorldTime | None = None
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class AcquireKnowledge(Command):
+    """Trusted evidence-channel execution, not a principal self-grant API."""
+
+    assertion_id: KnowledgeAssertionId
+    receiver_id: PrincipalId
+    source_assertion_id: KnowledgeAssertionId
+    channel: ObservationChannel
+    epistemic_status: str | None = None
+    confidence: Decimal | None = None
+
+
 type WorldCommand = (
     CreateWorld
     | CreateLocation
@@ -117,4 +192,6 @@ type WorldCommand = (
     | CreateCharacter
     | PlaceCharacter
     | ChangeRelationship
+    | AssertWorldTruth
+    | AcquireKnowledge
 )

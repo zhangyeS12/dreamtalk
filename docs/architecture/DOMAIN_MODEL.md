@@ -1,6 +1,6 @@
 # LivingWorld 领域概念模型
 
-状态：Stage 0 领域语言保留；C-003A 实现领域模型，C-003B 增加独立 SQLite ORM 映射，C-003C 按用户确认增加 RelationshipMetrics 和首批确定性 Command 事务管线，见 [COMMAND_MODEL.md](COMMAND_MODEL.md) 与 [PERSISTENCE_MODEL.md](PERSISTENCE_MODEL.md)。其余概念仍是定义；回放、完整乐观并发处理、Director、Agent、业务 HTTP API 与世界模拟未实现。
+状态：Stage 0 领域语言保留；C-003A 实现领域模型，C-003B 增加独立 SQLite ORM 映射，C-003C 增加 RelationshipMetrics 与确定性 Command 事务，C-003D 按用户确认增加独立 ObservationId、主体知识隔离与显式获知。见 [COMMAND_MODEL.md](COMMAND_MODEL.md)、[PERSISTENCE_MODEL.md](PERSISTENCE_MODEL.md) 和 [KNOWLEDGE_ACCESS_MODEL.md](KNOWLEDGE_ACCESS_MODEL.md)。其余概念仍是定义；回放、完整乐观并发处理、Director、Agent、业务 HTTP API 与世界模拟未实现。
 
 ## 阅读约定
 
@@ -29,7 +29,7 @@
 
 | 模块 | 已实现模型 / 值 | 当前职责 |
 | --- | --- | --- |
-| [identifiers.py](../../services/core/src/livingworld/domain/identifiers.py) | WorldId、LocationId、PlayerId、CharacterId、EventId、KnowledgeAssertionId、CorrelationId、PrincipalId | UUID 的具体类型；地点/参与者/事件/断言引用携带 WorldId；PrincipalId 为 CharacterId 或 PlayerId |
+| [identifiers.py](../../services/core/src/livingworld/domain/identifiers.py) | WorldId、LocationId、PlayerId、CharacterId、EventId、KnowledgeAssertionId、ObservationId、CorrelationId、PrincipalId | UUID 的具体类型；地点/参与者/事件/断言/观察引用携带 WorldId；PrincipalId 为 CharacterId 或 PlayerId |
 | [values.py](../../services/core/src/livingworld/domain/values.py) | WorldTime、Revision、不可变 JSON 值、UTC 校验 | 两条时间轴、版本检查、嵌套结构的防御性复制 |
 | [world.py](../../services/core/src/livingworld/domain/world.py) | World、WorldClock、Location、LocationConnection | 世界身份、双时间时钟快照、地点及有序拓扑连接；不定义移动耗时或通行策略 |
 | [participants.py](../../services/core/src/livingworld/domain/participants.py) | Player、PlayerPresence、Character、CharacterState | 静态定义和运行状态分离；玩家单一位置、activity 与 Busy/Available 独立 |
@@ -49,6 +49,12 @@
 - 事件和结构化值防御性复制并深度冻结；事件没有 update/delete 操作。知识 scope/owner 的组合必须合法，错误信念允许与真相冲突。
 - ID 校验保证引用类型及世界归属，不查询目标是否已创建，也不维护世界实体注册表。C-003B 通过复合外键与主键加固引用存在性、同世界归属和当前快照唯一性；分支归属与 Kernel 授权仍待后续实现。
 - `epistemic_status` 与回执 `status` 为必填非空语义标签，只定义扩展接口，不冻结状态机。`confidence` 为有限 Decimal 的 [0, 1] 或 None；知识有效期只拒绝倒序，不定义查询端点的包含性或自动失效。
+
+### C-003D Observation 身份决策：已解决
+
+ObservationId 是不可变的同世界 typed UUID，沿用现有 world_id + value 的标识符约定，不把 world_id 编码进 UUID。Observation 必须持有自身 observation_id；principal_id、target_id、channel、observed_at 描述发生了什么，不决定 occurrence 身份。两个独立观察可以拥有完全相同的语义坐标但不同 ObservationId。
+
+RequestId 是命令幂等身份，ObservationId 是观察发生身份；运行时新获知执行生成独立 UUIDv4，既不 hash RequestId，也不 hash 坐标。成功提交后重试由回执返回原 ObservationId；完全回滚的身份从未成为 canonical state，后续合法重试可以生成新身份。旧自然键仅用于 0004 的确定性迁移回填，**legacy backfill identity != runtime identity generation**。迁移与查询边界见 [持久化模型](PERSISTENCE_MODEL.md) 和 [知识访问模型](KNOWLEDGE_ACCESS_MODEL.md)。
 
 测试见 [tests/domain](../../tests/domain/)；领域依赖约束由 [架构测试](../../tests/core/test_architecture.py) 验证。详细事件和知识定义见下方相关文档。
 
@@ -319,7 +325,7 @@ Knowledge 与其知情主体之间的归属边界，以及判断某内容是否�
 
 - 必须区分角色知识归属与玩家知识归属（FR-04）。
 - 共享一段 Conversation 或 Scene 不等于自动获得其中所有后台信息（FR-05）。
-- 观察、转述、阅读等行为何时形成知识归属，以及群组共享知识是否需要独立概念，待确认。
+- C-003D 以可信内部 AcquireKnowledge 显式建立一个主体自有断言；来源与 provenance 不授予源存储读取权限。观察、转述、阅读的自动触发时机与群组共享知识仍待确认。
 
 ## 12. Memory
 

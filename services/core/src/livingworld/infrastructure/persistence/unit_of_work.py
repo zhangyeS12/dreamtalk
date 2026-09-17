@@ -14,7 +14,16 @@ from livingworld.application.results import CommandResult, RelationshipReference
 from livingworld.domain.commands import CommandReceipt
 from livingworld.domain.contracts import RequestId
 from livingworld.domain.events import WorldEvent
-from livingworld.domain.identifiers import CharacterId, LocationId, PlayerId, PrincipalId, WorldId
+from livingworld.domain.identifiers import (
+    CharacterId,
+    KnowledgeAssertionId,
+    LocationId,
+    ObservationId,
+    PlayerId,
+    PrincipalId,
+    WorldId,
+)
+from livingworld.domain.knowledge import KnowledgeAssertion, Observation
 from livingworld.domain.participants import Character, CharacterState, Player, PlayerPresence
 from livingworld.domain.relationships import Relationship
 from livingworld.domain.values import Revision
@@ -28,6 +37,7 @@ from livingworld.infrastructure.persistence.models import (
     CharacterRecord,
     CharacterStateRecord,
     CommandReceiptRecord,
+    KnowledgeAssertionRecord,
     LocationRecord,
     PlayerPresenceRecord,
     PlayerRecord,
@@ -152,12 +162,44 @@ class EventAppender:
         await self._session.flush()
 
 
+class KnowledgeMutationRepository:
+    """Exact-source lookup for trusted acquisition, not a principal query port."""
+
+    def __init__(self, session: AsyncSession):
+        self._session = session
+
+    async def get(self, assertion_id: KnowledgeAssertionId) -> KnowledgeAssertion | None:
+        record = await self._session.get(
+            KnowledgeAssertionRecord, (assertion_id.world_id.value, assertion_id.value)
+        )
+        return to_domain(record) if record is not None else None
+
+    async def add(self, assertion: KnowledgeAssertion) -> None:
+        self._session.add(to_record(assertion))
+        await self._session.flush()
+
+
+class ObservationAppender:
+    def __init__(self, session: AsyncSession):
+        self._session = session
+
+    async def add(self, observation: Observation) -> None:
+        self._session.add(to_record(observation))
+        await self._session.flush()
+
+
 def _decode_id(value: dict):
     identity = UUID(value["id"])
     if value["kind"] == "WorldId":
         return WorldId(identity)
     world = WorldId(UUID(value["world_id"]))
-    types = {"LocationId": LocationId, "PlayerId": PlayerId, "CharacterId": CharacterId}
+    types = {
+        "LocationId": LocationId,
+        "PlayerId": PlayerId,
+        "CharacterId": CharacterId,
+        "KnowledgeAssertionId": KnowledgeAssertionId,
+        "ObservationId": ObservationId,
+    }
     return types[value["kind"]](world, identity)
 
 
@@ -177,6 +219,9 @@ def _encode_result(result: CommandResult) -> str:
             "result_version": 1,
             "entity_reference": entity,
             "resulting_revision": result.resulting_revision.value,
+            "observation_id": id_input(result.observation_id)
+            if result.observation_id is not None
+            else None,
         }
     )
 
@@ -214,7 +259,13 @@ class CommandReceiptRepository:
                 else _decode_id(entity)
             )
             return CommandResult(
-                request_id, receipt.command_type, reference, Revision(value["resulting_revision"])
+                request_id,
+                receipt.command_type,
+                reference,
+                Revision(value["resulting_revision"]),
+                observation_id=_decode_id(value["observation_id"])
+                if value.get("observation_id") is not None
+                else None,
             )
         except (ValueError, KeyError, TypeError):
             raise PersistenceDataError("invalid_command_result") from None
@@ -239,6 +290,8 @@ class SqlAlchemyUnitOfWork:
         self.players = PlayerRepository(self._session)
         self.characters = CharacterRepository(self._session)
         self.relationships = RelationshipRepository(self._session)
+        self.knowledge = KnowledgeMutationRepository(self._session)
+        self.observations = ObservationAppender(self._session)
         self.events = EventAppender(self._session)
         self.receipts = CommandReceiptRepository(self._session)
         return self

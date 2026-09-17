@@ -8,6 +8,9 @@ from sqlalchemy import event
 from sqlalchemy.engine import URL
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async_engine
 
+from livingworld.application import ports
+from livingworld.domain.identifiers import CharacterId, PlayerId, WorldId
+from livingworld.infrastructure.persistence import knowledge_readers
 from livingworld.infrastructure.persistence.migration import upgrade
 from livingworld.infrastructure.persistence.store import PersistenceStore
 from livingworld.infrastructure.persistence.unit_of_work import SqlAlchemyUnitOfWork
@@ -72,6 +75,19 @@ class Database:
 
     def unit_of_work(self) -> SqlAlchemyUnitOfWork:
         return SqlAlchemyUnitOfWork(self._sessions)
+
+    def world_truth_reader(self, world_id: WorldId) -> ports.WorldTruthReader:
+        """Trusted composition only; never supplied to principal contexts."""
+        return knowledge_readers.WorldTruthReader(self._sessions, world_id)
+
+    def character_knowledge_reader(
+        self, character_id: CharacterId
+    ) -> ports.CharacterKnowledgeReader:
+        """Bind a verified principal at the trusted composition boundary."""
+        return knowledge_readers.CharacterKnowledgeReader(self._sessions, character_id)
+
+    def player_knowledge_reader(self, player_id: PlayerId) -> ports.PlayerKnowledgeReader:
+        return knowledge_readers.PlayerKnowledgeReader(self._sessions, player_id)
 
     async def close(self) -> None:
         await self.engine.dispose()

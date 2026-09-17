@@ -3,7 +3,15 @@
 from dataclasses import dataclass
 
 from livingworld.domain.contracts import RequestId
-from livingworld.domain.identifiers import CharacterId, LocationId, PlayerId, PrincipalId, WorldId
+from livingworld.domain.identifiers import (
+    CharacterId,
+    KnowledgeAssertionId,
+    LocationId,
+    ObservationId,
+    PlayerId,
+    PrincipalId,
+    WorldId,
+)
 from livingworld.domain.values import Revision
 
 
@@ -13,7 +21,9 @@ class RelationshipReference:
     target_id: PrincipalId
 
 
-type EntityReference = WorldId | LocationId | PlayerId | CharacterId | RelationshipReference
+type EntityReference = (
+    WorldId | LocationId | PlayerId | CharacterId | KnowledgeAssertionId | RelationshipReference
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -23,3 +33,4 @@ class CommandResult:
     entity_reference: EntityReference
     resulting_revision: Revision
     replayed: bool = False
+    observation_id: ObservationId | None = None

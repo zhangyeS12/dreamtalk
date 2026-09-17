@@ -7,7 +7,15 @@ from livingworld.application.results import CommandResult
 from livingworld.domain.commands import CommandReceipt
 from livingworld.domain.contracts import RequestId
 from livingworld.domain.events import WorldEvent
-from livingworld.domain.identifiers import CharacterId, LocationId, PlayerId, PrincipalId, WorldId
+from livingworld.domain.identifiers import (
+    CharacterId,
+    KnowledgeAssertionId,
+    LocationId,
+    PlayerId,
+    PrincipalId,
+    WorldId,
+)
+from livingworld.domain.knowledge import KnowledgeAssertion, Observation
 from livingworld.domain.participants import Character, CharacterState, Player, PlayerPresence
 from livingworld.domain.relationships import Relationship
 from livingworld.domain.world import Location, World
@@ -50,6 +58,38 @@ class EventAppender(Protocol):
     async def append(self, event: WorldEvent) -> None: ...
 
 
+class WorldTruthReader(Protocol):
+    """Bound world, truth only; trusted world layer capability."""
+
+    async def get(self, assertion_id: KnowledgeAssertionId) -> KnowledgeAssertion | None: ...
+    async def list(self) -> tuple[KnowledgeAssertion, ...]: ...
+
+
+class CharacterKnowledgeReader(Protocol):
+    """Bound character, own beliefs only; no source traversal."""
+
+    async def get(self, assertion_id: KnowledgeAssertionId) -> KnowledgeAssertion | None: ...
+    async def list(self) -> tuple[KnowledgeAssertion, ...]: ...
+
+
+class PlayerKnowledgeReader(Protocol):
+    """Bound player, own knowledge only."""
+
+    async def get(self, assertion_id: KnowledgeAssertionId) -> KnowledgeAssertion | None: ...
+    async def list(self) -> tuple[KnowledgeAssertion, ...]: ...
+
+
+class KnowledgeMutationRepository(Protocol):
+    """Internal exact-source capability, only supplied to authoritative commands."""
+
+    async def get(self, assertion_id: KnowledgeAssertionId) -> KnowledgeAssertion | None: ...
+    async def add(self, assertion: KnowledgeAssertion) -> None: ...
+
+
+class ObservationAppender(Protocol):
+    async def add(self, observation: Observation) -> None: ...
+
+
 class CommandReceiptRepository(Protocol):
     async def existing(self, request_id: RequestId, fingerprint: str) -> CommandResult | None: ...
     async def add(
@@ -63,6 +103,8 @@ class UnitOfWork(Protocol):
     players: PlayerRepository
     characters: CharacterRepository
     relationships: RelationshipRepository
+    knowledge: KnowledgeMutationRepository
+    observations: ObservationAppender
     events: EventAppender
     receipts: CommandReceiptRepository
 

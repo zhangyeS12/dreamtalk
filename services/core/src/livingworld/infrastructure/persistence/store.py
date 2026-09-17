@@ -6,7 +6,7 @@ from sqlalchemy.orm import selectinload
 
 from livingworld.domain.commands import CommandReceipt
 from livingworld.domain.events import WorldEvent
-from livingworld.domain.identifiers import CharacterId, EventId
+from livingworld.domain.identifiers import CharacterId
 from livingworld.domain.knowledge import KnowledgeAssertion, Observation
 from livingworld.domain.participants import Character, CharacterState, Player, PlayerPresence
 from livingworld.domain.relationships import Relationship
@@ -83,19 +83,7 @@ class PersistenceStore:
         if isinstance(entity, KnowledgeAssertion):
             return KnowledgeAssertionRecord, (world, entity.assertion_id.value)
         if isinstance(entity, Observation):
-            principal_kind = (
-                "character" if isinstance(entity.principal_id, CharacterId) else "player"
-            )
-            target_kind = "event" if isinstance(entity.target_id, EventId) else "assertion"
-            return ObservationRecord, (
-                world,
-                principal_kind,
-                entity.principal_id.value,
-                target_kind,
-                entity.target_id.value,
-                entity.channel.value,
-                entity.observed_at,
-            )
+            return ObservationRecord, (world, entity.observation_id.value)
         if isinstance(entity, CommandReceipt):
             return CommandReceiptRecord, (world, entity.request_id.value)
         raise TypeError(f"No persistence identity for {type(entity).__name__}")

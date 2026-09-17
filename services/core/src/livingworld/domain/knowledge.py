@@ -1,6 +1,6 @@
 """Permission ownership and explicit observations, without retrieval/propagation."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
@@ -10,6 +10,7 @@ from livingworld.domain.identifiers import (
     CharacterId,
     EventId,
     KnowledgeAssertionId,
+    ObservationId,
     PlayerId,
     PrincipalId,
     WorldId,
@@ -104,11 +105,13 @@ class Observation:
     channel: ObservationChannel
     observed_at: WorldTime
     created_at: datetime | None = None
+    observation_id: ObservationId = field(kw_only=True)
 
     def __post_init__(self) -> None:
+        require_type(self.observation_id, ObservationId, "observation_id")
         require_type(self.principal_id, (CharacterId, PlayerId), "principal_id")
         require_type(self.target_id, (EventId, KnowledgeAssertionId), "target_id")
-        same_world(self.world_id, self.principal_id, self.target_id)
+        same_world(self.world_id, self.observation_id, self.principal_id, self.target_id)
         require_type(self.channel, ObservationChannel, "channel")
         require_type(self.observed_at, WorldTime, "observed_at")
         if self.created_at is not None:

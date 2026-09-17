@@ -1,9 +1,13 @@
 """Versioned canonical semantic inputs, excluding request identity and wall time."""
 
 import json
+from collections.abc import Mapping
+from decimal import Decimal
 from hashlib import sha256
 
 from livingworld.application.commands import (
+    AcquireKnowledge,
+    AssertWorldTruth,
     ChangeRelationship,
     CreateCharacter,
     CreateLocation,
@@ -13,10 +17,19 @@ from livingworld.application.commands import (
     PlaceCharacter,
     WorldCommand,
 )
-from livingworld.domain.identifiers import CharacterId, LocationId, PlayerId, WorldId
+from livingworld.domain.identifiers import (
+    CharacterId,
+    KnowledgeAssertionId,
+    LocationId,
+    ObservationId,
+    PlayerId,
+    WorldId,
+)
 
 
-def id_input(identity: WorldId | LocationId | PlayerId | CharacterId) -> dict[str, str]:
+def id_input(
+    identity: WorldId | LocationId | PlayerId | CharacterId | KnowledgeAssertionId | ObservationId,
+) -> dict[str, str]:
     result = {"kind": type(identity).__name__, "id": str(identity.value)}
     if not isinstance(identity, WorldId):
         result["world_id"] = str(identity.world_id.value)
@@ -72,14 +85,57 @@ def semantic_input(command: WorldCommand) -> dict:
                 "trust_delta": command.trust_delta,
                 "familiarity_delta": command.familiarity_delta,
             }
+        case AssertWorldTruth():
+            details = {
+                "assertion_id": id_input(command.assertion_id),
+                "subject": command.subject,
+                "predicate": command.predicate,
+                "value": command.value,
+                "epistemic_status": command.epistemic_status,
+                "confidence": decimal_input(command.confidence),
+                "valid_from": command.valid_from.microseconds
+                if command.valid_from is not None
+                else None,
+                "valid_to": command.valid_to.microseconds if command.valid_to is not None else None,
+            }
+        case AcquireKnowledge():
+            details = {
+                "assertion_id": id_input(command.assertion_id),
+                "receiver_id": id_input(command.receiver_id),
+                "source_assertion_id": id_input(command.source_assertion_id),
+                "channel": command.channel.value,
+                "epistemic_status": command.epistemic_status,
+                "confidence": decimal_input(command.confidence),
+            }
         case _:
             raise TypeError("Unsupported command type")
     return common | details
 
 
+def decimal_input(value: Decimal | None) -> str | None:
+    if value is None:
+        return None
+    text = format(value, "f")
+    if "." in text:
+        text = text.rstrip("0").rstrip(".")
+    return "0" if value == 0 else text
+
+
+def _json_data(value):
+    if isinstance(value, Mapping):
+        return {key: _json_data(item) for key, item in value.items()}
+    if isinstance(value, (tuple, list)):
+        return [_json_data(item) for item in value]
+    return value
+
+
 def canonical_json(value: dict) -> str:
     return json.dumps(
-        value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
+        _json_data(value),
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
     )
 
 
