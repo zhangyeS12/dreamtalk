@@ -1,6 +1,6 @@
 # LivingWorld 领域概念模型
 
-状态：Stage 0 领域语言保留；C-003A 已实现下述领域模型与不变量。其余概念仍是产品/架构定义，不代表已实现。C-003A 不实现持久化、事件提交/回放、Director、Agent、业务 HTTP API 或世界模拟。
+状态：Stage 0 领域语言保留；C-003A 已实现下述领域模型与不变量，C-003B 增加独立的 SQLite ORM 映射，见 [PERSISTENCE_MODEL.md](PERSISTENCE_MODEL.md)。其余概念仍是产品/架构定义，不代表已实现。Kernel 提交、Command 执行、回放、Director、Agent、业务 HTTP API 与世界模拟未实现；领域代码在 C-003B 中保持不变。
 
 ## 阅读约定
 
@@ -47,7 +47,7 @@
 - `Relationship(source_id, target_id)` 有方向，A→B 与 B→A 独立；允许 Player / Character 主体，但不新增群体关系政策或数值维度。
 - 未来可修改的世界/定义/状态/关系/断言/回执带 `Revision`。`Revision.advance(expected)` 只在版本匹配时返回 +1；presence 更新返回重新校验的新快照，失败不改变旧值。不实现数据库并发控制。
 - 事件和结构化值防御性复制并深度冻结；事件没有 update/delete 操作。知识 scope/owner 的组合必须合法，错误信念允许与真相冲突。
-- ID 校验保证引用类型及世界归属，不查询目标是否已创建，也不维护世界实体注册表。未来应用/持久化层负责存在性、同一实体当前快照唯一性、分支归属与 Kernel 授权；本任务不假装已执行这些职责。
+- ID 校验保证引用类型及世界归属，不查询目标是否已创建，也不维护世界实体注册表。C-003B 通过复合外键与主键加固引用存在性、同世界归属和当前快照唯一性；分支归属与 Kernel 授权仍待后续实现。
 - `epistemic_status` 与回执 `status` 为必填非空语义标签，只定义扩展接口，不冻结状态机。`confidence` 为有限 Decimal 的 [0, 1] 或 None；知识有效期只拒绝倒序，不定义查询端点的包含性或自动失效。
 
 测试见 [tests/domain](../../tests/domain/)；领域依赖约束由 [架构测试](../../tests/core/test_architecture.py) 验证。详细事件和知识定义见下方相关文档。

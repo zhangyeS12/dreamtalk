@@ -1,6 +1,6 @@
 # Event Model
 
-> 状态：保留 Stage 0 概念边界；C-003A 实现不可变 WorldEvent 领域值及不变量。候选激活、Kernel 提交、持久化、ledger、projection、回放和业务事件目录均未实现。
+> 状态：保留 Stage 0 概念边界；C-003A 实现不可变 WorldEvent 领域值及不变量，C-003B 增加只追加事件存储与映射。候选激活、Kernel 提交、projection 执行、回放和业务事件目录均未实现。
 
 规则来源：[PRODUCT_SPEC.md](../product/PRODUCT_SPEC.md) 中的 FR-01、FR-02、FR-04 至 FR-15、FR-22 至 FR-24。规划责任见 [DIRECTOR_MODEL.md](DIRECTOR_MODEL.md)，信息归属见 [KNOWLEDGE_MODEL.md](KNOWLEDGE_MODEL.md)。
 
@@ -40,13 +40,19 @@ WorldEvent、RelationshipEvent 与 WorldTruth 的关系属于概念分工。本�
 | correlation_id | 可选独立 UUID CorrelationId，用于关联一组工作，不等同于事件身份 |
 | idempotency_key | 可选非空语义键；本任务不执行去重 |
 
-**双时间表示歧义已解决。** occurred_at 不是 UTC；created_at 不是世界时间。两者刻意允许不同，尤其未来离线 catch-up 可记录较早的世界发生位置和较晚的现实创建时间；本任务不实现 catch-up 或持久化。naive created_at 一律拒绝，aware 的非 UTC 输入统一归一化 UTC，不隐式转换 occurred_at，也不跨轴比较大小。
+**双时间表示歧义已解决。** occurred_at 不是 UTC；created_at 不是世界时间。两者刻意允许不同，尤其未来离线 catch-up 可记录较早的世界发生位置和较晚的现实创建时间；C-003B 只存储双时间，不实现 catch-up。naive created_at 一律拒绝，aware 的非 UTC 输入统一归一化 UTC，不隐式转换 occurred_at，也不跨轴比较大小。
 
 WorldTime 是逻辑坐标，不是全局事件 ID；两个 EventId 可以共享同一 WorldTime，未来分支也可以在同一坐标拥有不同历史。C-003A 不加入日历、调度或分支身份机制。
 
 WorldEvent 是 canonical history 的不可变领域表达，frozen snapshot 没有 update/delete 方法。外部原始 payload 后续修改不会改变事件；事件内部的嵌套结构也不能修改。此处创建 Python 值不意味着事件已由 Kernel 提交或世界事实已落库。只有未来 Deterministic World Kernel 能正式提交 canonical WorldEvent，Director 只提出批量计划。CandidateEvent 没有在 C-003A 实现，更不能通过构造候选提前写入事实。
 
-[CommandReceipt](../../services/core/src/livingworld/domain/commands.py) 定义未来请求幂等性接口：现有 RequestId、world_id、command_type、非空 status 标签、可选同世界结果引用、UTC 创建/完成时间及 Revision。完成时间不能早于创建时间。回执没有执行、保存、重试或去重行为；同一个 key 构造多个事件不会在此层自动合并。
+[CommandReceipt](../../services/core/src/livingworld/domain/commands.py) 定义未来请求幂等性接口：现有 RequestId、world_id、command_type、非空 status 标签、可选同世界结果引用、UTC 创建/完成时间及 Revision。完成时间不能早于创建时间。C-003B 保存回执并约束 (world_id, request_id) 唯一性；没有命令执行、重试或返回旧执行结果的流程，同一个 key 构造多个事件不会在领域层自动合并。
+
+### C-003B 事件持久化边界
+
+[PERSISTENCE_MODEL.md](PERSISTENCE_MODEL.md) 定义独立 WorldEventRecord 和显式 mapper。occurred_at 保存有符号 64 位整数微秒，created_at 保存规范 UTC 文本；payload_version、因果 EventId/RequestId 与 CorrelationId 完整还原，payload 返回领域时深度冻结。(world_id, idempotency_key) unique 只提供 DB 去重约束；None 允许多个事件，相同 WorldTime 不限制事件身份。
+
+adapter 只有 insert/reload，无事件 update/delete API。SQLite 触发器拒绝 UPDATE/DELETE，本 engine 启用 recursive_triggers 以阻止 INSERT OR REPLACE 绕过只追加边界。低层存储验证不是 Kernel 授权机制，也没有 event→projection→receipt 命令事务。正式 canonical WorldEvent 的唯一提交者仍是未来 Deterministic World Kernel。
 
 ## 2. 候选的语义生命周期
 
@@ -110,7 +116,7 @@ WorldEvent 是 canonical history 的不可变领域表达，frozen snapshot 没�
 - Developer Mode 能查看 Director、Agent、Memory、LLM 使用等决策 Trace（FR-23）。候选激活、延期、取消与 Replan 的依据属于需要说明的决策范围；Trace 的具体内容和保留方式未确定。
 - 产品必须记录 Token、Latency 和 Cost，并支持预算与模型路由（FR-24）。候选执行与 LLM 调用是不同概念，不能将每个普通小事件处理都推导成一次 LLM 调用。
 
-持久化方向见 [Architecture Review 001](ARCHITECTURE_REVIEW_001.md)；C-003A 不实现事件总线、队列、数据库业务、事务提交或持久化。
+持久化方向见 [Architecture Review 001](ARCHITECTURE_REVIEW_001.md)，C-003B 存储细节见 [PERSISTENCE_MODEL.md](PERSISTENCE_MODEL.md)；事件总线、队列与 Kernel/Command 事务提交未实现。
 
 ## 7. 待确认的产品定义
 

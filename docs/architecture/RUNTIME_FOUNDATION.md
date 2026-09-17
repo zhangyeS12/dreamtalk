@@ -1,6 +1,6 @@
 # C-002：Application Runtime Foundation
 
-状态：Stage 1，运行时基础实现。Stage 0 的 [冻结规则与 P-01～P-19](../product/PRODUCT_SPEC.md) 保持不变。本阶段不实现 Director、Agent、世界模拟、世界业务表或最终 UI。
+状态：C-002 Stage 1 运行时基础继续沿用，本文同步记录 C-003A 领域与 C-003B 持久化接线。Stage 0 的 [冻结规则与 P-01～P-19](../product/PRODUCT_SPEC.md) 保持不变。当前不实现 Director、Agent、世界模拟、业务 API 或最终 UI。
 
 ## 工程边界与依赖
 
@@ -10,9 +10,9 @@ domain ← application ← infrastructure / adapters
                        bootstrap（composition root）
 ```
 
-domain 只包含无框架的系统契约与 RequestId；application 协调 readiness 与 shutdown；infrastructure 提供标准库 SQLite 和结构化日志；HTTP adapter 使用 FastAPI / Pydantic v2；bootstrap 负责 asyncio/Uvicorn 生命周期与组装。内层依赖方向由 AST 架构测试检查。
+domain 包含无框架的系统契约、RequestId 及 C-003A 领域快照；application 协调 readiness 与 shutdown；infrastructure 提供 SQLAlchemy AsyncEngine / aiosqlite / Alembic 的 SQLite 基础及结构化日志；HTTP adapter 使用 FastAPI / Pydantic v2；bootstrap 负责 asyncio/Uvicorn/Database 生命周期与组装。内层依赖方向由 AST 架构测试检查。
 
-共享 React UI 位于 `apps/web`，Tauri 壳位于 `apps/desktop`；所有 UI Core 请求经过 `packages/api-client` 的 CoreClient。UI 不知道固定 Core 端口。没有引入数据库 ORM、消息队列、Agent 框架或云数据库。
+共享 React UI 位于 `apps/web`，Tauri 壳位于 `apps/desktop`；所有 UI Core 请求经过 `packages/api-client` 的 CoreClient。UI 不知道固定 Core 端口。C-003B 引入任务指定的 SQLAlchemy ORM / Alembic；没有引入消息队列、Agent 框架或云数据库。
 
 ## 集中系统契约
 
@@ -64,7 +64,9 @@ Core 的 graceful drain 上限为 5 秒，窗口关闭的 supervisor 等待为 8
 
 ## SQLite 与日志
 
-数据库在 app data 的 `data/runtime.sqlite3`。bootstrap 启用 WAL、foreign_keys、busy_timeout 并探测 FTS5。唯一持久化表是 schema_version 和 migration_history。迁移按连续版本执行、记录 checksum，事务失败回滚，重复启动不重复迁移，检测已应用迁移的 checksum 漂移或未知未来版本。
+数据库在 app data 的 `data/runtime.sqlite3`。C-003B 集中创建 AsyncEngine 与 session factory，每条连接启用 WAL、foreign_keys、recursive_triggers、busy_timeout，并在启动时探测 FTS5。bootstrap await 数据库初始化后启动 HTTP；关闭时释放 process-owned engine。领域 schema 与约束见 [PERSISTENCE_MODEL.md](PERSISTENCE_MODEL.md)，没有业务 API。
+
+Alembic 是唯一迁移执行器，alembic_version 是权威 cursor：0001 精确表示旧 C-002 基础，0002 增加领域表。旧库必须先验证版本、历史 checksum 与 schema 形状，才 stamp 0001 并 upgrade；任何歧义失败关闭，不自动修复或重建。旧 schema_version=1 和 migration_history 原始行作为兼容/历史证据保留，不再表示当前 schema cursor，也不驱动迁移。迁移失败事务回滚，重复启动不重放、不重复审计。
 
 日志只接受 timestamp、level、component、event 与可选已验证 UUID trace_id；不接受任意 payload 或异常原文。Core stdout 与 app-data `logs/core-<generation>.jsonl` 使用同一结构。HTTP access log 被禁用；secret/token/prompt/user conversation 默认不记录。日志轮转/保留策略尚未实现。
 
@@ -72,7 +74,7 @@ Core 的 graceful drain 上限为 5 秒，窗口关闭的 supervisor 等待为 8
 
 - Python BootstrapFileAccess 与 Rust BootstrapFilePolicy 预留 owner/ACL 校验接口；当前仅做文件基本验证、create_new 和随机目录，未实现生产 ACL 加固。
 - 当前开发 executable 依赖 checkout Python venv；独立 Python runtime 分发、安装包、签名和更新不在 C-002 内。
-- SQLite migration 是基础设施框架；未来业务 migration 必须由新的任务定义。
+- SQLite migration 已由 C-003B 接管为 Alembic；后续新增 schema 必须由明确任务及新 revision 定义，不能恢复第二套 runner。
 - CoreClient 的连接来源可被后续 server transport 替换；当前不提供云鉴权或多用户连接协议。
 - 现阶段没有业务 trace、LLM 调用、真实费用统计或世界行为。
 

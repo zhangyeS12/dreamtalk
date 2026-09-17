@@ -1,6 +1,6 @@
 # 知识模型
 
-状态：保留 Stage 0 语义；C-003A 实现 KnowledgeAssertion / Observation 领域值与不变量，不实现存储、检索、权限执行或知识传播。依据 [PRODUCT_SPEC.md](../product/PRODUCT_SPEC.md) 的 FR-03、FR-04、FR-05、FR-07、FR-17 至 FR-20、FR-22、FR-23，以及已接受的 [Architecture Review 001](ARCHITECTURE_REVIEW_001.md)。
+状态：保留 Stage 0 语义；C-003A 实现 KnowledgeAssertion / Observation 领域值与不变量，C-003B 增加独立 ORM 存储、映射及数据库约束。不实现检索、查询权限服务或知识传播。依据 [PRODUCT_SPEC.md](../product/PRODUCT_SPEC.md) 的 FR-03、FR-04、FR-05、FR-07、FR-17 至 FR-20、FR-22、FR-23，以及已接受的 [Architecture Review 001](ARCHITECTURE_REVIEW_001.md)。
 
 ## 1. 三种不同的语义
 
@@ -37,6 +37,12 @@ Observation 定义 `world_id`、`principal_id: CharacterId | PlayerId`、`target
 channel 必须为 ObservationChannel 的 `witnessed / told / message / news / document / inferred` 之一；不接受未知渠道或未解析的原始字符串。主体与目标必须在同一世界。该对象记录一个显式观察，不自动授予检索权限、不传播/复制断言，也不因 inactive 玩家仍在某地点而创建见证记录。
 
 权限过滤必须先于 semantic retrieval / prompt assembly，这是已接受的架构边界；C-003A 只验证 scope / owner，不实现检索或权限服务。错误所有权抛出 InvalidKnowledgeOwnershipError，跨世界引用抛出 CrossWorldReferenceError。
+
+### C-003B 存储约束
+
+详见 [PERSISTENCE_MODEL.md](PERSISTENCE_MODEL.md)。KnowledgeAssertionRecord 以 CHECK 强制上述 scope/owner 组合，复合外键保证 owner、来源事件和来源断言存在于同一 world；valid_from/to 保存整数 WorldTime，拒绝倒序。confidence 使用精确 Decimal 文本，value 以 JSON 保存并在返回领域时冻结；不同主体可保留相互冲突的认知。
+
+ObservationRecord 使用具体 principal/target 类型分支及同世界 FK，channel 限制为已定义枚举，observed_at 保存 WorldTime，可选 created_at 保留 aware UTC 语义。只保存显式观察，不复制断言、不自动授予知识或权限。数据库 ownership CHECK 不代替未来 permission filtering 服务。
 
 ## 2. 已冻结的边界
 

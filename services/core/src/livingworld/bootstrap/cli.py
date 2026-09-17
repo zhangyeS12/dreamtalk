@@ -16,6 +16,7 @@ from livingworld.bootstrap.reader import derive_session, read_bootstrap
 from livingworld.domain.contracts import API_PROTOCOL, LOOPBACK_HOST
 from livingworld.infrastructure.database import bootstrap_database
 from livingworld.infrastructure.logging import StructuredLogger
+from livingworld.infrastructure.persistence.errors import MigrationCompatibilityError
 
 
 def parent_alive(pid: int) -> bool:
@@ -48,69 +49,70 @@ async def run(bootstrap_path: Path, parent_pid: int | None = None) -> None:
     logger = StructuredLogger(logfile=config.log_dir / f"core-{generation}.jsonl")
     status = RuntimeStatus(version("livingworld-core"), generation)
     shutdown = ShutdownRequests()
-    app = create_app(
-        status,
-        shutdown,
-        session,
-        lambda: bootstrap_database(config.data_dir),
-        logger,
-        config.allowed_origins,
-    )
     ready_path = bootstrap_path.parent / "ready.json"
     ready_path.unlink(missing_ok=True)
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.bind((LOOPBACK_HOST, 0))
-    sock.listen(128)
-    sock.setblocking(False)
-    port = sock.getsockname()[1]
-    server = uvicorn.Server(
-        uvicorn.Config(
-            app,
-            host=LOOPBACK_HOST,
-            port=port,
-            access_log=False,
-            log_config=None,
-            log_level="critical",
-            timeout_graceful_shutdown=5,
-        )
-    )
-    task = asyncio.create_task(server.serve(sockets=[sock]))
     try:
-        while not server.started:
-            if task.done():
-                await task
-                raise RuntimeError("server_start_failed")
-            await asyncio.sleep(0.02)
-        ready = {
-            "endpoint": f"http://{LOOPBACK_HOST}:{port}",
-            "api_protocol": API_PROTOCOL,
-            "core_version": status.core_version,
-            "generation": generation,
-            "instance_nonce": config.instance_nonce,
-            "pid": os.getpid(),
-            "launcher_pid": os.getppid(),
-        }
-        temporary = ready_path.with_suffix(".tmp")
-        temporary.write_text(json.dumps(ready), encoding="utf-8")
-        temporary.replace(ready_path)
-        logger.emit("core", "core_ready")
-        while not task.done() and not shutdown.event.is_set():
-            if parent_pid is not None and not parent_alive(parent_pid):
-                logger.emit("core", "parent_exited")
-                break
-            await asyncio.sleep(0.05)
-        status.ready = False
-        server.should_exit = True
-        logger.emit("core", "core_shutdown_started")
-        await task
-        logger.emit("core", "core_shutdown_completed")
-    finally:
-        server.should_exit = True
-        if not task.done():
+        database = await bootstrap_database(config.data_dir)
+    except MigrationCompatibilityError as error:
+        logger.emit("migration", error.code.value, level="ERROR")
+        raise
+    try:
+        app = create_app(status, shutdown, session, lambda: None, logger, config.allowed_origins)
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.bind((LOOPBACK_HOST, 0))
+        sock.listen(128)
+        sock.setblocking(False)
+        port = sock.getsockname()[1]
+        server = uvicorn.Server(
+            uvicorn.Config(
+                app,
+                host=LOOPBACK_HOST,
+                port=port,
+                access_log=False,
+                log_config=None,
+                log_level="critical",
+                timeout_graceful_shutdown=5,
+            )
+        )
+        task = asyncio.create_task(server.serve(sockets=[sock]))
+        try:
+            while not server.started:
+                if task.done():
+                    await task
+                    raise RuntimeError("server_start_failed")
+                await asyncio.sleep(0.02)
+            ready = {
+                "endpoint": f"http://{LOOPBACK_HOST}:{port}",
+                "api_protocol": API_PROTOCOL,
+                "core_version": status.core_version,
+                "generation": generation,
+                "instance_nonce": config.instance_nonce,
+                "pid": os.getpid(),
+                "launcher_pid": os.getppid(),
+            }
+            temporary = ready_path.with_suffix(".tmp")
+            temporary.write_text(json.dumps(ready), encoding="utf-8")
+            temporary.replace(ready_path)
+            logger.emit("core", "core_ready")
+            while not task.done() and not shutdown.event.is_set():
+                if parent_pid is not None and not parent_alive(parent_pid):
+                    logger.emit("core", "parent_exited")
+                    break
+                await asyncio.sleep(0.05)
+            status.ready = False
+            server.should_exit = True
+            logger.emit("core", "core_shutdown_started")
             await task
-        ready_path.unlink(missing_ok=True)
-        sock.close()
-        session = ""
+            logger.emit("core", "core_shutdown_completed")
+        finally:
+            server.should_exit = True
+            if not task.done():
+                await task
+            ready_path.unlink(missing_ok=True)
+            sock.close()
+            session = ""
+    finally:
+        await database.close()
 
 
 def main() -> None:

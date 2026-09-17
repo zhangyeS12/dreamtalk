@@ -7,7 +7,14 @@ name = "livingworld-core"
 version = "0.1.0"
 description = "LivingWorld application runtime foundation"
 requires-python = ">=3.12"
-dependencies = ["fastapi>=0.115,<1", "pydantic>=2.10,<3", "uvicorn>=0.34,<1"]
+dependencies = [
+    "aiosqlite>=0.20,<1",
+    "alembic>=1.14,<2",
+    "fastapi>=0.115,<1",
+    "pydantic>=2.10,<3",
+    "sqlalchemy[asyncio]>=2.0,<3",
+    "uvicorn>=0.34,<1",
+]
 
 [project.scripts]
 livingworld-core = "livingworld.bootstrap.cli:main"
@@ -25,7 +32,7 @@ dev = [
 packages = ["services/core/src/livingworld"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests/core", "tests/domain"]
+testpaths = ["tests/core", "tests/domain", "tests/persistence"]
 addopts = "-ra"
 
 [tool.ruff]

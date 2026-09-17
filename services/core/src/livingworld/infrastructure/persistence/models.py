@@ -1,0 +1,402 @@
+"""SQLAlchemy persistence records. These classes are never domain entities."""
+
+from __future__ import annotations
+
+from datetime import datetime
+from decimal import Decimal
+from uuid import UUID
+
+from sqlalchemy import (
+    CheckConstraint,
+    ForeignKey,
+    ForeignKeyConstraint,
+    Index,
+    Integer,
+    String,
+    UniqueConstraint,
+)
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+
+from livingworld.domain.values import WorldTime
+from livingworld.infrastructure.persistence.types import (
+    DecimalTextStorage,
+    JSONTextStorage,
+    UTCTimestampStorage,
+    UUIDStorage,
+    WorldTimeStorage,
+)
+
+
+class Base(DeclarativeBase):
+    pass
+
+
+class WorldRecord(Base):
+    __tablename__ = "worlds"
+    world_id: Mapped[UUID] = mapped_column(UUIDStorage(), primary_key=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    clock: Mapped[WorldClockRecord] = relationship(
+        back_populates="world", cascade="save-update, merge", lazy="selectin", uselist=False
+    )
+
+
+class WorldClockRecord(Base):
+    __tablename__ = "world_clocks"
+    world_id: Mapped[UUID] = mapped_column(
+        UUIDStorage(), ForeignKey("worlds.world_id"), primary_key=True
+    )
+    logical_time: Mapped[WorldTime] = mapped_column(WorldTimeStorage(), nullable=False)
+    observed_wall_time_utc: Mapped[datetime] = mapped_column(UTCTimestampStorage(), nullable=False)
+    time_scale: Mapped[Decimal] = mapped_column(DecimalTextStorage(), nullable=False)
+    state: Mapped[str] = mapped_column(String(16), nullable=False)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    world: Mapped[WorldRecord] = relationship(back_populates="clock")
+    __table_args__ = (
+        CheckConstraint("state IN ('running', 'paused')", name="ck_world_clocks_state"),
+    )
+
+
+class LocationRecord(Base):
+    __tablename__ = "locations"
+    world_id: Mapped[UUID] = mapped_column(
+        UUIDStorage(), ForeignKey("worlds.world_id"), primary_key=True
+    )
+    location_id: Mapped[UUID] = mapped_column(UUIDStorage(), primary_key=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False)
+
+
+class LocationConnectionRecord(Base):
+    __tablename__ = "location_connections"
+    world_id: Mapped[UUID] = mapped_column(
+        UUIDStorage(), ForeignKey("worlds.world_id"), primary_key=True
+    )
+    source_id: Mapped[UUID] = mapped_column(UUIDStorage(), primary_key=True)
+    target_id: Mapped[UUID] = mapped_column(UUIDStorage(), primary_key=True)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["world_id", "source_id"], ["locations.world_id", "locations.location_id"]
+        ),
+        ForeignKeyConstraint(
+            ["world_id", "target_id"], ["locations.world_id", "locations.location_id"]
+        ),
+    )
+
+
+class PlayerRecord(Base):
+    __tablename__ = "players"
+    world_id: Mapped[UUID] = mapped_column(
+        UUIDStorage(), ForeignKey("worlds.world_id"), primary_key=True
+    )
+    player_id: Mapped[UUID] = mapped_column(UUIDStorage(), primary_key=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False)
+
+
+class PlayerPresenceRecord(Base):
+    __tablename__ = "player_presences"
+    world_id: Mapped[UUID] = mapped_column(
+        UUIDStorage(), ForeignKey("worlds.world_id"), primary_key=True
+    )
+    player_id: Mapped[UUID] = mapped_column(UUIDStorage(), primary_key=True)
+    location_id: Mapped[UUID] = mapped_column(UUIDStorage(), nullable=False)
+    activity: Mapped[str] = mapped_column(String(16), nullable=False)
+    availability: Mapped[str] = mapped_column(String(16), nullable=False)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    __table_args__ = (
+        ForeignKeyConstraint(["world_id", "player_id"], ["players.world_id", "players.player_id"]),
+        ForeignKeyConstraint(
+            ["world_id", "location_id"], ["locations.world_id", "locations.location_id"]
+        ),
+        CheckConstraint("activity IN ('active', 'inactive')", name="ck_presence_activity"),
+        CheckConstraint("availability IN ('busy', 'available')", name="ck_presence_availability"),
+    )
+
+
+class CharacterRecord(Base):
+    __tablename__ = "characters"
+    world_id: Mapped[UUID] = mapped_column(
+        UUIDStorage(), ForeignKey("worlds.world_id"), primary_key=True
+    )
+    character_id: Mapped[UUID] = mapped_column(UUIDStorage(), primary_key=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False)
+
+
+class CharacterStateRecord(Base):
+    __tablename__ = "character_states"
+    world_id: Mapped[UUID] = mapped_column(
+        UUIDStorage(), ForeignKey("worlds.world_id"), primary_key=True
+    )
+    character_id: Mapped[UUID] = mapped_column(UUIDStorage(), primary_key=True)
+    location_id: Mapped[UUID] = mapped_column(UUIDStorage(), nullable=False)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["world_id", "character_id"], ["characters.world_id", "characters.character_id"]
+        ),
+        ForeignKeyConstraint(
+            ["world_id", "location_id"], ["locations.world_id", "locations.location_id"]
+        ),
+    )
+
+
+class RelationshipRecord(Base):
+    __tablename__ = "relationships"
+    world_id: Mapped[UUID] = mapped_column(
+        UUIDStorage(), ForeignKey("worlds.world_id"), primary_key=True
+    )
+    source_kind: Mapped[str] = mapped_column(String(16), primary_key=True)
+    source_id: Mapped[UUID] = mapped_column(UUIDStorage(), primary_key=True)
+    target_kind: Mapped[str] = mapped_column(String(16), primary_key=True)
+    target_id: Mapped[UUID] = mapped_column(UUIDStorage(), primary_key=True)
+    source_character_id: Mapped[UUID | None] = mapped_column(UUIDStorage())
+    source_player_id: Mapped[UUID | None] = mapped_column(UUIDStorage())
+    target_character_id: Mapped[UUID | None] = mapped_column(UUIDStorage())
+    target_player_id: Mapped[UUID | None] = mapped_column(UUIDStorage())
+    revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["world_id", "source_character_id"],
+            ["characters.world_id", "characters.character_id"],
+        ),
+        ForeignKeyConstraint(
+            ["world_id", "source_player_id"], ["players.world_id", "players.player_id"]
+        ),
+        ForeignKeyConstraint(
+            ["world_id", "target_character_id"],
+            ["characters.world_id", "characters.character_id"],
+        ),
+        ForeignKeyConstraint(
+            ["world_id", "target_player_id"], ["players.world_id", "players.player_id"]
+        ),
+        CheckConstraint(
+            "(source_kind = 'character' AND source_character_id IS NOT NULL "
+            "AND source_character_id = source_id "
+            "AND source_player_id IS NULL) OR "
+            "(source_kind = 'player' AND source_player_id IS NOT NULL "
+            "AND source_player_id = source_id "
+            "AND source_character_id IS NULL)",
+            name="ck_relationship_source",
+        ),
+        CheckConstraint(
+            "(target_kind = 'character' AND target_character_id IS NOT NULL "
+            "AND target_character_id = target_id "
+            "AND target_player_id IS NULL) OR "
+            "(target_kind = 'player' AND target_player_id IS NOT NULL "
+            "AND target_player_id = target_id "
+            "AND target_character_id IS NULL)",
+            name="ck_relationship_target",
+        ),
+    )
+
+
+class WorldEventRecord(Base):
+    __tablename__ = "world_events"
+    world_id: Mapped[UUID] = mapped_column(
+        UUIDStorage(), ForeignKey("worlds.world_id"), primary_key=True
+    )
+    event_id: Mapped[UUID] = mapped_column(UUIDStorage(), primary_key=True)
+    event_type: Mapped[str] = mapped_column(String, nullable=False)
+    occurred_at: Mapped[WorldTime] = mapped_column(WorldTimeStorage(), nullable=False)
+    payload: Mapped[object] = mapped_column(JSONTextStorage(), nullable=False)
+    payload_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    causation_event_id: Mapped[UUID | None] = mapped_column(UUIDStorage())
+    causation_request_id: Mapped[UUID | None] = mapped_column(UUIDStorage())
+    correlation_id: Mapped[UUID | None] = mapped_column(UUIDStorage())
+    idempotency_key: Mapped[str | None] = mapped_column(String)
+    created_at: Mapped[datetime] = mapped_column(UTCTimestampStorage(), nullable=False)
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["world_id", "causation_event_id"], ["world_events.world_id", "world_events.event_id"]
+        ),
+        CheckConstraint(
+            "causation_event_id IS NULL OR causation_request_id IS NULL",
+            name="ck_world_event_one_causation",
+        ),
+        CheckConstraint("payload_version >= 1", name="ck_world_event_payload_version"),
+        UniqueConstraint("world_id", "idempotency_key", name="uq_world_event_idempotency"),
+        Index("ix_world_events_occurred", "world_id", "occurred_at", "event_id"),
+    )
+
+
+class KnowledgeAssertionRecord(Base):
+    __tablename__ = "knowledge_assertions"
+    world_id: Mapped[UUID] = mapped_column(
+        UUIDStorage(), ForeignKey("worlds.world_id"), primary_key=True
+    )
+    assertion_id: Mapped[UUID] = mapped_column(UUIDStorage(), primary_key=True)
+    scope: Mapped[str] = mapped_column(String(24), nullable=False)
+    owner_character_id: Mapped[UUID | None] = mapped_column(UUIDStorage())
+    owner_player_id: Mapped[UUID | None] = mapped_column(UUIDStorage())
+    subject: Mapped[str] = mapped_column(String, nullable=False)
+    predicate: Mapped[str] = mapped_column(String, nullable=False)
+    value: Mapped[object] = mapped_column(JSONTextStorage(), nullable=False)
+    epistemic_status: Mapped[str] = mapped_column(String, nullable=False)
+    confidence: Mapped[Decimal | None] = mapped_column(DecimalTextStorage())
+    valid_from: Mapped[WorldTime] = mapped_column(WorldTimeStorage(), nullable=False)
+    valid_to: Mapped[WorldTime | None] = mapped_column(WorldTimeStorage())
+    provenance_event_id: Mapped[UUID | None] = mapped_column(UUIDStorage())
+    source_assertion_id: Mapped[UUID | None] = mapped_column(UUIDStorage())
+    revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["world_id", "owner_character_id"],
+            ["characters.world_id", "characters.character_id"],
+        ),
+        ForeignKeyConstraint(
+            ["world_id", "owner_player_id"], ["players.world_id", "players.player_id"]
+        ),
+        ForeignKeyConstraint(
+            ["world_id", "provenance_event_id"],
+            ["world_events.world_id", "world_events.event_id"],
+        ),
+        ForeignKeyConstraint(
+            ["world_id", "source_assertion_id"],
+            ["knowledge_assertions.world_id", "knowledge_assertions.assertion_id"],
+        ),
+        CheckConstraint(
+            "(scope = 'truth' AND owner_character_id IS NULL AND owner_player_id IS NULL) OR "
+            "(scope = 'character_belief' AND owner_character_id IS NOT NULL "
+            "AND owner_player_id IS NULL) OR "
+            "(scope = 'player_knowledge' AND owner_player_id IS NOT NULL "
+            "AND owner_character_id IS NULL)",
+            name="ck_knowledge_owner",
+        ),
+        CheckConstraint("valid_to IS NULL OR valid_to >= valid_from", name="ck_knowledge_validity"),
+        Index("ix_knowledge_character_owner", "world_id", "scope", "owner_character_id"),
+        Index("ix_knowledge_player_owner", "world_id", "scope", "owner_player_id"),
+    )
+
+
+class ObservationRecord(Base):
+    __tablename__ = "observations"
+    world_id: Mapped[UUID] = mapped_column(
+        UUIDStorage(), ForeignKey("worlds.world_id"), primary_key=True
+    )
+    principal_kind: Mapped[str] = mapped_column(String(16), primary_key=True)
+    principal_id: Mapped[UUID] = mapped_column(UUIDStorage(), primary_key=True)
+    target_kind: Mapped[str] = mapped_column(String(24), primary_key=True)
+    target_id: Mapped[UUID] = mapped_column(UUIDStorage(), primary_key=True)
+    channel: Mapped[str] = mapped_column(String(16), primary_key=True)
+    observed_at: Mapped[WorldTime] = mapped_column(WorldTimeStorage(), primary_key=True)
+    principal_character_id: Mapped[UUID | None] = mapped_column(UUIDStorage())
+    principal_player_id: Mapped[UUID | None] = mapped_column(UUIDStorage())
+    target_event_id: Mapped[UUID | None] = mapped_column(UUIDStorage())
+    target_assertion_id: Mapped[UUID | None] = mapped_column(UUIDStorage())
+    created_at: Mapped[datetime | None] = mapped_column(UTCTimestampStorage())
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["world_id", "principal_character_id"],
+            ["characters.world_id", "characters.character_id"],
+        ),
+        ForeignKeyConstraint(
+            ["world_id", "principal_player_id"], ["players.world_id", "players.player_id"]
+        ),
+        ForeignKeyConstraint(
+            ["world_id", "target_event_id"], ["world_events.world_id", "world_events.event_id"]
+        ),
+        ForeignKeyConstraint(
+            ["world_id", "target_assertion_id"],
+            ["knowledge_assertions.world_id", "knowledge_assertions.assertion_id"],
+        ),
+        CheckConstraint(
+            "(principal_kind = 'character' AND principal_character_id IS NOT NULL "
+            "AND principal_character_id = principal_id "
+            "AND principal_player_id IS NULL) OR "
+            "(principal_kind = 'player' AND principal_player_id IS NOT NULL "
+            "AND principal_player_id = principal_id "
+            "AND principal_character_id IS NULL)",
+            name="ck_observation_principal",
+        ),
+        CheckConstraint(
+            "(target_kind = 'event' AND target_event_id IS NOT NULL "
+            "AND target_event_id = target_id "
+            "AND target_assertion_id IS NULL) OR "
+            "(target_kind = 'assertion' AND target_assertion_id IS NOT NULL "
+            "AND target_assertion_id = target_id "
+            "AND target_event_id IS NULL)",
+            name="ck_observation_target",
+        ),
+        CheckConstraint(
+            "channel IN ('witnessed', 'told', 'message', 'news', 'document', 'inferred')",
+            name="ck_observation_channel",
+        ),
+    )
+
+
+class CommandReceiptRecord(Base):
+    __tablename__ = "command_receipts"
+    world_id: Mapped[UUID] = mapped_column(
+        UUIDStorage(), ForeignKey("worlds.world_id"), primary_key=True
+    )
+    request_id: Mapped[UUID] = mapped_column(UUIDStorage(), primary_key=True)
+    command_type: Mapped[str] = mapped_column(String, nullable=False)
+    status: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UTCTimestampStorage(), nullable=False)
+    completed_at: Mapped[datetime | None] = mapped_column(UTCTimestampStorage())
+    result_kind: Mapped[str | None] = mapped_column(String(24))
+    result_id: Mapped[UUID | None] = mapped_column(UUIDStorage())
+    result_event_id: Mapped[UUID | None] = mapped_column(UUIDStorage())
+    result_assertion_id: Mapped[UUID | None] = mapped_column(UUIDStorage())
+    revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["world_id", "result_event_id"], ["world_events.world_id", "world_events.event_id"]
+        ),
+        ForeignKeyConstraint(
+            ["world_id", "result_assertion_id"],
+            ["knowledge_assertions.world_id", "knowledge_assertions.assertion_id"],
+        ),
+        CheckConstraint(
+            "(result_kind IS NULL AND result_id IS NULL AND result_event_id IS NULL "
+            "AND result_assertion_id IS NULL) OR "
+            "(result_kind IS NOT NULL AND result_kind = 'event' AND result_id IS NOT NULL "
+            "AND result_event_id IS NOT NULL AND result_event_id = result_id "
+            "AND result_assertion_id IS NULL) OR "
+            "(result_kind IS NOT NULL AND result_kind = 'assertion' AND result_id IS NOT NULL "
+            "AND result_assertion_id IS NOT NULL AND result_assertion_id = result_id "
+            "AND result_event_id IS NULL)",
+            name="ck_command_receipt_result",
+        ),
+        CheckConstraint(
+            "completed_at IS NULL OR completed_at >= created_at",
+            name="ck_command_receipt_completion",
+        ),
+    )
+
+
+for _record in (
+    WorldRecord,
+    WorldClockRecord,
+    LocationRecord,
+    LocationConnectionRecord,
+    PlayerRecord,
+    PlayerPresenceRecord,
+    CharacterRecord,
+    CharacterStateRecord,
+    RelationshipRecord,
+    KnowledgeAssertionRecord,
+    CommandReceiptRecord,
+):
+    _record.__table__.append_constraint(
+        CheckConstraint("revision >= 0", name=f"ck_{_record.__tablename__}_revision")
+    )
+
+WorldClockRecord.__table__.append_constraint(
+    CheckConstraint("typeof(logical_time) = 'integer'", name="ck_world_clock_logical_time_type")
+)
+WorldEventRecord.__table__.append_constraint(
+    CheckConstraint("typeof(occurred_at) = 'integer'", name="ck_world_event_occurred_type")
+)
+KnowledgeAssertionRecord.__table__.append_constraint(
+    CheckConstraint(
+        "typeof(valid_from) = 'integer' AND (valid_to IS NULL OR typeof(valid_to) = 'integer')",
+        name="ck_knowledge_world_time_type",
+    )
+)
+ObservationRecord.__table__.append_constraint(
+    CheckConstraint("typeof(observed_at) = 'integer'", name="ck_observation_world_time_type")
+)
