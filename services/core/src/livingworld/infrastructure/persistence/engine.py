@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async
 
 from livingworld.infrastructure.persistence.migration import upgrade
 from livingworld.infrastructure.persistence.store import PersistenceStore
+from livingworld.infrastructure.persistence.unit_of_work import SqlAlchemyUnitOfWork
 
 
 def _source_root() -> Path:
@@ -68,6 +69,9 @@ class Database:
 
     def store(self) -> PersistenceStore:
         return PersistenceStore(self._sessions)
+
+    def unit_of_work(self) -> SqlAlchemyUnitOfWork:
+        return SqlAlchemyUnitOfWork(self._sessions)
 
     async def close(self) -> None:
         await self.engine.dispose()

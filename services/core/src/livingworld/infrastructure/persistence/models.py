@@ -13,7 +13,9 @@ from sqlalchemy import (
     Index,
     Integer,
     String,
+    Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -157,7 +159,21 @@ class RelationshipRecord(Base):
     target_character_id: Mapped[UUID | None] = mapped_column(UUIDStorage())
     target_player_id: Mapped[UUID | None] = mapped_column(UUIDStorage())
     revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    affinity: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    trust: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    familiarity: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
     __table_args__ = (
+        CheckConstraint(
+            "typeof(affinity) = 'integer' AND affinity BETWEEN -100 AND 100",
+            name="ck_relationship_affinity",
+        ),
+        CheckConstraint(
+            "typeof(trust) = 'integer' AND trust BETWEEN -100 AND 100", name="ck_relationship_trust"
+        ),
+        CheckConstraint(
+            "typeof(familiarity) = 'integer' AND familiarity BETWEEN 0 AND 100",
+            name="ck_relationship_familiarity",
+        ),
         ForeignKeyConstraint(
             ["world_id", "source_character_id"],
             ["characters.world_id", "characters.character_id"],
@@ -342,7 +358,22 @@ class CommandReceiptRecord(Base):
     result_event_id: Mapped[UUID | None] = mapped_column(UUIDStorage())
     result_assertion_id: Mapped[UUID | None] = mapped_column(UUIDStorage())
     revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    result_payload: Mapped[str | None] = mapped_column(Text)
+    command_fingerprint: Mapped[str | None] = mapped_column(String(64))
     __table_args__ = (
+        CheckConstraint(
+            "(command_fingerprint IS NULL AND result_payload IS NULL) OR "
+            "(command_fingerprint IS NOT NULL AND length(command_fingerprint) = 64 "
+            "AND result_payload IS NOT NULL AND status = 'committed' "
+            "AND completed_at IS NOT NULL AND result_event_id IS NOT NULL)",
+            name="ck_command_receipt_command_result",
+        ),
+        Index(
+            "uq_command_request_identity",
+            "request_id",
+            unique=True,
+            sqlite_where=text("command_fingerprint IS NOT NULL"),
+        ),
         ForeignKeyConstraint(
             ["world_id", "result_event_id"], ["world_events.world_id", "world_events.event_id"]
         ),

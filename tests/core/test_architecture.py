@@ -39,3 +39,17 @@ def test_inner_layers_have_no_outward_dependencies():
                             module == prefix or module.startswith(prefix + ".")
                             for prefix in allowed
                         ), (source, module)
+
+
+def test_command_wall_clock_is_injected_and_raw_store_is_read_only():
+    root = Path(__file__).resolve().parents[2] / "services/core/src/livingworld"
+    for source in (root / "application").rglob("*.py"):
+        for node in ast.walk(ast.parse(source.read_text(encoding="utf-8"))):
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+                assert node.func.attr not in {"now", "utcnow", "execute", "merge"}, (
+                    source,
+                    node.lineno,
+                )
+    from livingworld.infrastructure.persistence.store import PersistenceStore
+
+    assert not hasattr(PersistenceStore, "add")

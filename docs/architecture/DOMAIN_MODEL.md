@@ -1,6 +1,6 @@
 # LivingWorld 领域概念模型
 
-状态：Stage 0 领域语言保留；C-003A 已实现下述领域模型与不变量，C-003B 增加独立的 SQLite ORM 映射，见 [PERSISTENCE_MODEL.md](PERSISTENCE_MODEL.md)。其余概念仍是产品/架构定义，不代表已实现。Kernel 提交、Command 执行、回放、Director、Agent、业务 HTTP API 与世界模拟未实现；领域代码在 C-003B 中保持不变。
+状态：Stage 0 领域语言保留；C-003A 实现领域模型，C-003B 增加独立 SQLite ORM 映射，C-003C 按用户确认增加 RelationshipMetrics 和首批确定性 Command 事务管线，见 [COMMAND_MODEL.md](COMMAND_MODEL.md) 与 [PERSISTENCE_MODEL.md](PERSISTENCE_MODEL.md)。其余概念仍是定义；回放、完整乐观并发处理、Director、Agent、业务 HTTP API 与世界模拟未实现。
 
 ## 阅读约定
 
@@ -33,7 +33,7 @@
 | [values.py](../../services/core/src/livingworld/domain/values.py) | WorldTime、Revision、不可变 JSON 值、UTC 校验 | 两条时间轴、版本检查、嵌套结构的防御性复制 |
 | [world.py](../../services/core/src/livingworld/domain/world.py) | World、WorldClock、Location、LocationConnection | 世界身份、双时间时钟快照、地点及有序拓扑连接；不定义移动耗时或通行策略 |
 | [participants.py](../../services/core/src/livingworld/domain/participants.py) | Player、PlayerPresence、Character、CharacterState | 静态定义和运行状态分离；玩家单一位置、activity 与 Busy/Available 独立 |
-| [relationships.py](../../services/core/src/livingworld/domain/relationships.py) | Relationship | 同世界两个主体的有向关系及版本；无亲密度维度或玩家数值接口 |
+| [relationships.py](../../services/core/src/livingworld/domain/relationships.py) | Relationship、RelationshipMetrics | 同世界主体的有向关系及版本；C-003C 三项内部整数指标，无普通玩家数值接口 |
 | [events.py](../../services/core/src/livingworld/domain/events.py) | WorldEvent | 独立事件身份、双时间、版本化不可变 payload 和因果/关联/幂等元数据 |
 | [knowledge.py](../../services/core/src/livingworld/domain/knowledge.py) | KnowledgeAssertion、Observation | scope/owner 约束、结构化断言、世界有效期、来源和显式观察渠道 |
 | [commands.py](../../services/core/src/livingworld/domain/commands.py) | CommandReceipt | 复用 [contracts.py](../../services/core/src/livingworld/domain/contracts.py) 的 RequestId，定义未来回执元数据；不执行命令或去重 |
@@ -44,7 +44,7 @@
 - 每个世界对象显式关联一个 `WorldId`，自身 ID 及所有世界内引用必须属于该世界。原始 UUID 不能替代具体身份类型；跨世界的地点、主体、因果事件、知识来源、观察目标和回执结果均拒绝。
 - `PlayerPresence` 必须持有一个 `LocationId`，拒绝 null、错误身份和多位置集合。inactive 保留物理位置，不自动赋予见证资格；activity 与 Busy/Available 独立。一个快照没有容纳第二物理位置的字段。
 - `Character` 仅定义身份/名称，`CharacterState` 独立持有位置和版本；没有目标、日程、记忆或情绪系统。
-- `Relationship(source_id, target_id)` 有方向，A→B 与 B→A 独立；允许 Player / Character 主体，但不新增群体关系政策或数值维度。
+- `Relationship(source_id, target_id)` 有方向，A→B 与 B→A 独立；允许 Player / Character 主体。C-003C 已确认仅增加内部 affinity、trust、familiarity，不新增群体关系政策。
 - 未来可修改的世界/定义/状态/关系/断言/回执带 `Revision`。`Revision.advance(expected)` 只在版本匹配时返回 +1；presence 更新返回重新校验的新快照，失败不改变旧值。不实现数据库并发控制。
 - 事件和结构化值防御性复制并深度冻结；事件没有 update/delete 操作。知识 scope/owner 的组合必须合法，错误信念允许与真相冲突。
 - ID 校验保证引用类型及世界归属，不查询目标是否已创建，也不维护世界实体注册表。C-003B 通过复合外键与主键加固引用存在性、同世界归属和当前快照唯一性；分支归属与 Kernel 授权仍待后续实现。
@@ -194,6 +194,7 @@
 ### Important invariants
 
 - 任意时刻只能存在于一个物理地点（FR-06）。
+- C-003C 用户确认：成功创建普通 Player 必须同时创建有初始地点的 PlayerPresence；世界/地点存在且同世界，整个命令原子提交。复用 activity/availability 枚举，默认 active/available；玩家创建歧义已解决，静态定义与状态仍分离。
 - 具有 Busy / Available 状态；Busy 时 Director 不得发起非必要主动联系，Available 时可以安排一个角色或一组角色主动联系（FR-08、FR-09、FR-10）。
 - 普通玩家不能查看关系数值，也不能直接看到其不知道的后台事件（FR-05、FR-07）。
 - 状态由谁设置、状态切换何时生效，以及“必要联系”的边界，待确认。
@@ -353,7 +354,7 @@ Knowledge 与其知情主体之间的归属边界，以及判断某内容是否�
 
 ### Owns
 
-关系的概念身份、参与方以及随经历变化的关系语境；具体维度与表示方式待确认。
+关系的有向身份、参与方、版本及不可变 RelationshipMetrics。C-003C 用户确认 affinity（态度）、trust（信任）为 [-100,100] 的整数，familiarity（熟悉程度）为 [0,100] 的整数；关系状态表示歧义已解决，不增加其他维度。
 
 ### Does not own
 
@@ -368,6 +369,8 @@ Knowledge 与其知情主体之间的归属边界，以及判断某内容是否�
 - 关系后台存在，但不能向普通玩家展示数值（FR-07）。
 - Director 负责关系变化调度（FR-02）。
 - C-003A 已确认关系有方向，A→B 与 B→A 独立，不假定对称。群体关系与可感知的非数值反馈方式仍待确认。
+- C-003C ChangeRelationship 至少一个整数 delta 非零；通过领域逻辑相加并校验结果，超范围明确拒绝，不 clamp。缺失边从三项 0、revision=0 开始，应用后保存 revision=1；不创建或改变反向边。
+- 指标仅用于内部模拟，未来 Developer/debug 可查看，不能成为普通玩家的好感分数。
 
 ## 14. RelationshipEvent
 

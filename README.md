@@ -8,11 +8,11 @@ LivingWorld 是持久化、事件驱动的多角色 AI 世界，不是普通聊�
 
 ## 开发状态
 
-当前阶段：**Stage 2 — C-003B Persistence Mapping**。C-003A 领域模型与不变量继续沿用；现已建立 SQLAlchemy AsyncEngine / aiosqlite、13 个领域表、显式领域↔ORM 映射，以及 Alembic 对 C-002 迁移元数据的验证接管。世界逻辑时间使用整数微秒 WorldTime，现实时间使用 UTC-aware datetime；详见 [领域模型](docs/architecture/DOMAIN_MODEL.md) 和 [持久化模型](docs/architecture/PERSISTENCE_MODEL.md)。
+当前阶段：**Stage 2 — C-003C Command Transaction & Idempotency Pipeline**。沿用 C-003A 领域模型与 C-003B SQLite 映射/Alembic 接管；现已建立 7 个应用层命令、UnitOfWork、事件/投影/回执单事务提交、持久化语义指纹与重试幂等。玩家创建原子建立初始 Presence 并产生两个事件，关系变化仅操作有向边的三项内部指标。世界逻辑时间使用整数微秒 WorldTime，现实时间使用 UTC-aware datetime；详见 [命令模型](docs/architecture/COMMAND_MODEL.md)、[领域模型](docs/architecture/DOMAIN_MODEL.md) 和 [持久化模型](docs/architecture/PERSISTENCE_MODEL.md)。
 
 C-002 运行时基础继续沿用：共享 React UI、Tauri v2 Windows 开发壳、Python Core 启停协议、系统 API、SQLite 迁移元数据、结构化日志和 CI。页面仅显示 Core Connecting / Ready / Failed。
 
-Director、Character Agent、世界模拟、Command handler/事务执行、事件回放、知识检索/传播和最终 UI 尚未实现。当前持久化 adapter 只证明领域快照的插入与读取。冻结产品规则保持不变；双时间表示歧义已按用户决策解决，P-01 的推进政策及其余待确认问题仍保留，见 [PRODUCT_SPEC.md](docs/product/PRODUCT_SPEC.md)。Stage 0 审查见 [ARCHITECTURE_REVIEW_001.md](docs/architecture/ARCHITECTURE_REVIEW_001.md)，运行时边界见 [RUNTIME_FOUNDATION.md](docs/architecture/RUNTIME_FOUNDATION.md)。
+Director、Character Agent、世界模拟、事件回放、完整乐观并发执行、业务 HTTP API、知识检索/传播和最终 UI 尚未实现。生产 snapshot store 只读，正式世界变更通过命令管线执行。冻结产品规则保持不变；双时间、关系指标和正常玩家创建语义已按用户决策明确，P-01 的推进政策及其余待确认问题仍保留，见 [PRODUCT_SPEC.md](docs/product/PRODUCT_SPEC.md)。Stage 0 审查见 [ARCHITECTURE_REVIEW_001.md](docs/architecture/ARCHITECTURE_REVIEW_001.md)，运行时边界见 [RUNTIME_FOUNDATION.md](docs/architecture/RUNTIME_FOUNDATION.md)。
 
 ## 开发环境与运行
 

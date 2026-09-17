@@ -1,7 +1,6 @@
-"""Small infrastructure persistence adapter used to prove lossless domain mappings."""
+"""Read-only snapshot inspection; production mutations use command UnitOfWork."""
 
 from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import async_sessionmaker
 from sqlalchemy.orm import selectinload
 
@@ -12,8 +11,7 @@ from livingworld.domain.knowledge import KnowledgeAssertion, Observation
 from livingworld.domain.participants import Character, CharacterState, Player, PlayerPresence
 from livingworld.domain.relationships import Relationship
 from livingworld.domain.world import Location, LocationConnection, World, WorldClock
-from livingworld.infrastructure.persistence.errors import PersistenceConflictError
-from livingworld.infrastructure.persistence.mapping import DomainObject, to_domain, to_record
+from livingworld.infrastructure.persistence.mapping import DomainObject, to_domain
 from livingworld.infrastructure.persistence.models import (
     CharacterRecord,
     CharacterStateRecord,
@@ -32,17 +30,10 @@ from livingworld.infrastructure.persistence.models import (
 
 
 class PersistenceStore:
-    """Insert and reload snapshots without exposing AsyncSession or ORM records."""
+    """Reload snapshots without exposing AsyncSession or ORM records."""
 
     def __init__(self, sessions: async_sessionmaker):
         self._sessions = sessions
-
-    async def add(self, entity: DomainObject) -> None:
-        try:
-            async with self._sessions.begin() as session:
-                session.add(to_record(entity))
-        except IntegrityError:
-            raise PersistenceConflictError("persistence_insert_conflict") from None
 
     async def reload(self, entity: DomainObject) -> DomainObject | None:
         model, key = self._identity(entity)

@@ -14,7 +14,8 @@ from livingworld.infrastructure.persistence.errors import MigrationCompatibility
 from livingworld.infrastructure.persistence.models import Base
 
 LEGACY_REVISION = "0001_legacy_runtime_foundation"
-HEAD_REVISION = "0002_world_domain_persistence"
+DOMAIN_BASELINE_REVISION = "0002_world_domain_persistence"
+HEAD_REVISION = "0003_command_pipeline"
 LEGACY_CHECKSUM = "0345ec9d50fd45b01ba0f97ff6f14a25f683fb8d01f08f04ff9dc4892ad1cac5"
 LEGACY_TABLES = {"schema_version", "migration_history"}
 DOMAIN_TABLES = set(Base.metadata.tables)
@@ -61,6 +62,10 @@ def _normalized_sql(sql: str) -> str:
 
 def _fail(code: str) -> None:
     raise MigrationCompatibilityError(code)
+
+
+def _index_predicate(value: object) -> str:
+    return _normalized_sql(str(value)) if value is not None else ""
 
 
 def _table_names(connection: Connection) -> set[str]:
@@ -149,18 +154,19 @@ def _current_revision(connection: Connection) -> str:
 
 
 def _validate_managed_state(connection: Connection, revision: str) -> None:
-    if revision not in {LEGACY_REVISION, HEAD_REVISION}:
+    if revision not in {LEGACY_REVISION, DOMAIN_BASELINE_REVISION, HEAD_REVISION}:
         _fail("alembic_revision_unsupported")
     _validate_legacy_metadata(connection)
     tables = _table_names(connection)
     expected = LEGACY_TABLES | {"alembic_version"}
-    if revision == HEAD_REVISION:
+    domain_present = revision != LEGACY_REVISION
+    if domain_present:
         expected |= DOMAIN_TABLES
     if tables != expected:
         _fail("alembic_schema_state_mismatch")
-    _validate_auxiliary_objects(connection, revision == HEAD_REVISION)
-    if revision == HEAD_REVISION:
-        _validate_domain_shape(connection)
+    _validate_auxiliary_objects(connection, domain_present)
+    if domain_present:
+        _validate_domain_shape(connection, revision)
 
 
 def _validate_auxiliary_objects(connection: Connection, domain_present: bool) -> None:
@@ -175,10 +181,23 @@ def _validate_auxiliary_objects(connection: Connection, domain_present: bool) ->
             _fail("migration_schema_objects_mismatch")
 
 
-def _validate_domain_shape(connection: Connection) -> None:
+def _validate_domain_shape(connection: Connection, revision: str) -> None:
     """Detect partial/mismatched schemas; never infer a revision from them."""
 
     inspector = inspect(connection)
+    # Historical 0002 shape differs ONLY in these explicitly reviewed 0003 additions.
+    # The Alembic cursor selects the expected shape; shape never selects migrations.
+    baseline = revision == DOMAIN_BASELINE_REVISION
+    added_columns = {
+        "relationships": {"affinity", "trust", "familiarity"},
+        "command_receipts": {"result_payload", "command_fingerprint"},
+    }
+    added_checks = {
+        "ck_relationship_affinity",
+        "ck_relationship_trust",
+        "ck_relationship_familiarity",
+        "ck_command_receipt_command_result",
+    }
     for table in Base.metadata.sorted_tables:
         actual = [
             (column["name"], str(column["type"]).upper(), column["nullable"])
@@ -187,6 +206,7 @@ def _validate_domain_shape(connection: Connection) -> None:
         expected = [
             (column.name, column.type.compile(dialect=connection.dialect).upper(), column.nullable)
             for column in table.columns
+            if not (baseline and column.name in added_columns.get(table.name, set()))
         ]
         if actual != expected:
             _fail("alembic_schema_shape_mismatch")
@@ -212,6 +232,7 @@ def _validate_domain_shape(connection: Connection) -> None:
             (constraint.name, _normalized_sql(str(constraint.sqltext)))
             for constraint in table.constraints
             if isinstance(constraint, CheckConstraint)
+            and not (baseline and constraint.name in added_checks)
         }
         actual_checks = {
             (constraint["name"], _normalized_sql(constraint["sqltext"]))
@@ -231,11 +252,22 @@ def _validate_domain_shape(connection: Connection) -> None:
         if actual_uniques != expected_uniques:
             _fail("alembic_schema_shape_mismatch")
         expected_indexes = {
-            (index.name, tuple(column.name for column in index.columns), bool(index.unique))
+            (
+                index.name,
+                tuple(column.name for column in index.columns),
+                bool(index.unique),
+                _index_predicate(index.dialect_options["sqlite"].get("where")),
+            )
             for index in table.indexes
+            if not (baseline and index.name == "uq_command_request_identity")
         }
         actual_indexes = {
-            (index["name"], tuple(index["column_names"]), bool(index["unique"]))
+            (
+                index["name"],
+                tuple(index["column_names"]),
+                bool(index["unique"]),
+                _index_predicate(index.get("dialect_options", {}).get("sqlite_where")),
+            )
             for index in inspector.get_indexes(table.name)
         }
         if actual_indexes != expected_indexes:

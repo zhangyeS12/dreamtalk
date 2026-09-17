@@ -32,6 +32,7 @@ from livingworld.domain.participants import (
 from livingworld.domain.relationships import Relationship
 from livingworld.domain.values import Revision, WorldTime
 from livingworld.domain.world import ClockState, Location, LocationConnection, World, WorldClock
+from snapshot_support import snapshot_store
 
 
 @pytest.fixture
@@ -164,7 +165,7 @@ def objects():
 @pytest.fixture
 def populate(objects):
     async def run(database):
-        store = database.store()
+        store = snapshot_store(database)
         for entity in objects.values():
             await store.add(entity)
         return store

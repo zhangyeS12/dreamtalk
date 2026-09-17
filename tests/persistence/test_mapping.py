@@ -20,6 +20,7 @@ from livingworld.infrastructure.persistence.errors import (
 from livingworld.infrastructure.persistence.mapping import to_record
 from livingworld.infrastructure.persistence.models import WorldClockRecord
 from livingworld.infrastructure.persistence.types import SQLITE_INT64_MAX, SQLITE_INT64_MIN
+from snapshot_support import snapshot_store
 from sqlalchemy import insert, text
 from sqlalchemy.exc import StatementError
 
@@ -84,8 +85,8 @@ def test_world_clock_signed_integer_exactness(tmp_path, objects, microseconds):
                 state=ClockState.RUNNING,
             )
             world = replace(objects["world"], clock=clock)
-            await database.store().add(world)
-            assert await database.store().reload(clock) == clock
+            await snapshot_store(database).add(world)
+            assert await snapshot_store(database).reload(clock) == clock
             async with database.engine.connect() as connection:
                 assert (
                     await connection.execute(
@@ -109,8 +110,8 @@ def test_unrepresentable_world_time_rejected_without_rounding(tmp_path, objects,
                 clock=replace(objects["world"].clock, logical_time=WorldTime(microseconds)),
             )
             with pytest.raises(StatementError, match="world_time_outside_sqlite_integer_range"):
-                await database.store().add(world)
-            assert await database.store().reload(world) is None
+                await snapshot_store(database).add(world)
+            assert await snapshot_store(database).reload(world) is None
         finally:
             await database.close()
 
@@ -122,13 +123,13 @@ def test_naive_datetime_rejected_on_bind_and_load(tmp_path, objects):
         database = Database(tmp_path)
         try:
             await database.initialize()
-            await database.store().add(objects["world"])
+            await snapshot_store(database).add(objects["world"])
             async with database.engine.begin() as connection:
                 await connection.execute(
                     text("UPDATE world_clocks SET observed_wall_time_utc='2026-09-17T00:00:00'")
                 )
             with pytest.raises(PersistenceDataError, match="stored_timestamp_not_utc_aware"):
-                await database.store().reload(objects["world"].clock)
+                await snapshot_store(database).reload(objects["world"].clock)
             record = to_record(objects["world"].clock)
             record.observed_wall_time_utc = datetime(2026, 9, 17)
             with pytest.raises(StatementError, match="timezone-aware"):

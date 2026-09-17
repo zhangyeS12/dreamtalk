@@ -29,7 +29,7 @@ from livingworld.domain.participants import (
     PlayerAvailability,
     PlayerPresence,
 )
-from livingworld.domain.relationships import Relationship
+from livingworld.domain.relationships import Relationship, RelationshipMetrics
 from livingworld.domain.values import Revision
 from livingworld.domain.world import ClockState, Location, LocationConnection, World, WorldClock
 from livingworld.infrastructure.persistence.errors import PersistenceDataError
@@ -178,6 +178,9 @@ def to_record(entity: DomainObject) -> Base:
             target_character_id=target_character,
             target_player_id=target_player,
             revision=entity.revision.value,
+            affinity=entity.metrics.affinity,
+            trust=entity.metrics.trust,
+            familiarity=entity.metrics.familiarity,
         )
     if isinstance(entity, WorldEvent):
         cause_event = (
@@ -321,6 +324,7 @@ def to_domain(record: Base) -> DomainObject:
             _principal(world, record.source_kind, record.source_id),
             _principal(world, record.target_kind, record.target_id),
             Revision(record.revision),
+            RelationshipMetrics(record.affinity, record.trust, record.familiarity),
         )
     if isinstance(record, WorldEventRecord):
         if record.causation_event_id is not None:

@@ -19,6 +19,7 @@ from livingworld.infrastructure.persistence.models import (
     KnowledgeAssertionRecord,
 )
 from livingworld.infrastructure.persistence.store import PersistenceStore
+from snapshot_support import snapshot_store
 from sqlalchemy import and_, insert, text
 from sqlalchemy.exc import IntegrityError
 
@@ -158,7 +159,7 @@ def test_cross_world_foreign_reference_rejected(tmp_path, objects, populate, nam
                 other_event,
                 other_assertion,
             ):
-                await database.store().add(entity)
+                await snapshot_store(database).add(entity)
             record = to_record(objects[name])
             if field in {"location_id", "target_id"}:
                 replacement = other_location.location_id.value
@@ -210,9 +211,11 @@ def test_world_event_database_append_only(tmp_path, objects, populate, sql):
 
 def test_world_event_adapter_has_no_update_or_delete():
     assert {name for name in vars(PersistenceStore) if not name.startswith("_")} == {
-        "add",
         "reload",
     }
+    from livingworld.infrastructure.persistence.unit_of_work import EventAppender
+
+    assert {name for name in vars(EventAppender) if not name.startswith("_")} == {"append"}
 
 
 def test_same_uuid_principal_types_remain_distinct(tmp_path, objects):
@@ -220,7 +223,7 @@ def test_same_uuid_principal_types_remain_distinct(tmp_path, objects):
         database = Database(tmp_path)
         try:
             await database.initialize()
-            store = database.store()
+            store = snapshot_store(database)
             await store.add(objects["world"])
             world = objects["world"].world_id
             shared = uuid4()

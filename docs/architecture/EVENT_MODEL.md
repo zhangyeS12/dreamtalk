@@ -1,6 +1,6 @@
 # Event Model
 
-> 状态：保留 Stage 0 概念边界；C-003A 实现不可变 WorldEvent 领域值及不变量，C-003B 增加只追加事件存储与映射。候选激活、Kernel 提交、projection 执行、回放和业务事件目录均未实现。
+> 状态：保留 Stage 0 概念边界；C-003A 定义不可变 WorldEvent，C-003B 增加只追加存储，C-003C 实现首批确定性 Command→event→projection→receipt 原子提交及下述事件目录。候选激活、回放、完整乐观并发执行和模拟仍未实现。
 
 规则来源：[PRODUCT_SPEC.md](../product/PRODUCT_SPEC.md) 中的 FR-01、FR-02、FR-04 至 FR-15、FR-22 至 FR-24。规划责任见 [DIRECTOR_MODEL.md](DIRECTOR_MODEL.md)，信息归属见 [KNOWLEDGE_MODEL.md](KNOWLEDGE_MODEL.md)。
 
@@ -44,15 +44,38 @@ WorldEvent、RelationshipEvent 与 WorldTruth 的关系属于概念分工。本�
 
 WorldTime 是逻辑坐标，不是全局事件 ID；两个 EventId 可以共享同一 WorldTime，未来分支也可以在同一坐标拥有不同历史。C-003A 不加入日历、调度或分支身份机制。
 
-WorldEvent 是 canonical history 的不可变领域表达，frozen snapshot 没有 update/delete 方法。外部原始 payload 后续修改不会改变事件；事件内部的嵌套结构也不能修改。此处创建 Python 值不意味着事件已由 Kernel 提交或世界事实已落库。只有未来 Deterministic World Kernel 能正式提交 canonical WorldEvent，Director 只提出批量计划。CandidateEvent 没有在 C-003A 实现，更不能通过构造候选提前写入事实。
+WorldEvent 是 canonical history 的不可变领域表达，frozen snapshot 没有 update/delete 方法。外部原始 payload 后续修改不会改变事件；事件内部的嵌套结构也不能修改。构造 Python 值不等于提交事实。C-003C 确定性 command handler 承担首批 Kernel 执行职责，正式事实必须随投影和回执原子提交；Director 仍只提出计划。CandidateEvent 未实现，不能通过构造候选提前写入事实。
 
-[CommandReceipt](../../services/core/src/livingworld/domain/commands.py) 定义未来请求幂等性接口：现有 RequestId、world_id、command_type、非空 status 标签、可选同世界结果引用、UTC 创建/完成时间及 Revision。完成时间不能早于创建时间。C-003B 保存回执并约束 (world_id, request_id) 唯一性；没有命令执行、重试或返回旧执行结果的流程，同一个 key 构造多个事件不会在领域层自动合并。
+[CommandReceipt](../../services/core/src/livingworld/domain/commands.py) 保持 RequestId、world_id、command_type、status、同世界结果引用、UTC 创建/完成时间及 Revision。完成时间不能早于创建时间。C-003C 原表新增独立语义指纹和原始结果：相同请求/语义返回旧结果，变更语义显式冲突，回执指向命令最后一个事件；见 [COMMAND_MODEL.md](COMMAND_MODEL.md)。单纯构造领域事件不自动执行去重。
 
 ### C-003B 事件持久化边界
 
 [PERSISTENCE_MODEL.md](PERSISTENCE_MODEL.md) 定义独立 WorldEventRecord 和显式 mapper。occurred_at 保存有符号 64 位整数微秒，created_at 保存规范 UTC 文本；payload_version、因果 EventId/RequestId 与 CorrelationId 完整还原，payload 返回领域时深度冻结。(world_id, idempotency_key) unique 只提供 DB 去重约束；None 允许多个事件，相同 WorldTime 不限制事件身份。
 
-adapter 只有 insert/reload，无事件 update/delete API。SQLite 触发器拒绝 UPDATE/DELETE，本 engine 启用 recursive_triggers 以阻止 INSERT OR REPLACE 绕过只追加边界。低层存储验证不是 Kernel 授权机制，也没有 event→projection→receipt 命令事务。正式 canonical WorldEvent 的唯一提交者仍是未来 Deterministic World Kernel。
+EventAppender 只有 append，无事件 update/delete API。SQLite UPDATE/DELETE 触发器及 recursive_triggers 防止 INSERT OR REPLACE 绕过只追加边界。生产 snapshot store 只读，底层映射约束测试不能替代 canonical command 事务入口。
+
+### C-003C 首批事件合约
+
+所有下列 payload_version=1，显式语义字段不保存完整 ORM/domain dump。world_id、双时间、因果与关联身份位于统一事件 envelope。
+
+| Event | payload 语义 |
+| --- | --- |
+| WorldCreated | 世界身份/名称、初始 logical_time、观察 UTC、time_scale、clock_state、世界与时钟版本 |
+| LocationCreated | 地点身份、名称、初始 revision |
+| PlayerCreated | 玩家身份、名称、静态定义初始 revision |
+| PlayerPlaced | 玩家身份、初始地点、activity、availability、Presence 初始 revision |
+| PlayerMoved | 玩家身份、from/to 地点、保留的 activity/availability、Presence resulting revision |
+| CharacterCreated | 角色身份、名称、静态定义初始 revision |
+| CharacterPlaced | 角色身份、可空原地点、新地点、状态 resulting revision |
+| RelationshipChanged | 有类型与世界作用域的 source/target；角色双方额外 source_character_id/target_character_id；edge_existed、before/delta/after 三项指标与 resulting revision |
+
+**玩家创建事件歧义已解决：** CreatePlayer 固定产生 ordinal 0 PlayerCreated、ordinal 1 PlayerPlaced，同一事务中创建 Player/PlayerPresence 和单一回执。不能提交无初始物理位置的正常玩家。
+
+**关系事件语义歧义已解决：** delta 至少一项非零，范围校验不 clamp，缺失边的 before 为 0/0/0，初始 revision=0；应用后 resulting revision=1，反向边独立。指标仅供内部模拟，普通玩家不能获得数值展示。
+
+事件 key 固定 `request_id:ordinal`；EventId 为基于 RequestId/world/ordinal 的 UUIDv5，身份独立于 WorldTime。顶层 causation=RequestId，correlation=CorrelationId(RequestId.value)。occurred_at 来自当前 WorldClock（创建世界使用初始值），created_at 来自注入 UTC WallClock。多事件 ordinal 是命令内部身份约定，**不是跨命令 canonical replay position**；不按 WorldTime/created_at 选择唯一回放顺序。
+
+只在事件、投影、回执均成功后 commit；异常全部 rollback，同一未提交请求可重试。成功重试包含进程/engine 重启，不产生第二组事件或额外 revision。Replay 与完整乐观并发约束留给 C-003E。
 
 ## 2. 候选的语义生命周期
 
@@ -116,7 +139,7 @@ adapter 只有 insert/reload，无事件 update/delete API。SQLite 触发器拒
 - Developer Mode 能查看 Director、Agent、Memory、LLM 使用等决策 Trace（FR-23）。候选激活、延期、取消与 Replan 的依据属于需要说明的决策范围；Trace 的具体内容和保留方式未确定。
 - 产品必须记录 Token、Latency 和 Cost，并支持预算与模型路由（FR-24）。候选执行与 LLM 调用是不同概念，不能将每个普通小事件处理都推导成一次 LLM 调用。
 
-持久化方向见 [Architecture Review 001](ARCHITECTURE_REVIEW_001.md)，C-003B 存储细节见 [PERSISTENCE_MODEL.md](PERSISTENCE_MODEL.md)；事件总线、队列与 Kernel/Command 事务提交未实现。
+持久化方向见 [Architecture Review 001](ARCHITECTURE_REVIEW_001.md)，存储细节见 [PERSISTENCE_MODEL.md](PERSISTENCE_MODEL.md)，C-003C 事务见 [COMMAND_MODEL.md](COMMAND_MODEL.md)。事件总线、队列、候选执行与回放未实现。
 
 ## 7. 待确认的产品定义
 
