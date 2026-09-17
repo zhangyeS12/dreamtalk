@@ -8,8 +8,9 @@ from importlib.resources import files
 
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import CheckConstraint, Connection, UniqueConstraint, inspect, text
+from sqlalchemy import CheckConstraint, Connection, MetaData, UniqueConstraint, inspect, text
 
+from livingworld.infrastructure.persistence.content_models import ContentBase
 from livingworld.infrastructure.persistence.errors import MigrationCompatibilityError
 from livingworld.infrastructure.persistence.models import Base
 
@@ -17,10 +18,12 @@ LEGACY_REVISION = "0001_legacy_runtime_foundation"
 DOMAIN_BASELINE_REVISION = "0002_world_domain_persistence"
 COMMAND_REVISION = "0003_command_pipeline"
 OBSERVATION_REVISION = "0004_observation_identity"
-HEAD_REVISION = "0005_canonical_ledger"
+LEDGER_REVISION = "0005_canonical_ledger"
+HEAD_REVISION = "0006_canonical_content"
 LEGACY_CHECKSUM = "0345ec9d50fd45b01ba0f97ff6f14a25f683fb8d01f08f04ff9dc4892ad1cac5"
 LEGACY_TABLES = {"schema_version", "migration_history"}
 DOMAIN_TABLES = set(Base.metadata.tables)
+CONTENT_TABLES = set(ContentBase.metadata.tables)
 
 _LEGACY_COLUMNS = {
     "schema_version": [
@@ -161,6 +164,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         DOMAIN_BASELINE_REVISION,
         COMMAND_REVISION,
         OBSERVATION_REVISION,
+        LEDGER_REVISION,
         HEAD_REVISION,
     }:
         _fail("alembic_revision_unsupported")
@@ -170,13 +174,17 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
     domain_present = revision != LEGACY_REVISION
     if domain_present:
         expected |= DOMAIN_TABLES
-        if revision != HEAD_REVISION:
+        if revision not in {LEDGER_REVISION, HEAD_REVISION}:
             expected -= {"world_ledger_cursors"}
+    if revision == HEAD_REVISION:
+        expected |= CONTENT_TABLES
     if tables != expected:
         _fail("alembic_schema_state_mismatch")
     _validate_auxiliary_objects(connection, domain_present)
     if domain_present:
         _validate_domain_shape(connection, revision)
+    if revision == HEAD_REVISION:
+        _validate_domain_shape(connection, revision, ContentBase.metadata)
 
 
 def _validate_auxiliary_objects(connection: Connection, domain_present: bool) -> None:
@@ -191,7 +199,9 @@ def _validate_auxiliary_objects(connection: Connection, domain_present: bool) ->
             _fail("migration_schema_objects_mismatch")
 
 
-def _validate_domain_shape(connection: Connection, revision: str) -> None:
+def _validate_domain_shape(
+    connection: Connection, revision: str, metadata: MetaData = Base.metadata
+) -> None:
     """Detect partial/mismatched schemas; never infer a revision from them."""
 
     inspector = inspect(connection)
@@ -209,8 +219,11 @@ def _validate_domain_shape(connection: Connection, revision: str) -> None:
         "ck_relationship_familiarity",
         "ck_command_receipt_command_result",
     }
-    for table in Base.metadata.sorted_tables:
-        if revision != HEAD_REVISION and table.name == "world_ledger_cursors":
+    for table in metadata.sorted_tables:
+        if (
+            revision not in {LEDGER_REVISION, HEAD_REVISION}
+            and table.name == "world_ledger_cursors"
+        ):
             continue
         actual = [
             (column["name"], str(column["type"]).upper(), column["nullable"])
@@ -226,7 +239,7 @@ def _validate_domain_shape(connection: Connection, revision: str) -> None:
                 and column.name == "observation_id"
             )
             and not (
-                revision != HEAD_REVISION
+                revision not in {LEDGER_REVISION, HEAD_REVISION}
                 and table.name == "world_events"
                 and column.name == "ledger_position"
             )
@@ -266,7 +279,8 @@ def _validate_domain_shape(connection: Connection, revision: str) -> None:
             if isinstance(constraint, CheckConstraint)
             and not (baseline and constraint.name in added_checks)
             and not (
-                revision != HEAD_REVISION and constraint.name == "ck_world_event_ledger_position"
+                revision not in {LEDGER_REVISION, HEAD_REVISION}
+                and constraint.name == "ck_world_event_ledger_position"
             )
         }
         actual_checks = {
@@ -295,7 +309,10 @@ def _validate_domain_shape(connection: Connection, revision: str) -> None:
             )
             for index in table.indexes
             if not (baseline and index.name == "uq_command_request_identity")
-            and not (revision != HEAD_REVISION and index.name == "uq_world_event_ledger_position")
+            and not (
+                revision not in {LEDGER_REVISION, HEAD_REVISION}
+                and index.name == "uq_world_event_ledger_position"
+            )
         }
         actual_indexes = {
             (

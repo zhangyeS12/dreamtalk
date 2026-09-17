@@ -2,6 +2,7 @@
 
 from alembic import context
 
+from livingworld.infrastructure.persistence.content_models import ContentBase
 from livingworld.infrastructure.persistence.models import Base
 
 connection = context.config.attributes.get("connection")
@@ -20,7 +21,7 @@ def include_object(
 
 context.configure(
     connection=connection,
-    target_metadata=Base.metadata,
+    target_metadata=[Base.metadata, ContentBase.metadata],
     transactional_ddl=True,
     include_object=include_object,
 )

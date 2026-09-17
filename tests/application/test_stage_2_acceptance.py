@@ -33,6 +33,7 @@ from livingworld.domain.identifiers import (
 from livingworld.domain.knowledge import KnowledgeScope, ObservationChannel
 from livingworld.domain.participants import PlayerActivity, PlayerAvailability
 from livingworld.domain.values import Revision, WorldTime
+from livingworld.infrastructure.persistence.migration import HEAD_REVISION
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from test_replay import EVIDENCE, PROJECTIONS, snapshot
@@ -504,7 +505,7 @@ def test_stage_2_command_world_history_concurrency_knowledge_and_replay(environm
             assert await verify_knowledge() == knowledge_before
             assert await env.handler.execute(door_belief) == replace(belief_result, replayed=True)
             assert await env.handler.execute(duplicate) == replace(duplicate_result, replayed=True)
-            assert (await env.rows("alembic_version"))[0].version_num == "0005_canonical_ledger"
+            assert (await env.rows("alembic_version"))[0].version_num == HEAD_REVISION
         finally:
             await env.database.close()
 

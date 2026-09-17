@@ -9,8 +9,10 @@ from sqlalchemy.engine import URL, Connection
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async_engine
 
 from livingworld.application import ports
+from livingworld.application.content import ContentRepository
 from livingworld.domain.identifiers import CharacterId, PlayerId, WorldId
 from livingworld.infrastructure.persistence import knowledge_readers, replay
+from livingworld.infrastructure.persistence.content_repository import SqlAlchemyContentRepository
 from livingworld.infrastructure.persistence.migration import upgrade
 from livingworld.infrastructure.persistence.store import PersistenceStore
 from livingworld.infrastructure.persistence.unit_of_work import SqlAlchemyUnitOfWork
@@ -77,6 +79,10 @@ class Database:
 
     def store(self) -> PersistenceStore:
         return PersistenceStore(self._sessions)
+
+    def content_repository(self) -> ContentRepository:
+        """Content library capability; grants no canonical runtime write access."""
+        return SqlAlchemyContentRepository(self._sessions)
 
     def unit_of_work(self) -> SqlAlchemyUnitOfWork:
         return SqlAlchemyUnitOfWork(self._sessions)

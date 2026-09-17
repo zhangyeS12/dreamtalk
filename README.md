@@ -8,7 +8,9 @@ LivingWorld 是持久化、事件驱动的多角色 AI 世界，不是普通聊�
 
 ## 开发状态
 
-当前阶段：**Stage 2 — C-003E2 Optimistic Concurrency & Final Acceptance**。资源级 typed expected revision、SQL CAS、显式期待不存在与有限 receipt 碰撞解析已建立；内部 FormCharacterBelief 可形成独立或与 Truth 矛盾的主观断言，支持完整 canonical 回放。验收通过应用命令构建两个世界，验证秘密隔离、并发/idempotency、回滚和重建等价。详见 [Stage 2 验收](docs/architecture/STAGE_2_ACCEPTANCE.md)、[回放模型](docs/architecture/REPLAY_MODEL.md)、[事件模型](docs/architecture/EVENT_MODEL.md)、[知识访问模型](docs/architecture/KNOWLEDGE_ACCESS_MODEL.md)、[命令模型](docs/architecture/COMMAND_MODEL.md) 和 [持久化模型](docs/architecture/PERSISTENCE_MODEL.md)。
+当前阶段：**Stage 3 — C-004A Canonical Content Model & Import Boundary**。已建立独立 CharacterDefinition、WorldContent、LoreEntry、typed 内容身份与 ContentRevision、versioned canonical JSON/哈希、来源与原始导入保留、Draft/Preview/confirmed Commit 边界，以及 Alembic 0006 的独立 SQLite 内容库。详见 [内容模型](docs/architecture/CONTENT_MODEL.md)、[导入边界](docs/architecture/IMPORT_MODEL.md) 和 [持久化模型](docs/architecture/PERSISTENCE_MODEL.md)。
+
+Imported Content != Runtime State。保存内容不创建运行世界/角色，不断言 WorldTruth 或授予主体知识；prompt-like 导入文本只是不可信创作数据。尚未实现 Character Card/Lorebook/PNG parser、AI Builder、LLM、prompt assembly、运行实例化或 .lworld archive。Stage 2 的资源级 CAS、持久化幂等、canonical ledger/rebuild 和主体知识隔离继续沿用，见 [Stage 2 验收](docs/architecture/STAGE_2_ACCEPTANCE.md)、[回放模型](docs/architecture/REPLAY_MODEL.md)、[事件模型](docs/architecture/EVENT_MODEL.md)、[知识访问模型](docs/architecture/KNOWLEDGE_ACCESS_MODEL.md) 和 [命令模型](docs/architecture/COMMAND_MODEL.md)。
 
 C-002 运行时基础继续沿用：共享 React UI、Tauri v2 Windows 开发壳、Python Core 启停协议、系统 API、SQLite 迁移元数据、结构化日志和 CI。页面仅显示 Core Connecting / Ready / Failed。
 

@@ -130,3 +130,18 @@ def test_cas_contracts_use_existing_revision_and_focused_ports():
         assert get_type_hints(method)["expected_revision"] == kind
         assert signature(method).parameters["expected_revision"].default is Parameter.empty
     assert not any("expected" in field for field in get_type_hints(FormCharacterBelief))
+
+
+def test_content_flow_has_no_runtime_mutation_or_knowledge_capability():
+    from livingworld.application.content import ContentRepository
+
+    assert not {"events", "receipts", "worlds", "knowledge", "execute"} & set(
+        vars(ContentRepository)
+    )
+    root = Path(__file__).resolve().parents[2] / "services/core/src/livingworld"
+    forbidden = {"command_handler", "unit_of_work", "knowledge", "events", "participants", "world"}
+    for relative in ("application/content.py", "infrastructure/persistence/content_repository.py"):
+        tree = ast.parse((root / relative).read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.module.startswith("livingworld."):
+                assert node.module.split(".")[-1] not in forbidden, (relative, node.module)

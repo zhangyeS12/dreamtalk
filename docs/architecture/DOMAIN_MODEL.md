@@ -1,6 +1,16 @@
 # LivingWorld 领域概念模型
 
-状态：Stage 0 领域语言保留；Stage 2 已建立领域模型、SQLite 映射、命令事务、知识隔离、canonical ledger、回放及资源级乐观并发。C-003E2 按用户确认增加内部 CharacterBelief 形成路径，复用已有 KnowledgeAssertion。见 [COMMAND_MODEL.md](COMMAND_MODEL.md)、[PERSISTENCE_MODEL.md](PERSISTENCE_MODEL.md) 和 [STAGE_2_ACCEPTANCE.md](STAGE_2_ACCEPTANCE.md)。其余概念仍是定义；Director、Agent、业务 HTTP API 与世界模拟未实现。
+状态：Stage 0 领域语言保留；Stage 2 已建立领域模型、SQLite 映射、命令事务、知识隔离、canonical ledger、回放及资源级乐观并发。C-003E2 按用户确认增加内部 CharacterBelief 形成路径，复用已有 KnowledgeAssertion；Stage 3 C-004A 新增独立创作内容模型及导入边界。见 [COMMAND_MODEL.md](COMMAND_MODEL.md)、[PERSISTENCE_MODEL.md](PERSISTENCE_MODEL.md)、[STAGE_2_ACCEPTANCE.md](STAGE_2_ACCEPTANCE.md) 和 [CONTENT_MODEL.md](CONTENT_MODEL.md)。其余概念仍是定义；Director、Agent、业务 HTTP API 与世界模拟未实现。
+
+## C-004A 内容与运行状态边界
+
+**Imported Content != Runtime State；CharacterDefinition != Character；WorldContent != World；LoreEntry != WorldTruth。**
+
+Stage 3 新增独立创作模型，不合并或扩展现有运行实体：CharacterDefinition 保存 persona/background/authored instructions；WorldContent 保存 setting/factions/authored locations/rules；LoreEntry 保存正文/trigger/opaque metadata。没有运行 world_id、位置、Memory、Knowledge、关系或 ledger position。prompt-like 导入文本仅为不可信创作数据。
+
+CharacterDefinitionId / WorldContentId / LoreEntryId / ContentAssetId / RawImportId 是独立 typed UUID，不携带运行世界作用域；ContentRevision 表达内容编辑，与 runtime Revision 分离。冻结快照通过新版本支持编辑，未实现完整历史。保存内容不实例化角色、世界或任何知识，不绕过 Stage 2 command/event/projection/receipt。
+
+详细 Purpose / Owns / Does not own / Relationships / Important invariants 见 [CONTENT_MODEL.md](CONTENT_MODEL.md)，Draft/Preview/raw preservation 边界见 [IMPORT_MODEL.md](IMPORT_MODEL.md)。运行实例与定义版本的绑定及初始知识分配仍为后续范围。
 
 ## C-003E2 已确认的边界
 

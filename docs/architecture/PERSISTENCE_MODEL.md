@@ -2,6 +2,32 @@
 
 状态：Stage 2 SQLite/Alembic、持久化幂等、主体知识隔离、canonical ledger、原子投影重建及资源级 CAS 已实现。C-003E2 的内部信念形成复用既有 KnowledgeAssertion 存储。自动传播、语义检索与世界模拟未实现。产品冻结规则不变，见 [COMMAND_MODEL.md](COMMAND_MODEL.md)、[KNOWLEDGE_ACCESS_MODEL.md](KNOWLEDGE_ACCESS_MODEL.md) 与 [REPLAY_MODEL.md](REPLAY_MODEL.md)。
 
+## C-004A 独立内容库
+
+**Imported Content != Runtime State；CharacterDefinition != Character；WorldContent != World；LoreEntry != WorldTruth。**
+
+Alembic head 现为 [0006_canonical_content](../../services/core/src/livingworld/infrastructure/persistence/migrations/versions/0006_canonical_content.py)，down_revision=0005_canonical_ledger。仅新增五个内容表，不修改 Stage 2 表、事件、回执、cursor、typed/world-scoped IDs 或审计行。下文 Stage 2 的 0005 head 描述保留其阶段语境，不表示当前 head。
+
+| 内容表 | 可直接校验/查询的结构 | 正文边界 |
+| --- | --- | --- |
+| content_character_definitions | CharacterDefinitionId PK、title、content_version、ContentRevision、semantic_hash | 独立 CharacterDefinition canonical JSON |
+| content_worlds | WorldContentId PK、title、content_version、ContentRevision、semantic_hash | 独立 WorldContent canonical JSON |
+| content_lore_entries | LoreEntryId PK、title（可空串）、content_version、ContentRevision、semantic_hash | 独立 LoreEntry canonical JSON，title 不为 SQL NULL，正文不能为空 |
+| content_assets | ContentAssetId PK、media_type、opaque resource_reference | 元数据 JSON，不存图片 bytes，不打开引用 |
+| content_raw_imports | RawImportId PK、原文件 SHA-256 | provenance/opaque extensions JSON、完整原 bytes BLOB；不是 asset storage pipeline |
+
+使用独立 [ContentBase / Records](../../services/core/src/livingworld/infrastructure/persistence/content_models.py)，与 runtime Base 完全分离。三种 root 独立表保证 typed 身份边界，没有巨型泛型 JSON 表；正文不用逐文本过度规范化。当前需求按 ID 读取，不为尚不存在的搜索增加索引或 FTS 业务表。DB CHECK 强制 JSON 合法、版本 1、非负整数 revision、hash 长度与必要非空标签；读取重新校验 canonical 数据、完整哈希和独立元数据一致性。
+
+[SqlAlchemyContentRepository](../../services/core/src/livingworld/infrastructure/persistence/content_repository.py) 使用既有 Database 的 engine/session factory，数据库仍位于 app data；无新存储进程或依赖。ContentDraft 封闭图在应用边界验证 Lore/asset/raw 引用及重复 typed IDs，root references 保留 canonical JSON 中，不使用 polymorphic runtime FK。当前无删除 API，整批创建/编辑/依赖复用同一事务；未来若增加删除/独立依赖修改，须维持该图约束。
+
+创建必须预期 None + revision=0；编辑必须 typed ContentRevision + 下一版本，SQL WHERE 含完整内容身份与预期版本；未变依赖只有精确匹配才保留。Raw/asset 同 ID 不可覆盖不同数据，版本/唯一性/写入失败整批回滚。BEGIN IMMEDIATE 复用现有集中事务 hook，ContentRevision 与 runtime CAS 完全分离；没有 content WorldEvent、runtime receipt 或自动 retry。
+
+内容保存本身是创作编辑，不是 canonical runtime 变更；repository 没有运行时 mutation capability。WorldEvent ledger/rebuild 与内容库相互独立，rebuild 不删除内容。Prompt-like 文本/扩展始终为数据，数据库不会执行或自动传播为 Truth/Knowledge。
+
+迁移 compatibility detector 显式区分 0005 与 0006 的允许表形状；旧 revisions 仍严格验证，不以内容表猜测 cursor。0006 支持空库、valid legacy takeover、完整 0005 升级和重复启动；部分新增内容表/未知列 fail closed。DDL 失败保留 0005 与所有原行，downgrade 要求 review。schema_version=1/migration_history 继续是 legacy audit，只有 alembic_version 选择迁移。
+
+验证：[test_content_persistence.py](../../tests/persistence/test_content_persistence.py) 证明重启 round-trip、typed ID、原始 bytes、ContentRevision 更新/原子失败、所有 Stage 2 行/审计保留与迁移失败回滚；[test_content_boundary.py](../../tests/application/test_content_boundary.py) 证明内容提交及 runtime replay 保持 Truth/Belief/PlayerKnowledge/ledger 隔离。没有迁移实际用户数据库，没有 GUI smoke。详见 [CONTENT_MODEL.md](CONTENT_MODEL.md)、[IMPORT_MODEL.md](IMPORT_MODEL.md)。
+
 ## 1. 边界与生命周期
 
 ```text
