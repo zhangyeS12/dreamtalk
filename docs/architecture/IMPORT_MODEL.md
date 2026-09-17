@@ -1,10 +1,11 @@
 # Import Boundary — C-004A
 
-状态：只建立 canonical 内容 Draft、原始导入 envelope、确定性校验和 Preview → confirmed Commit 的应用边界。没有 Character Card V2/V3、Lorebook、PNG/APNG parser、文件选择 UI、Builder、web research、LLM 或最终 .lworld package。
+状态：canonical 内容 Draft、原始导入 envelope、确定性校验和 Preview → confirmed Commit 已建立。C-004B 增加独立、离线的 Character Card V2/V3 JSON/PNG/APNG parser。Lorebook 语义规范化、文件选择 UI、Builder、web research、LLM 和最终 .lworld package 尚未实现。
 
 ```text
 external source (untrusted)
-→ future independent format adapter / parse
+→ content-based container detection / independent external parser
+→ external structure validation / semantic adapter
 → ContentDraft + RawImportEnvelope
 → deterministic structural validation
 → ContentPreview (exact preview hash)
@@ -56,10 +57,18 @@ Alembic 0006 只增加独立内容表，不改变既有 runtime projection、his
 - 不把作者描述当作 Truth 或玩家已知事实。未来 Agent context 仍需 permission filtering before semantic retrieval，不能用卡片 instruction 解除隔离。
 - 来源 ID 不授予外部资料可信性，也不授予其他主体知识读取权限。保留文件内容不意味着授权执行、发布或把它写入日志。
 
-独立 adapter 兼容 Character Card V2/V3、PNG/JSON、Lorebook 是冻结目标；不复制 SillyTavern 源码，也不需要 SillyTavern 运行。C-004A 没有研究或实现这些格式细节。
+独立 adapter 兼容 Character Card V2/V3、PNG/JSON、Lorebook 是冻结目标；不复制 SillyTavern 源码，也不需要 SillyTavern 运行。C-004B 的已实现范围见 [CHARACTER_CARD_COMPATIBILITY.md](CHARACTER_CARD_COMPATIBILITY.md)，Lorebook 规范化仍留给 C-004C。
 
-## 5. 保留事项
+## 5. C-004B 导入审阅
 
-外部字段映射/extension namespaces/parser 资源限制、重复导入的用户选择、来源冲突展示、AI Research → Evidence → Claim → Conflict 流程、runtime 初始知识分配、实例定义版本绑定、资产存储布局与 .lworld container 均未实现。它们不影响当前内容库与 runtime 状态分离的已验证边界。
+[CharacterCardImporter](../../services/core/src/livingworld/infrastructure/imports/character_cards.py) 接收 bytes、调用方提供的 aware imported_at 和可选 original_name，返回 [ImportDraft](../../services/core/src/livingworld/application/imports.py)。文件名只作来源记录；识别由 bytes 决定。该 adapter 没有 repository、运行 Kernel、网络、shell、LLM 或浏览器能力。
+
+ImportDraft.preview() 返回 ImportPreview，其 content 是既有 ContentPreview，其 warnings 从 Draft 中 LivingWorld 自有元数据读取。错误是 ContentImportError(code, structural path)；警告不阻断 Commit。警告及兼容元数据已经纳入既有 preview_hash，不能在确认后悄悄移除警告而保持同一个 hash。外部 extensions 单独嵌套保留，不能覆盖 livingworld.import 的审阅信息。
+
+显式用户确认仍由可信调用方提供 reviewed_hash，并通过 ContentService.commit(preview.content, ...) 原子保存。解析和 Preview 都不写数据库。相同 bytes 的每次独立 parse 生成新的 typed content/raw/asset IDs，不按 hash 自动覆盖；所有原始 bytes、来源、兼容数据与引用复用 C-004A 的一个事务。无需新 migration 或新的数据库字段。
+
+## 6. 保留事项
+
+Character Card 字段映射、兼容 namespaces 和 parser 资源限制已在 C-004B 定义。重复导入的用户选择、来源冲突展示、AI Research → Evidence → Claim → Conflict 流程、runtime 初始知识分配、实例定义版本绑定、资产存储布局与 .lworld container 均未实现。它们不影响当前内容库与 runtime 状态分离的已验证边界。
 
 测试见 [test_content_boundary.py](../../tests/application/test_content_boundary.py)、[test_content.py](../../tests/domain/test_content.py) 与 [test_content_persistence.py](../../tests/persistence/test_content_persistence.py)。冻结产品规则见 [PRODUCT_SPEC.md](../product/PRODUCT_SPEC.md)，Stage 2 回归见 [STAGE_2_ACCEPTANCE.md](STAGE_2_ACCEPTANCE.md)。

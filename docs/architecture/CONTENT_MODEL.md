@@ -1,6 +1,6 @@
 # Canonical Content Model — C-004A
 
-状态：Stage 3 的标准库内容模型、确定性 canonical JSON、校验及独立 SQLite 内容库已建立。没有 Character Card / Lorebook / PNG parser、Builder、LLM、prompt assembly、运行时实例化或最终 UI。
+状态：Stage 3 的标准库内容模型、确定性 canonical JSON、校验及独立 SQLite 内容库已建立。C-004B 增加独立 Character Card V2/V3 JSON/PNG/APNG 导入适配器；Lorebook 语义规范化、Builder、LLM、prompt assembly、运行时实例化和最终 UI 尚未实现。
 
 ```text
 Imported Content != Runtime State
@@ -71,4 +71,10 @@ ContentDraft 是包含 roots、assets、raw_imports 的封闭引用图。校验�
 - [导入边界测试](../../tests/application/test_content_boundary.py)：Draft/Preview/确认、opaque bytes/extensions、内容提交不改变真实事件或各主体知识，runtime rebuild 不影响内容库。
 - [内容持久化测试](../../tests/persistence/test_content_persistence.py)：重启、原始 bytes/provenance/typed ID、原子编辑/回滚、旧 schema 升级及失败回滚。
 
-C-004B 才处理外部格式映射与 parser；C-004D 才处理 archive/asset layout。初始知识分配、运行实例与定义版本绑定、产品级重复导入/冲突展示、Builder 来源评价和编辑历史仍是后续设计范围，未通过本任务隐式解决。
+C-004B 的外部格式映射和 parser 见 [CHARACTER_CARD_COMPATIBILITY.md](CHARACTER_CARD_COMPATIBILITY.md)。canonical 类型和 content_version 保持不变：非空源标签原样映射（不 trim、不改大小写、不去重），空白标签仅从 canonical tags 中省略，完整数组仍保留在来源兼容数据与 raw envelope，并显示非阻断 Preview warning。名称仍须满足既有非空约束，不发明缺省名称。
+
+卡片 greeting、system/post-history 文本是 authored_instructions 中的来源数据；不是 Message/Conversation，也不执行模板或替换系统权限。昵称独立保存在 compatibility metadata，不替换 display_name，不推断 aliases。嵌入 character_book 保留完整来源对象及角色卡 provenance，尚不生成 LoreEntry。
+
+V3 ContentAsset 只保存 descriptor/reference 元数据。PNG/APNG icon 的 ccdefault 指向 raw envelope 的 container-image，data URL 的原值通过 raw descriptor 恢复，不在 canonical asset JSON 内复制二进制 base64；无文件物化、网络读取或资产运行效果。
+
+C-004D 才处理 archive/asset layout。初始知识分配、运行实例与定义版本绑定、产品级重复导入/冲突展示、Builder 来源评价和编辑历史仍是后续设计范围，未通过本任务隐式解决。

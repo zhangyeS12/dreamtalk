@@ -145,3 +145,31 @@ def test_content_flow_has_no_runtime_mutation_or_knowledge_capability():
         for node in ast.walk(tree):
             if isinstance(node, ast.ImportFrom) and node.module.startswith("livingworld."):
                 assert node.module.split(".")[-1] not in forbidden, (relative, node.module)
+
+
+def test_external_importers_have_only_content_and_import_capabilities():
+    root = Path(__file__).resolve().parents[2] / "services/core/src/livingworld"
+    allowed = (
+        "livingworld.domain.content",
+        "livingworld.domain.errors",
+        "livingworld.application.content",
+        "livingworld.application.imports",
+        "livingworld.infrastructure.imports",
+    )
+    sources = [root / "application/imports.py", *(root / "infrastructure/imports").glob("*.py")]
+    forbidden = {"socket", "subprocess", "urllib", "httpx", "requests", "os", "pathlib"}
+    for source in sources:
+        tree = ast.parse(source.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                modules = [alias.name for alias in node.names]
+            elif isinstance(node, ast.ImportFrom):
+                modules = [node.module]
+            else:
+                continue
+            for module in modules:
+                assert module.split(".")[0] not in forbidden, (source, module)
+                if module.startswith("livingworld."):
+                    assert any(
+                        module == prefix or module.startswith(prefix + ".") for prefix in allowed
+                    ), (source, module)
