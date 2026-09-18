@@ -1,6 +1,6 @@
-# Provider-Neutral LLM Infrastructure — C-005A / C-005B / C-005C1
+# Provider-Neutral LLM Infrastructure — C-005A / C-005B / C-005C1 / C-005C2
 
-状态：C-005A 建立标准库 application contracts、配置/凭据引用边界和 deterministic offline fake；C-005B 增加 OpenAI-compatible Chat Completions adapter；C-005C1 增加显式结构化模式与 infrastructure 本地验证。验证使用离线 MockTransport；没有 provider SDK、真实 API 调用验证、credential storage、usage persistence 或 migration。
+状态：C-005A 建立标准库 application contracts、配置/凭据引用边界和 deterministic offline fake；C-005B 增加 OpenAI-compatible Chat Completions adapter；C-005C1 增加显式结构化模式与 infrastructure 本地验证；C-005C2 增加真实非结构化 SSE text streaming 和 content-free stream completion。验证使用离线 MockTransport；没有 provider SDK、真实 API 调用验证、credential storage、usage persistence 或 migration。
 
 ```text
 Provider != Model != Purpose
@@ -55,11 +55,23 @@ await gateway.generate(nonstreaming_request) → LLMResponse / LLMError
 gateway.stream(streaming_request) → AsyncIterator[LLMStreamEvent]
 ```
 
-流使用 typed StreamStarted、TextDelta、UsageUpdate、StreamCompleted(response)、StreamFailed(failure)。顺序是 start → ordered text deltas / usage updates → exactly one terminal completed/failed。Completion 的完整 response 是最终结果；usage update 是 cumulative snapshot，不能逐条求和。拒绝的 terminal 是 completed REFUSAL。没有 provider SSE packets、网络 stream、partial JSON 自动验证或 tool deltas。
+冻结结果边界：
+
+```text
+LLMResponse = complete non-streaming generation result
+LLMStreamCompletion = streaming terminal metadata
+TextDelta = streaming content source of truth
+```
+
+typed StreamStarted → ordered TextDelta / UsageUpdate → exactly one StreamCompleted(completion) 或 StreamFailed(failure)。LLMStreamCompletion 只包含 invocation、model、finish、最小 typed StreamOutcome（NORMAL / REFUSAL / CONTENT_FILTERED）、usage、latency 和 bounded safe diagnostics，没有全文或 prompt/reasoning/raw SSE/HTTP objects。TextDelta 是正文的权威来源；adapter 不为终态累计全文，上层可自行明确选择累计政策。Fake 使用相同新契约；generate 仍返回完整 LLMResponse。
+
+UsageUpdate 是 provider factual snapshot；completion.usage 是成功 `[DONE]` 时最新已知快照。二者不是 additive delta，不能累加或双重计量；缺失保持 None。流式元数据复用 closed numeric accounting-counter projection，不携带任意文本 metadata。partial failure 不存在 completion，也不创建完成的 LLMAttemptSummary。显式 refusal/filter 是成功 terminal semantics，不是 broken transport；两个结果以 typed StreamOutcome 区分，复用既有 REFUSAL finish。
+
+真实 streaming、`[DONE]`/finish 条件、bounded framing、explicit profile、资源清理和离线证明详见 [LLM_STREAMING.md](LLM_STREAMING.md)。没有 partial JSON 自动验证或 tool deltas。
 
 LLMErrorCode 区分 authentication、configuration、unsupported capability、invalid request、rate limited、provider unavailable、timeout、context limit、malformed response 与 cancelled。LLMFailure 关联 invocation 和 selected diagnostics，单一 LLMError exception 只输出稳定 code；不携带原 HTTP/SDK exception、headers/body 或任意 exception 文本。ProviderDiagnostics 只接受非 secret 的 provider request ID/diagnostic code，默认隐藏 repr；真实 adapter 负责安全挑选，禁止写入 credential/prompt。
 
-进入 stream 前的非法请求可 raise LLMError；start 后的 normalized failure 以 StreamFailed 终止。外部 asyncio Task.cancel() 的 CancelledError 自然传播，不转换成 LLMError、不吞取消或继续消费。CANCELLED code 留给显式 normalized cancellation outcome，不替代 asyncio task cancellation。停止消费时调用 iterator.aclose() / context-managed closing；没有自定义线程取消或后台任务。
+合法 typed request 的 preflight/HTTP pre-start failure 只产生一个 StreamFailed，无 Started；start 后的 normalized failure 也以 StreamFailed 终止。结构性错误类型仍可 raise LLMContractError。外部 asyncio Task.cancel() 的 CancelledError 自然传播，不转换成 LLMError、不吞取消或继续消费。CANCELLED code 留给显式 normalized cancellation outcome，不替代 asyncio task cancellation。停止消费时调用 iterator.aclose() / context-managed closing；没有自定义线程取消或后台任务。
 
 ## 5. 配置与凭据边界
 
@@ -83,11 +95,11 @@ Fake 可返回 JSON-looking text，却不 validate schema/instance、tokenize、
 
 ## 7. C-005B Chat Completions adapter
 
-[OpenAICompatibleChatGateway](../../services/core/src/livingworld/infrastructure/llm/openai_compatible.py) 实现 generate port 的 non-streaming 子集：caller base path + `/chat/completions`、一次 async HTTP request、调用时 CredentialProvider.resolve、explicit timeout、禁止自动 redirect/retry。仅 system/user/assistant、max_output_tokens→max_tokens、最多 4 个 ordered stop；immutable profile 显式声明 n=1 和 C-005C1 structured mode。developer、nontext 与 stream execution 均拒绝；NONE 拒绝结构化请求。不按模型名猜能力、不把 reasoning_content 作为 assistant text。
+[OpenAICompatibleChatGateway](../../services/core/src/livingworld/infrastructure/llm/openai_compatible.py) 实现 generate port 的 non-streaming 子集：caller base path + `/chat/completions`、一次 async HTTP request、调用时 CredentialProvider.resolve、explicit timeout、禁止自动 redirect/retry。仅 system/user/assistant、max_output_tokens→max_tokens、最多 4 个 ordered stop；immutable profile 显式声明 n=1、C-005C1 structured mode，以及 C-005C2 streaming/stream-usage 支持。developer、nontext 与 structured stream 拒绝；NONE 拒绝结构化请求。不按模型名猜能力、不把 reasoning_content 作为 assistant text。
 
 校验最小 success schema，选择第一项 choice，实际 reported model 保留配置 ProviderId；InvocationId 仍为本地身份。Refusal 是成功响应；usage 缺失保持未知，advanced token counts 只取 allowlist，不计算 price。HTTP/credential errors 转为既有 LLMError，原 exceptions 不保留 context/cause，正常日志只记录固定 category 与本地 trace，finally 清除 wire Authorization。详见 [契约证据、映射与限制](OPENAI_COMPATIBLE_ADAPTER.md) 和 [离线测试](../../tests/core/test_openai_compatible.py)。
 
-本 adapter 未配置为 production default；真实网络兼容性未实测。OpenAI 原生 Responses/其他 provider adapters、streaming、retry/repair、fallback/routing/rate-limit scheduler、pricing/budgets/persistence、keychain、Prompt/context assembly、Director/Character Agent/Memory/AI Builder、tool execution 和最终 UI 均未实现。相关边界：[SYSTEM_OVERVIEW.md](SYSTEM_OVERVIEW.md)、[STAGE_2_ACCEPTANCE.md](STAGE_2_ACCEPTANCE.md)、[STAGE_3_ACCEPTANCE.md](STAGE_3_ACCEPTANCE.md)。
+本 adapter 未配置为 production default；真实网络兼容性未实测。OpenAI 原生 Responses/其他 provider adapters、structured streaming、retry/repair、fallback/routing/rate-limit scheduler、pricing/budgets/persistence、keychain、Prompt/context assembly、Director/Character Agent/Memory/AI Builder、tool execution 和最终 UI 均未实现。相关边界：[SYSTEM_OVERVIEW.md](SYSTEM_OVERVIEW.md)、[STAGE_2_ACCEPTANCE.md](STAGE_2_ACCEPTANCE.md)、[STAGE_3_ACCEPTANCE.md](STAGE_3_ACCEPTANCE.md)。
 
 ## 8. C-005C1 结构化结果与安全失败计量
 
@@ -96,3 +108,8 @@ Fake 可返回 JSON-looking text，却不 validate schema/instance、tokenize、
 LLMFailure.attempt 默认 None、隐藏 repr，类型为 immutable LLMAttemptSummary。只包含 ModelRef、usage、FinishReason、latency_ms；ModelRef 已包含 provider identity，不重复定义。Usage 复制标准 token 计数，仅保留既有闭合 accounting-counter allowlist（cached/audio/reasoning/prediction/cache-hit/miss），值限定非负整数/None；任意 metadata 被丢弃。摘要没有 content、structured payload、prompt、secret、headers、HTTP objects 或 provider error body，即使显式遍历所有字段也不会展开模型内容。当前不保留可选 provider request ID，避免反射内容；结构化后处理 failure diagnostics 也保持空。
 
 完成生成后的 JSON/schema/empty/truncation failure 保留实际 usage/model/finish/latency；没有 usage 就保持 None。Auth/transport/timeout 等前置失败不虚构 attempt。Refusal/filter 保持 LLMResponse 和 usage，不解析。成功结果仍保留 raw TextContent 与独立 validated claim。无价格、retry storage 或 repair context；详见 [STRUCTURED_GENERATION.md](STRUCTURED_GENERATION.md)。
+
+
+## 9. C-005C2 真实流式传输
+
+Chat gateway 的 stream 与 generate 共享 request translation、late credentials、HTTP client 和错误归一化；只在 profile 支持时请求 stream=true，可选 include_usage。SSE framing 增量、限额、pull-driven，不将非流式结果拆段。合法 HTTP/type 后 Started，choice-0 finish 后的 `[DONE]` 才能 Completed；中断/非法流 Failed，取消直接传播并关闭资源。reasoning/refusal payload 不成为 visible TextDelta。所有 terminal metadata 已排除正文，详见 [LLM_STREAMING.md](LLM_STREAMING.md) 和 [focused tests](../../tests/core/test_llm_streaming.py)。无新增依赖、usage persistence 或世界/内容/migration 改动。

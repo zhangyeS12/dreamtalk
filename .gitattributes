@@ -10,3 +10,4 @@
 *.mjs text eol=lf
 *.png binary
 *.ico binary
+tests/core/fixtures/llm/*.sse -text whitespace=-blank-at-eof,cr-at-eol

@@ -8,13 +8,13 @@ LivingWorld 是持久化、事件驱动的多角色 AI 世界，不是普通聊�
 
 ## 开发状态
 
-当前阶段：**Stage 4 — C-005C1 Structured Generation & Local Schema Validation**。沿用 C-005A/B 的中立契约与非流式 Chat adapter，增加显式 NONE / NATIVE_JSON_SCHEMA / JSON_OBJECT_LOCAL_VALIDATE 模式、严格 JSON 解析和本地 Draft 2020-12 验证。只有本地验证通过才生成结构化结果；已完成调用的后处理失败保留不含模型内容的计量摘要，拒绝仍返回成功响应。OpenAI/DeepSeek 通过受控离线 fixtures 验证。真实 API 调用、production default wiring、streaming、retry/repair、费用、路由/预算和使用记录持久化尚未验证或实现。详见 [LLM 基础契约](docs/architecture/LLM_INFRASTRUCTURE.md)、[Chat adapter](docs/architecture/OPENAI_COMPATIBLE_ADAPTER.md) 和 [结构化生成边界](docs/architecture/STRUCTURED_GENERATION.md)。
+当前阶段：**Stage 4 — C-005C2 Real OpenAI-Compatible Text Streaming**。沿用 C-005A/B/C1 的中立契约、Chat adapter 和非流式结构化验证，增加显式 profile 控制的真实 SSE 文本流、bounded incremental framing、ordered TextDelta 和仅含终态元数据的 LLMStreamCompletion。合法 finish + `[DONE]` 才成功；中断失败无 completion，取消传播并清理资源；拒绝/过滤保持成功语义，reasoning 不交付。usage 为事实快照，不累加。OpenAI/DeepSeek 通过受控离线 fixtures 验证。真实生成 API、production default wiring、structured streaming、retry/repair、费用、路由/预算和 usage 持久化尚未验证或实现。详见 [LLM 基础契约](docs/architecture/LLM_INFRASTRUCTURE.md)、[Chat adapter](docs/architecture/OPENAI_COMPATIBLE_ADAPTER.md)、[结构化生成边界](docs/architecture/STRUCTURED_GENERATION.md) 和 [真实文本流](docs/architecture/LLM_STREAMING.md)。
 
 Stage 3 已完成 canonical authored-content、Character Card/Lorebook 离线导入、Draft/Preview/confirmed Commit、外部 JSON 导出和 `.lwcontent` 原生内容包。原生包支持显式 roots 的依赖闭包、shared references、完整来源、本地 SHA-256 资产、六种三方冲突与事务化 accepted baseline。详见 [Stage 3 验收](docs/architecture/STAGE_3_ACCEPTANCE.md)、[原生内容包](docs/architecture/NATIVE_CONTENT_PACKAGE.md)、[内容模型](docs/architecture/CONTENT_MODEL.md)、[导入](docs/architecture/IMPORT_MODEL.md)、[导出](docs/architecture/EXPORT_MODEL.md) 和 [持久化](docs/architecture/PERSISTENCE_MODEL.md)。
 
 `.lwcontent` = authored content package；`.lworld` 保留给未来 runtime-world/state package。content package != backup != running world；hash integrity != publisher authentication；filesystem blobs + SQLite 不被宣称为一个 ACID transaction。导入/导出不创建 Runtime World/Character，不断言 Truth 或授予 Belief/PlayerKnowledge。作者文本/regex/activation metadata 保持不可信数据，不执行。
 
-运行内容实例化、automatic Lore→Truth/Belief、activation、prompt assembly、Memory/RAG、Director、Character Agent、AI Builder、checkpoint/branch、`.lworld`、cloud sync、marketplace 和 final UI 尚未实现。外部 PNG/APNG writer、CHARX、任意图复制、签名与 orphan blob GC 仍 deferred。Stage 2 的资源级 CAS、幂等、ledger/rebuild 和知识隔离继续沿用，见 [Stage 2 验收](docs/architecture/STAGE_2_ACCEPTANCE.md)。停止于 C-005C1，C-005C2 未开始。
+运行内容实例化、automatic Lore→Truth/Belief、activation、prompt assembly、Memory/RAG、Director、Character Agent、AI Builder、checkpoint/branch、`.lworld`、cloud sync、marketplace 和 final UI 尚未实现。外部 PNG/APNG writer、CHARX、任意图复制、签名与 orphan blob GC 仍 deferred。Stage 2 的资源级 CAS、幂等、ledger/rebuild 和知识隔离继续沿用，见 [Stage 2 验收](docs/architecture/STAGE_2_ACCEPTANCE.md)。停止于 C-005C2，C-005D 未开始。
 
 C-002 运行时基础继续沿用：共享 React UI、Tauri v2 Windows 开发壳、Python Core 启停协议、系统 API、SQLite 迁移元数据、结构化日志和 CI。页面仅显示 Core Connecting / Ready / Failed。
 

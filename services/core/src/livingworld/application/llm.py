@@ -339,6 +339,36 @@ class StructuredFailureDetail:
             raise LLMContractError("invalid_validator_keyword")
 
 
+def _accounting_usage(usage: LLMUsage) -> LLMUsage:
+    details = {}
+    for group, names in {
+        "prompt_tokens_details": ("cached_tokens", "audio_tokens"),
+        "completion_tokens_details": (
+            "reasoning_tokens",
+            "audio_tokens",
+            "accepted_prediction_tokens",
+            "rejected_prediction_tokens",
+        ),
+        "": ("prompt_cache_hit_tokens", "prompt_cache_miss_tokens"),
+    }.items():
+        source = usage.details.get(group, {}) if group else usage.details
+        if not isinstance(source, Mapping):
+            raise LLMContractError("invalid_attempt_usage")
+        selected = {}
+        for name in names:
+            if name in source:
+                value = source[name]
+                if value is not None:
+                    _count(value, "attempt_usage_counter")
+                selected[name] = value
+        if selected:
+            if group:
+                details[group] = selected
+            else:
+                details.update(selected)
+    return LLMUsage(usage.input_tokens, usage.output_tokens, usage.total_tokens, details)
+
+
 @dataclass(frozen=True, slots=True)
 class LLMAttemptSummary:
     """Content-free facts from a completed generation, never a retry workspace.
@@ -360,42 +390,7 @@ class LLMAttemptSummary:
             _count(self.latency_ms, "latency")
         if self.usage is not None:
             _type(self.usage, LLMUsage, "usage")
-            details = {}
-            for group, names in {
-                "prompt_tokens_details": ("cached_tokens", "audio_tokens"),
-                "completion_tokens_details": (
-                    "reasoning_tokens",
-                    "audio_tokens",
-                    "accepted_prediction_tokens",
-                    "rejected_prediction_tokens",
-                ),
-                "": ("prompt_cache_hit_tokens", "prompt_cache_miss_tokens"),
-            }.items():
-                source = self.usage.details.get(group, {}) if group else self.usage.details
-                if not isinstance(source, Mapping):
-                    raise LLMContractError("invalid_attempt_usage")
-                selected = {}
-                for name in names:
-                    if name in source:
-                        value = source[name]
-                        if value is not None:
-                            _count(value, "attempt_usage_counter")
-                        selected[name] = value
-                if selected:
-                    if group:
-                        details[group] = selected
-                    else:
-                        details.update(selected)
-            object.__setattr__(
-                self,
-                "usage",
-                LLMUsage(
-                    self.usage.input_tokens,
-                    self.usage.output_tokens,
-                    self.usage.total_tokens,
-                    details,
-                ),
-            )
+            object.__setattr__(self, "usage", _accounting_usage(self.usage))
 
 
 @dataclass(frozen=True, slots=True)
@@ -487,14 +482,62 @@ class UsageUpdate:
     def __post_init__(self):
         _type(self.invocation_id, InvocationId, "invocation_id")
         _type(self.usage, LLMUsage, "usage")
+        object.__setattr__(self, "usage", _accounting_usage(self.usage))
+
+
+class StreamOutcome(StrEnum):
+    NORMAL = "normal"
+    REFUSAL = "refusal"
+    CONTENT_FILTERED = "content_filtered"
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class LLMStreamCompletion:
+    """Streaming terminal facts only. TextDelta owns content; usage is a snapshot.
+
+    Distinct from the completed-generation postprocessing LLMAttemptSummary.
+    No full response, content workspace or arbitrary diagnostic metadata is allowed.
+    """
+
+    invocation_id: InvocationId
+    model_used: ModelRef
+    finish_reason: FinishReason
+    outcome: StreamOutcome = StreamOutcome.NORMAL
+    usage: LLMUsage | None = None
+    latency_ms: int | None = None
+    diagnostics: ProviderDiagnostics = field(default_factory=ProviderDiagnostics, repr=False)
+
+    def __post_init__(self):
+        _type(self.invocation_id, InvocationId, "invocation_id")
+        _type(self.model_used, ModelRef, "model_ref")
+        _type(self.finish_reason, FinishReason, "finish_reason")
+        _type(self.outcome, StreamOutcome, "stream_outcome")
+        if (self.outcome is StreamOutcome.NORMAL) != (
+            self.finish_reason is not FinishReason.REFUSAL
+        ):
+            raise LLMContractError("inconsistent_stream_outcome")
+        if self.latency_ms is not None:
+            _count(self.latency_ms, "latency")
+        if self.usage is not None:
+            _type(self.usage, LLMUsage, "usage")
+            object.__setattr__(self, "usage", _accounting_usage(self.usage))
+        _type(self.diagnostics, ProviderDiagnostics, "provider_diagnostics")
+        identifier = self.diagnostics.provider_request_id
+        if identifier is not None and (
+            not 1 <= len(identifier) <= 128
+            or any(not (c.isascii() and (c.isalnum() or c in "_.:-")) for c in identifier)
+        ):
+            raise LLMContractError("invalid_stream_request_id")
+        if self.diagnostics.diagnostic_code not in {None, "unknown_finish_reason"}:
+            raise LLMContractError("invalid_stream_diagnostic")
 
 
 @dataclass(frozen=True, slots=True)
 class StreamCompleted:
-    response: LLMResponse
+    completion: LLMStreamCompletion
 
     def __post_init__(self):
-        _type(self.response, LLMResponse, "response")
+        _type(self.completion, LLMStreamCompletion, "stream_completion")
 
 
 @dataclass(frozen=True, slots=True)

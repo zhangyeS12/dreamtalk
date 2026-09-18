@@ -12,12 +12,14 @@ from livingworld.application.llm import (
     LLMFailure,
     LLMRequest,
     LLMResponse,
+    LLMStreamCompletion,
     LLMStreamEvent,
     LLMUsage,
     ModelCapabilities,
     ModelRef,
     StreamCompleted,
     StreamFailed,
+    StreamOutcome,
     StreamStarted,
     TextContent,
     TextDelta,
@@ -86,15 +88,37 @@ class FakeModelGateway:
         return self._response(request)
 
     async def stream(self, request: LLMRequest) -> AsyncIterator[LLMStreamEvent]:
-        self._request(request, streaming=True)
+        try:
+            self._request(request, streaming=True)
+        except LLMError as error:
+            yield StreamFailed(error.failure)
+            return
+        if request.structured_output is not None:
+            yield StreamFailed(
+                LLMFailure(LLMErrorCode.UNSUPPORTED_CAPABILITY, request.invocation_id)
+            )
+            return
         await asyncio.sleep(0)
         yield StreamStarted(request.invocation_id, request.model)
         if self._error is not None:
             yield StreamFailed(LLMFailure(self._error, request.invocation_id))
             return
-        for chunk in self._chunks:
-            await asyncio.sleep(0)
-            yield TextDelta(request.invocation_id, chunk)
+        if self._finish is not FinishReason.REFUSAL:
+            for chunk in self._chunks:
+                await asyncio.sleep(0)
+                if chunk:
+                    yield TextDelta(request.invocation_id, chunk)
         if self._usage is not None:
             yield UsageUpdate(request.invocation_id, self._usage)
-        yield StreamCompleted(self._response(request))
+        yield StreamCompleted(
+            LLMStreamCompletion(
+                invocation_id=request.invocation_id,
+                model_used=request.model,
+                finish_reason=self._finish,
+                outcome=StreamOutcome.REFUSAL
+                if self._finish is FinishReason.REFUSAL
+                else StreamOutcome.NORMAL,
+                usage=self._usage,
+                latency_ms=0,
+            )
+        )

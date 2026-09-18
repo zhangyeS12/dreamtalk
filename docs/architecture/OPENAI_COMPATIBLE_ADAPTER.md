@@ -1,4 +1,4 @@
-# OpenAI-Compatible Chat Adapter — C-005B / C-005C1
+# OpenAI-Compatible Chat Adapter — C-005B / C-005C1 / C-005C2
 
 状态：已实现 infrastructure adapter，使用受控官方契约形状的离线 fixtures 验证。没有真实 API key、真实提供方调用或 production default wiring；fixture 通过不等于所有模型/兼容服务器已经实测。
 
@@ -36,7 +36,7 @@ Immutable profile 保留 `ChatCompletionsProfile.supports_n`：默认 false；�
 
 ## 3. 凭据与请求映射
 
-ProviderConfig 只保留 SecretRef。Preflight 和本地配置检查通过后，每次 generate 才调用 CredentialProvider.resolve；不缓存解析结果。缺失 reference 是 CONFIGURATION，解析失败/错误值/非法 bearer token 是 AUTHENTICATION，不调用 HTTP。取消凭据查找或 HTTP await 的 CancelledError 直接传播。
+ProviderConfig 只保留 SecretRef。Preflight 和本地配置检查通过后，每次 generate/stream 才调用 CredentialProvider.resolve；不缓存解析结果。缺失 reference 是 CONFIGURATION，解析失败/错误值/非法 bearer token 是 AUTHENTICATION，不调用 HTTP。取消凭据查找或 HTTP await 的 CancelledError 直接传播。
 
 明文仅作为临时 transport-boundary 值构造 Authorization，不放入 config/request/response/diagnostics。finally 删除 wire request 的 Authorization、清空临时 provider cookies、关闭 response 并释放本地 secret reference；client default headers 不存 bearer，后续请求不发送 cookie。Python 字符串不被宣称为可保证物理内存擦除。Injected transport 属于可信边界，负责不记录凭据或消息。
 
@@ -50,7 +50,7 @@ ProviderConfig 只保留 SecretRef。Preflight 和本地配置检查通过后，
 | profile.supports_n=true | n=1 |
 | purpose / invocation / correlation / metadata / SecretRef | 不发送 |
 
-没有中性 temperature 参数，所以不制造 temperature/top_p/seed。Streaming、未来 nontext blocks 及 NONE 下的 StructuredOutputRequest 均在解析凭据前拒绝。C-005C1 的两个显式结构化模式只添加 response_format，不改写消息或附加 schema 提示词，不按自然语言里的 JSON 字样检查能力。store/previous-response IDs、provider-side conversation state、tools、thinking/reasoning controls 不启用。此层 stateless 不构成云端数据保留政策承诺。
+没有中性 temperature 参数，所以不制造 temperature/top_p/seed。未声明支持的 streaming、structured stream、未来 nontext blocks 及 NONE 下的 StructuredOutputRequest 均在解析凭据前拒绝。C-005C2 的真实文本 stream 使用同一 request mapper，stream=true 和显式 profile 控制的 include_usage；详见下文。C-005C1 的两个显式结构化模式只添加 response_format，不改写消息或附加 schema 提示词，不按自然语言里的 JSON 字样检查能力。store/previous-response IDs、provider-side conversation state、tools、thinking/reasoning controls 不启用。此层 stateless 不构成云端数据保留政策承诺。
 
 ## 4. 响应、拒绝与 usage
 
@@ -113,3 +113,18 @@ Native 原样发送 request 的 schema_name/schema，绝不注入提示或重写
 先检查 schema/dialect/local refs，再一次 HTTP 生成，再依次处理 refusal/filter → length → strict parse → schema validation。Refusal/filter 返回 LLMResponse，无 claim；length 返回 OUTPUT_TRUNCATED，哪怕文本恰好是合法 JSON。Parse/schema/empty failure 使用 STRUCTURED_OUTPUT_FAILED + typed reason，保留不含 response 的 attempt accounting summary。成功仅在本地验证后保留 raw text + validated claim。自动重试、repair、prompt 修改和价格均未实现。
 
 官方证据、精确 dialect/format/$ref policy 和受控结构化 fixtures 见 [STRUCTURED_GENERATION.md](STRUCTURED_GENERATION.md)。C-005B 的纯文本回归仍执行。
+
+
+## 8. C-005C2 Real Text Streaming
+
+新增 profile.supports_streaming / supports_stream_usage（默认 false，usage support 要求 streaming），实例 capabilities.streaming 如实读取显式配置。`stream()` 使用同一 `_payload`、`_secret`、AsyncClient 和 `_status_failure`，一次 stream=true HTTP attempt；只在声明支持时发送 stream_options.include_usage=true，不猜 hostname/model/provider。不调用 generate/完整 response parser，不缓存完整 HTTP content 或累计答案。
+
+SSEDecoder 按 LF/CRLF、blank line 和多 data lines 增量 framing；UTF-8 分片安全，comments 忽略，StreamLimits 集中限制 line/event/error body/model metadata。每个合法非空 choice-0 content 原样产生一个 TextDelta；role/空/null 无假正文；extra choices 不合并。reasoning_content 和 refusal payload 不交付、不留 growing buffer；tools 不执行并明确失败。
+
+HTTP/type 成功才 Started。usable finish + `[DONE]` 才 Completed；EOF、missing finish、malformed event/chunk、midstream timeout/disconnect→单一 normalized Failed，无 completion 或 automatic retry。Refusal/filter 保持成功 completion，以最小 StreamOutcome 区分，既有非流式 mapping 不变。未知 finish 只保留固定 unknown_finish_reason code。
+
+StreamCompleted 携带 content-free LLMStreamCompletion；TextDelta 是唯一正文来源。UsageUpdate 与 terminal usage 是同一最新事实快照，未知 None，不求和；失败后不虚构完成的 attempt summary。latency 从 send 到 `[DONE]`，包括 consumer backpressure。safe provider request ID 仍仅为诊断。
+
+finally 在 terminal 交付前 scrub wire Authorization/cookies/secret reference 并关闭 response，关闭的 HTTPX failure 也归一化。CancelledError 与 explicit iterator.aclose 释放资源，不转为 synthetic Failed/Completed；放弃 iterator 时使用 aclosing。没有 greedy reader/queue。日志继续固定 allowlist，不写正文/prompt/reasoning/HTTP exceptions。
+
+详细限额/生命周期/官方证据/限制见 [LLM_STREAMING.md](LLM_STREAMING.md)；离线验证见 [stream tests](../../tests/core/test_llm_streaming.py)、[OpenAI SSE](../../tests/core/fixtures/llm/openai_stream.sse)、[DeepSeek SSE](../../tests/core/fixtures/llm/deepseek_stream.sse)。C-005B/C1 generate regressions 保持执行，无新增依赖和 migration，真实 API 兼容性仍未实测。

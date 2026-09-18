@@ -23,6 +23,7 @@ from livingworld.application.llm import (
     ModelGateway,
     ModelRef,
     ProviderId,
+    StreamFailed,
     StructuredOutputRequest,
     TextContent,
 )
@@ -270,7 +271,7 @@ def test_unsupported_requests_fail_before_transport_and_credentials(feature):
     assert wire.requests == []
 
 
-def test_stream_port_raises_before_started_and_never_calls_generate():
+def test_unsupported_stream_profile_fails_before_started_and_never_calls_generate():
     async def scenario():
         creds = Credentials()
         wire = Wire()
@@ -278,9 +279,9 @@ def test_stream_port_raises_before_started_and_never_calls_generate():
             config(), creds, transport=httpx.MockTransport(wire)
         ) as g:
             stream = g.stream(request(streaming=True))
-            with pytest.raises(LLMError) as captured:
-                await anext(stream)
-            assert captured.value.failure.code is LLMErrorCode.UNSUPPORTED_CAPABILITY
+            events = [event async for event in stream]
+            assert len(events) == 1 and isinstance(events[0], StreamFailed)
+            assert events[0].failure.code is LLMErrorCode.UNSUPPORTED_CAPABILITY
             await stream.aclose()
         assert creds.calls == []
         assert wire.requests == []

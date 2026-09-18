@@ -218,7 +218,7 @@ def test_refusal_is_a_successful_round_trip_and_failed_stream_is_distinct():
             async for event in FakeModelGateway(finish_reason=FinishReason.REFUSAL).stream(streamed)
         ]
         assert isinstance(refusal[-1], StreamCompleted)
-        assert refusal[-1].response.finish_reason is FinishReason.REFUSAL
+        assert refusal[-1].completion.finish_reason is FinishReason.REFUSAL
         failed = [
             event async for event in FakeModelGateway(error=LLMErrorCode.TIMEOUT).stream(streamed)
         ]
@@ -269,14 +269,21 @@ def test_fake_generate_and_stream_are_deterministic_and_never_network(monkeypatc
             StreamCompleted,
         ]
         assert all(event.invocation_id == original.invocation_id for event in events[:-1])
-        assert events[-1].response == response
+        completion = events[-1].completion
+        assert completion.invocation_id == response.invocation_id
+        assert completion.model_used == response.model_used
+        assert completion.finish_reason == response.finish_reason
+        assert completion.usage == response.usage
+        assert completion.latency_ms == response.latency_ms
+        assert not hasattr(completion, "text") and not hasattr(completion, "content")
         assert (
             "".join(event.text for event in events if isinstance(event, TextDelta)) == response.text
         )
         with pytest.raises(LLMError, match="invalid_request"):
             await gateway.generate(streamed)
-        with pytest.raises(LLMError, match="invalid_request"):
-            await anext(gateway.stream(original))
+        invalid = [event async for event in gateway.stream(original)]
+        assert len(invalid) == 1 and isinstance(invalid[0], StreamFailed)
+        assert invalid[0].failure.code is LLMErrorCode.INVALID_REQUEST
 
     asyncio.run(run())
 
