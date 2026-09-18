@@ -1,4 +1,4 @@
-# Provider-Neutral LLM Infrastructure — C-005A / C-005B / C-005C1 / C-005C2 / C-005D1 / C-005D2A
+# Provider-Neutral LLM Infrastructure — C-005A / C-005B / C-005C1 / C-005C2 / C-005D1 / C-005D2A / C-005D2B
 
 状态：C-005A 建立标准库 application contracts、配置/凭据引用边界和 deterministic offline fake；C-005B 增加 OpenAI-compatible Chat Completions adapter；C-005C1 增加显式结构化模式与 infrastructure 本地验证；C-005C2 增加真实非结构化 SSE text streaming 和 content-free stream completion；C-005D1 增加外层 provider-neutral retry orchestration 和 typed dispatch/retry timing metadata。验证使用离线 MockTransport；没有 provider SDK、真实付费 API 验证或 credential storage；C-005D2A 已增加独立 accounting persistence/migration 和定价估算，见 [LLM_ACCOUNTING.md](LLM_ACCOUNTING.md)。
 
@@ -99,7 +99,7 @@ Fake 可返回 JSON-looking text，却不 validate schema/instance、tokenize、
 
 校验最小 success schema，选择第一项 choice，实际 reported model 保留配置 ProviderId；InvocationId 仍为本地身份。Refusal 是成功响应；usage 缺失保持未知，advanced token counts 只取 allowlist，不计算 price。HTTP/credential errors 转为既有 LLMError，原 exceptions 不保留 context/cause，正常日志只记录固定 category 与本地 trace，finally 清除 wire Authorization。详见 [契约证据、映射与限制](OPENAI_COMPATIBLE_ADAPTER.md) 和 [离线测试](../../tests/core/test_openai_compatible.py)。
 
-本 adapter 未配置为 production default；真实网络兼容性未实测。OpenAI 原生 Responses/其他 provider adapters、structured streaming、repair、fallback/routing/rate-limit scheduler、hard budgets、production catalog、incomplete reconciliation、keychain、Prompt/context assembly、Director/Character Agent/Memory/AI Builder、tool execution 和最终 UI 均未实现。相关边界：[SYSTEM_OVERVIEW.md](SYSTEM_OVERVIEW.md)、[STAGE_2_ACCEPTANCE.md](STAGE_2_ACCEPTANCE.md)、[STAGE_3_ACCEPTANCE.md](STAGE_3_ACCEPTANCE.md)。
+本 adapter 未配置为 production default；真实网络兼容性未实测。OpenAI 原生 Responses/其他 provider adapters、structured streaming、repair、fallback/routing/rate-limit scheduler、production catalog、incomplete reconciliation、keychain、Prompt/context assembly、Director/Character Agent/Memory/AI Builder、tool execution 和最终 UI 均未实现。相关边界：[SYSTEM_OVERVIEW.md](SYSTEM_OVERVIEW.md)、[STAGE_2_ACCEPTANCE.md](STAGE_2_ACCEPTANCE.md)、[STAGE_3_ACCEPTANCE.md](STAGE_3_ACCEPTANCE.md)。
 
 ## 8. C-005C1 结构化结果与安全失败计量
 
@@ -125,4 +125,10 @@ Chat gateway 的 stream 与 generate 共享 request translation、late credentia
 
 LLMUsage 保留 input/output/total，新增 optional cached_input/cache_write_input/uncached_input/reasoning_output；None 不补零，reasoning 默认是 output 子集。Safe summaries/completions/UsageUpdate 的闭合 numeric projection 保留这些事实，拒绝不可能的 partition，排除任意 raw metadata。LLMResponse、LLMAttemptSummary 与 LLMStreamCompletion 可保留 documented actual response processing tier，无 pricing config。
 
-[物理 attempt accounting](LLM_ACCOUNTING.md) 位于独立 application port / infrastructure repository，不在 provider adapter；RetryRecord != attempt record。START 失败抛本地 AccountingInfrastructureError 且零 provider 调用；FINALIZE 失败原样保留 response/failure/completion/cancellation，通过独立固定 severe diagnostics 表达 degradation，禁止下一 attempt。Ledger INCOMPLETE 不解释为零费用。Pricing catalogs 是 trusted explicit reference data，historical exact Decimal estimates 使用持久化 immutable snapshots；usage != pricing config，estimated cost != invoice。Unknown exposure 与多币种不能隐藏或合并。C-005D2B 的 hard budget enforcement deferred。
+[物理 attempt accounting](LLM_ACCOUNTING.md) 位于独立 application port / infrastructure repository，不在 provider adapter；RetryRecord != attempt record。START 失败抛本地 AccountingInfrastructureError 且零 provider 调用；FINALIZE 失败原样保留 response/failure/completion/cancellation，通过独立固定 severe diagnostics 表达 degradation，禁止下一 attempt。Ledger INCOMPLETE 不解释为零费用。Pricing catalogs 是 trusted explicit reference data，historical exact Decimal estimates 使用持久化 immutable snapshots；usage != pricing config，estimated cost != invoice。Unknown exposure 与多币种不能隐藏或合并。C-005D2B 已增加独立 opt-in [Budget Guard](LLM_BUDGET_GUARD.md)。
+
+## C-005D2B：estimated-spend authorization
+
+[Budget policy/bounds ports](../../services/core/src/livingworld/application/llm_budget.py)、[preflight pricing](../../services/core/src/livingworld/application/llm_preflight.py) 在 application；operational persistence 通过 [SqlAlchemyBudgetGuard](../../services/core/src/livingworld/infrastructure/persistence/llm_budget_repository.py) 实现，provider adapter 无 DB/budget/world 能力。可信 ModelUsageLimits/exhaustive requested-alias PricingEnvelope 由 composition 显式注入；不猜 tokenizer/model/provider 语义，缺可信 bounds/context/prices 的 HARD 零调用 fail closed。
+
+HARD 授权 LivingWorld trusted estimated upper-bound spend，不承诺 invoice/余额。SOFT warning 不改变请求、模型/output cap。Budget scope/admission/history/query/retry 统一 exact requested ModelRef；reported metadata 独立用于实际 pricing/analytics。START/reservation 与 final accounting/settlement 各共享 SQLite write transaction；crash/partial/unknown 保留 holds，没有自动 expiry/reconcile。本地 failure 不重放 provider，outcome/cancellation 保持。没有 production default wiring/catalog、routing/UI/智能层。详见 [LLM_BUDGET_GUARD.md](LLM_BUDGET_GUARD.md)。

@@ -6,7 +6,7 @@
 
 **Imported Content != Runtime State；CharacterDefinition != Character；WorldContent != World；LoreEntry != WorldTruth；LoreCollection != WorldContent != Runtime World != WorldTruth。**
 
-Alembic head 现为 [0009_llm_accounting](../../services/core/src/livingworld/infrastructure/persistence/migrations/versions/0009_llm_accounting.py)，down_revision=0008_native_content_packages。0009 只新增独立 AccountingBase 的 operational llm_attempts，不修改 world/content schema 或历史 rows；详见 [LLM_ACCOUNTING.md](LLM_ACCOUNTING.md)。0008 只增加 accepted baseline 与 immutable blob binding 两张本地元数据表；不存 ZIP structure、不修改旧 rows/JSON/hash/audit/runtime。0006 建立五个内容表；0007 只新增集合表与条目归属 FK，不修改 Stage 2 表、事件、回执、cursor、typed/world-scoped IDs 或审计行。下文 Stage 2 的 0005 head 描述保留其阶段语境，不表示当前 head。
+Alembic head 现为 [0010_llm_budget_guard](../../services/core/src/livingworld/infrastructure/persistence/migrations/versions/0010_llm_budget_guard.py)，down_revision=0009_llm_accounting，只新增 operational budget/reservation tables，不修改 prior rows/world/content；详见 [LLM_BUDGET_GUARD.md](LLM_BUDGET_GUARD.md)。前序 [0009_llm_accounting](../../services/core/src/livingworld/infrastructure/persistence/migrations/versions/0009_llm_accounting.py)，down_revision=0008_native_content_packages。0009 只新增独立 AccountingBase 的 operational llm_attempts，不修改 world/content schema 或历史 rows；详见 [LLM_ACCOUNTING.md](LLM_ACCOUNTING.md)。0008 只增加 accepted baseline 与 immutable blob binding 两张本地元数据表；不存 ZIP structure、不修改旧 rows/JSON/hash/audit/runtime。0006 建立五个内容表；0007 只新增集合表与条目归属 FK，不修改 Stage 2 表、事件、回执、cursor、typed/world-scoped IDs 或审计行。下文 Stage 2 的 0005 head 描述保留其阶段语境，不表示当前 head。
 
 | 内容表 | 可直接校验/查询的结构 | 正文边界 |
 | --- | --- | --- |
@@ -162,7 +162,7 @@ Repeat startup 正常调用 Alembic upgrade head，不重放 revision、不重�
 
 权限过滤必须先于 semantic retrieval / prompt assembly；C-003D 的 list/get SQL 强制 world/scope/owner 条件，见 [knowledge_readers.py](../../services/core/src/livingworld/infrastructure/persistence/knowledge_readers.py)。内部 exact-source repository 与 snapshot inspection 不分发给角色/玩家；返回 source_assertion_id 也不授予源读取权限。CommandReceipt 的 versioned JSON 结果新增可选 typed ObservationId，兼容旧结果无此 key，不需额外回执 schema 迁移。
 
-C-003C 回归见 [命令集成测试](../../tests/application/test_commands.py) 和 [0003 迁移回归](../../tests/persistence/test_command_migration.py)；C-003D 验证见 [知识访问集成测试](../../tests/application/test_knowledge_access.py) 和 [Observation 迁移回归](../../tests/persistence/test_observation_migration.py)。C-003E1 见 [ledger 测试](../../tests/application/test_ledger.py)、[0005 迁移测试](../../tests/persistence/test_ledger_migration.py) 与 [重建测试](../../tests/application/test_replay.py)。C-003E2 的竞争/回滚和完整验收见 [STAGE_2_ACCEPTANCE.md](STAGE_2_ACCEPTANCE.md)。Timeline/Checkpoint、预算与智能层仍未实现。
+C-003C 回归见 [命令集成测试](../../tests/application/test_commands.py) 和 [0003 迁移回归](../../tests/persistence/test_command_migration.py)；C-003D 验证见 [知识访问集成测试](../../tests/application/test_knowledge_access.py) 和 [Observation 迁移回归](../../tests/persistence/test_observation_migration.py)。C-003E1 见 [ledger 测试](../../tests/application/test_ledger.py)、[0005 迁移测试](../../tests/persistence/test_ledger_migration.py) 与 [重建测试](../../tests/application/test_replay.py)。C-003E2 的竞争/回滚和完整验收见 [STAGE_2_ACCEPTANCE.md](STAGE_2_ACCEPTANCE.md)。Timeline/Checkpoint 与智能层仍未实现；独立 operational 预算见 [LLM_BUDGET_GUARD.md](LLM_BUDGET_GUARD.md)。
 
 ## 7. Canonical 分配与投影重建
 
@@ -190,4 +190,15 @@ FormCharacterBelief 不需要新表、列或索引：复用 knowledge_assertions
 
 [llm_attempts](../../services/core/src/livingworld/infrastructure/persistence/llm_models.py) 以 (InvocationId, attempt_ordinal) 为 PK，START/FINALIZE 使用 app-data Database 的独立事务。Durable START 缺失 final facts 为 INCOMPLETE + POSSIBLY_BILLED_UNKNOWN，estimated money=NULL；重复 delivery 同事实幂等，冲突拒绝，restart 不自动补写或重放 generation。Logical terminal outcome 单独记录，允许物理 FAILED 与 invocation CANCELLED（例如 backoff 取消）同时存在。Exact Decimal 以 TEXT 保存，price snapshot 保存 effective schedule/selected variant/context/rates/source/line items，更新 catalog 不改历史。Migration detector 按 Alembic cursor 区分 0008/0009 的 exact shape，失败回滚，不利用 schema_version 再选择迁移。
 
-[Usage ledger repository](../../services/core/src/livingworld/infrastructure/persistence/llm_repository.py) 只接收 closed safe accounting facts，不接收 request/response/credential objects，不写 world/knowledge/content、WorldEvent 或 package。Raw rows/SQLite canary、duplicate delivery、历史快照、crash/restart 和 0008→0009 rollback 见 [accounting tests](../../tests/core/test_llm_accounting.py)。Usage fact != price config；estimated cost != invoice；未知费用不是零；预算限制与 incomplete reconciliation deferred。
+[Usage ledger repository](../../services/core/src/livingworld/infrastructure/persistence/llm_repository.py) 只接收 closed safe accounting facts，不接收 request/response/credential objects，不写 world/knowledge/content、WorldEvent 或 package。Raw rows/SQLite canary、duplicate delivery、历史快照、crash/restart 和 0008→0009 rollback 见 [accounting tests](../../tests/core/test_llm_accounting.py)。Usage fact != price config；estimated cost != invoice；未知费用不是零；C-005D2B 已增加独立预算限制，incomplete reconciliation deferred。
+
+## C-005D2B：预算与持久化 reservation
+
+| operational 表 | 身份/数据 |
+| --- | --- |
+| llm_budgets | BudgetId UUID PK；enabled/mode/currency/Decimal TEXT limit、UTC window、exact purpose/provider/requested-model scope、revision/audit UTC |
+| llm_budget_reservations | `(budget_id,invocation_id,attempt_ordinal)` PK；FK RESTRICT policy/START；reserved/settled Decimal TEXT、currency、status、audit UTC、closed safe policy/preflight evidence snapshots |
+
+AccountingBase 与 runtime/content 分离，CHECK 加固 mode/enable/revision/window、ordinal/status/settlement/audit。Detector 按 cursor 对 0009 排除新表，对 0010 要求 complete exact shape；Alembic 唯一 authority，DDL failure rollback，prior attempts/audit/world/content rows 不变，downgrade 单独 review。准入 BEGIN IMMEDIATE 后重读所有 policies/history/holds，ALL matching HARD reservations + START 一次 COMMIT 后才 dispatch；final accounting + settlement 同事务。
+
+Unknown/cancel/crash 保留 conservative hold，known priced cost settle并释放 unused capacity，NOT_DISPATCHED release不虚构 zero usage。Known cost > bound 为 durable BOUND_VIOLATION，original/overlapping scope 的 future HARD fail closed；新 ID/window/restart 不自动恢复信任。每 physical exposure 的可信 holds 最大 bound 计一次，unbounded history 为 state uncertain，stale settlement/evidence mismatch 为 integrity degraded。Budget SQL requested_model only；ledger OR predicate 仅 analytics。本地 failure 保留原 provider outcome、不 replay；没有 expiry/reconciliation、dashboard、production catalog/default wiring。实现和测试详见 [LLM_BUDGET_GUARD.md](LLM_BUDGET_GUARD.md)。

@@ -36,6 +36,11 @@ from livingworld.application.llm_accounting import (
     UsageCompleteness,
     factual_usage,
 )
+from livingworld.application.llm_budget import (
+    BudgetAdmissionError,
+    BudgetedAttemptAccountingSink,
+    BudgetIntegrityError,
+)
 
 
 class JitterStrategy(StrEnum):
@@ -215,6 +220,7 @@ class ExecutingModelGateway:
         accounting: AttemptAccountingSink | None = None,
         wall_clock: Callable[[], datetime] | None = None,
         accounting_diagnostics: Callable[[AccountingDiagnostic], None] | None = None,
+        budget_guard: BudgetedAttemptAccountingSink | None = None,
     ):
         self._gateway = gateway
         self._policy = policy if policy is not None else RetryPolicy()
@@ -223,10 +229,14 @@ class ExecutingModelGateway:
         self._clock, self._sleep = clock, sleep
         self._backoff = ExponentialBackoff(random_unit)
         self._observer = observer
+        if accounting is not None and budget_guard is not None:
+            raise LLMContractError("budget_guard_owns_accounting_transaction")
+        accounting = budget_guard if budget_guard is not None else accounting
         if accounting is not None and (wall_clock is None or accounting_diagnostics is None):
             raise LLMContractError("accounting_requires_clock_and_diagnostics")
         self._accounting, self._wall_clock = accounting, wall_clock
         self._accounting_diagnostics = accounting_diagnostics
+        self._budget_guard = budget_guard
 
     def _accounting_report(self, start, event="accounting_persistence_incomplete"):
         # A diagnostics consumer must be non-raising. Its failure may not replace
@@ -246,7 +256,14 @@ class ExecutingModelGateway:
         )
         failed = False
         try:
-            await self._accounting.start(record)
+            if self._budget_guard is not None:
+                await self._budget_guard.admit(record, request)
+            else:
+                await self._accounting.start(record)
+        except BudgetAdmissionError:
+            if ordinal > 1:
+                await self._complete_invocation(record, AttemptOutcome.LOCAL_ERROR)
+            raise
         except Exception:
             failed = True
         if failed:
@@ -302,6 +319,9 @@ class ExecutingModelGateway:
                 # that an unknown gateway could have copied from private content.
             )
             await self._accounting.finalize(facts)
+        except BudgetIntegrityError:
+            # The budget capability already emitted a content-free severe diagnostic.
+            return False
         except asyncio.CancelledError:
             self._accounting_report(start)
             raise

@@ -23,7 +23,9 @@ LEDGER_REVISION = "0005_canonical_ledger"
 CONTENT_REVISION = "0006_canonical_content"
 LORE_REVISION = "0007_lore_collections"
 PACKAGE_REVISION = "0008_native_content_packages"
-HEAD_REVISION = "0009_llm_accounting"
+ACCOUNTING_REVISION = "0009_llm_accounting"
+HEAD_REVISION = "0010_llm_budget_guard"
+BUDGET_TABLES = {"llm_budgets", "llm_budget_reservations"}
 PACKAGE_TABLES = {"content_import_baselines", "content_asset_blob_bindings"}
 LEGACY_CHECKSUM = "0345ec9d50fd45b01ba0f97ff6f14a25f683fb8d01f08f04ff9dc4892ad1cac5"
 LEGACY_TABLES = {"schema_version", "migration_history"}
@@ -173,6 +175,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         CONTENT_REVISION,
         LORE_REVISION,
         PACKAGE_REVISION,
+        ACCOUNTING_REVISION,
         HEAD_REVISION,
     }:
         _fail("alembic_revision_unsupported")
@@ -187,26 +190,41 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
             CONTENT_REVISION,
             LORE_REVISION,
             PACKAGE_REVISION,
+            ACCOUNTING_REVISION,
             HEAD_REVISION,
         }:
             expected -= {"world_ledger_cursors"}
-    if revision in {CONTENT_REVISION, LORE_REVISION, PACKAGE_REVISION, HEAD_REVISION}:
+    if revision in {
+        CONTENT_REVISION,
+        LORE_REVISION,
+        PACKAGE_REVISION,
+        ACCOUNTING_REVISION,
+        HEAD_REVISION,
+    }:
         expected |= CONTENT_TABLES
-        if revision not in {PACKAGE_REVISION, HEAD_REVISION}:
+        if revision not in {PACKAGE_REVISION, ACCOUNTING_REVISION, HEAD_REVISION}:
             expected -= PACKAGE_TABLES
         if revision == CONTENT_REVISION:
             expected -= {"content_lore_collections"}
-    if revision == HEAD_REVISION:
+    if revision in {ACCOUNTING_REVISION, HEAD_REVISION}:
         expected |= set(AccountingBase.metadata.tables)
+        if revision == ACCOUNTING_REVISION:
+            expected -= BUDGET_TABLES
     if tables != expected:
         _fail("alembic_schema_state_mismatch")
     _validate_auxiliary_objects(connection, domain_present)
     if domain_present:
         _validate_domain_shape(connection, revision)
-    if revision in {CONTENT_REVISION, LORE_REVISION, PACKAGE_REVISION, HEAD_REVISION}:
+    if revision in {
+        CONTENT_REVISION,
+        LORE_REVISION,
+        PACKAGE_REVISION,
+        ACCOUNTING_REVISION,
+        HEAD_REVISION,
+    }:
         _validate_domain_shape(connection, revision, ContentBase.metadata)
 
-    if revision == HEAD_REVISION:
+    if revision in {ACCOUNTING_REVISION, HEAD_REVISION}:
         _validate_domain_shape(connection, revision, AccountingBase.metadata)
 
 
@@ -243,7 +261,12 @@ def _validate_domain_shape(
         "ck_command_receipt_command_result",
     }
     for table in metadata.sorted_tables:
-        if revision not in {PACKAGE_REVISION, HEAD_REVISION} and table.name in PACKAGE_TABLES:
+        if revision == ACCOUNTING_REVISION and table.name in BUDGET_TABLES:
+            continue
+        if (
+            revision not in {PACKAGE_REVISION, ACCOUNTING_REVISION, HEAD_REVISION}
+            and table.name in PACKAGE_TABLES
+        ):
             continue
         if revision == CONTENT_REVISION and table.name == "content_lore_collections":
             continue
@@ -254,6 +277,7 @@ def _validate_domain_shape(
                 CONTENT_REVISION,
                 LORE_REVISION,
                 PACKAGE_REVISION,
+                ACCOUNTING_REVISION,
                 HEAD_REVISION,
             }
             and table.name == "world_ledger_cursors"
@@ -279,6 +303,7 @@ def _validate_domain_shape(
                     CONTENT_REVISION,
                     LORE_REVISION,
                     PACKAGE_REVISION,
+                    ACCOUNTING_REVISION,
                     HEAD_REVISION,
                 }
                 and table.name == "world_events"
@@ -336,6 +361,7 @@ def _validate_domain_shape(
                     CONTENT_REVISION,
                     LORE_REVISION,
                     PACKAGE_REVISION,
+                    ACCOUNTING_REVISION,
                     HEAD_REVISION,
                 }
                 and constraint.name == "ck_world_event_ledger_position"
@@ -374,6 +400,7 @@ def _validate_domain_shape(
                     CONTENT_REVISION,
                     LORE_REVISION,
                     PACKAGE_REVISION,
+                    ACCOUNTING_REVISION,
                     HEAD_REVISION,
                 }
                 and index.name == "uq_world_event_ledger_position"

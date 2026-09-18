@@ -1,6 +1,6 @@
-# LLM Attempt Orchestration, Retry & Backoff — C-005D1 / C-005D2A
+# LLM Attempt Orchestration, Retry & Backoff — C-005D1 / C-005D2A / C-005D2B
 
-状态：provider-neutral opt-in sequential retry wrapper 已实现，离线测试使用虚拟时钟、可控 sleeper/jitter 和 MockTransport。没有真实付费 API 验证、production default wiring、fallback 或 repair。C-005D2A 增加独立 accounting port、usage persistence/migration 与 pricing estimates，详见 [LLM_ACCOUNTING.md](LLM_ACCOUNTING.md)。下文 1–8 节保留 D1 retry policy 语境。
+状态：provider-neutral opt-in sequential retry wrapper 已实现，离线测试使用虚拟时钟、可控 sleeper/jitter 和 MockTransport。没有真实付费 API 验证、production default wiring、fallback 或 repair。C-005D2A 增加独立 accounting port、usage persistence/migration 与 pricing estimates，详见 [LLM_ACCOUNTING.md](LLM_ACCOUNTING.md)。C-005D2B 已增加 opt-in [预算准入](LLM_BUDGET_GUARD.md)；下文 1–8 节保留 D1 retry policy 语境。
 
 ```text
 logical invocation != physical attempt
@@ -102,4 +102,10 @@ C-005A/B/C1/C2 和完整 Stage 0–3/architecture regressions 继续执行。新
 
 ExecutingModelGateway 接受 AttemptAccountingSink、injected UTC wall clock 与 non-raising safe diagnostic consumer。每个实际 ordinal 先 durable START 再调用 single-attempt gateway，terminal 后 FINALIZE；包括 logical stream 隐藏的 pre-Started failures。RetryRecord 仍是 retry decision metadata，不用它计数 attempts。Streaming 只保留 latest factual usage snapshot，不保存 TextDelta，不累加 snapshots；structured post-processing failure 使用 content-free LLMAttemptSummary。
 
-START write failure → AccountingInfrastructureError → 零 provider calls。FINALIZE write failure → 原 outcome/对象与 cancellation 保持 → 固定 accounting_persistence_incomplete CRITICAL operational event → 禁止 attempt N+1（包括 429/503 和 hidden streaming retry）。没有因为 ledger failure 而重放 generation 或改 provider。未 final 的 START 保持 INCOMPLETE 与 unknown possible exposure；restart 不自动 repair/replay。Logical terminal 单独观察，backoff cancellation 不修改最后一次物理 FAILED。详见 [accounting](LLM_ACCOUNTING.md)。Pricing/accounting 不作为 hard budget limiter，D2B deferred。
+START write failure → AccountingInfrastructureError → 零 provider calls。FINALIZE write failure → 原 outcome/对象与 cancellation 保持 → 固定 accounting_persistence_incomplete CRITICAL operational event → 禁止 attempt N+1（包括 429/503 和 hidden streaming retry）。没有因为 ledger failure 而重放 generation 或改 provider。未 final 的 START 保持 INCOMPLETE 与 unknown possible exposure；restart 不自动 repair/replay。Logical terminal 单独观察，backoff cancellation 不修改最后一次物理 FAILED。详见 [accounting](LLM_ACCOUNTING.md)。D2A historical pricing 独立于 D2B preflight upper bounds 和 HARD admission。
+
+## C-005D2B：预算优先于 retry permission
+
+ExecutingModelGateway 的 budget_guard 参数替代 accounting sink，不能同时配置二者，以保证 reservation + START 同事务。每 ordinal 在 provider 前 admit，同 requested ModelRef、同 immutable request、同 InvocationId，独立 reservation。Denied attempt 无 START/provider call，终止为 typed local BudgetAdmissionError，不是 LLMFailure/provider retry；保留已有 physical outcome，retry denial 的 logical terminal 为 LOCAL_ERROR。
+
+含 hidden pre-STARTED attempts 在内，每次 retry 重新授权。Unknown first exposure 保留 hold；proven NOT_DISPATCHED 可释放。FINALIZE/settlement failure 或 bound violation 原样保留 response/failure/completion/cancellation，安全 severe diagnostic 表达 integrity degradation并禁止下一 attempt；本地 DB failure 永远不是 provider replay 理由。STARTED 后 no retry、TextDelta 内容边界、latest snapshot 非 additive 不变。无匹配 enabled budget 时不要求 bounder，D1 行为保持。详见 [LLM_BUDGET_GUARD.md](LLM_BUDGET_GUARD.md)。

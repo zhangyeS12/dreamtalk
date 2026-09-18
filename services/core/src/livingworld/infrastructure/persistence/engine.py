@@ -91,6 +91,20 @@ class Database:
 
         return SqlAlchemyUsageLedger(self._sessions, catalog=catalog)
 
+    def llm_budget_guard(self, *, bounder, diagnostics, catalog=None, envelopes=()):
+        """Atomic budget/START capability; composition must inject trusted reference data."""
+        from livingworld.infrastructure.persistence.llm_budget_repository import (
+            SqlAlchemyBudgetGuard,
+        )
+
+        return SqlAlchemyBudgetGuard(
+            self._sessions,
+            bounder=bounder,
+            diagnostics=diagnostics,
+            catalog=catalog,
+            envelopes=envelopes,
+        )
+
     def package_repository(self) -> PackageRepository:
         """Native authored snapshot acceptance; no runtime command capability."""
         from livingworld.infrastructure.persistence.package_repository import (

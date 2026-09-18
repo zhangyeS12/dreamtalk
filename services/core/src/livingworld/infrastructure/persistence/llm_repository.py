@@ -30,6 +30,14 @@ from livingworld.application.llm_accounting import (
     LedgerQuery,
     UsageCompleteness,
 )
+from livingworld.application.llm_budget import (
+    BoundGuarantee,
+    BudgetId,
+    BudgetMode,
+    BudgetPolicy,
+    UsageUpperBound,
+)
+from livingworld.application.llm_preflight import MoneyUpperBound
 from livingworld.application.llm_pricing import (
     CostStatus,
     InMemoryPricingCatalog,
@@ -44,6 +52,7 @@ from livingworld.application.llm_pricing import (
     RateLine,
     UTCWindow,
 )
+from livingworld.domain.values import Revision
 from livingworld.infrastructure.logging import StructuredLogger
 from livingworld.infrastructure.persistence.llm_models import LLMAttemptRow
 
@@ -64,6 +73,11 @@ _TYPES = {
         PricingVariant,
         RateLine,
         UTCWindow,
+        BudgetId,
+        BudgetPolicy,
+        UsageUpperBound,
+        MoneyUpperBound,
+        Revision,
     )
 }
 _ENUMS = {
@@ -77,6 +91,8 @@ _ENUMS = {
         UsageCompleteness,
         CostStatus,
         Meter,
+        BudgetMode,
+        BoundGuarantee,
     )
 }
 
@@ -149,35 +165,36 @@ class SqlAlchemyUsageLedger:
             raise LLMContractError("invalid_attempt_start")
         async with self._sessions() as session, session.begin():
             await session.connection(execution_options={"livingworld_write_intent": True})
-            row = await session.get(
-                LLMAttemptRow, (record.invocation_id.value, record.attempt_ordinal)
+            await self._start_in_session(session, record)
+
+    async def _start_in_session(self, session, record):
+        row = await session.get(LLMAttemptRow, (record.invocation_id.value, record.attempt_ordinal))
+        if row is not None:
+            if _start(row) != record:
+                raise LLMContractError("conflicting_attempt_start")
+            return
+        closed = await session.scalar(
+            select(LLMAttemptRow.invocation_id)
+            .where(
+                LLMAttemptRow.invocation_id == record.invocation_id.value,
+                LLMAttemptRow.invocation_outcome.is_not(None),
             )
-            if row is not None:
-                if _start(row) != record:
-                    raise LLMContractError("conflicting_attempt_start")
-                return
-            closed = await session.scalar(
-                select(LLMAttemptRow.invocation_id)
-                .where(
-                    LLMAttemptRow.invocation_id == record.invocation_id.value,
-                    LLMAttemptRow.invocation_outcome.is_not(None),
-                )
-                .limit(1)
+            .limit(1)
+        )
+        if closed is not None:
+            raise LLMContractError("invocation_already_completed")
+        session.add(
+            LLMAttemptRow(
+                invocation_id=record.invocation_id.value,
+                attempt_ordinal=record.attempt_ordinal,
+                purpose=record.purpose.value,
+                provider_id=record.requested_model.provider_id.value,
+                requested_model=record.requested_model.model_id,
+                started_at_utc=record.started_at_utc,
+                outcome=AttemptOutcome.INCOMPLETE.value,
+                cost_status=CostStatus.POSSIBLY_BILLED_UNKNOWN.value,
             )
-            if closed is not None:
-                raise LLMContractError("invocation_already_completed")
-            session.add(
-                LLMAttemptRow(
-                    invocation_id=record.invocation_id.value,
-                    attempt_ordinal=record.attempt_ordinal,
-                    purpose=record.purpose.value,
-                    provider_id=record.requested_model.provider_id.value,
-                    requested_model=record.requested_model.model_id,
-                    started_at_utc=record.started_at_utc,
-                    outcome=AttemptOutcome.INCOMPLETE.value,
-                    cost_status=CostStatus.POSSIBLY_BILLED_UNKNOWN.value,
-                )
-            )
+        )
 
     async def complete_invocation(self, invocation_id, outcome):
         if (
@@ -207,44 +224,49 @@ class SqlAlchemyUsageLedger:
             raise LLMContractError("invalid_attempt_facts")
         async with self._sessions() as session, session.begin():
             await session.connection(execution_options={"livingworld_write_intent": True})
-            start = facts.start
-            row = await session.get(
-                LLMAttemptRow, (start.invocation_id.value, start.attempt_ordinal)
+            await self._finalize_in_session(session, facts)
+
+    async def _finalize_in_session(self, session, facts):
+        start = facts.start
+        row = await session.get(LLMAttemptRow, (start.invocation_id.value, start.attempt_ordinal))
+        if row is None or _start(row) != start:
+            raise LLMContractError("attempt_start_missing_or_conflicting")
+        if row.facts is not None:
+            if _decode(row.facts) != facts:
+                raise LLMContractError("conflicting_attempt_finalization")
+            return PriceQuote(
+                CostStatus(row.cost_status),
+                _decode(row.price_snapshot) if row.price_snapshot else None,
+            )  # Never reprice.
+        if facts.dispatch_state is DispatchState.NOT_DISPATCHED:
+            quote = PriceQuote(CostStatus.NOT_DISPATCHED)
+        elif facts.completeness is UsageCompleteness.UNKNOWN:
+            quote = PriceQuote(
+                CostStatus.POSSIBLY_BILLED_UNKNOWN
+                if facts.dispatch_state is DispatchState.DISPATCHED_OR_UNKNOWN
+                else CostStatus.USAGE_UNKNOWN
             )
-            if row is None or _start(row) != start:
-                raise LLMContractError("attempt_start_missing_or_conflicting")
-            if row.facts is not None:
-                if _decode(row.facts) != facts:
-                    raise LLMContractError("conflicting_attempt_finalization")
-                return  # Never reprice or overwrite a historical finalized row.
-            if facts.dispatch_state is DispatchState.NOT_DISPATCHED:
-                quote = PriceQuote(CostStatus.NOT_DISPATCHED)
-            elif facts.completeness is UsageCompleteness.UNKNOWN:
-                quote = PriceQuote(
-                    CostStatus.POSSIBLY_BILLED_UNKNOWN
-                    if facts.dispatch_state is DispatchState.DISPATCHED_OR_UNKNOWN
-                    else CostStatus.USAGE_UNKNOWN
-                )
-            elif facts.completeness is UsageCompleteness.PARTIAL:
-                quote = PriceQuote(CostStatus.USAGE_PARTIAL)
-            else:
-                quote = self._pricing.estimate(
-                    requested=start.requested_model,
-                    reported=facts.reported_model,
-                    at=start.started_at_utc,
-                    usage=facts.usage,
-                    processing_tier=facts.processing_tier,
-                )
-            row.facts = _encode(facts)
-            row.finished_at_utc, row.outcome = facts.finished_at_utc, facts.outcome.value
-            row.reported_model = facts.reported_model.model_id if facts.reported_model else None
-            row.cost_status = quote.status.value
-            if quote.snapshot:
-                row.price_snapshot = _encode(quote.snapshot)
-                row.currency, row.estimated_cost = (
-                    quote.estimated_cost.currency,
-                    quote.estimated_cost.amount,
-                )
+        elif facts.completeness is UsageCompleteness.PARTIAL:
+            quote = PriceQuote(CostStatus.USAGE_PARTIAL)
+        else:
+            quote = self._pricing.estimate(
+                requested=start.requested_model,
+                reported=facts.reported_model,
+                at=start.started_at_utc,
+                usage=facts.usage,
+                processing_tier=facts.processing_tier,
+            )
+        row.facts = _encode(facts)
+        row.finished_at_utc, row.outcome = facts.finished_at_utc, facts.outcome.value
+        row.reported_model = facts.reported_model.model_id if facts.reported_model else None
+        row.cost_status = quote.status.value
+        if quote.snapshot:
+            row.price_snapshot = _encode(quote.snapshot)
+            row.currency, row.estimated_cost = (
+                quote.estimated_cost.currency,
+                quote.estimated_cost.amount,
+            )
+        return quote
 
     async def query(self, query: LedgerQuery):
         if not isinstance(query, LedgerQuery):
