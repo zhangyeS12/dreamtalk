@@ -4,7 +4,7 @@ from collections.abc import Mapping
 
 from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from livingworld.application.content import ContentConflictError, ContentDraft, RawImportEnvelope
 from livingworld.domain.content.identifiers import (
@@ -90,6 +90,34 @@ def _loaded(record: object, content_id: ContentId) -> CanonicalContent:
     return content
 
 
+async def _save_dependencies(session: AsyncSession, draft: ContentDraft) -> None:
+    for envelope in draft.raw_imports:
+        values = {
+            "import_id": envelope.import_id.value,
+            "content_hash": envelope.provenance.content_hash,
+            "provenance_json": stable_json(json_value(envelope.provenance)),
+            "extensions_json": stable_json(envelope.unknown_extensions),
+            "original_payload": envelope.original_payload,
+        }
+        record = await session.get(RawImportRecord, envelope.import_id.value)
+        if record is None:
+            session.add(RawImportRecord(**values))
+        elif any(getattr(record, key) != value for key, value in values.items()):
+            raise ContentConflictError("Raw import identity is immutable")
+    for asset in draft.assets:
+        values = {
+            "asset_id": asset.asset_id.value,
+            "media_type": asset.media_type,
+            "resource_reference": asset.resource_reference,
+            "metadata_json": stable_json(json_value(asset)),
+        }
+        record = await session.get(ContentAssetRecord, asset.asset_id.value)
+        if record is None:
+            session.add(ContentAssetRecord(**values))
+        elif any(getattr(record, key) != value for key, value in values.items()):
+            raise ContentConflictError("Asset reference identity is immutable")
+
+
 class SqlAlchemyContentRepository:
     def __init__(self, sessions: async_sessionmaker) -> None:
         self._sessions = sessions
@@ -152,31 +180,7 @@ class SqlAlchemyContentRepository:
         try:
             async with self._sessions() as session, session.begin():
                 await session.connection(execution_options={"livingworld_write_intent": True})
-                for envelope in draft.raw_imports:
-                    values = {
-                        "import_id": envelope.import_id.value,
-                        "content_hash": envelope.provenance.content_hash,
-                        "provenance_json": stable_json(json_value(envelope.provenance)),
-                        "extensions_json": stable_json(envelope.unknown_extensions),
-                        "original_payload": envelope.original_payload,
-                    }
-                    record = await session.get(RawImportRecord, envelope.import_id.value)
-                    if record is None:
-                        session.add(RawImportRecord(**values))
-                    elif any(getattr(record, key) != value for key, value in values.items()):
-                        raise ContentConflictError("Raw import identity is immutable")
-                for asset in draft.assets:
-                    values = {
-                        "asset_id": asset.asset_id.value,
-                        "media_type": asset.media_type,
-                        "resource_reference": asset.resource_reference,
-                        "metadata_json": stable_json(json_value(asset)),
-                    }
-                    record = await session.get(ContentAssetRecord, asset.asset_id.value)
-                    if record is None:
-                        session.add(ContentAssetRecord(**values))
-                    elif any(getattr(record, key) != value for key, value in values.items()):
-                        raise ContentConflictError("Asset reference identity is immutable")
+                await _save_dependencies(session, draft)
                 # The collection FK must exist before any owned entries are inserted.
                 roots = sorted(
                     draft.contents, key=lambda root: not isinstance(root, LoreCollection)

@@ -6,7 +6,7 @@
 
 **Imported Content != Runtime State；CharacterDefinition != Character；WorldContent != World；LoreEntry != WorldTruth；LoreCollection != WorldContent != Runtime World != WorldTruth。**
 
-Alembic head 现为 [0007_lore_collections](../../services/core/src/livingworld/infrastructure/persistence/migrations/versions/0007_lore_collections.py)，down_revision=0006_canonical_content。0006 建立五个内容表；0007 只新增集合表与条目归属 FK，不修改 Stage 2 表、事件、回执、cursor、typed/world-scoped IDs 或审计行。下文 Stage 2 的 0005 head 描述保留其阶段语境，不表示当前 head。
+Alembic head 现为 [0008_native_content_packages](../../services/core/src/livingworld/infrastructure/persistence/migrations/versions/0008_native_content_packages.py)，down_revision=0007_lore_collections。0008 只增加 accepted baseline 与 immutable blob binding 两张本地元数据表；不存 ZIP structure、不修改旧 rows/JSON/hash/audit/runtime。0006 建立五个内容表；0007 只新增集合表与条目归属 FK，不修改 Stage 2 表、事件、回执、cursor、typed/world-scoped IDs 或审计行。下文 Stage 2 的 0005 head 描述保留其阶段语境，不表示当前 head。
 
 | 内容表 | 可直接校验/查询的结构 | 正文边界 |
 | --- | --- | --- |
@@ -34,6 +34,21 @@ C-004C1 新 owned entry 的 collection_id 使用明确内容 FK，集合 referen
 0007 的 compatibility detector 同样按 Alembic cursor 明确区分 0006/0007 表、列和 FK；不能以 NULL/引用猜测版本。失败完整 rollback，保留 0006 和原行/元数据，不留半个集合表。验证见 [test_lorebook_persistence.py](../../tests/persistence/test_lorebook_persistence.py)；实际 app-data 数据库未用于验收。
 
 验证：[test_content_persistence.py](../../tests/persistence/test_content_persistence.py) 证明重启 round-trip、typed ID、原始 bytes、ContentRevision 更新/原子失败、所有 Stage 2 行/审计保留与迁移失败回滚；[test_content_boundary.py](../../tests/application/test_content_boundary.py) 证明内容提交及 runtime replay 保持 Truth/Belief/PlayerKnowledge/ledger 隔离。没有迁移实际用户数据库，没有 GUI smoke。详见 [CONTENT_MODEL.md](CONTENT_MODEL.md)、[IMPORT_MODEL.md](IMPORT_MODEL.md)。
+
+### C-004D2 native snapshot 与本地元数据
+
+| 本地表 | 身份与语义 |
+| --- | --- |
+| content_import_baselines | unique PK `(content_kind,content_id)`；accepted_semantic_hash、aware UTC accepted_at、optional source_package UUID/hash。LOCAL IMPORT/CONFLICT METADATA，不是 canonical/revision/history/runtime，不导出。 |
+| content_asset_blob_bindings | ContentAssetId PK/FK、verified SHA-256 digest、nonnegative size；metadata→app-data hash blob 的不可变关联，不以 filename 为身份。 |
+
+[SqlAlchemyPackageRepository](../../services/core/src/livingworld/infrastructure/persistence/package_repository.py) 是显式 native snapshot acceptance port。DB transaction 重核 local full snapshot + baseline；NEW/REPLACE/接受 IDENTICAL 的 baseline 更新与对应 canonical roots/raw/asset/binding 同事务。KEEP 不更新 baseline，不按 revision 大小选择 winner。不建立 full edit history，不修改普通 ContentRepository 的 absent+revision0/exact-next-revision contract。
+
+native 导入保留原 typed IDs、任意合法 nonnegative imported ContentRevision 与 canonical bytes；显式 REPLACE 也可接受较低 revision，但 stale Preview 仍通过 exact snapshot/baseline precondition 拒绝。owned entries 不可 re-home/隐式删除；跨成员 decisions 破坏闭包或持久化 collection membership 时全部失败。
+
+[FileContentAssetStore](../../services/core/src/livingworld/infrastructure/packages/asset_store.py) 在既有 Database.data_dir 下独立 hash-keyed 文件。先验证/写 staging/发布 immutable blobs，再做 DB transaction；失败 DB 可留不可达 orphan，future GC deferred。只有 committed DB refs 使 blob 语义可达。FS+SQLite **不是单一 ACID transaction**；资产缺失/损坏明确拒绝，不 silent repair。
+
+0008 compatibility detector 仅依据 Alembic cursor 校验历史 0007/当前 0008 的 exact tables/columns/FK/checks，未知/partial state fail closed；DDL failure 连同两表与 cursor 回滚。WorldContent 的空 lore_collection_ids 采用 additive canonical legacy encoding，不需要重写 rows/hash 或新增 JSON字段列。测试见 [package persistence](../../tests/persistence/test_package_persistence.py) 与 [Stage 3](STAGE_3_ACCEPTANCE.md)。
 
 ## 1. 边界与生命周期
 

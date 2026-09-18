@@ -75,6 +75,10 @@ JSON object keys 排序、紧凑编码，作者数组保持顺序，无 NaN/Infi
 
 [Export tests](../../tests/application/test_content_export.py) 验证 V2/V3/ST semantic round-trip、embedded book、known edit/delete 优先、same-format unknown 保留、跨格式损失、三项已接受规则、selection、UID、重启，以及有真实非空 Truth/Belief/PlayerKnowledge 的完整 SQLite 表与 ledger/receipt 快照不变。[Architecture tests](../../tests/core/test_architecture.py) 限制出口 capability；network/shell/file/regex instrumentation 验证导出文本惰性。
 
-没有新增 dependency、migration、表或 runtime event。没有 GUI smoke、PNG/APNG writer、CHARX、asset materialization/download、native archive/.lworld、backup/restore、lore activation、prompt assembly、LLM、Memory、Director、Agent 或 final UI。C-004D2 未开始。
+没有新增 dependency、migration、表或 runtime event。没有 GUI smoke、PNG/APNG writer、CHARX、asset materialization/download、native archive/.lworld、backup/restore、lore activation、prompt assembly、LLM、Memory、Director、Agent 或 final UI。C-004D2 的独立原生 authored-content export 已实现，见 [NATIVE_CONTENT_PACKAGE.md](NATIVE_CONTENT_PACKAGE.md)；本 JSON adapter 的无 filesystem/runtime capability 边界保持不变。
 
 公开规范核对日期：2026-09-17：[V2](https://github.com/malfoyslastname/character-card-spec-v2/blob/main/spec_v2.md)、[V3](https://github.com/kwaroran/character-card-spec-v3/blob/main/SPEC_V3.md)、[ST World Info](https://docs.sillytavern.app/usage/core-concepts/worldinfo/)、[ST public field/enum declarations](https://github.com/SillyTavern/SillyTavern/blob/release/public/scripts/world-info.js)。V3 secondary_keys 的 interface/prose 冲突按用户确认采用 array。
+
+## 9. Native export 与外部 JSON export 分离
+
+`.lwcontent` 使用显式 selected roots、canonical dependency closure、shared typed references、已拥有本地 hash blobs 和 registered authored source artifacts；不访问任意 resource URI/路径、不下载远端资产。返回 bytes 与 semantic package metadata，不写用户 save path。Manifest bindings 必须来自 canonical graph，不另建 package-only binding truth。`.lworld` 为未来 runtime-world/state package，不能由内容 exporter 生成。原生 SHA-256 integrity 不代表 publisher authentication；资产/内容提交语义及完整回归见 [STAGE_3_ACCEPTANCE.md](STAGE_3_ACCEPTANCE.md)。

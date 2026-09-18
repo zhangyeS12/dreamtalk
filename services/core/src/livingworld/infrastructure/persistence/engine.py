@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async
 
 from livingworld.application import ports
 from livingworld.application.content import ContentRepository
+from livingworld.application.content_packages import ContentAssetStore, PackageRepository
 from livingworld.domain.identifiers import CharacterId, PlayerId, WorldId
 from livingworld.infrastructure.persistence import knowledge_readers, replay
 from livingworld.infrastructure.persistence.content_repository import SqlAlchemyContentRepository
@@ -83,6 +84,19 @@ class Database:
     def content_repository(self) -> ContentRepository:
         """Content library capability; grants no canonical runtime write access."""
         return SqlAlchemyContentRepository(self._sessions)
+
+    def package_repository(self) -> PackageRepository:
+        """Native authored snapshot acceptance; no runtime command capability."""
+        from livingworld.infrastructure.persistence.package_repository import (
+            SqlAlchemyPackageRepository,
+        )
+
+        return SqlAlchemyPackageRepository(self._sessions)
+
+    def content_asset_store(self) -> ContentAssetStore:
+        from livingworld.infrastructure.packages.asset_store import FileContentAssetStore
+
+        return FileContentAssetStore(self.data_dir)
 
     def unit_of_work(self) -> SqlAlchemyUnitOfWork:
         return SqlAlchemyUnitOfWork(self._sessions)

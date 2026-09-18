@@ -8,9 +8,11 @@ LivingWorld 是持久化、事件驱动的多角色 AI 世界，不是普通聊�
 
 ## 开发状态
 
-当前阶段：**Stage 3 — C-004D1 External Content Export Compatibility**。已建立独立内容模型、卡片/Lorebook 离线导入与 Draft/Preview/confirmed Commit，并新增 Character Card V2/V3、ST World Info 和 CharacterBook 的显式 JSON 导出。导出使用当前 canonical 字段、受限兼容保留、明确 lore selection / V3 regex policy 与确定性损失警告，只返回 bytes，不保存文件或修改内容/运行状态。详见 [导出模型](docs/architecture/EXPORT_MODEL.md)、[Lorebook 兼容性](docs/architecture/LOREBOOK_COMPATIBILITY.md)、[卡片兼容性](docs/architecture/CHARACTER_CARD_COMPATIBILITY.md)、[内容模型](docs/architecture/CONTENT_MODEL.md) 和 [持久化模型](docs/architecture/PERSISTENCE_MODEL.md)。
+当前阶段：**Stage 3 — C-004D2 Native Content Package & Final Acceptance**。已建立 canonical authored-content、Character Card/Lorebook 离线导入、Draft/Preview/confirmed Commit、外部 JSON 导出和 `.lwcontent` 原生内容包。原生包支持显式 roots 的依赖闭包、shared references、完整来源、本地 SHA-256 资产、六种三方冲突与事务化 accepted baseline。详见 [Stage 3 验收](docs/architecture/STAGE_3_ACCEPTANCE.md)、[原生内容包](docs/architecture/NATIVE_CONTENT_PACKAGE.md)、[内容模型](docs/architecture/CONTENT_MODEL.md)、[导入](docs/architecture/IMPORT_MODEL.md)、[导出](docs/architecture/EXPORT_MODEL.md) 和 [持久化](docs/architecture/PERSISTENCE_MODEL.md)。
 
-Imported Content != Runtime State。LoreCollection != WorldContent != Runtime World != WorldTruth。内容导入/导出不创建运行世界/角色，不断言 WorldTruth 或授予主体知识；prompt-like 文本和 activation metadata 只保存为不可信数据，不执行。canonical export != original source bytes。尚未实现 lore 运行激活、regex/概率/组/递归/timing 引擎、资产物化、V1、PNG/APNG 写入、CHARX、native archive、AI Builder、LLM、prompt assembly、运行实例化或 .lworld archive。Stage 2 的资源级 CAS、持久化幂等、canonical ledger/rebuild 和主体知识隔离继续沿用，见 [Stage 2 验收](docs/architecture/STAGE_2_ACCEPTANCE.md)、[回放模型](docs/architecture/REPLAY_MODEL.md)、[事件模型](docs/architecture/EVENT_MODEL.md)、[知识访问模型](docs/architecture/KNOWLEDGE_ACCESS_MODEL.md) 和 [命令模型](docs/architecture/COMMAND_MODEL.md)。
+`.lwcontent` = authored content package；`.lworld` 保留给未来 runtime-world/state package。content package != backup != running world；hash integrity != publisher authentication；filesystem blobs + SQLite 不被宣称为一个 ACID transaction。导入/导出不创建 Runtime World/Character，不断言 Truth 或授予 Belief/PlayerKnowledge。作者文本/regex/activation metadata 保持不可信数据，不执行。
+
+Stage 3 不实现运行内容实例化、automatic Lore→Truth/Belief、activation、prompt assembly、Memory/RAG、Director、Character Agent、LLM/AI Builder、checkpoint/branch、`.lworld`、cloud sync、marketplace 或 final UI。外部 PNG/APNG writer、CHARX、任意图复制、签名与 orphan blob GC 仍 deferred。Stage 2 的资源级 CAS、幂等、ledger/rebuild 和知识隔离继续沿用，见 [Stage 2 验收](docs/architecture/STAGE_2_ACCEPTANCE.md)。Stage 4 未开始。
 
 C-002 运行时基础继续沿用：共享 React UI、Tauri v2 Windows 开发壳、Python Core 启停协议、系统 API、SQLite 迁移元数据、结构化日志和 CI。页面仅显示 Core Connecting / Ready / Failed。
 

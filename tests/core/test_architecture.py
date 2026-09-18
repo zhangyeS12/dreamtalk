@@ -229,3 +229,77 @@ def test_external_exporters_have_no_runtime_or_external_effect_capabilities():
                     "now",
                     "utcnow",
                 }, (source, name)
+
+
+def test_native_packages_are_content_only_and_container_io_stays_outside_application():
+    root = Path(__file__).resolve().parents[2] / "services/core/src/livingworld"
+    sources = [
+        root / "application/content_packages.py",
+        root / "application/package_service.py",
+        root / "infrastructure/packages/lwcontent.py",
+    ]
+    allowed = (
+        "livingworld.domain.content",
+        "livingworld.domain.errors",
+        "livingworld.domain.values",
+        "livingworld.application.content",
+        "livingworld.application.imports",
+        "livingworld.application.content_packages",
+        "livingworld.infrastructure.imports.json_input",
+    )
+    for source in sources:
+        for node in ast.walk(ast.parse(source.read_text("utf-8"))):
+            modules = (
+                [alias.name for alias in node.names]
+                if isinstance(node, ast.Import)
+                else [node.module]
+                if isinstance(node, ast.ImportFrom)
+                else []
+            )
+            for module in modules:
+                assert module.split(".")[0] not in {
+                    "socket",
+                    "subprocess",
+                    "urllib",
+                    "os",
+                    "pathlib",
+                    "sqlite3",
+                    "sqlalchemy",
+                    "httpx",
+                    "requests",
+                }, (source, module)
+                if source.parent.name == "application":
+                    assert module.split(".")[0] not in {"zipfile", "io"}
+                if module.startswith("livingworld."):
+                    assert any(
+                        module == prefix or module.startswith(prefix + ".") for prefix in allowed
+                    ), (source, module)
+            if isinstance(node, ast.Call):
+                name = (
+                    node.func.attr
+                    if isinstance(node.func, ast.Attribute)
+                    else getattr(node.func, "id", "")
+                )
+                assert name not in {
+                    "extract",
+                    "extractall",
+                    "write_text",
+                    "write_bytes",
+                    "execute",
+                    "eval",
+                    "exec",
+                    "now",
+                    "utcnow",
+                }, (source, name)
+                assert not isinstance(node.func, ast.Name) or node.func.id != "open"
+    for source in (root / "domain").rglob("*.py"):
+        for node in ast.walk(ast.parse(source.read_text("utf-8"))):
+            if isinstance(node, (ast.Import, ast.ImportFrom)):
+                modules = (
+                    [alias.name for alias in node.names]
+                    if isinstance(node, ast.Import)
+                    else [node.module or ""]
+                )
+                assert all(
+                    module.split(".")[0] not in {"zipfile", "pathlib", "os"} for module in modules
+                ), source

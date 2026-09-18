@@ -1,11 +1,12 @@
 """Separate typed content tables; runtime projections contain no authored JSON."""
 
+from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy import CheckConstraint, ForeignKey, Integer, LargeBinary, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
-from livingworld.infrastructure.persistence.types import UUIDStorage
+from livingworld.infrastructure.persistence.types import UTCTimestampStorage, UUIDStorage
 
 
 class ContentBase(DeclarativeBase):
@@ -96,4 +97,45 @@ class RawImportRecord(ContentBase):
         CheckConstraint("length(content_hash) = 64", name="ck_content_raw_imports_hash"),
         CheckConstraint("json_valid(provenance_json)", name="ck_content_raw_imports_provenance"),
         CheckConstraint("json_valid(extensions_json)", name="ck_content_raw_imports_extensions"),
+    )
+
+
+class AcceptedImportBaselineRecord(ContentBase):
+    __tablename__ = "content_import_baselines"
+    content_kind: Mapped[str] = mapped_column(String(32), primary_key=True)
+    content_id: Mapped[UUID] = mapped_column(UUIDStorage(), primary_key=True)
+    accepted_semantic_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    accepted_at_utc: Mapped[datetime] = mapped_column(UTCTimestampStorage(), nullable=False)
+    source_package_id: Mapped[UUID | None] = mapped_column(UUIDStorage(), nullable=True)
+    source_package_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    __table_args__ = (
+        CheckConstraint(
+            "content_kind IN ('character_definition','world_content',"
+            "'lore_entry','lore_collection')",
+            name="ck_import_baseline_kind",
+        ),
+        CheckConstraint(
+            "length(accepted_semantic_hash) = 64 AND accepted_semantic_hash NOT GLOB '*[^0-9a-f]*'",
+            name="ck_import_baseline_hash",
+        ),
+        CheckConstraint(
+            "source_package_hash IS NULL OR (length(source_package_hash) = 64 "
+            "AND source_package_hash NOT GLOB '*[^0-9a-f]*')",
+            name="ck_import_baseline_source_hash",
+        ),
+    )
+
+
+class AssetBlobBindingRecord(ContentBase):
+    __tablename__ = "content_asset_blob_bindings"
+    asset_id: Mapped[UUID] = mapped_column(
+        UUIDStorage(), ForeignKey("content_assets.asset_id"), primary_key=True
+    )
+    digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    size: Mapped[int] = mapped_column(Integer, nullable=False)
+    __table_args__ = (
+        CheckConstraint(
+            "length(digest) = 64 AND digest NOT GLOB '*[^0-9a-f]*'", name="ck_asset_blob_digest"
+        ),
+        CheckConstraint("typeof(size) = 'integer' AND size >= 0", name="ck_asset_blob_size"),
     )

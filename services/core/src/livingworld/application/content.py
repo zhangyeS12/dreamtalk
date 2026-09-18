@@ -15,6 +15,7 @@ from livingworld.domain.content.models import (
     ContentSourceKind,
     LoreCollection,
     LoreEntry,
+    WorldContent,
 )
 from livingworld.domain.content.serialization import (
     content_kind,
@@ -100,7 +101,7 @@ class ContentDraft:
                 if not set(content.lore_entry_ids) <= lore_ids:
                     raise DomainInvariantError("Unresolved LoreEntryId in draft")
                 if (
-                    isinstance(content, CharacterDefinition)
+                    isinstance(content, (CharacterDefinition, WorldContent))
                     and not set(content.lore_collection_ids) <= collections.keys()
                 ):
                     raise DomainInvariantError("Unresolved LoreCollectionId in draft")

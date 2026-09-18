@@ -255,6 +255,13 @@ def _root_collections(root: object) -> None:
     object.__setattr__(root, "assets", assets)
 
 
+def _collection_references(root: object) -> None:
+    collections = _objects(root.lore_collection_ids, LoreCollectionId, "lore_collection_ids")
+    if len(set(collections)) != len(collections):
+        raise DomainInvariantError("Duplicate LoreCollectionId reference")
+    object.__setattr__(root, "lore_collection_ids", collections)
+
+
 @dataclass(frozen=True, slots=True, kw_only=True)
 class CharacterDefinition(_Content):
     content_id: CharacterDefinitionId
@@ -290,10 +297,7 @@ class CharacterDefinition(_Content):
             object.__setattr__(self, name, _texts(getattr(self, name), name))
         object.__setattr__(self, "authored_instructions", _opaque(self.authored_instructions))
         _root_collections(self)
-        collections = _objects(self.lore_collection_ids, LoreCollectionId, "lore_collection_ids")
-        if len(set(collections)) != len(collections):
-            raise DomainInvariantError("Duplicate LoreCollectionId reference")
-        object.__setattr__(self, "lore_collection_ids", collections)
+        _collection_references(self)
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -308,6 +312,7 @@ class WorldContent(_Content):
     lore_entry_ids: tuple[LoreEntryId, ...] = ()
     tags: tuple[str, ...] = ()
     assets: tuple[AssetReference, ...] = ()
+    lore_collection_ids: tuple[LoreCollectionId, ...] = ()
 
     def __post_init__(self) -> None:
         _Content.__post_init__(self)
@@ -322,6 +327,7 @@ class WorldContent(_Content):
                 raise DomainInvariantError(f"Duplicate authored {name} key")
             object.__setattr__(self, name, values)
         _root_collections(self)
+        _collection_references(self)
 
 
 type CanonicalContent = CharacterDefinition | WorldContent | LoreEntry | LoreCollection

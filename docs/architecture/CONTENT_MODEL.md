@@ -1,6 +1,6 @@
 # Canonical Content Model — C-004A / C-004C1
 
-状态：Stage 3 的标准库内容模型、确定性 canonical JSON、独立 SQLite 内容库及 Character Card adapter 已建立。C-004C1 新增 LoreCollection、typed 内容引用、Lorebook 离线导入/规范化和 legacy 归属兼容。C-004D1 新增独立外部 JSON export，不改变 canonical 类型、版本或持久化 schema。Builder、LLM、lore 运行激活、prompt assembly、运行时实例化和最终 UI 尚未实现。
+状态：Stage 3 的标准库内容模型、确定性 canonical JSON、独立 SQLite 内容库及 Character Card adapter 已建立。C-004C1 新增 LoreCollection、typed 内容引用、Lorebook 离线导入/规范化和 legacy 归属兼容。C-004D1 新增独立外部 JSON export；C-004D2 新增 `.lwcontent`、immutable asset blob store、独立本地 accepted baseline 与 WorldContent 集合引用。Builder、LLM、lore 运行激活、prompt assembly、运行时实例化和最终 UI 尚未实现。
 
 ```text
 Imported Content != Runtime State
@@ -24,10 +24,10 @@ WorldContent 描述创作设定，World 是一个运行时间线。保存内容�
 | 对象 | Purpose | Owns | Does not own | Relationships | Important invariants |
 | --- | --- | --- | --- | --- | --- |
 | CharacterDefinition | 角色的创作定义 | display_name、aliases、description、personality、background、scenario、speech_guidance、creator_notes、authored_instructions、example_dialogue、tags、assets、lore_entry_ids、lore_collection_ids、extensions、provenance | 运行地点、Memory、Knowledge、关系指标、运行 projection revision | typed 引用 LoreCollection、LoreEntry 与 ContentAsset，未来供 Character 实例化 | 独立 CharacterDefinitionId；非空名称；引用不授予知识或删除权；没有 world_id |
-| WorldContent | 世界的创作素材 | title、description、setting、rules、factions、locations、lore_entry_ids、tags、assets、extensions、provenance | 运行 WorldClock、Truth、ledger、参与者状态 | 引用 LoreEntry 与 ContentAsset，未来供 World 实例化 | 独立 WorldContentId；title 非空；地点/阵营 key 在各自集合内唯一；rules 不执行 |
+| WorldContent | 世界的创作素材 | title、description、setting、rules、factions、locations、lore_entry_ids、lore_collection_ids、tags、assets、extensions、provenance | 运行 WorldClock、Truth、ledger、参与者状态 | 引用 LoreCollection、LoreEntry 与 ContentAsset，未来供 World 实例化 | 独立 WorldContentId；title 非空；地点/阵营 key 在各自集合内唯一；rules 不执行 |
 | LoreEntry | 可引用的 lore 素材 | collection_id、title、comment、content、keywords、secondary_keywords、enabled、priority、order、scope、category、group、activation_metadata、insertion_metadata、extensions、provenance | WorldTruth、检索、激活、prompt insertion | 新条目归属恰好一个 LoreCollection；保留旧 CharacterDefinition / WorldContent 共享引用 | 独立 LoreEntryId；disabled 也不能有空白正文；secondary keys 需要 primary；unbound 仅为 deprecated legacy 状态；metadata 不执行 |
 | LoreCollection | 作者 Lorebook 内容根 | name、description、有序 lore_entry_ids、activation_metadata、extensions、provenance、ContentRevision | WorldContent、运行 World、Truth、角色自动知识、scanner | 拥有新 LoreEntry，可被多个定义非拥有引用 | 独立 LoreCollectionId；外部 uid 不是 library ID；允许无名称/空集合；没有 destructive cascade |
-| ContentAsset | 资产引用元数据 | asset_id、media_type、resource_reference、可选 content_hash、opaque extensions | 图片处理、文件读取、二进制存储、package layout | AssetReference 通过 ID 与 role 引用 | typed ID；非空 media type/reference；相同 ID 的已存元数据不可覆盖 |
+| ContentAsset | 资产引用元数据 | asset_id、media_type、resource_reference、可选 content_hash、opaque extensions | 图片处理、任意文件读取、blob bytes 或 ZIP layout | AssetReference 通过 ID 与 role 引用 | typed ID；非空 media type/reference；相同 ID 的已存元数据不可覆盖 |
 | ContentProvenance | 创作/导入来源记录 | source_kind、source_format、source_format_version、original_name、source_identifier、imported_at、content_hash、raw_import_id | 来源真假判定、copyright policy、凭证、运行知识权限 | 导入来源指向 RawImportEnvelope | imported_at 必须 aware 并归一化 UTC；hash 为小写 SHA-256；不采样时间或联网 |
 
 AuthoredPlace / AuthoredFaction 仅包含局部 key、name、description、opaque extensions，不是 runtime LocationId 或阵营模拟。AssetReference 包含 ContentAssetId 与用途 role；不把资产 bytes/base64 内嵌正常 canonical JSON。
@@ -43,17 +43,17 @@ AuthoredPlace / AuthoredFaction 仅包含局部 key、name、description、opaqu
 集中常量为 [LIVINGWORLD_CONTENT_VERSION](../../services/core/src/livingworld/domain/content/__init__.py)=1。每个 root 显式包含 content_version，反序列化拒绝未知版本。
 
 ```text
-content_version != api_protocol != Alembic revision != world_package_format
+content_version != api_protocol != Alembic revision != lwcontent_package_format != future_lworld_format
 ContentRevision != runtime Revision != ledger_position
 ```
 
-即使不同版本轴恰好都是 1，也没有联动。最终 .lworld archive/container 留给 C-004D。
+即使不同版本轴恰好都是 1，也没有联动。C-004D2 的 `.lwcontent` 仅打包 authored content；`.lworld` 保留给未来 runtime-world/state package。
 
 ## 4. Canonical JSON 与哈希
 
 root envelope 为 `{ "kind": "character_definition|world_content|lore_entry|lore_collection", "data": ... }`。UUID 保存小写 32 字符 hex，ContentRevision 保存整数，现实时间保存固定微秒精度 aware UTC ISO-8601，集合保存 JSON array。
 
-C-004C1 对 version=1 增加两项明确的 legacy 编码兼容：旧 LoreEntry 缺失 collection_id 解码为 legacy None；旧 CharacterDefinition 缺失 lore_collection_ids 解码为空引用。serializer 在这两种状态省略对应字段，保持旧 JSON/hash 原样。新 owned entry 与非空 collection references 显式编码；其他缺失/未知字段仍拒绝，不改写存储中的历史内容。
+C-004C1 对 version=1 增加两项明确的 legacy 编码兼容：旧 LoreEntry 缺失 collection_id 解码为 legacy None；旧 CharacterDefinition 缺失 lore_collection_ids 解码为空引用。serializer 在这两种状态省略对应字段，保持旧 JSON/hash 原样。新 owned entry 与非空 collection references 显式编码；C-004D2 同样为 WorldContent 缺失 lore_collection_ids 解码为空，空引用省略，不改变旧 JSON/hash。其他缺失/未知字段仍拒绝，不改写存储中的历史内容。
 
 JSON object keys 排序，紧凑 separators，UTF-8，无非有限数。作者数组顺序有语义，保留不排序；opaque extensions 深度冻结并往返。serialize → deserialize 保持 canonical 相等；semantic_hash 是完整 canonical UTF-8 JSON 的 SHA-256，包含 typed kind、ID、revision、provenance 与正文。因此它不是跨身份内容去重器，也不等于原文件哈希。
 
@@ -85,4 +85,4 @@ V3 ContentAsset 只保存 descriptor/reference 元数据。PNG/APNG icon 的 ccd
 
 外部 JSON export 见 [EXPORT_MODEL.md](EXPORT_MODEL.md)：当前 canonical known fields 优先于旧 source，same-format unknown 保留与跨格式 loss 分开；原始 bytes retrieval 不变，多集合不隐式 merge。V3 use_regex 未指定时必须显式 caller policy；secondary_keys 保持 array；ST comment 使用 canonical comment，独立 title 发出损失警告。export 不修改内容对象、revision 或 runtime。
 
-archive/asset layout 仍为后续范围。初始知识分配、运行实例与定义版本绑定、产品级重复导入/冲突展示、Builder 来源评价和编辑历史仍未实现。
+原生 authored-content layout/blob store 见 [NATIVE_CONTENT_PACKAGE.md](NATIVE_CONTENT_PACKAGE.md)。accepted baseline 是独立本地冲突证据，不参加 canonical semantic_hash、不导出。native snapshot acceptance 保留包内 revision；日常编辑仍严格 next revision。`.lworld` runtime package 与 asset image decoding/materialization workflow 仍 deferred。初始知识分配、运行实例与定义版本绑定、产品级重复导入/冲突展示、Builder 来源评价和编辑历史仍未实现。

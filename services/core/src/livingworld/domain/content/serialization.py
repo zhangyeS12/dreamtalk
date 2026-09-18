@@ -90,7 +90,7 @@ def serialize_content(content: CanonicalContent) -> str:
     # missing unrelated fields and unknown fields remain errors on deserialization.
     if isinstance(content, LoreEntry) and content.collection_id is None:
         del data["collection_id"]
-    if isinstance(content, CharacterDefinition) and not content.lore_collection_ids:
+    if isinstance(content, (CharacterDefinition, WorldContent)) and not content.lore_collection_ids:
         del data["lore_collection_ids"]
     return stable_json({"kind": content_kind(content), "data": data})
 
@@ -121,6 +121,7 @@ def _data(value: object, model: type) -> dict:
     legacy_defaults = {
         LoreEntry: {"collection_id": None},
         CharacterDefinition: {"lore_collection_ids": []},
+        WorldContent: {"lore_collection_ids": []},
     }.get(model, {})
     if not isinstance(value, dict):
         raise DomainInvariantError("Canonical fields must match the declared model exactly")
@@ -193,7 +194,7 @@ def deserialize_content(payload: str) -> CanonicalContent:
     data["revision"] = ContentRevision(data["revision"])
     if model is LoreEntry and data["collection_id"] is not None:
         data["collection_id"] = _id(data["collection_id"], LoreCollectionId)
-    if model is CharacterDefinition:
+    if model in (CharacterDefinition, WorldContent):
         data["lore_collection_ids"] = [
             _id(value, LoreCollectionId) for value in _sequence(data["lore_collection_ids"])
         ]
