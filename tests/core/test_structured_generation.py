@@ -250,7 +250,13 @@ def test_schema_failure_preserves_completed_facts(mode, text, keyword):
 def test_strict_parse_failure_retains_usage_without_output(text):
     result = failure(Wire(body(text)), StructuredFailureReason.JSON_PARSE_FAILED)
     assert result.attempt.usage.total_tokens == body()["usage"]["total_tokens"]
-    assert set(plain(result.attempt)) == {"model", "usage", "finish_reason", "latency_ms"}
+    assert set(plain(result.attempt)) == {
+        "model",
+        "usage",
+        "finish_reason",
+        "latency_ms",
+        "processing_tier",
+    }
     assert not hasattr(result, "attempt_response")
     assert not hasattr(result.attempt, "content")
 

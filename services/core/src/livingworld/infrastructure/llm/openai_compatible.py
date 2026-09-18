@@ -58,7 +58,7 @@ _FINISH = {
     "refusal": FinishReason.REFUSAL,
 }
 _DETAILS = {
-    "prompt_tokens_details": ("cached_tokens", "audio_tokens"),
+    "prompt_tokens_details": ("cached_tokens", "cache_write_tokens", "audio_tokens"),
     "completion_tokens_details": (
         "reasoning_tokens",
         "audio_tokens",
@@ -159,11 +159,54 @@ def _usage(value) -> LLMUsage | None:
     for field in ("prompt_cache_hit_tokens", "prompt_cache_miss_tokens"):
         if field in value:
             details[field] = _count(value[field])
-    return LLMUsage(
-        input_tokens=_count(value.get("prompt_tokens")),
-        output_tokens=_count(value.get("completion_tokens")),
-        total_tokens=_count(value.get("total_tokens")),
-        details=details,
+    input_tokens = _count(value.get("prompt_tokens"))
+    prompt = details.get("prompt_tokens_details", {})
+    cached = prompt.get("cached_tokens")
+    cache_write = prompt.get("cache_write_tokens")
+    hit, miss = details.get("prompt_cache_hit_tokens"), details.get("prompt_cache_miss_tokens")
+    uncached = None
+    if hit is not None:
+        if cached is not None and cached != hit:
+            raise _InvalidResponse
+        cached = hit
+    if miss is not None:
+        uncached = miss
+    if (
+        hit is not None
+        and miss is not None
+        and input_tokens is not None
+        and hit + miss != input_tokens
+    ):
+        raise _InvalidResponse
+    if all(v is not None for v in (input_tokens, cached, cache_write)):
+        derived = input_tokens - cached - cache_write
+        if derived < 0 or uncached is not None and derived != uncached:
+            raise _InvalidResponse
+        uncached = derived
+    try:
+        return LLMUsage(
+            input_tokens=input_tokens,
+            output_tokens=_count(value.get("completion_tokens")),
+            total_tokens=_count(value.get("total_tokens")),
+            details=details,
+            cached_input_tokens=cached,
+            cache_write_input_tokens=cache_write,
+            uncached_input_tokens=uncached,
+            reasoning_output_tokens=details.get("completion_tokens_details", {}).get(
+                "reasoning_tokens"
+            ),
+        )
+    except LLMContractError:
+        raise _InvalidResponse from None
+
+
+def _tier(data):
+    # Only documented response values; never request hints, arbitrary strings or auto.
+    value = data.get("service_tier")
+    return (
+        value
+        if type(value) is str and value in {"default", "flex", "scale", "priority", "fast"}
+        else None
     )
 
 
@@ -262,6 +305,7 @@ def _response(response, request, secret, latency_ms):
         usage=_usage(data.get("usage")),
         diagnostics=_diagnostics(response, data, request, secret, diagnostic),
         latency_ms=latency_ms,
+        processing_tier=_tier(data),
     )
 
 
@@ -381,6 +425,7 @@ class _StreamChunk:
     finish_reason: FinishReason | None
     outcome: StreamOutcome
     provider_request_id: str | None
+    processing_tier: str | None
 
 
 def _unique_fields(pairs):
@@ -480,6 +525,7 @@ def _stream_chunk(payload, request, secret, limits):
         _FINISH.get(finish, FinishReason.UNKNOWN) if finish is not None else None,
         outcome,
         identifier,
+        _tier(data),
     )
 
 
@@ -493,6 +539,7 @@ class _StreamState:
         "outcome",
         "usage",
         "provider_request_id",
+        "processing_tier",
     )
 
     def __init__(self, model):
@@ -502,8 +549,13 @@ class _StreamState:
         self.outcome = StreamOutcome.NORMAL
         self.usage = None
         self.provider_request_id = None
+        self.processing_tier = None
 
     def accept(self, chunk):
+        if chunk.processing_tier is not None:
+            if self.processing_tier is not None and self.processing_tier != chunk.processing_tier:
+                raise _InvalidResponse
+            self.processing_tier = chunk.processing_tier
         if self.reported_model and chunk.model != self.model:
             raise _InvalidResponse
         self.model, self.reported_model = chunk.model, True
@@ -844,6 +896,7 @@ class OpenAICompatibleChatGateway:
                             finish_reason=state.finish_reason,
                             outcome=state.outcome,
                             usage=state.usage,
+                            processing_tier=state.processing_tier,
                             latency_ms=max(0, int((perf_counter() - started) * 1000)),
                             diagnostics=ProviderDiagnostics(
                                 provider_request_id=state.provider_request_id,

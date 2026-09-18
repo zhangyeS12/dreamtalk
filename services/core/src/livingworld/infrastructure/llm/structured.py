@@ -175,6 +175,7 @@ def process_structured(
                 response.usage,
                 response.finish_reason,
                 response.latency_ms,
+                response.processing_tier,
             ),
             structured_detail=result,
         )

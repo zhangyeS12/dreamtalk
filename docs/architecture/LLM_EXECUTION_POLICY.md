@@ -1,6 +1,6 @@
-# LLM Attempt Orchestration, Retry & Backoff — C-005D1
+# LLM Attempt Orchestration, Retry & Backoff — C-005D1 / C-005D2A
 
-状态：provider-neutral opt-in sequential retry wrapper 已实现，离线测试使用虚拟时钟、可控 sleeper/jitter 和 MockTransport。没有真实生成 API 验证、production default wiring、pricing、usage persistence、fallback、repair 或 migration。停止于 C-005D1。
+状态：provider-neutral opt-in sequential retry wrapper 已实现，离线测试使用虚拟时钟、可控 sleeper/jitter 和 MockTransport。没有真实付费 API 验证、production default wiring、fallback 或 repair。C-005D2A 增加独立 accounting port、usage persistence/migration 与 pricing estimates，详见 [LLM_ACCOUNTING.md](LLM_ACCOUNTING.md)。下文 1–8 节保留 D1 retry policy 语境。
 
 ```text
 logical invocation != physical attempt
@@ -97,3 +97,9 @@ Retry 可能增加 provider quota/paid attempt 消耗，不能把 logical invoca
 [test_llm_execution.py](../../tests/core/test_llm_execution.py) 覆盖 explicit 429/503、proven connect vs uncertain read/write、same invocation/request、late credentials、attempt/time caps、Retry-After 两种语法/无效/过去/超长值、jitter/cap、cancel/oversleep，以及真实 adapter 的 pre-start hidden retry 与 post-start 无重放。Structured generation 经 429 后的 parse/schema/empty/truncation failure 仍保留实际 usage；refusal/filter 原样成功。序列化 closed records、repr 和 StructuredLogger logs 排除 credential/prompt/output/reasoning/raw-body canaries。
 
 C-005A/B/C1/C2 和完整 Stage 0–3/architecture regressions 继续执行。新测试没有真实 sleep seconds 或外部网络。没有 UI/desktop 改动、无需 GUI smoke。没有新增依赖、migration 或 accounting persistence；真实提供方兼容性仍未实测。
+
+## C-005D2A：独立 accounting lifecycle
+
+ExecutingModelGateway 接受 AttemptAccountingSink、injected UTC wall clock 与 non-raising safe diagnostic consumer。每个实际 ordinal 先 durable START 再调用 single-attempt gateway，terminal 后 FINALIZE；包括 logical stream 隐藏的 pre-Started failures。RetryRecord 仍是 retry decision metadata，不用它计数 attempts。Streaming 只保留 latest factual usage snapshot，不保存 TextDelta，不累加 snapshots；structured post-processing failure 使用 content-free LLMAttemptSummary。
+
+START write failure → AccountingInfrastructureError → 零 provider calls。FINALIZE write failure → 原 outcome/对象与 cancellation 保持 → 固定 accounting_persistence_incomplete CRITICAL operational event → 禁止 attempt N+1（包括 429/503 和 hidden streaming retry）。没有因为 ledger failure 而重放 generation 或改 provider。未 final 的 START 保持 INCOMPLETE 与 unknown possible exposure；restart 不自动 repair/replay。Logical terminal 单独观察，backoff cancellation 不修改最后一次物理 FAILED。详见 [accounting](LLM_ACCOUNTING.md)。Pricing/accounting 不作为 hard budget limiter，D2B deferred。

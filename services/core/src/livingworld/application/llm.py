@@ -172,13 +172,46 @@ class LLMUsage:
     output_tokens: int | None = None
     total_tokens: int | None = None
     details: Mapping[str, JsonValue] = field(default_factory=dict, repr=False)
+    cached_input_tokens: int | None = None
+    cache_write_input_tokens: int | None = None
+    uncached_input_tokens: int | None = None
+    reasoning_output_tokens: int | None = None
 
     def __post_init__(self):
-        for label in ("input_tokens", "output_tokens", "total_tokens"):
+        for label in (
+            "input_tokens",
+            "output_tokens",
+            "total_tokens",
+            "cached_input_tokens",
+            "cache_write_input_tokens",
+            "uncached_input_tokens",
+            "reasoning_output_tokens",
+        ):
             value = getattr(self, label)
             if value is not None:
                 _count(value, label)
-        # Do not fabricate totals or enforce a provider-specific category relationship.
+        partitions = (
+            self.cached_input_tokens,
+            self.cache_write_input_tokens,
+            self.uncached_input_tokens,
+        )
+        if (
+            self.input_tokens is not None
+            and sum(v for v in partitions if v is not None) > self.input_tokens
+        ):
+            raise LLMContractError("invalid_input_partition")
+        if (
+            all(v is not None for v in partitions)
+            and self.input_tokens is not None
+            and sum(partitions) != self.input_tokens
+        ):
+            raise LLMContractError("invalid_input_partition")
+        if (
+            self.reasoning_output_tokens is not None
+            and self.output_tokens is not None
+            and self.reasoning_output_tokens > self.output_tokens
+        ):
+            raise LLMContractError("invalid_reasoning_partition")
         object.__setattr__(self, "details", _json_object(self.details))
 
 
@@ -228,6 +261,7 @@ class LLMResponse:
     structured_result: ValidatedStructuredResult | None = field(default=None, repr=False)
     diagnostics: ProviderDiagnostics = field(default_factory=ProviderDiagnostics, repr=False)
     latency_ms: int | None = None
+    processing_tier: str | None = None
 
     def __post_init__(self):
         _type(self.invocation_id, InvocationId, "invocation_id")
@@ -235,6 +269,7 @@ class LLMResponse:
         _type(self.finish_reason, FinishReason, "finish_reason")
         object.__setattr__(self, "content", _content(self.content))
         _type(self.diagnostics, ProviderDiagnostics, "provider_diagnostics")
+        _processing_tier(self.processing_tier)
         if self.usage is not None:
             _type(self.usage, LLMUsage, "usage")
         if self.structured_result is not None:
@@ -343,7 +378,7 @@ class StructuredFailureDetail:
 def _accounting_usage(usage: LLMUsage) -> LLMUsage:
     details = {}
     for group, names in {
-        "prompt_tokens_details": ("cached_tokens", "audio_tokens"),
+        "prompt_tokens_details": ("cached_tokens", "cache_write_tokens", "audio_tokens"),
         "completion_tokens_details": (
             "reasoning_tokens",
             "audio_tokens",
@@ -367,7 +402,25 @@ def _accounting_usage(usage: LLMUsage) -> LLMUsage:
                 details[group] = selected
             else:
                 details.update(selected)
-    return LLMUsage(usage.input_tokens, usage.output_tokens, usage.total_tokens, details)
+    return LLMUsage(
+        usage.input_tokens,
+        usage.output_tokens,
+        usage.total_tokens,
+        details,
+        usage.cached_input_tokens,
+        usage.cache_write_input_tokens,
+        usage.uncached_input_tokens,
+        usage.reasoning_output_tokens,
+    )
+
+
+def _processing_tier(value):
+    if value is not None and (
+        type(value) is not str
+        or not 1 <= len(value) <= 32
+        or any(not (c.isascii() and (c.isalnum() or c == "_")) for c in value)
+    ):
+        raise LLMContractError("invalid_processing_tier")
 
 
 @dataclass(frozen=True, slots=True)
@@ -383,9 +436,11 @@ class LLMAttemptSummary:
     usage: LLMUsage | None
     finish_reason: FinishReason
     latency_ms: int | None
+    processing_tier: str | None = None
 
     def __post_init__(self):
         _type(self.model, ModelRef, "model_ref")
+        _processing_tier(self.processing_tier)
         _type(self.finish_reason, FinishReason, "finish_reason")
         if self.latency_ms is not None:
             _count(self.latency_ms, "latency")
@@ -531,9 +586,11 @@ class LLMStreamCompletion:
     usage: LLMUsage | None = None
     latency_ms: int | None = None
     diagnostics: ProviderDiagnostics = field(default_factory=ProviderDiagnostics, repr=False)
+    processing_tier: str | None = None
 
     def __post_init__(self):
         _type(self.invocation_id, InvocationId, "invocation_id")
+        _processing_tier(self.processing_tier)
         _type(self.model_used, ModelRef, "model_ref")
         _type(self.finish_reason, FinishReason, "finish_reason")
         _type(self.outcome, StreamOutcome, "stream_outcome")

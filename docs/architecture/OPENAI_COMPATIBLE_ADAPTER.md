@@ -1,4 +1,4 @@
-# OpenAI-Compatible Chat Adapter — C-005B / C-005C1 / C-005C2 / C-005D1
+# OpenAI-Compatible Chat Adapter — C-005B / C-005C1 / C-005C2 / C-005D1 / C-005D2A
 
 状态：已实现 infrastructure adapter，使用受控官方契约形状的离线 fixtures 验证。没有真实 API key、真实提供方调用或 production default wiring；fixture 通过不等于所有模型/兼容服务器已经实测。
 
@@ -134,4 +134,10 @@ finally 在 terminal 交付前 scrub wire Authorization/cookies/secret reference
 
 Adapter 仍每次 generate/stream 只发起一次 HTTP send，无 backoff/sleep/retry loop。新增 failure dispatch_state / http_status / retry_after_seconds；explicit HTTP 429/408/5xx 保留 normalized status 和有效 standard Retry-After duration（delta-seconds / HTTP-date），不保留 header。Local preflight/credentials 为 NOT_DISPATCHED；pool/connect timeout 和 ConnectError 在没有 response 时为 proven NOT_DISPATCHED；read/write/unknown transport failure 为 DISPATCHED_OR_UNKNOWN。HTTP response 后的 malformed/structured failure 标为 HTTP_RESPONSE_RECEIVED，结构化 summary 不变；read interruption 仍未知，不因 headers 200 就认为可以重放。
 
-[_status_failure / _transport_failure](../../services/core/src/livingworld/infrastructure/llm/openai_compatible.py) 是唯一 concrete normalization 边界；[_failure_error](../../services/core/src/livingworld/infrastructure/llm/openai_compatible.py) 转交全部安全 typed facts。仅 [外层 ExecutingModelGateway](LLM_EXECUTION_POLICY.md) 决定相同 provider/model/request 的下一次 attempt。旧 direct no-retry/credential/scrub/structured/stream tests 继续执行。没有 SDK、dependency、migration 或 production wiring；C-005D2 未开始。
+[_status_failure / _transport_failure](../../services/core/src/livingworld/infrastructure/llm/openai_compatible.py) 是唯一 concrete normalization 边界；[_failure_error](../../services/core/src/livingworld/infrastructure/llm/openai_compatible.py) 转交全部安全 typed facts。仅 [外层 ExecutingModelGateway](LLM_EXECUTION_POLICY.md) 决定相同 provider/model/request 的下一次 attempt。旧 direct no-retry/credential/scrub/structured/stream tests 继续执行。没有 SDK、dependency、migration 或 production wiring；该段记录 C-005D1；C-005D2A accounting 见下文，C-005D2B 未开始。
+
+## C-005D2A：factual usage normalization
+
+2026-09-18 官方 [OpenAI caching](https://developers.openai.com/api/docs/guides/prompt-caching) / [Chat usage](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create) 与 [DeepSeek usage](https://api-docs.deepseek.com/api/create-chat-completion/) 支持 optional normalized cached/cache-write/uncached/reasoning 明细。OpenAI ordinary=input-cached-write 仅全部相关事实已知时推导；缺 cache-write 不补零。DeepSeek hit/miss 直接使用 provider counters；全部已知时 hit+miss=input，同时 cached/hit 要一致。Impossible partition 拒绝、不 clamp。Reasoning 是 output 子集，不自动另收费。Generate、structured attempt summaries、stream UsageUpdate/completion 均保留 normalized facts，snapshots 不求和。
+
+Actual response service_tier 仅从 documented default/flex/scale/priority/fast 闭合值保留；不发送新增 tier preference、不推断 model billing tier，auto/unknown 为 None。Structured failure summary 保留该 safe accounting fact；stream state 仍有界、没有累计正文。Adapter 仍不接收 ledger/catalog、不写 SQLite、不算价格；[执行 observer / pricing / operational accounting](LLM_ACCOUNTING.md) 在外层。Price pages mutable，fixtures 非 production catalog。

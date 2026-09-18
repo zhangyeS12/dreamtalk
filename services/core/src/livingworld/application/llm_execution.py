@@ -6,6 +6,7 @@ import random
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import aclosing
 from dataclasses import dataclass
+from datetime import datetime
 from enum import StrEnum
 from time import monotonic
 
@@ -23,6 +24,17 @@ from livingworld.application.llm import (
     StreamCompleted,
     StreamFailed,
     StreamStarted,
+    UsageUpdate,
+)
+from livingworld.application.llm_accounting import (
+    AccountingDiagnostic,
+    AccountingInfrastructureError,
+    AttemptAccountingSink,
+    AttemptFacts,
+    AttemptOutcome,
+    AttemptStart,
+    UsageCompleteness,
+    factual_usage,
 )
 
 
@@ -200,6 +212,9 @@ class ExecutingModelGateway:
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         random_unit: Callable[[], float] = random.random,
         observer: Callable[[RetryRecord], None] | None = None,
+        accounting: AttemptAccountingSink | None = None,
+        wall_clock: Callable[[], datetime] | None = None,
+        accounting_diagnostics: Callable[[AccountingDiagnostic], None] | None = None,
     ):
         self._gateway = gateway
         self._policy = policy if policy is not None else RetryPolicy()
@@ -208,6 +223,107 @@ class ExecutingModelGateway:
         self._clock, self._sleep = clock, sleep
         self._backoff = ExponentialBackoff(random_unit)
         self._observer = observer
+        if accounting is not None and (wall_clock is None or accounting_diagnostics is None):
+            raise LLMContractError("accounting_requires_clock_and_diagnostics")
+        self._accounting, self._wall_clock = accounting, wall_clock
+        self._accounting_diagnostics = accounting_diagnostics
+
+    def _accounting_report(self, start, event="accounting_persistence_incomplete"):
+        # A diagnostics consumer must be non-raising. Its failure may not replace
+        # a completed provider outcome or trigger another provider attempt.
+        try:
+            self._accounting_diagnostics(
+                AccountingDiagnostic(start.invocation_id, start.attempt_ordinal, event)
+            )
+        except Exception:
+            pass
+
+    async def _begin_attempt(self, request, ordinal):
+        if self._accounting is None:
+            return None
+        record = AttemptStart(
+            request.invocation_id, ordinal, request.purpose, request.model, self._wall_clock()
+        )
+        failed = False
+        try:
+            await self._accounting.start(record)
+        except Exception:
+            failed = True
+        if failed:
+            self._accounting_report(record, "accounting_start_persistence_failed")
+            # Outside the handler: no SQL exception chain or provider classification.
+            raise AccountingInfrastructureError()
+        return record
+
+    async def _finish_attempt(
+        self,
+        start,
+        tick,
+        *,
+        result=None,
+        failure=None,
+        usage=None,
+        reported=None,
+        outcome=AttemptOutcome.FAILED,
+        stream_started=False,
+    ):
+        if start is None:
+            return True
+        failed = False
+        try:
+            completed = result if result is not None else failure.attempt if failure else None
+            if completed is not None:
+                usage = completed.usage if completed.usage is not None else usage
+                reported = completed.model_used if result is not None else completed.model
+            usage = factual_usage(usage)
+            completeness = (
+                (UsageCompleteness.FINAL if completed is not None else UsageCompleteness.PARTIAL)
+                if usage
+                else UsageCompleteness.UNKNOWN
+            )
+            facts = AttemptFacts(
+                start=start,
+                finished_at_utc=self._wall_clock(),
+                latency_ms=max(0, int((self._clock() - tick) * 1000)),
+                outcome=outcome,
+                dispatch_state=DispatchState.HTTP_RESPONSE_RECEIVED
+                if completed is not None or stream_started
+                else failure.dispatch_state
+                if failure
+                else DispatchState.DISPATCHED_OR_UNKNOWN,
+                reported_model=reported,
+                failure_code=failure.code if failure else None,
+                finish_reason=completed.finish_reason if completed else None,
+                stream_outcome=getattr(completed, "outcome", None),
+                usage=usage,
+                completeness=completeness,
+                processing_tier=completed.processing_tier if completed else None,
+                # Provider IDs are optional. Omit them rather than reflect a string
+                # that an unknown gateway could have copied from private content.
+            )
+            await self._accounting.finalize(facts)
+        except asyncio.CancelledError:
+            self._accounting_report(start)
+            raise
+        except Exception:
+            failed = True
+        if failed:
+            self._accounting_report(start)
+        return not failed
+
+    async def _complete_invocation(self, start, outcome):
+        if start is None:
+            return
+        failed = False
+        try:
+            await self._accounting.complete_invocation(start.invocation_id, outcome)
+        except asyncio.CancelledError:
+            self._accounting_report(start)
+            raise
+        except Exception:
+            failed = True
+        if failed:
+            self._accounting_report(start)
 
     def _record(self, request, ordinal, decision, failure=None):
         if self._observer is not None:
@@ -234,8 +350,17 @@ class ExecutingModelGateway:
         self._record(request, ordinal, decision, failure)
         return decision
 
-    async def _wait(self, request, ordinal, started_at, decision, failure):
-        await self._sleep(decision.delay_seconds)
+    async def _wait(self, request, ordinal, started_at, decision, failure, attempt=None):
+        try:
+            await self._sleep(decision.delay_seconds)
+        except BaseException as error:
+            await self._complete_invocation(
+                attempt,
+                AttemptOutcome.CANCELLED
+                if isinstance(error, asyncio.CancelledError)
+                else AttemptOutcome.LOCAL_ERROR,
+            )
+            raise
         # A scheduler may oversleep; never dispatch using a stale pre-sleep decision.
         if self._clock() - started_at >= self._policy.max_elapsed_seconds:
             self._record(
@@ -254,14 +379,35 @@ class ExecutingModelGateway:
     async def generate(self, request: LLMRequest) -> LLMResponse:
         started_at = self._clock()
         for ordinal in range(1, self._policy.max_attempts + 1):
+            attempt = await self._begin_attempt(request, ordinal)
+            tick = self._clock()
             failure = None
             try:
                 result = await self._gateway.generate(request)
             except LLMError as error:
                 failure = error.failure
+            except BaseException as error:
+                outcome = (
+                    AttemptOutcome.CANCELLED
+                    if isinstance(error, asyncio.CancelledError)
+                    else AttemptOutcome.LOCAL_ERROR
+                )
+                if await self._finish_attempt(
+                    attempt,
+                    tick,
+                    outcome=outcome,
+                ):
+                    await self._complete_invocation(attempt, outcome)
+                raise
             if failure is None:
+                if await self._finish_attempt(
+                    attempt, tick, result=result, outcome=AttemptOutcome.SUCCESS
+                ):
+                    await self._complete_invocation(attempt, AttemptOutcome.SUCCESS)
                 self._record(request, ordinal, RetryDecision(False, 0.0, RetryReason.SUCCESS))
                 return result
+            if not await self._finish_attempt(attempt, tick, failure=failure):
+                raise LLMError(failure)
             decision = self._decision(request, ordinal, started_at, failure)
             if not decision.retry or not await self._wait(
                 request,
@@ -269,7 +415,9 @@ class ExecutingModelGateway:
                 started_at,
                 decision,
                 failure,
+                attempt,
             ):
+                await self._complete_invocation(attempt, AttemptOutcome.FAILED)
                 # Outside the exception handler: do not retain the attempt's traceback/context.
                 raise LLMError(failure)
         raise AssertionError("retry_loop_unreachable")
@@ -278,6 +426,10 @@ class ExecutingModelGateway:
         started_at = self._clock()
         stream_started = False
         for ordinal in range(1, self._policy.max_attempts + 1):
+            attempt = await self._begin_attempt(request, ordinal)
+            tick = self._clock()
+            latest_usage = reported = None
+            finalized = False
             failure = None
             try:
                 async with aclosing(self._gateway.stream(request)) as events:
@@ -292,6 +444,17 @@ class ExecutingModelGateway:
                         elif not stream_started:
                             raise LLMContractError("stream_event_before_started")
                         if isinstance(event, StreamCompleted):
+                            finalized = (
+                                True  # Never retry finalization if cancellation interrupts it.
+                            )
+                            if await self._finish_attempt(
+                                attempt,
+                                tick,
+                                result=event.completion,
+                                usage=latest_usage,
+                                outcome=AttemptOutcome.SUCCESS,
+                            ):
+                                await self._complete_invocation(attempt, AttemptOutcome.SUCCESS)
                             self._record(
                                 request,
                                 ordinal,
@@ -303,11 +466,49 @@ class ExecutingModelGateway:
                             )
                             yield event
                             return
+                        if isinstance(event, UsageUpdate):
+                            latest_usage = event.usage
                         yield event
             except LLMError as error:
                 failure = error.failure
+            except BaseException as error:
+                if not finalized:
+                    outcome = (
+                        AttemptOutcome.CANCELLED
+                        if isinstance(error, asyncio.CancelledError)
+                        else AttemptOutcome.LOCAL_ERROR
+                    )
+                    if await self._finish_attempt(
+                        attempt,
+                        tick,
+                        usage=latest_usage,
+                        reported=reported,
+                        stream_started=stream_started,
+                        outcome=outcome,
+                    ):
+                        await self._complete_invocation(attempt, outcome)
+                raise
             if failure is None:
+                if await self._finish_attempt(
+                    attempt,
+                    tick,
+                    usage=latest_usage,
+                    reported=reported,
+                    stream_started=stream_started,
+                    outcome=AttemptOutcome.LOCAL_ERROR,
+                ):
+                    await self._complete_invocation(attempt, AttemptOutcome.LOCAL_ERROR)
                 raise LLMContractError("stream_missing_terminal")
+            if not await self._finish_attempt(
+                attempt,
+                tick,
+                failure=failure,
+                usage=latest_usage,
+                reported=reported,
+                stream_started=stream_started,
+            ):
+                yield StreamFailed(failure)
+                return
             decision = self._decision(
                 request,
                 ordinal,
@@ -321,7 +522,9 @@ class ExecutingModelGateway:
                 started_at,
                 decision,
                 failure,
+                attempt,
             ):
+                await self._complete_invocation(attempt, AttemptOutcome.FAILED)
                 yield StreamFailed(failure)
                 return
         raise AssertionError("retry_loop_unreachable")

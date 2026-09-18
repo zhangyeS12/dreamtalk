@@ -85,6 +85,12 @@ class Database:
         """Content library capability; grants no canonical runtime write access."""
         return SqlAlchemyContentRepository(self._sessions)
 
+    def llm_usage_ledger(self, *, catalog=None):
+        """Operational accounting capability, isolated from world/content writes."""
+        from livingworld.infrastructure.persistence.llm_repository import SqlAlchemyUsageLedger
+
+        return SqlAlchemyUsageLedger(self._sessions, catalog=catalog)
+
     def package_repository(self) -> PackageRepository:
         """Native authored snapshot acceptance; no runtime command capability."""
         from livingworld.infrastructure.persistence.package_repository import (

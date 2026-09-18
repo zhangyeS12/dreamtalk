@@ -6,7 +6,7 @@
 
 **Imported Content != Runtime State；CharacterDefinition != Character；WorldContent != World；LoreEntry != WorldTruth；LoreCollection != WorldContent != Runtime World != WorldTruth。**
 
-Alembic head 现为 [0008_native_content_packages](../../services/core/src/livingworld/infrastructure/persistence/migrations/versions/0008_native_content_packages.py)，down_revision=0007_lore_collections。0008 只增加 accepted baseline 与 immutable blob binding 两张本地元数据表；不存 ZIP structure、不修改旧 rows/JSON/hash/audit/runtime。0006 建立五个内容表；0007 只新增集合表与条目归属 FK，不修改 Stage 2 表、事件、回执、cursor、typed/world-scoped IDs 或审计行。下文 Stage 2 的 0005 head 描述保留其阶段语境，不表示当前 head。
+Alembic head 现为 [0009_llm_accounting](../../services/core/src/livingworld/infrastructure/persistence/migrations/versions/0009_llm_accounting.py)，down_revision=0008_native_content_packages。0009 只新增独立 AccountingBase 的 operational llm_attempts，不修改 world/content schema 或历史 rows；详见 [LLM_ACCOUNTING.md](LLM_ACCOUNTING.md)。0008 只增加 accepted baseline 与 immutable blob binding 两张本地元数据表；不存 ZIP structure、不修改旧 rows/JSON/hash/audit/runtime。0006 建立五个内容表；0007 只新增集合表与条目归属 FK，不修改 Stage 2 表、事件、回执、cursor、typed/world-scoped IDs 或审计行。下文 Stage 2 的 0005 head 描述保留其阶段语境，不表示当前 head。
 
 | 内容表 | 可直接校验/查询的结构 | 正文边界 |
 | --- | --- | --- |
@@ -185,3 +185,9 @@ SQLite command UoW 在读取前通过集中 begin hook 的 `livingworld_write_in
 FormCharacterBelief 不需要新表、列或索引：复用 knowledge_assertions 的 ownership CHECK、source/provenance 同世界 FK、Decimal/JSON/WorldTime 编码。新断言 revision=0，source/provenance 可 SQL NULL，提供时原样保存；不要求对应 Truth 或 Observation。没有 semantic 去重、命题唯一约束或自动调和。
 
 **C-003E2 无 schema 变更，Alembic head 保持 0005_canonical_ledger；不创建 0006。** schema_version=1 和旧 migration_history 仍为兼容审计证据，Alembic 是唯一 cursor；旧事件、回执和审计不改写，实际 app-data 数据库未用于验收。
+
+## C-005D2A：独立物理 attempt accounting
+
+[llm_attempts](../../services/core/src/livingworld/infrastructure/persistence/llm_models.py) 以 (InvocationId, attempt_ordinal) 为 PK，START/FINALIZE 使用 app-data Database 的独立事务。Durable START 缺失 final facts 为 INCOMPLETE + POSSIBLY_BILLED_UNKNOWN，estimated money=NULL；重复 delivery 同事实幂等，冲突拒绝，restart 不自动补写或重放 generation。Logical terminal outcome 单独记录，允许物理 FAILED 与 invocation CANCELLED（例如 backoff 取消）同时存在。Exact Decimal 以 TEXT 保存，price snapshot 保存 effective schedule/selected variant/context/rates/source/line items，更新 catalog 不改历史。Migration detector 按 Alembic cursor 区分 0008/0009 的 exact shape，失败回滚，不利用 schema_version 再选择迁移。
+
+[Usage ledger repository](../../services/core/src/livingworld/infrastructure/persistence/llm_repository.py) 只接收 closed safe accounting facts，不接收 request/response/credential objects，不写 world/knowledge/content、WorldEvent 或 package。Raw rows/SQLite canary、duplicate delivery、历史快照、crash/restart 和 0008→0009 rollback 见 [accounting tests](../../tests/core/test_llm_accounting.py)。Usage fact != price config；estimated cost != invoice；未知费用不是零；预算限制与 incomplete reconciliation deferred。
