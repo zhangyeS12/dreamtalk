@@ -123,7 +123,7 @@ class StructuredOutputRequest:
     def __post_init__(self):
         _text(self.schema_name, "schema_name")
         object.__setattr__(self, "schema", _json_object(self.schema))
-        # This carries a JSON Schema document; schema/instance validation is C-005C.
+        # Schema/dialect validation belongs to the infrastructure validator.
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -259,6 +259,143 @@ class LLMErrorCode(StrEnum):
     CONTEXT_LIMIT = "context_limit"
     MALFORMED_RESPONSE = "malformed_response"
     CANCELLED = "cancelled"
+    STRUCTURED_OUTPUT_FAILED = "structured_output_failed"
+
+
+class StructuredOutputMode(StrEnum):
+    NONE = "none"
+    NATIVE_JSON_SCHEMA = "native_json_schema"
+    JSON_OBJECT_LOCAL_VALIDATE = "json_object_local_validate"
+
+
+class StructuredFailureReason(StrEnum):
+    JSON_PARSE_FAILED = "json_parse_failed"
+    SCHEMA_VALIDATION_FAILED = "schema_validation_failed"
+    OUTPUT_TRUNCATED = "output_truncated"
+    EMPTY_OUTPUT = "empty_output"
+
+
+@dataclass(frozen=True, slots=True)
+class StructuredFailureDetail:
+    """Bounded locations: object keys are redacted, array indices remain useful."""
+
+    reason: StructuredFailureReason
+    instance_path: tuple[str | int, ...] = ()
+    schema_path: tuple[str | int, ...] = ()
+    validator_keyword: str | None = None
+
+    def __post_init__(self):
+        _type(self.reason, StructuredFailureReason, "structured_failure_reason")
+        for label in ("instance_path", "schema_path"):
+            path = getattr(self, label)
+            if (
+                type(path) is not tuple
+                or len(path) > 16
+                or any(
+                    part != "*" and (type(part) is not int or not 0 <= part <= 2**31 - 1)
+                    for part in path
+                )
+            ):
+                raise LLMContractError("invalid_validation_path")
+        if self.validator_keyword is not None and self.validator_keyword not in {
+            "$ref",
+            "$dynamicRef",
+            "type",
+            "required",
+            "properties",
+            "patternProperties",
+            "additionalProperties",
+            "unevaluatedProperties",
+            "propertyNames",
+            "items",
+            "prefixItems",
+            "unevaluatedItems",
+            "contains",
+            "minContains",
+            "maxContains",
+            "minItems",
+            "maxItems",
+            "uniqueItems",
+            "minProperties",
+            "maxProperties",
+            "minLength",
+            "maxLength",
+            "pattern",
+            "minimum",
+            "maximum",
+            "exclusiveMinimum",
+            "exclusiveMaximum",
+            "multipleOf",
+            "enum",
+            "const",
+            "allOf",
+            "anyOf",
+            "oneOf",
+            "not",
+            "if",
+            "dependentRequired",
+            "dependentSchemas",
+        }:
+            raise LLMContractError("invalid_validator_keyword")
+
+
+@dataclass(frozen=True, slots=True)
+class LLMAttemptSummary:
+    """Content-free facts from a completed generation, never a retry workspace.
+
+    Usage details are projected onto a closed set of accounting counters. Arbitrary
+    LLMUsage metadata cannot survive even explicit serialization of this object.
+    Provider request IDs are deliberately omitted until a safe use requires them.
+    """
+
+    model: ModelRef
+    usage: LLMUsage | None
+    finish_reason: FinishReason
+    latency_ms: int | None
+
+    def __post_init__(self):
+        _type(self.model, ModelRef, "model_ref")
+        _type(self.finish_reason, FinishReason, "finish_reason")
+        if self.latency_ms is not None:
+            _count(self.latency_ms, "latency")
+        if self.usage is not None:
+            _type(self.usage, LLMUsage, "usage")
+            details = {}
+            for group, names in {
+                "prompt_tokens_details": ("cached_tokens", "audio_tokens"),
+                "completion_tokens_details": (
+                    "reasoning_tokens",
+                    "audio_tokens",
+                    "accepted_prediction_tokens",
+                    "rejected_prediction_tokens",
+                ),
+                "": ("prompt_cache_hit_tokens", "prompt_cache_miss_tokens"),
+            }.items():
+                source = self.usage.details.get(group, {}) if group else self.usage.details
+                if not isinstance(source, Mapping):
+                    raise LLMContractError("invalid_attempt_usage")
+                selected = {}
+                for name in names:
+                    if name in source:
+                        value = source[name]
+                        if value is not None:
+                            _count(value, "attempt_usage_counter")
+                        selected[name] = value
+                if selected:
+                    if group:
+                        details[group] = selected
+                    else:
+                        details.update(selected)
+            object.__setattr__(
+                self,
+                "usage",
+                LLMUsage(
+                    self.usage.input_tokens,
+                    self.usage.output_tokens,
+                    self.usage.total_tokens,
+                    details,
+                ),
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -266,11 +403,19 @@ class LLMFailure:
     code: LLMErrorCode
     invocation_id: InvocationId
     diagnostics: ProviderDiagnostics = field(default_factory=ProviderDiagnostics, repr=False)
+    attempt: LLMAttemptSummary | None = field(default=None, repr=False)
+    structured_detail: StructuredFailureDetail | None = None
 
     def __post_init__(self):
         _type(self.code, LLMErrorCode, "error_code")
         _type(self.invocation_id, InvocationId, "invocation_id")
         _type(self.diagnostics, ProviderDiagnostics, "provider_diagnostics")
+        if self.attempt is not None:
+            _type(self.attempt, LLMAttemptSummary, "attempt_summary")
+        if self.structured_detail is not None:
+            _type(self.structured_detail, StructuredFailureDetail, "structured_failure_detail")
+            if self.code is not LLMErrorCode.STRUCTURED_OUTPUT_FAILED:
+                raise LLMContractError("structured_detail_requires_structured_failure")
 
 
 class LLMError(Exception):
@@ -288,11 +433,25 @@ class ModelCapabilities:
     vision: bool = False
     tool_calling: bool = False
     reasoning_controls: bool = False
+    structured_output_mode: StructuredOutputMode = StructuredOutputMode.NONE
 
     def __post_init__(self):
-        for label in self.__slots__:
+        for label in (
+            "text_generation",
+            "streaming",
+            "structured_output",
+            "vision",
+            "tool_calling",
+            "reasoning_controls",
+        ):
             if type(getattr(self, label)) is not bool:
                 raise LLMContractError("invalid_capability_flag")
+        _type(self.structured_output_mode, StructuredOutputMode, "structured_output_mode")
+        if (
+            self.structured_output_mode is not StructuredOutputMode.NONE
+            and not self.structured_output
+        ):
+            raise LLMContractError("structured_mode_requires_capability")
 
 
 class ModelCatalog(Protocol):

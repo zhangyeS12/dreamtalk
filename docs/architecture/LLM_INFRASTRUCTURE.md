@@ -1,6 +1,6 @@
-# Provider-Neutral LLM Infrastructure — C-005A / C-005B
+# Provider-Neutral LLM Infrastructure — C-005A / C-005B / C-005C1
 
-状态：C-005A 建立标准库 application contracts、配置/凭据引用边界和 deterministic offline fake；C-005B 增加一个真实 HTTP transport 的 OpenAI-compatible Chat Completions adapter，验证使用离线 MockTransport。没有 provider SDK、真实 API key/调用验证、credential storage、usage persistence 或 migration。
+状态：C-005A 建立标准库 application contracts、配置/凭据引用边界和 deterministic offline fake；C-005B 增加 OpenAI-compatible Chat Completions adapter；C-005C1 增加显式结构化模式与 infrastructure 本地验证。验证使用离线 MockTransport；没有 provider SDK、真实 API 调用验证、credential storage、usage persistence 或 migration。
 
 ```text
 Provider != Model != Purpose
@@ -22,7 +22,7 @@ raw text != validated structured result
 | InvocationId | LivingWorld-owned typed UUID，由调用方生成；独立于 provider request ID、RequestId、EventId 和 WorldTime |
 | CorrelationId | 复用现有跨工作关联身份，optional；不是 invocation 或 provider identity |
 
-ModelCatalog 提供按完整 ModelRef 的显式能力查询，unknown 返回 None，不由 model-name substring 推断。ModelCapabilities 的 text_generation、streaming、structured_output、vision、tool_calling、reasoning_controls 是独立声明；布尔 false 表示未声明支持，不意味着 C-005A 实现这些功能。Routing、探测与 provider translation 留待后续。
+ModelCatalog 提供按完整 ModelRef 的显式能力查询，unknown 返回 None，不由 model-name substring 推断。ModelCapabilities 保留 text_generation、streaming、structured_output、vision、tool_calling、reasoning_controls 声明。C-005C1 增加中立 StructuredOutputMode：NONE、NATIVE_JSON_SCHEMA、JSON_OBJECT_LOCAL_VALIDATE；非 NONE 要求 structured_output=true，真实 Chat gateway 同时准确报告布尔和模式。旧布尔声明保留源兼容，但单独 true 不证明原生 schema 保证，不能据此选择 wire 模式。Routing/探测未实现。
 
 ## 2. 请求与文本内容
 
@@ -44,7 +44,7 @@ LLMUsage 的 input_tokens / output_tokens / total_tokens 是 nonnegative integer
 
 StructuredOutputRequest 携带 schema_name 与 JSON Schema document，包含的 `$schema` 等声明可原样保留。C-005A 仅检查有限 JSON/类型，不验证 schema dialect、schema 正确性或 generated instance。小测试 schema 不包含 Director/Builder 业务定义。
 
-ValidatedStructuredResult 是未来可信 validator 的 typed output claim，含 schema_name 与防御性冻结的 JSON value。它与 raw model text 分离；构造这个值本身**不执行或证明 schema validation**。只有未来 C-005C validated-generation 流程应在验证后构造；当前 fake 永远不创建此 claim。Tests 手工创建受控 claim 仅验证表达与类型边界，不能作为真实结构化验证证据。看起来是 JSON 的文本仍只有 raw content，不能直接写 canonical 世界状态。
+ValidatedStructuredResult 是可信 validator 的 typed output claim，含 schema_name 与防御性冻结的 JSON value。它与 raw model text 分离；构造这个值本身**不执行或证明 schema validation**。C-005C1 真实 adapter 仅在严格解析和显式 Draft202012Validator 验证后构造；fake 不创建此 claim。Tests 手工创建受控 claim 仅验证类型边界。看起来是 JSON 的文本不能直接写 canonical 世界状态。
 
 FinishReason 为 STOP / OUTPUT_LIMIT / REFUSAL / UNKNOWN。**模型内容/政策拒绝是正常 round trip 的 REFUSAL response**，可保留 usage/latency，不能改成 transport exception；REFUSAL 不允许携带 validated structured result。未知 provider finish code 的翻译留待真实 adapter。
 
@@ -83,8 +83,16 @@ Fake 可返回 JSON-looking text，却不 validate schema/instance、tokenize、
 
 ## 7. C-005B Chat Completions adapter
 
-[OpenAICompatibleChatGateway](../../services/core/src/livingworld/infrastructure/llm/openai_compatible.py) 实现 generate port 的 non-streaming text 子集：caller base path + `/chat/completions`、一次 async HTTP request、调用时 CredentialProvider.resolve、explicit timeout、禁止自动 redirect/retry。仅 system/user/assistant、max_output_tokens→max_tokens、最多 4 个 ordered stop；immutable profile 只显式声明是否支持 n=1。developer、nontext、structured-output 与 stream execution 均拒绝；不按模型名猜能力、不把 reasoning_content 作为 assistant text。
+[OpenAICompatibleChatGateway](../../services/core/src/livingworld/infrastructure/llm/openai_compatible.py) 实现 generate port 的 non-streaming 子集：caller base path + `/chat/completions`、一次 async HTTP request、调用时 CredentialProvider.resolve、explicit timeout、禁止自动 redirect/retry。仅 system/user/assistant、max_output_tokens→max_tokens、最多 4 个 ordered stop；immutable profile 显式声明 n=1 和 C-005C1 structured mode。developer、nontext 与 stream execution 均拒绝；NONE 拒绝结构化请求。不按模型名猜能力、不把 reasoning_content 作为 assistant text。
 
 校验最小 success schema，选择第一项 choice，实际 reported model 保留配置 ProviderId；InvocationId 仍为本地身份。Refusal 是成功响应；usage 缺失保持未知，advanced token counts 只取 allowlist，不计算 price。HTTP/credential errors 转为既有 LLMError，原 exceptions 不保留 context/cause，正常日志只记录固定 category 与本地 trace，finally 清除 wire Authorization。详见 [契约证据、映射与限制](OPENAI_COMPATIBLE_ADAPTER.md) 和 [离线测试](../../tests/core/test_openai_compatible.py)。
 
-本 adapter 未配置为 production default；真实网络兼容性未实测。OpenAI 原生 Responses/其他 provider adapters、streaming、structured validation/retry、fallback/routing/rate-limit scheduler、pricing/budgets/persistence、keychain、Prompt/context assembly、Director/Character Agent/Memory/AI Builder、tool execution 和最终 UI 均未实现。相关边界：[SYSTEM_OVERVIEW.md](SYSTEM_OVERVIEW.md)、[STAGE_2_ACCEPTANCE.md](STAGE_2_ACCEPTANCE.md)、[STAGE_3_ACCEPTANCE.md](STAGE_3_ACCEPTANCE.md)。
+本 adapter 未配置为 production default；真实网络兼容性未实测。OpenAI 原生 Responses/其他 provider adapters、streaming、retry/repair、fallback/routing/rate-limit scheduler、pricing/budgets/persistence、keychain、Prompt/context assembly、Director/Character Agent/Memory/AI Builder、tool execution 和最终 UI 均未实现。相关边界：[SYSTEM_OVERVIEW.md](SYSTEM_OVERVIEW.md)、[STAGE_2_ACCEPTANCE.md](STAGE_2_ACCEPTANCE.md)、[STAGE_3_ACCEPTANCE.md](STAGE_3_ACCEPTANCE.md)。
+
+## 8. C-005C1 结构化结果与安全失败计量
+
+中立契约增加单一 STRUCTURED_OUTPUT_FAILED category 与 StructuredFailureDetail.reason（JSON_PARSE_FAILED / SCHEMA_VALIDATION_FAILED / OUTPUT_TRUNCATED / EMPTY_OUTPUT）。有界 instance/schema path 的键名隐藏为 `*`，保留数组索引和 validator keyword；不携带 library ValidationError、schema/instance 或原异常。LLMError 仍只有稳定 code。
+
+LLMFailure.attempt 默认 None、隐藏 repr，类型为 immutable LLMAttemptSummary。只包含 ModelRef、usage、FinishReason、latency_ms；ModelRef 已包含 provider identity，不重复定义。Usage 复制标准 token 计数，仅保留既有闭合 accounting-counter allowlist（cached/audio/reasoning/prediction/cache-hit/miss），值限定非负整数/None；任意 metadata 被丢弃。摘要没有 content、structured payload、prompt、secret、headers、HTTP objects 或 provider error body，即使显式遍历所有字段也不会展开模型内容。当前不保留可选 provider request ID，避免反射内容；结构化后处理 failure diagnostics 也保持空。
+
+完成生成后的 JSON/schema/empty/truncation failure 保留实际 usage/model/finish/latency；没有 usage 就保持 None。Auth/transport/timeout 等前置失败不虚构 attempt。Refusal/filter 保持 LLMResponse 和 usage，不解析。成功结果仍保留 raw TextContent 与独立 validated claim。无价格、retry storage 或 repair context；详见 [STRUCTURED_GENERATION.md](STRUCTURED_GENERATION.md)。

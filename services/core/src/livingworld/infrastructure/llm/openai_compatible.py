@@ -1,4 +1,4 @@
-"""One-shot, non-streaming text Chat Completions translation; no provider SDK."""
+"""One-shot Chat Completions translation with opt-in structured modes; no provider SDK."""
 
 import json
 import re
@@ -23,9 +23,15 @@ from livingworld.application.llm import (
     ModelCapabilities,
     ModelRef,
     ProviderDiagnostics,
+    StructuredOutputMode,
     TextContent,
 )
 from livingworld.application.llm_config import CredentialProvider, ProviderConfig, SecretValue
+from livingworld.infrastructure.llm.structured import (
+    InvalidStructuredSchema,
+    prepare_schema,
+    process_structured,
+)
 from livingworld.infrastructure.logging import StructuredLogger
 
 _ROLES = frozenset({MessageRole.SYSTEM, MessageRole.USER, MessageRole.ASSISTANT})
@@ -51,12 +57,15 @@ _DETAILS = {
 
 @dataclass(frozen=True, slots=True)
 class ChatCompletionsProfile:
-    """Only opt into the optional n field after verifying target support."""
+    """Explicit target capabilities; never inferred from host or model name."""
 
     supports_n: bool = False
+    structured_output_mode: StructuredOutputMode = StructuredOutputMode.NONE
 
     def __post_init__(self):
         if type(self.supports_n) is not bool:
+            raise LLMContractError("invalid_chat_profile")
+        if not isinstance(self.structured_output_mode, StructuredOutputMode):
             raise LLMContractError("invalid_chat_profile")
 
 
@@ -212,7 +221,11 @@ def _response(response, request, secret, latency_ms):
     reason = _FINISH.get(finish, FinishReason.UNKNOWN)
     if refusal:
         reason = FinishReason.REFUSAL
-    if text is None and reason is not FinishReason.REFUSAL:
+    if (
+        text is None
+        and reason is not FinishReason.REFUSAL
+        and not (request.structured_output is not None and reason is FinishReason.OUTPUT_LIMIT)
+    ):
         raise _InvalidResponse
     output = text if text is not None else refusal or ""
     if secret in output:
@@ -287,6 +300,11 @@ class OpenAICompatibleChatGateway:
         self._config = config
         self._credentials = credentials
         self._profile = profile
+        self.capabilities = ModelCapabilities(
+            text_generation=True,
+            structured_output=profile.structured_output_mode is not StructuredOutputMode.NONE,
+            structured_output_mode=profile.structured_output_mode,
+        )
         self._logger = logger
         self._client = httpx.AsyncClient(
             transport=transport,
@@ -305,7 +323,7 @@ class OpenAICompatibleChatGateway:
     async def aclose(self):
         await self._client.aclose()
 
-    def _error(self, request, code, diagnostics=None):
+    def _error(self, request, code, diagnostics=None, *, attempt=None, structured_detail=None):
         if self._logger is not None:
             self._logger.emit(
                 "llm",
@@ -314,7 +332,13 @@ class OpenAICompatibleChatGateway:
                 trace_id=str(request.invocation_id.value),
             )
         return LLMError(
-            LLMFailure(code, request.invocation_id, diagnostics or ProviderDiagnostics())
+            LLMFailure(
+                code,
+                request.invocation_id,
+                diagnostics or ProviderDiagnostics(),
+                attempt,
+                structured_detail,
+            )
         )
 
     def _payload(self, request):
@@ -322,7 +346,10 @@ class OpenAICompatibleChatGateway:
             raise LLMContractError("invalid_llm_request")
         if request.model.provider_id != self._config.provider_id:
             raise self._error(request, LLMErrorCode.CONFIGURATION)
-        if request.streaming or request.structured_output is not None:
+        if request.streaming or (
+            request.structured_output is not None
+            and self._profile.structured_output_mode is StructuredOutputMode.NONE
+        ):
             raise self._error(request, LLMErrorCode.UNSUPPORTED_CAPABILITY)
         if len(request.stop_sequences) > _MAX_STOPS:
             raise self._error(request, LLMErrorCode.UNSUPPORTED_CAPABILITY)
@@ -349,6 +376,34 @@ class OpenAICompatibleChatGateway:
 
     async def generate(self, request: LLMRequest) -> LLMResponse:
         payload = self._payload(request)
+        validator = None
+        if request.structured_output is not None:
+            invalid = False
+            try:
+                validator = prepare_schema(request.structured_output)
+            except InvalidStructuredSchema:
+                invalid = True
+            if invalid:
+                raise self._error(request, LLMErrorCode.INVALID_REQUEST)
+            schema = validator.schema
+            # These wire modes require an explicit object root. Do not rewrite
+            # arrays/unions/$refs into objects, or claim general schema transport.
+            if schema.get("type") != "object" or (
+                self._profile.structured_output_mode is StructuredOutputMode.NATIVE_JSON_SCHEMA
+                and "anyOf" in schema
+            ):
+                raise self._error(request, LLMErrorCode.UNSUPPORTED_CAPABILITY)
+            if self._profile.structured_output_mode is StructuredOutputMode.NATIVE_JSON_SCHEMA:
+                payload["response_format"] = {
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": request.structured_output.schema_name,
+                        "strict": True,
+                        "schema": schema,
+                    },
+                }
+            else:
+                payload["response_format"] = {"type": "json_object"}
         if self._client.is_closed or self._config.secret_ref is None:
             raise self._error(request, LLMErrorCode.CONFIGURATION)
         credential_failed = False
@@ -399,6 +454,15 @@ class OpenAICompatibleChatGateway:
                 raise self._error(request, LLMErrorCode.MALFORMED_RESPONSE)
             if isinstance(result, LLMFailure):
                 raise self._error(request, result.code, result.diagnostics)
+            if validator is not None:
+                result = process_structured(request.structured_output, validator, result)
+                if isinstance(result, LLMFailure):
+                    raise self._error(
+                        request,
+                        result.code,
+                        attempt=result.attempt,
+                        structured_detail=result.structured_detail,
+                    )
             if self._logger is not None:
                 self._logger.emit(
                     "llm", "chat_completed", trace_id=str(request.invocation_id.value)

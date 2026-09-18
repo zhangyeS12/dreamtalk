@@ -1,4 +1,4 @@
-# OpenAI-Compatible Chat Adapter — C-005B
+# OpenAI-Compatible Chat Adapter — C-005B / C-005C1
 
 状态：已实现 infrastructure adapter，使用受控官方契约形状的离线 fixtures 验证。没有真实 API key、真实提供方调用或 production default wiring；fixture 通过不等于所有模型/兼容服务器已经实测。
 
@@ -18,7 +18,7 @@ OpenAI-compatible Chat adapter != OpenAI-native Responses adapter
 
 两方都支持 system/user/assistant 文本和 stop；OpenAI 最多 4 个 stop，DeepSeek 最多 16 个。本子集限制为 4 个，超出返回 UNSUPPORTED_CAPABILITY，不截断或忽略。角色 developer 不在共同子集中，拒绝而不转换权限。
 
-唯一 immutable profile 选项是 `ChatCompletionsProfile.supports_n`：默认 false；调用方验证目标支持后设置 true，发送 `n=1`。OpenAI fixture 使用 true；DeepSeek 当前文档没有该参数，其 fixture 使用默认 profile。选择不依赖 hostname、provider ID 或模型名称。文本生成能力声明为 true，其余 ModelCapabilities 为 false。
+Immutable profile 保留 `ChatCompletionsProfile.supports_n`：默认 false；调用方验证目标支持后设置 true，发送 `n=1`。C-005C1 增加 explicit structured_output_mode，默认 NONE；实例 capabilities 准确报告 text 与 structured mode，不依赖 hostname、provider ID 或模型名称。旧纯文本 fixture 配置继续有效。
 
 ## 2. Endpoint、传输与生命周期
 
@@ -50,11 +50,11 @@ ProviderConfig 只保留 SecretRef。Preflight 和本地配置检查通过后，
 | profile.supports_n=true | n=1 |
 | purpose / invocation / correlation / metadata / SecretRef | 不发送 |
 
-没有中性 temperature 参数，所以不制造 temperature/top_p/seed。StructuredOutputRequest、streaming、未来 nontext blocks 均在解析凭据前明确拒绝；不降级成提示词、不伪造流。store/previous-response IDs、provider-side conversation state、tools、response_format、thinking/reasoning controls 均不启用。此层 stateless 不构成云端数据保留政策承诺。
+没有中性 temperature 参数，所以不制造 temperature/top_p/seed。Streaming、未来 nontext blocks 及 NONE 下的 StructuredOutputRequest 均在解析凭据前拒绝。C-005C1 的两个显式结构化模式只添加 response_format，不改写消息或附加 schema 提示词，不按自然语言里的 JSON 字样检查能力。store/previous-response IDs、provider-side conversation state、tools、thinking/reasoning controls 不启用。此层 stateless 不构成云端数据保留政策承诺。
 
 ## 4. 响应、拒绝与 usage
 
-要求合法 JSON object、`object=chat.completion`、nonblank model、非空 choices；只选择**数组第一项**，验证 nonnegative integer index、assistant message 和 content/refusal/finish 类型。多个 choice 不拼接，不排序、不产生多个应用结果；其余 choice 不作为选择结果。finish 缺失/null 可映射 UNKNOWN；message.content 必须存在且为 string/null。未提供明确 refusal 时，null text 是 MALFORMED_RESPONSE，不把 reasoning_content 当作替代文本。
+要求合法 JSON object、`object=chat.completion`、nonblank model、非空 choices；只选择**数组第一项**，验证 nonnegative integer index、assistant message 和 content/refusal/finish 类型。多个 choice 不拼接，不排序、不产生多个应用结果；其余 choice 不作为选择结果。finish 缺失/null 可映射 UNKNOWN；message.content 必须存在且为 string/null。无明确 refusal 的 null text 通常是 MALFORMED_RESPONSE；结构化请求的 length/null 例外，先归类 OUTPUT_TRUNCATED。不会用 reasoning_content 替代文本。
 
 保留提供方报告的实际 model string，但 ProviderId 和 InvocationId 始终来自本地 request。Content 是 TextContent，不返回外部 message dict；`reasoning_content`、annotations、tool arguments、raw payload 均不透传。若提供方把本次 bearer 直接反射入 model/output，拒绝该响应。
 
@@ -66,7 +66,7 @@ ProviderConfig 只保留 SecretRef。Preflight 和本地配置检查通过后，
 | tool_calls / function_call finish 或实际 tool payload | UNSUPPORTED_CAPABILITY，不执行 |
 | 未知字符串 / 缺失 finish | UNKNOWN + bounded selected diagnostic |
 
-普通文本含 “I can't help with that.” 不构成 refusal 推断。REFUSAL 仍保留 usage/latency；content 非 null 时保留 content，null 时使用显式 refusal text，content_filter 没有文本时保留空输出。不创建 ValidatedStructuredResult。
+普通文本含 “I can't help with that.” 不构成 refusal 推断。REFUSAL 仍保留 usage/latency；content 非 null 时保留 content，null 时使用显式 refusal text，content_filter 没有文本时保留空输出。Refusal 不创建 ValidatedStructuredResult。其他结构化响应按 C-005C1 本地验证后才可创建该 claim。
 
 usage 可 absent/null；保持 None，不生成零值或假想总数。prompt_tokens/completion_tokens/total_tokens 映射 input/output/total，各字段可未知，已报告值要求 nonnegative integer（不接受 bool）。只保留 allowlisted cached/audio/reasoning/prediction token counts 和 DeepSeek cache-hit/miss counts，未知详情不复制；不计算价格。latency_ms 用 monotonic perf_counter 测量一次 HTTP send 的 round trip，包含读取响应，不包含凭据查找或 response normalization。
 
@@ -84,7 +84,7 @@ usage 可 absent/null；保持 None，不生成零值或假想总数。prompt_to
 | 不支持的请求或 tool response | UNSUPPORTED_CAPABILITY |
 | 3xx / 其他配置不兼容 HTTP status | CONFIGURATION |
 
-不分析英语 message 猜 context limit；未知结构化 code 不猜测。错误只携带 normalized code、InvocationId 与 selected diagnostics；原 HTTPX/credential exceptions 不保留在 LLMError.__context__/__cause__。
+不分析英语 message 猜 context limit；未知结构化 code 不猜测。错误携带 normalized code、InvocationId 与 selected diagnostics；结构化后处理失败额外携带安全 attempt summary 和 typed detail。原 HTTPX/credential exceptions 不保留在 LLMError.__context__/__cause__。
 
 Selected provider_request_id 优先 x-request-id，其次 body.id；允许最多 128 个 `[A-Za-z0-9_.:-]` 字符，并拒绝本次 bearer 和完整已知 message/stop 的直接反射。未知 finish 同样筛选，安全时保留 `finish:<value>`，否则仅 `unknown_finish_reason`。这不是任意字符串/编码敏感数据的万能 sanitizer。HTTP error diagnostic 仅 `http:<status>`，不复制 provider message、raw body、headers、URLs 或 Retry-After。C-005A 的 ProviderDiagnostics 只有 request ID/code，没有 typed retry timing slot；本任务不扩展 application 契约来承载时序元数据，不重试，后续任务处理。
 
@@ -97,3 +97,19 @@ Selected provider_request_id 优先 x-request-id，其次 body.id；允许最多
 覆盖正确 base paths、安全 endpoint/redirect、late credential resolve、header/cookie cleanup、role/content/stop/profile 映射、内部字段排除、usage unknown/advanced counts、explicit refusal、unknown finish、malformed success、status/context/transport errors、cancellation、single-request/no-retry、structured logs 与 synthetic canary 排除，以及已有 fake/架构和 Stage 0–3 回归。
 
 没有修改 domain/application contracts、canonical content/hash/package、command/ledger/replay、知识权限或 migration。httpx 从 dev 提升为直接 runtime dependency，uv.lock 继续锁定 0.28.1；没有新增 SDK。Responses、其他 provider、SSE streaming、schema validation、retry/backoff、routing/fallback、pricing/usage persistence、真实 key storage、Director/Agent/Memory/Builder 和 final UI 均不在 C-005B。停止于本任务。
+
+以上依赖/范围说明记录 C-005B 基线。C-005C1 的 contract 扩展和本地验证如下；世界、内容、knowledge、ledger 和 migration 均不变。
+
+## 7. C-005C1 显式结构化模式
+
+| Profile mode | response_format | 保证边界 |
+| --- | --- | --- |
+| NONE | 不发送；结构化请求在凭据/HTTP 前拒绝 | 普通文本 |
+| NATIVE_JSON_SCHEMA | `{type: json_schema, json_schema: {name, strict: true, schema}}` | 明确选择的提供方 schema 子集 + 本地验证 |
+| JSON_OBJECT_LOCAL_VALIDATE | `{type: json_object}` | 提供方 JSON object syntax；schema 仅在本地 |
+
+Native 原样发送 request 的 schema_name/schema，绝不注入提示或重写 schema。两种 transport 均要求显式 `type: object`；native 还拒绝 root anyOf。更宽的 union/$ref-only/array/scalar root 作为 UNSUPPORTED_CAPABILITY 在凭据/HTTP 前拒绝。通用本地 validator 支持所有 schema-permitted JSON roots，不把 wire 限制扩展成全局模型规则。Native 其余子集不复制另一套 schema engine；提供方 400/422 仍归类 INVALID_REQUEST。
+
+先检查 schema/dialect/local refs，再一次 HTTP 生成，再依次处理 refusal/filter → length → strict parse → schema validation。Refusal/filter 返回 LLMResponse，无 claim；length 返回 OUTPUT_TRUNCATED，哪怕文本恰好是合法 JSON。Parse/schema/empty failure 使用 STRUCTURED_OUTPUT_FAILED + typed reason，保留不含 response 的 attempt accounting summary。成功仅在本地验证后保留 raw text + validated claim。自动重试、repair、prompt 修改和价格均未实现。
+
+官方证据、精确 dialect/format/$ref policy 和受控结构化 fixtures 见 [STRUCTURED_GENERATION.md](STRUCTURED_GENERATION.md)。C-005B 的纯文本回归仍执行。
