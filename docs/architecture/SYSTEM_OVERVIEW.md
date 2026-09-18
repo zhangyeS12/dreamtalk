@@ -80,4 +80,4 @@ Planning Window 耗尽或大量计划失效才触发 Replan（FR-15）；上述�
 
 结构化生成是独立 request/validated-result 概念，raw JSON-looking text 不等于验证结果；C-005C 才实现验证/重试。流为 provider-neutral typed async events，取消使用标准 asyncio。Refusal 是成功 round-trip 的独立结果，usage 是 factual token data，price/cost 是 C-005D 的配置政策。凭据只通过 SecretRef/CredentialProvider seam 引用，不写入 prompt、normal logs、canonical 项目数据或 `.lwcontent`。
 
-当前只有确定性内存 fake，没有真实 provider SDK/API、Prompt assembly、路由/预算执行或使用记录表。详见 [LLM_INFRASTRUCTURE.md](LLM_INFRASTRUCTURE.md)。
+当前提供确定性内存 fake 和 C-005B 的 non-streaming text Chat Completions HTTP adapter；后者只经离线 OpenAI/DeepSeek 契约 fixtures 验证，未进行真实提供方调用或 production default wiring。没有 provider SDK、Prompt assembly、路由/预算执行或使用记录表。详见 [LLM_INFRASTRUCTURE.md](LLM_INFRASTRUCTURE.md) 和 [OPENAI_COMPATIBLE_ADAPTER.md](OPENAI_COMPATIBLE_ADAPTER.md)。

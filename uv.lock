@@ -268,6 +268,7 @@ dependencies = [
     { name = "aiosqlite" },
     { name = "alembic" },
     { name = "fastapi" },
+    { name = "httpx" },
     { name = "pydantic" },
     { name = "sqlalchemy", extra = ["asyncio"] },
     { name = "uvicorn" },
@@ -278,7 +279,6 @@ browser-test = [
     { name = "playwright" },
 ]
 dev = [
-    { name = "httpx" },
     { name = "httpx2" },
     { name = "pytest" },
     { name = "ruff" },
@@ -289,6 +289,7 @@ requires-dist = [
     { name = "aiosqlite", specifier = ">=0.20,<1" },
     { name = "alembic", specifier = ">=1.14,<2" },
     { name = "fastapi", specifier = ">=0.115,<1" },
+    { name = "httpx", specifier = ">=0.28,<1" },
     { name = "pydantic", specifier = ">=2.10,<3" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0,<3" },
     { name = "uvicorn", specifier = ">=0.34,<1" },
@@ -297,7 +298,6 @@ requires-dist = [
 [package.metadata.requires-dev]
 browser-test = [{ name = "playwright", specifier = ">=1.63,<2" }]
 dev = [
-    { name = "httpx", specifier = ">=0.28,<1" },
     { name = "httpx2", specifier = ">=2.13.0" },
     { name = "pytest", specifier = ">=8.3,<10" },
     { name = "ruff", specifier = ">=0.11,<1" },

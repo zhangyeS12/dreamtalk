@@ -8,13 +8,13 @@ LivingWorld 是持久化、事件驱动的多角色 AI 世界，不是普通聊�
 
 ## 开发状态
 
-当前阶段：**Stage 4 — C-005A Provider-Neutral LLM Contracts**。已建立 LivingWorld-owned ModelGateway、typed text request/response、usage、structured-output request/result、stream events、normalized errors、explicit capabilities、配置/凭据引用边界和 deterministic offline fake。真实 provider SDK/API、结构化验证/重试、费用、路由/预算执行和使用记录持久化尚未实现。详见 [LLM 基础契约](docs/architecture/LLM_INFRASTRUCTURE.md)。
+当前阶段：**Stage 4 — C-005B OpenAI-Compatible Chat Provider Adapter**。C-005A 的 LivingWorld-owned ModelGateway、typed request/response、usage、normalized errors、explicit capabilities、凭据引用和 offline fake 继续沿用；新增非流式文本 `/chat/completions` HTTP adapter，以离线 OpenAI/DeepSeek 契约 fixtures 验证。Adapter 在调用时解析凭据，一次请求、不自动重定向/重试，不暴露 private reasoning。真实 API 调用、production default wiring、provider SDK、streaming/结构化执行、费用、路由/预算和使用记录持久化尚未验证或实现。详见 [LLM 基础契约](docs/architecture/LLM_INFRASTRUCTURE.md) 和 [Chat adapter 映射与限制](docs/architecture/OPENAI_COMPATIBLE_ADAPTER.md)。
 
 Stage 3 已完成 canonical authored-content、Character Card/Lorebook 离线导入、Draft/Preview/confirmed Commit、外部 JSON 导出和 `.lwcontent` 原生内容包。原生包支持显式 roots 的依赖闭包、shared references、完整来源、本地 SHA-256 资产、六种三方冲突与事务化 accepted baseline。详见 [Stage 3 验收](docs/architecture/STAGE_3_ACCEPTANCE.md)、[原生内容包](docs/architecture/NATIVE_CONTENT_PACKAGE.md)、[内容模型](docs/architecture/CONTENT_MODEL.md)、[导入](docs/architecture/IMPORT_MODEL.md)、[导出](docs/architecture/EXPORT_MODEL.md) 和 [持久化](docs/architecture/PERSISTENCE_MODEL.md)。
 
 `.lwcontent` = authored content package；`.lworld` 保留给未来 runtime-world/state package。content package != backup != running world；hash integrity != publisher authentication；filesystem blobs + SQLite 不被宣称为一个 ACID transaction。导入/导出不创建 Runtime World/Character，不断言 Truth 或授予 Belief/PlayerKnowledge。作者文本/regex/activation metadata 保持不可信数据，不执行。
 
-运行内容实例化、automatic Lore→Truth/Belief、activation、prompt assembly、Memory/RAG、Director、Character Agent、真实 LLM/AI Builder、checkpoint/branch、`.lworld`、cloud sync、marketplace 和 final UI 尚未实现。外部 PNG/APNG writer、CHARX、任意图复制、签名与 orphan blob GC 仍 deferred。Stage 2 的资源级 CAS、幂等、ledger/rebuild 和知识隔离继续沿用，见 [Stage 2 验收](docs/architecture/STAGE_2_ACCEPTANCE.md)。C-005B 未开始。
+运行内容实例化、automatic Lore→Truth/Belief、activation、prompt assembly、Memory/RAG、Director、Character Agent、AI Builder、checkpoint/branch、`.lworld`、cloud sync、marketplace 和 final UI 尚未实现。外部 PNG/APNG writer、CHARX、任意图复制、签名与 orphan blob GC 仍 deferred。Stage 2 的资源级 CAS、幂等、ledger/rebuild 和知识隔离继续沿用，见 [Stage 2 验收](docs/architecture/STAGE_2_ACCEPTANCE.md)。C-005C 未开始。
 
 C-002 运行时基础继续沿用：共享 React UI、Tauri v2 Windows 开发壳、Python Core 启停协议、系统 API、SQLite 迁移元数据、结构化日志和 CI。页面仅显示 Core Connecting / Ready / Failed。
 

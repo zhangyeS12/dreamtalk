@@ -1,10 +1,10 @@
-# Provider-Neutral LLM Infrastructure — C-005A
+# Provider-Neutral LLM Infrastructure — C-005A / C-005B
 
-状态：Stage 4 首个任务只建立标准库 application contracts、配置/凭据引用边界和 deterministic offline fake。没有真实 provider adapter、SDK、HTTP 调用、API key、credential storage、usage persistence 或 migration。
+状态：C-005A 建立标准库 application contracts、配置/凭据引用边界和 deterministic offline fake；C-005B 增加一个真实 HTTP transport 的 OpenAI-compatible Chat Completions adapter，验证使用离线 MockTransport。没有 provider SDK、真实 API key/调用验证、credential storage、usage persistence 或 migration。
 
 ```text
 Provider != Model != Purpose
-application → ModelGateway port ← infrastructure provider adapters (future)
+application → ModelGateway port ← infrastructure provider adapters
 usage != price
 refusal != transport failure
 raw text != validated structured result
@@ -81,4 +81,10 @@ Fake 可返回 JSON-looking text，却不 validate schema/instance、tokenize、
 
 测试：[test_llm_contracts.py](../../tests/application/test_llm_contracts.py)、[architecture tests](../../tests/core/test_architecture.py)。覆盖请求 round-trip/immutability、raw vs validated claim、unknown usage、refusal vs failures、fake determinism/stream order/cancellation、explicit capabilities、credential repr/JSON/metadata/config isolation，以及实际 `.lwcontent` bytes/member canary 排除。完整 Stage 0–3 Python 回归继续执行。
 
-真实 provider adapters/SDK/HTTP、structured validation/retry、fallback/routing/rate-limit scheduler、pricing/budgets/persistence、keychain、Prompt/context assembly、Director/Character Agent/Memory/AI Builder、tool execution 和最终 UI 均未实现。下一任务 C-005B 未开始。相关边界：[SYSTEM_OVERVIEW.md](SYSTEM_OVERVIEW.md)、[STAGE_2_ACCEPTANCE.md](STAGE_2_ACCEPTANCE.md)、[STAGE_3_ACCEPTANCE.md](STAGE_3_ACCEPTANCE.md)。
+## 7. C-005B Chat Completions adapter
+
+[OpenAICompatibleChatGateway](../../services/core/src/livingworld/infrastructure/llm/openai_compatible.py) 实现 generate port 的 non-streaming text 子集：caller base path + `/chat/completions`、一次 async HTTP request、调用时 CredentialProvider.resolve、explicit timeout、禁止自动 redirect/retry。仅 system/user/assistant、max_output_tokens→max_tokens、最多 4 个 ordered stop；immutable profile 只显式声明是否支持 n=1。developer、nontext、structured-output 与 stream execution 均拒绝；不按模型名猜能力、不把 reasoning_content 作为 assistant text。
+
+校验最小 success schema，选择第一项 choice，实际 reported model 保留配置 ProviderId；InvocationId 仍为本地身份。Refusal 是成功响应；usage 缺失保持未知，advanced token counts 只取 allowlist，不计算 price。HTTP/credential errors 转为既有 LLMError，原 exceptions 不保留 context/cause，正常日志只记录固定 category 与本地 trace，finally 清除 wire Authorization。详见 [契约证据、映射与限制](OPENAI_COMPATIBLE_ADAPTER.md) 和 [离线测试](../../tests/core/test_openai_compatible.py)。
+
+本 adapter 未配置为 production default；真实网络兼容性未实测。OpenAI 原生 Responses/其他 provider adapters、streaming、structured validation/retry、fallback/routing/rate-limit scheduler、pricing/budgets/persistence、keychain、Prompt/context assembly、Director/Character Agent/Memory/AI Builder、tool execution 和最终 UI 均未实现。相关边界：[SYSTEM_OVERVIEW.md](SYSTEM_OVERVIEW.md)、[STAGE_2_ACCEPTANCE.md](STAGE_2_ACCEPTANCE.md)、[STAGE_3_ACCEPTANCE.md](STAGE_3_ACCEPTANCE.md)。

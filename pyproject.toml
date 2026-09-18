@@ -11,6 +11,7 @@ dependencies = [
     "aiosqlite>=0.20,<1",
     "alembic>=1.14,<2",
     "fastapi>=0.115,<1",
+    "httpx>=0.28,<1",
     "pydantic>=2.10,<3",
     "sqlalchemy[asyncio]>=2.0,<3",
     "uvicorn>=0.34,<1",
@@ -22,7 +23,6 @@ livingworld-core = "livingworld.bootstrap.cli:main"
 [dependency-groups]
 browser-test = ["playwright>=1.63,<2"]
 dev = [
-    "httpx>=0.28,<1",
     "httpx2>=2.13.0",
     "pytest>=8.3,<10",
     "ruff>=0.11,<1",
