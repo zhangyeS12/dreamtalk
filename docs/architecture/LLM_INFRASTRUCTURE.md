@@ -1,6 +1,6 @@
-# Provider-Neutral LLM Infrastructure — C-005A / C-005B / C-005C1 / C-005C2
+# Provider-Neutral LLM Infrastructure — C-005A / C-005B / C-005C1 / C-005C2 / C-005D1
 
-状态：C-005A 建立标准库 application contracts、配置/凭据引用边界和 deterministic offline fake；C-005B 增加 OpenAI-compatible Chat Completions adapter；C-005C1 增加显式结构化模式与 infrastructure 本地验证；C-005C2 增加真实非结构化 SSE text streaming 和 content-free stream completion。验证使用离线 MockTransport；没有 provider SDK、真实 API 调用验证、credential storage、usage persistence 或 migration。
+状态：C-005A 建立标准库 application contracts、配置/凭据引用边界和 deterministic offline fake；C-005B 增加 OpenAI-compatible Chat Completions adapter；C-005C1 增加显式结构化模式与 infrastructure 本地验证；C-005C2 增加真实非结构化 SSE text streaming 和 content-free stream completion；C-005D1 增加外层 provider-neutral retry orchestration 和 typed dispatch/retry timing metadata。验证使用离线 MockTransport；没有 provider SDK、真实 API 调用验证、credential storage、usage persistence 或 migration。
 
 ```text
 Provider != Model != Purpose
@@ -99,7 +99,7 @@ Fake 可返回 JSON-looking text，却不 validate schema/instance、tokenize、
 
 校验最小 success schema，选择第一项 choice，实际 reported model 保留配置 ProviderId；InvocationId 仍为本地身份。Refusal 是成功响应；usage 缺失保持未知，advanced token counts 只取 allowlist，不计算 price。HTTP/credential errors 转为既有 LLMError，原 exceptions 不保留 context/cause，正常日志只记录固定 category 与本地 trace，finally 清除 wire Authorization。详见 [契约证据、映射与限制](OPENAI_COMPATIBLE_ADAPTER.md) 和 [离线测试](../../tests/core/test_openai_compatible.py)。
 
-本 adapter 未配置为 production default；真实网络兼容性未实测。OpenAI 原生 Responses/其他 provider adapters、structured streaming、retry/repair、fallback/routing/rate-limit scheduler、pricing/budgets/persistence、keychain、Prompt/context assembly、Director/Character Agent/Memory/AI Builder、tool execution 和最终 UI 均未实现。相关边界：[SYSTEM_OVERVIEW.md](SYSTEM_OVERVIEW.md)、[STAGE_2_ACCEPTANCE.md](STAGE_2_ACCEPTANCE.md)、[STAGE_3_ACCEPTANCE.md](STAGE_3_ACCEPTANCE.md)。
+本 adapter 未配置为 production default；真实网络兼容性未实测。OpenAI 原生 Responses/其他 provider adapters、structured streaming、repair、fallback/routing/rate-limit scheduler、pricing/budgets/persistence、keychain、Prompt/context assembly、Director/Character Agent/Memory/AI Builder、tool execution 和最终 UI 均未实现。相关边界：[SYSTEM_OVERVIEW.md](SYSTEM_OVERVIEW.md)、[STAGE_2_ACCEPTANCE.md](STAGE_2_ACCEPTANCE.md)、[STAGE_3_ACCEPTANCE.md](STAGE_3_ACCEPTANCE.md)。
 
 ## 8. C-005C1 结构化结果与安全失败计量
 
@@ -113,3 +113,10 @@ LLMFailure.attempt 默认 None、隐藏 repr，类型为 immutable LLMAttemptSum
 ## 9. C-005C2 真实流式传输
 
 Chat gateway 的 stream 与 generate 共享 request translation、late credentials、HTTP client 和错误归一化；只在 profile 支持时请求 stream=true，可选 include_usage。SSE framing 增量、限额、pull-driven，不将非流式结果拆段。合法 HTTP/type 后 Started，choice-0 finish 后的 `[DONE]` 才能 Completed；中断/非法流 Failed，取消直接传播并关闭资源。reasoning/refusal payload 不成为 visible TextDelta。所有 terminal metadata 已排除正文，详见 [LLM_STREAMING.md](LLM_STREAMING.md) 和 [focused tests](../../tests/core/test_llm_streaming.py)。无新增依赖、usage persistence 或世界/内容/migration 改动。
+
+
+## 10. C-005D1 Attempt orchestration
+
+[ExecutingModelGateway / RetryPolicy](../../services/core/src/livingworld/application/llm_execution.py) 外包现有 single-attempt gateway，logical invocation != physical attempt。重试复用原 immutable request、provider/model/InvocationId，ordinal 是 execution metadata，不进入 wire。Failure 增加 typed DispatchState、HTTP status 和 normalized Retry-After duration；未知 dispatch 默认不重放。已完成 structured failure 不属于 transport retry；refusal/filter 原样成功。
+
+默认最多 3 次尝试、30 秒 retry-start window，bounded exponential full jitter，次数/monotonic elapsed 双重界限；Retry-After 是最早重试边界，无法满足就停止。Stream 只在暴露 Started 前允许 hidden retry；暴露后失败只交付一次 Failed，不重播或合并正文。Usage snapshots 不相加，retry 可能消耗额外 quota/cost，但没有 pricing/accounting persistence。取消在 attempt/backoff 直接传播；每次独立 resolve credentials，安全 observer 仅提供 closed execution facts。完整 policy/默认 eligibility/限制和离线证明见 [LLM_EXECUTION_POLICY.md](LLM_EXECUTION_POLICY.md)。

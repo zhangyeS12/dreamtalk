@@ -97,3 +97,10 @@ HTTP/status/credential 错误复用 C-005B 分类；read timeout→TIMEOUT，mid
 [fake/contract tests](../../tests/application/test_llm_contracts.py) 与真实 adapter 使用相同 metadata-only completion；fake 不为 stream 构造 full LLMResponse，不交付 refusal payload。C-005B/C1 非流式与完整 Stage 0–3/架构回归继续执行。没有 desktop/UI 变更，无 GUI smoke。
 
 未实测真实 API；结构化 streaming、Responses/WebSocket、tool execution、reasoning persistence、retry/repair/backoff/fallback/routing、pricing/budgets/usage DB、Director/Agent/Memory/Builder 均不在本任务。停止于 C-005C2。
+
+
+## 8. C-005D1 外层 pre-start orchestration
+
+Direct adapter stream 仍 single-attempt。新增 [ExecutingModelGateway](LLM_EXECUTION_POLICY.md) 只在 application 尚未见到 Started 前按 normalized dispatch/status/Retry-After 重试；将要重试的 Failed 只作为内部决策，旧 iterator 在等待前关闭。最终只交付一个 logical lifecycle；所有 pre-start attempts 失败则单一最终 Failed，后续成功则只有一次 Started。
+
+Started 暴露后永久禁止自动 replay，即使无正文；actual timeout/disconnect、malformed/EOF 都保持一次 Failed/no Completed。没有 prefix resume、multiple-attempt text merging 或 buffer。InvocationId/request/provider/model 不变，ordinal 仅 execution metadata。UsageUpdate/terminal usage 仍同一物理 stream 的事实快照，不求和/不混合隐藏尝试的 usage；missing None。取消在 stream/backoff 直接传播、不产生 synthetic terminal；每次 provider attempt 独立 resolve credentials。没有 per-attempt usage persistence、price 或 routing/fallback。

@@ -3,6 +3,7 @@
 from collections.abc import AsyncIterator, Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
+from math import isfinite
 from typing import Protocol
 from uuid import UUID
 
@@ -393,6 +394,12 @@ class LLMAttemptSummary:
             object.__setattr__(self, "usage", _accounting_usage(self.usage))
 
 
+class DispatchState(StrEnum):
+    NOT_DISPATCHED = "not_dispatched"
+    DISPATCHED_OR_UNKNOWN = "dispatched_or_unknown"
+    HTTP_RESPONSE_RECEIVED = "http_response_received"
+
+
 @dataclass(frozen=True, slots=True)
 class LLMFailure:
     code: LLMErrorCode
@@ -400,11 +407,29 @@ class LLMFailure:
     diagnostics: ProviderDiagnostics = field(default_factory=ProviderDiagnostics, repr=False)
     attempt: LLMAttemptSummary | None = field(default=None, repr=False)
     structured_detail: StructuredFailureDetail | None = None
+    dispatch_state: DispatchState = DispatchState.DISPATCHED_OR_UNKNOWN
+    http_status: int | None = None
+    retry_after_seconds: float | None = None
 
     def __post_init__(self):
         _type(self.code, LLMErrorCode, "error_code")
         _type(self.invocation_id, InvocationId, "invocation_id")
         _type(self.diagnostics, ProviderDiagnostics, "provider_diagnostics")
+        _type(self.dispatch_state, DispatchState, "dispatch_state")
+        if self.http_status is not None:
+            if type(self.http_status) is not int or not 100 <= self.http_status <= 599:
+                raise LLMContractError("invalid_http_status")
+            if self.dispatch_state is not DispatchState.HTTP_RESPONSE_RECEIVED:
+                raise LLMContractError("http_status_requires_response")
+        if self.retry_after_seconds is not None:
+            if (
+                type(self.retry_after_seconds) not in {int, float}
+                or not isfinite(self.retry_after_seconds)
+                or self.retry_after_seconds < 0
+            ):
+                raise LLMContractError("invalid_retry_after")
+            if self.dispatch_state is not DispatchState.HTTP_RESPONSE_RECEIVED:
+                raise LLMContractError("retry_after_requires_response")
         if self.attempt is not None:
             _type(self.attempt, LLMAttemptSummary, "attempt_summary")
         if self.structured_detail is not None:

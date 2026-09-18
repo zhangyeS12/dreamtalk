@@ -1,4 +1,4 @@
-# OpenAI-Compatible Chat Adapter — C-005B / C-005C1 / C-005C2
+# OpenAI-Compatible Chat Adapter — C-005B / C-005C1 / C-005C2 / C-005D1
 
 状态：已实现 infrastructure adapter，使用受控官方契约形状的离线 fixtures 验证。没有真实 API key、真实提供方调用或 production default wiring；fixture 通过不等于所有模型/兼容服务器已经实测。
 
@@ -128,3 +128,10 @@ StreamCompleted 携带 content-free LLMStreamCompletion；TextDelta 是唯一正
 finally 在 terminal 交付前 scrub wire Authorization/cookies/secret reference 并关闭 response，关闭的 HTTPX failure 也归一化。CancelledError 与 explicit iterator.aclose 释放资源，不转为 synthetic Failed/Completed；放弃 iterator 时使用 aclosing。没有 greedy reader/queue。日志继续固定 allowlist，不写正文/prompt/reasoning/HTTP exceptions。
 
 详细限额/生命周期/官方证据/限制见 [LLM_STREAMING.md](LLM_STREAMING.md)；离线验证见 [stream tests](../../tests/core/test_llm_streaming.py)、[OpenAI SSE](../../tests/core/fixtures/llm/openai_stream.sse)、[DeepSeek SSE](../../tests/core/fixtures/llm/deepseek_stream.sse)。C-005B/C1 generate regressions 保持执行，无新增依赖和 migration，真实 API 兼容性仍未实测。
+
+
+## 9. C-005D1 Dispatch / Retry-After normalization
+
+Adapter 仍每次 generate/stream 只发起一次 HTTP send，无 backoff/sleep/retry loop。新增 failure dispatch_state / http_status / retry_after_seconds；explicit HTTP 429/408/5xx 保留 normalized status 和有效 standard Retry-After duration（delta-seconds / HTTP-date），不保留 header。Local preflight/credentials 为 NOT_DISPATCHED；pool/connect timeout 和 ConnectError 在没有 response 时为 proven NOT_DISPATCHED；read/write/unknown transport failure 为 DISPATCHED_OR_UNKNOWN。HTTP response 后的 malformed/structured failure 标为 HTTP_RESPONSE_RECEIVED，结构化 summary 不变；read interruption 仍未知，不因 headers 200 就认为可以重放。
+
+[_status_failure / _transport_failure](../../services/core/src/livingworld/infrastructure/llm/openai_compatible.py) 是唯一 concrete normalization 边界；[_failure_error](../../services/core/src/livingworld/infrastructure/llm/openai_compatible.py) 转交全部安全 typed facts。仅 [外层 ExecutingModelGateway](LLM_EXECUTION_POLICY.md) 决定相同 provider/model/request 的下一次 attempt。旧 direct no-retry/credential/scrub/structured/stream tests 继续执行。没有 SDK、dependency、migration 或 production wiring；C-005D2 未开始。

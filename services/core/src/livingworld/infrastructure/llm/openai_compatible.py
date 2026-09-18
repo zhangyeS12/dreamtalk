@@ -3,13 +3,18 @@
 import json
 import re
 from collections.abc import AsyncIterator
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from datetime import UTC, datetime
+from email.utils import parsedate_to_datetime
+from math import isfinite
+from sys import float_info
 from time import perf_counter
 from urllib.parse import unquote, urlsplit
 
 import httpx
 
 from livingworld.application.llm import (
+    DispatchState,
     FinishReason,
     LLMContractError,
     LLMError,
@@ -263,6 +268,43 @@ def _response(response, request, secret, latency_ms):
 _UNREAD = object()
 
 
+def _retry_after(value, *, now_utc=None):
+    """Normalize standard HTTP hints once; never retain the original header."""
+    if not isinstance(value, str):
+        return None
+    value = value.strip()
+    if re.fullmatch(r"-?[0-9]+", value):
+        if value.startswith("-"):
+            return 0.0
+        seconds = float(value)
+        # An exceptionally large valid hint must stop retries, not become unavailable.
+        return max(0.0, seconds) if isfinite(seconds) else float_info.max
+    try:
+        date = parsedate_to_datetime(value)
+        if date.tzinfo is None:
+            return None
+        return max(0.0, (date - (now_utc or datetime.now(UTC))).total_seconds())
+    except (ValueError, TypeError, OverflowError):
+        return None
+
+
+def _transport_failure(error, *, response_received=False):
+    """Concrete HTTPX phase knowledge stops here; uncertain send/read/write is unsafe."""
+    if isinstance(error, httpx.InvalidURL):
+        return LLMErrorCode.CONFIGURATION, DispatchState.NOT_DISPATCHED
+    code = (
+        LLMErrorCode.TIMEOUT
+        if isinstance(error, httpx.TimeoutException)
+        else LLMErrorCode.PROVIDER_UNAVAILABLE
+    )
+    not_dispatched = not response_received and isinstance(
+        error, (httpx.PoolTimeout, httpx.ConnectTimeout, httpx.ConnectError)
+    )
+    return code, (
+        DispatchState.NOT_DISPATCHED if not_dispatched else DispatchState.DISPATCHED_OR_UNKNOWN
+    )
+
+
 def _status_failure(response, request, secret, *, data=_UNREAD):
     status = response.status_code
     if data is _UNREAD:
@@ -293,6 +335,11 @@ def _status_failure(response, request, secret, *, data=_UNREAD):
         code,
         request.invocation_id,
         _diagnostics(response, data, request, secret, f"http:{status}"),
+        dispatch_state=DispatchState.HTTP_RESPONSE_RECEIVED,
+        http_status=status,
+        retry_after_seconds=_retry_after(response.headers.get("retry-after"))
+        if status == 429 or status == 408 or status >= 500
+        else None,
     )
 
 
@@ -541,7 +588,18 @@ class OpenAICompatibleChatGateway:
     async def aclose(self):
         await self._client.aclose()
 
-    def _error(self, request, code, diagnostics=None, *, attempt=None, structured_detail=None):
+    def _error(
+        self,
+        request,
+        code,
+        diagnostics=None,
+        *,
+        attempt=None,
+        structured_detail=None,
+        dispatch_state=DispatchState.NOT_DISPATCHED,
+        http_status=None,
+        retry_after_seconds=None,
+    ):
         if self._logger is not None:
             self._logger.emit(
                 "llm",
@@ -556,7 +614,22 @@ class OpenAICompatibleChatGateway:
                 diagnostics or ProviderDiagnostics(),
                 attempt,
                 structured_detail,
+                dispatch_state,
+                http_status,
+                retry_after_seconds,
             )
+        )
+
+    def _failure_error(self, request, failure):
+        return self._error(
+            request,
+            failure.code,
+            failure.diagnostics,
+            attempt=failure.attempt,
+            structured_detail=failure.structured_detail,
+            dispatch_state=failure.dispatch_state,
+            http_status=failure.http_status,
+            retry_after_seconds=failure.retry_after_seconds,
         )
 
     def _payload(self, request, *, streaming=False):
@@ -659,7 +732,7 @@ class OpenAICompatibleChatGateway:
         secret = await self._secret(request)
         wire = None
         response = None
-        failure_code = None
+        transport_failure = None
         try:
             wire = self._client.build_request(
                 "POST", self._endpoint, json=payload, headers={"Authorization": f"Bearer {secret}"}
@@ -668,35 +741,46 @@ class OpenAICompatibleChatGateway:
             started = perf_counter()
             try:
                 response = await self._client.send(wire, follow_redirects=False)
-            except httpx.TimeoutException:
-                failure_code = LLMErrorCode.TIMEOUT
-            except httpx.InvalidURL:
-                failure_code = LLMErrorCode.CONFIGURATION
-            except httpx.HTTPError:
-                failure_code = LLMErrorCode.PROVIDER_UNAVAILABLE
+            except (httpx.HTTPError, httpx.InvalidURL) as error:
+                transport_failure = _transport_failure(error)
             latency_ms = max(0, int((perf_counter() - started) * 1000))
-            if failure_code is not None:
-                raise self._error(request, failure_code)
+            if transport_failure is not None:
+                code, dispatch = transport_failure
+                raise self._error(request, code, dispatch_state=dispatch)
             if not 200 <= response.status_code < 300:
                 failure = _status_failure(response, request, secret)
-                raise self._error(request, failure.code, failure.diagnostics)
+                raise self._failure_error(request, failure)
             malformed = False
             try:
                 result = _response(response, request, secret, latency_ms)
             except _InvalidResponse:
                 malformed = True
             if malformed:
-                raise self._error(request, LLMErrorCode.MALFORMED_RESPONSE)
+                raise self._error(
+                    request,
+                    LLMErrorCode.MALFORMED_RESPONSE,
+                    dispatch_state=DispatchState.HTTP_RESPONSE_RECEIVED,
+                    http_status=response.status_code,
+                )
             if isinstance(result, LLMFailure):
-                raise self._error(request, result.code, result.diagnostics)
+                raise self._failure_error(
+                    request,
+                    replace(
+                        result,
+                        dispatch_state=DispatchState.HTTP_RESPONSE_RECEIVED,
+                        http_status=response.status_code,
+                    ),
+                )
             if validator is not None:
                 result = process_structured(request.structured_output, validator, result)
                 if isinstance(result, LLMFailure):
-                    raise self._error(
+                    raise self._failure_error(
                         request,
-                        result.code,
-                        attempt=result.attempt,
-                        structured_detail=result.structured_detail,
+                        replace(
+                            result,
+                            dispatch_state=DispatchState.HTTP_RESPONSE_RECEIVED,
+                            http_status=response.status_code,
+                        ),
                     )
             if self._logger is not None:
                 self._logger.emit(
@@ -731,9 +815,14 @@ class OpenAICompatibleChatGateway:
             if not 200 <= response.status_code < 300:
                 data = await _bounded_error_body(response, self._stream_limits.max_error_body_bytes)
                 failed = _status_failure(response, request, secret, data=data)
-                raise self._error(request, failed.code, failed.diagnostics)
+                raise self._failure_error(request, failed)
             if not _event_stream_type(response.headers.get("content-type", "")):
-                raise self._error(request, LLMErrorCode.MALFORMED_RESPONSE)
+                raise self._error(
+                    request,
+                    LLMErrorCode.MALFORMED_RESPONSE,
+                    dispatch_state=DispatchState.HTTP_RESPONSE_RECEIVED,
+                    http_status=response.status_code,
+                )
             if self._logger is not None:
                 self._logger.emit(
                     "llm", "chat_stream_started", trace_id=str(request.invocation_id.value)
@@ -779,16 +868,23 @@ class OpenAICompatibleChatGateway:
                 raise _InvalidResponse  # EOF is never a protocol completion.
         except LLMError as error:
             failure = error.failure
-        except httpx.TimeoutException:
-            failure = self._error(request, LLMErrorCode.TIMEOUT).failure
-        except httpx.InvalidURL:
-            failure = self._error(request, LLMErrorCode.CONFIGURATION).failure
-        except httpx.HTTPError:
-            failure = self._error(request, LLMErrorCode.PROVIDER_UNAVAILABLE).failure
+        except (httpx.HTTPError, httpx.InvalidURL) as error:
+            code, dispatch = _transport_failure(error, response_received=response is not None)
+            failure = self._error(request, code, dispatch_state=dispatch).failure
         except _UnsupportedStream:
-            failure = self._error(request, LLMErrorCode.UNSUPPORTED_CAPABILITY).failure
+            failure = self._error(
+                request,
+                LLMErrorCode.UNSUPPORTED_CAPABILITY,
+                dispatch_state=DispatchState.HTTP_RESPONSE_RECEIVED,
+                http_status=response.status_code,
+            ).failure
         except (_InvalidResponse, SSEProtocolError):
-            failure = self._error(request, LLMErrorCode.MALFORMED_RESPONSE).failure
+            failure = self._error(
+                request,
+                LLMErrorCode.MALFORMED_RESPONSE,
+                dispatch_state=DispatchState.HTTP_RESPONSE_RECEIVED,
+                http_status=response.status_code,
+            ).failure
         finally:
             if wire is not None:
                 wire.headers.pop("authorization", None)
@@ -797,12 +893,10 @@ class OpenAICompatibleChatGateway:
             if response is not None:
                 try:
                     await response.aclose()
-                except httpx.TimeoutException:
+                except httpx.HTTPError as error:
                     if failure is None:
-                        failure = self._error(request, LLMErrorCode.TIMEOUT).failure
-                except httpx.HTTPError:
-                    if failure is None:
-                        failure = self._error(request, LLMErrorCode.PROVIDER_UNAVAILABLE).failure
+                        code, dispatch = _transport_failure(error, response_received=True)
+                        failure = self._error(request, code, dispatch_state=dispatch).failure
         # Close and scrub before delivering the terminal event, even if the
         # consumer never requests another item. CancelledError/GeneratorExit
         # propagate through finally and never reach this terminal delivery.
