@@ -1,6 +1,6 @@
 # 系统概览
 
-状态：Stage 0 概念架构；没有对应的业务实现。规则来源为 [PRODUCT_SPEC.md](../product/PRODUCT_SPEC.md) 中的 FR-01 至 FR-24。本文划分概念职责，不确定服务部署方式、编程语言、框架、存储引擎或通信协议。
+状态：本文职责划分源于 Stage 0；冻结规则来源为 [PRODUCT_SPEC.md](../product/PRODUCT_SPEC.md) 中的 FR-01 至 FR-24。已接受技术基线见 [Architecture Review 001](ARCHITECTURE_REVIEW_001.md)，已实现基础见 [Stage 2](STAGE_2_ACCEPTANCE.md)、[Stage 3](STAGE_3_ACCEPTANCE.md)。C-005A 建立 provider-neutral LLM application contracts；Director、Character Agent、Builder 和世界模拟业务尚未实现。本文不自行增加部署或产品决策。
 
 ## 1. 系统目标与边界
 
@@ -73,3 +73,11 @@ Planning Window 耗尽或大量计划失效才触发 Replan（FR-15）；上述�
 世界时间推进方式、暂停与离线推进；必要主动联系的定义；同一理由的身份与跨时间线作用域；多角色一次主动联系的消息计数；Planning Window 耗尽与大量计划失效的判定；事实冲突处理；Checkpoint 恢复与分支信息继承；知识和记忆修正；导入兼容边界；预算触顶后的行为。
 
 这些问题的具体决策均未在 C-001 中作出。研究清单见 [research/README.md](../research/README.md)。
+
+## 6. C-005A LLM 契约边界
+
+应用只依赖 LivingWorld-owned ModelGateway.generate/stream 与 typed request/response，provider adapter 属于 infrastructure。Provider != Model != Purpose；能力显式查询，不解析 model-name 猜行为。LLM contract 不授予 world/content/knowledge mutation capability，既有 Kernel 提交路径与先权限后检索的边界不变。
+
+结构化生成是独立 request/validated-result 概念，raw JSON-looking text 不等于验证结果；C-005C 才实现验证/重试。流为 provider-neutral typed async events，取消使用标准 asyncio。Refusal 是成功 round-trip 的独立结果，usage 是 factual token data，price/cost 是 C-005D 的配置政策。凭据只通过 SecretRef/CredentialProvider seam 引用，不写入 prompt、normal logs、canonical 项目数据或 `.lwcontent`。
+
+当前只有确定性内存 fake，没有真实 provider SDK/API、Prompt assembly、路由/预算执行或使用记录表。详见 [LLM_INFRASTRUCTURE.md](LLM_INFRASTRUCTURE.md)。

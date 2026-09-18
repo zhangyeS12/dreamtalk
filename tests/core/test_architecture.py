@@ -4,6 +4,43 @@ from importlib.util import resolve_name
 from pathlib import Path
 
 
+def test_llm_contracts_are_provider_neutral_and_existing_world_content_are_independent():
+    root = Path(__file__).resolve().parents[2] / "services/core/src/livingworld"
+    providers = {"openai", "anthropic", "google", "google_genai", "deepseek", "ollama"}
+    for layer in ("domain", "application"):
+        for source in (root / layer).rglob("*.py"):
+            for node in ast.walk(ast.parse(source.read_text("utf-8"))):
+                modules = (
+                    [alias.name for alias in node.names]
+                    if isinstance(node, ast.Import)
+                    else [node.module or ""]
+                    if isinstance(node, ast.ImportFrom)
+                    else []
+                )
+                for module in modules:
+                    assert module.split(".")[0] not in providers, (source, module)
+                    assert not module.startswith("livingworld.infrastructure.llm"), (source, module)
+                    if source.name.startswith("llm"):
+                        assert module.split(".")[0] not in {
+                            "httpx",
+                            "requests",
+                            "socket",
+                            "sqlite3",
+                        }, (source, module)
+                    if layer == "domain":
+                        assert not module.startswith("livingworld.application.llm"), (
+                            source,
+                            module,
+                        )
+    for source in root.rglob("*.py"):
+        if source.name.startswith("llm") or "llm" in source.relative_to(root).parts:
+            continue
+        for node in ast.walk(ast.parse(source.read_text("utf-8"))):
+            if isinstance(node, ast.ImportFrom):
+                assert not (node.module or "").startswith("livingworld.infrastructure.llm"), source
+                assert not (node.module or "").startswith("livingworld.application.llm"), source
+
+
 def test_inner_layers_have_no_outward_dependencies():
     root = Path(__file__).resolve().parents[2] / "services/core/src/livingworld"
     forbidden = {"fastapi", "sqlalchemy", "alembic", "tauri", "pydantic", "uvicorn", "starlette"}
