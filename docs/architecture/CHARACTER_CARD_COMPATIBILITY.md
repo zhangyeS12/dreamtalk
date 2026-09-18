@@ -17,7 +17,8 @@
 | CHARX | 明确不支持；解包/资产物化留给后续任务 |
 | embedded character_book | 卡片 parser 保留并 warning；C-004C1 normalizer 从该表示生成 LoreCollection/typed content reference，见下文 |
 | legacy embedded assets | 识别 tEXt namespace、记录位置/大小并保留 raw；不解码/提取 |
-| export / runtime instantiation | 未实现 |
+| external JSON export | C-004D1 显式 V2/V3 target，canonical 优先与损失警告；无 PNG/APNG writer |
+| runtime instantiation | 未实现 |
 
 实现：[character_cards.py](../../services/core/src/livingworld/infrastructure/imports/character_cards.py)、[png.py](../../services/core/src/livingworld/infrastructure/imports/png.py)、[imports.py](../../services/core/src/livingworld/application/imports.py)。
 
@@ -79,4 +80,8 @@ ImportDraft/ImportPreview 从已冻结 Draft 的 livingworld.import 读取 warni
 
 合法空白正文条目只保留来源并 warning；V3 secondary_keys 单字符串原样保留并 warning，不 split；canonical 非空约束不放宽，Commit 可继续。引用不创建 Runtime Character/Knowledge，也不赋予集合内容 Truth 地位或角色知识权限。0007 只为集合与归属新增内容 schema；C-004B parser 自身依然没有存储权限。
 
-Builder、lore 运行激活、资产布局、导出、运行实例化与产品级重复导入体验仍未实现。
+## 8. C-004D1 JSON export
+
+[EXPORT_MODEL.md](EXPORT_MODEL.md) 定义 pure-content JSON export：当前 canonical name/text/tags/examples 与 authored/card compatibility state 优先于旧源；同格式仅受限恢复 unknown/opaque extensions，跨格式不注入未知语义。V3→V2 逐字段 warning；V2→V3 不创造 optional 内容或资产。一个 linked book 可嵌入，多个必须 selection 或省略并 warning；旧未规范化 raw book 不自动代替 canonical 集合。V3 book 的 unspecified use_regex 要求显式 caller export policy，V3 secondary_keys 按用户确认输出 array。完整原 bytes 与导出 bytes 是独立操作。
+
+Builder、lore 运行激活、资产布局、PNG/APNG writer、CHARX、运行实例化与产品级重复导入体验仍未实现。

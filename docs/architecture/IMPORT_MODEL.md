@@ -23,7 +23,7 @@ external source (untrusted)
 | opaque canonical metadata | 哪些兼容数据需要保留但尚未解释？ | JSON extensions、authored_instructions、activation/insertion metadata |
 | RawImportEnvelope | 原始外部文件究竟包含什么？ | typed RawImportId、完整 original_payload bytes、来源元数据及 opaque unknown_extensions |
 
-RawImportEnvelope 保留精确 bytes，无需理解原编码或外部字段结构。SHA-256 校验覆盖全部原始 bytes，保留 whitespace/换行/未知字段等 round-trip 证据。C-004A 不实现导出器，也不宣称已经完成外部格式 round-trip。
+RawImportEnvelope 保留精确 bytes，无需理解原编码或外部字段结构。SHA-256 校验覆盖全部原始 bytes，保留 whitespace/换行/未知字段等 round-trip 证据。C-004A 不实现导出器；C-004D1 的 [外部 JSON export](EXPORT_MODEL.md) 重新生成当前 canonical 内容并验证 semantic round-trip，与原始 bytes retrieval 分开。
 
 来源 source_kind 为 native / import / builder；后者只是元数据标签。source_format/version 是非执行性标签，当前没有外部格式细节依赖。import provenance 必须包含 aware UTC imported_at、原 bytes content_hash 和 raw_import_id；envelope 的 ID/hash/provenance 必须一致。native 不制造假文件、假时间或 raw envelope。
 

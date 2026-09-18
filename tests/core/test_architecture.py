@@ -173,3 +173,59 @@ def test_external_importers_have_only_content_and_import_capabilities():
                     assert any(
                         module == prefix or module.startswith(prefix + ".") for prefix in allowed
                     ), (source, module)
+
+
+def test_external_exporters_have_no_runtime_or_external_effect_capabilities():
+    root = Path(__file__).resolve().parents[2] / "services/core/src/livingworld"
+    allowed = (
+        "livingworld.domain.content",
+        "livingworld.domain.errors",
+        "livingworld.application.content",
+        "livingworld.application.exports",
+        "livingworld.application.imports",
+        "livingworld.infrastructure.imports",
+        "livingworld.infrastructure.exports",
+    )
+    forbidden = {
+        "socket",
+        "subprocess",
+        "urllib",
+        "httpx",
+        "requests",
+        "os",
+        "pathlib",
+        "sqlite3",
+        "sqlalchemy",
+    }
+    sources = [root / "application/exports.py", *(root / "infrastructure/exports").glob("*.py")]
+    for source in sources:
+        for node in ast.walk(ast.parse(source.read_text("utf-8"))):
+            if isinstance(node, ast.Import):
+                modules = [alias.name for alias in node.names]
+            elif isinstance(node, ast.ImportFrom):
+                modules = [node.module]
+            else:
+                modules = []
+            for module in modules:
+                assert module.split(".")[0] not in forbidden, (source, module)
+                if module.startswith("livingworld."):
+                    assert any(
+                        module == prefix or module.startswith(prefix + ".") for prefix in allowed
+                    ), (source, module)
+            if isinstance(node, ast.Call):
+                name = (
+                    node.func.attr
+                    if isinstance(node.func, ast.Attribute)
+                    else getattr(node.func, "id", "")
+                )
+                assert name not in {
+                    "open",
+                    "write_text",
+                    "write_bytes",
+                    "execute",
+                    "eval",
+                    "exec",
+                    "uuid4",
+                    "now",
+                    "utcnow",
+                }, (source, name)

@@ -1,6 +1,6 @@
 # Lorebook Import & Canonical Normalization — C-004C1
 
-状态：独立离线 import/normalizer、LoreCollection 内容根、typed reference、Preview warning、原子内容提交及 0007 迁移已实现。没有复制 SillyTavern 实现，也没有运行时激活、scanner、prompt insertion、导出或 UI。
+状态：独立离线 import/normalizer、LoreCollection 内容根、typed reference、Preview warning、原子内容提交及 0007 迁移已实现。C-004D1 增加独立 ST World Info / V2/V3 CharacterBook JSON export。没有复制 SillyTavern 实现，也没有运行时激活、scanner、prompt insertion 或 UI。
 
 **LoreCollection != WorldContent != Runtime World != WorldTruth。LoreEntry 是作者内容，不自动成为 CharacterBelief / PlayerKnowledge / Memory，也不自动变成角色已知事实。**
 
@@ -13,7 +13,8 @@
 | Native ST World Info JSON | `LorebookImporter.parse(bytes, imported_at=..., original_name=...)`；root.entries 必须是 object map；生成独立、未绑定角色的 LoreCollection |
 | V2/V3 embedded character_book | 先由 CharacterCardImporter 保存来源表示，再调用 `LorebookImporter.normalize_embedded(imported)`；生成集合并更新同一 Draft 的 CharacterDefinition typed reference |
 | PNG/APNG embedded book | 使用 C-004B 已保存的对象；normalizer 不重新解析图片、base64 或卡片 bytes |
-| standalone V3 lorebook wrapper、其他格式、export | 当前入口不宣称支持；不猜测格式或偷偷转成 ST native JSON |
+| standalone V3 lorebook wrapper、其他 import 格式 | 当前入口不宣称支持；不猜测格式或偷偷转成 ST native JSON |
+| external JSON export | C-004D1 提供 ST World Info / CharacterBook，详见 [EXPORT_MODEL.md](EXPORT_MODEL.md) |
 
 实现：[lorebooks.py](../../services/core/src/livingworld/infrastructure/imports/lorebooks.py)。[json_input.py](../../services/core/src/livingworld/infrastructure/imports/json_input.py) 与卡片 adapter 共享严格 UTF-8/duplicate-key/有限 JSON/nesting 校验；不重复实现容器解析。默认 JSON 4 MiB、nesting 64、entries 10,000；LorebookLimits 可配置，这是本地资源策略。
 
@@ -96,4 +97,8 @@ SQLite transaction 同时保存集合、条目、definition reference、raw/asse
 
 核心证明：导入 `New Eridu is surrounded by Hollows.` 后 canonical LoreEntry 存在，但 authoritative WorldTruthReader、CharacterKnowledgeReader、PlayerKnowledgeReader 结果和整个 Stage-2 runtime/WorldEvent/receipt/cursor snapshot 均不变，重启后仍保持。regex/network/shell instrumentation 证明导入字符串不进入相应执行入口；未对实际 app-data DB 执行迁移。
 
-运行时激活、概率/组/递归/timing、vector/semantic retrieval、RAG、prompt assembly、Memory、Director、Agent、Builder、最终 UI、asset layout 和 export 均未实现。本任务结束后不进入 C-004C2 / C-004D。
+## 8. C-004D1 JSON export
+
+当前 canonical owned entries 才进入导出，raw 中的空白正文条目不会复活，legacy unbound rows 不附加到书。ST comment 仅取 canonical comment，title 不同则 warning；source UID 冲突确定性分配并 warning，不泄漏 LoreEntry UUID。CharacterBook 的 known keys/text/enabled/order 以 canonical 优先；V3 secondary_keys 使用 array，原歧义字符串不回填。V3 use_regex 区分 explicit bool / unspecified；未指定且无 caller policy 时返回 typed decision-required error，不看格式/regex-looking strings 猜值。metadata 仅按明确 target 映射，无法表示则 warning，不执行。详见 [EXPORT_MODEL.md](EXPORT_MODEL.md)。
+
+运行时激活、概率/组/递归/timing、vector/semantic retrieval、RAG、prompt assembly、Memory、Director、Agent、Builder、最终 UI、asset layout 均未实现；C-004C2 / C-004D2 未开始。

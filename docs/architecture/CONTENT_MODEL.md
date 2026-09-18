@@ -1,6 +1,6 @@
 # Canonical Content Model — C-004A / C-004C1
 
-状态：Stage 3 的标准库内容模型、确定性 canonical JSON、独立 SQLite 内容库及 Character Card adapter 已建立。C-004C1 新增 LoreCollection、typed 内容引用、Lorebook 离线导入/规范化和 legacy 归属兼容。Builder、LLM、lore 运行激活、prompt assembly、运行时实例化和最终 UI 尚未实现。
+状态：Stage 3 的标准库内容模型、确定性 canonical JSON、独立 SQLite 内容库及 Character Card adapter 已建立。C-004C1 新增 LoreCollection、typed 内容引用、Lorebook 离线导入/规范化和 legacy 归属兼容。C-004D1 新增独立外部 JSON export，不改变 canonical 类型、版本或持久化 schema。Builder、LLM、lore 运行激活、prompt assembly、运行时实例化和最终 UI 尚未实现。
 
 ```text
 Imported Content != Runtime State
@@ -83,4 +83,6 @@ C-004B 的外部格式映射和 parser 见 [CHARACTER_CARD_COMPATIBILITY.md](CHA
 
 V3 ContentAsset 只保存 descriptor/reference 元数据。PNG/APNG icon 的 ccdefault 指向 raw envelope 的 container-image，data URL 的原值通过 raw descriptor 恢复，不在 canonical asset JSON 内复制二进制 base64；无文件物化、网络读取或资产运行效果。
 
-C-004D 才处理 archive/asset layout。初始知识分配、运行实例与定义版本绑定、产品级重复导入/冲突展示、Builder 来源评价和编辑历史仍是后续设计范围，未通过本任务隐式解决。
+外部 JSON export 见 [EXPORT_MODEL.md](EXPORT_MODEL.md)：当前 canonical known fields 优先于旧 source，same-format unknown 保留与跨格式 loss 分开；原始 bytes retrieval 不变，多集合不隐式 merge。V3 use_regex 未指定时必须显式 caller policy；secondary_keys 保持 array；ST comment 使用 canonical comment，独立 title 发出损失警告。export 不修改内容对象、revision 或 runtime。
+
+archive/asset layout 仍为后续范围。初始知识分配、运行实例与定义版本绑定、产品级重复导入/冲突展示、Builder 来源评价和编辑历史仍未实现。
