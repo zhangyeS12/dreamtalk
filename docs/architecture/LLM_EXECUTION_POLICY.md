@@ -126,3 +126,16 @@ HTTP 200 后的 Anthropic SSE `error` 没有可证明的 HTTP response status，
 Gemini adapter 每次 generate/stream 调用只做一个 HTTP attempt；outer execution/routing policy 仍唯一决定 retry/fallback。稳定 machine code 区分 rate limit 与 provider-proven quota exhaustion。Quota exhaustion 不对同 candidate retry；只有 `REJECTED_BEFORE_EXECUTION` 的 safe PROFILE policy 才能切候选。429/5xx/timeout 继续走既有 dispatch-aware retry classifier。
 
 Gemini SSE `error`、EOF before semantic completion 和 protocol/state failure 不会产生 StreamCompleted。SSE error dispatch 为 unknown，Started 一旦交付永久锁定 candidate。Policy/content filter 是成功 terminal，不触发 retry/fallback。Continuation tamper 是本地 `CONTINUATION_STATE_INVALID`，在 credential resolve 和 HTTP 之前失败。
+
+## C-005E4：OpenAI Responses execution classification
+
+OpenAIResponsesGateway 每次 generate/stream 调用只发送一个 `POST /v1/responses`。HTTP status 与
+documented machine type/code 归一化 authentication、permission/configuration、invalid/context、rate、
+quota/billing、timeout 和 availability；sleep/retry/fallback 仍只由通用 execution/router 决定。
+
+Continuation digest/layout mismatch 是本地 `CONTINUATION_STATE_INVALID`，发生于 secret resolve 与
+network 前。Explicit refusal/filter 是成功 terminal；structured parse/schema failure 是 completed
+post-processing failure，均不重试或 fallback。Streaming 在合法 `response.created` 后暴露 STARTED，
+之后的 SSE error、failed/incomplete protocol violation、malformed known event、tool output 或 EOF 都不能
+重放。Provider-proven pre-execution quota rejection 可按已有 policy 考虑下一 candidate；ambiguous
+dispatch、accounting/budget integrity degradation 和 STARTED lock 始终优先终止。

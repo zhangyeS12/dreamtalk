@@ -80,7 +80,7 @@ Pre-STARTED candidate failures可隐藏并 fallback。Application 只看到一�
 
 ## 7. Deferred scope
 
-Anthropic native Messages adapter 已在 C-005E2 实现；Gemini/Responses adapter、tools、vision、provider discovery、online pricing、dynamic ranking、circuit breaker、semantic repair、Director、Agent、Memory 或 UI 仍未实现。Production registry loading/bootstrap composition 留给后续任务。
+Anthropic Messages、Gemini Interactions 和 OpenAI Responses native adapters 已分别在 C-005E2/E3/E4 实现；tools、vision、provider discovery、online pricing、dynamic ranking、circuit breaker、semantic repair、Director、Agent、Memory 或 UI 仍未实现。Production registry loading/bootstrap composition 留给后续任务。
 
 ## 8. C-005E2 跨协议证明
 
@@ -93,3 +93,17 @@ Anthropic SSE `event: error` 使用 `DISPATCHED_OR_UNKNOWN`，不会触发 provi
 Gemini quota exhaustion 只有在稳定 machine code 明确表示 quota、`dispatch_state=REJECTED_BEFORE_EXECUTION`、没有 completed attempt facts，且 PROFILE `RoutePolicy` 显式允许时，才可作为 `QUOTA_EXHAUSTED` 切换候选。同 candidate 不 retry；429 rate limiting 与 quota exhaustion 保持不同语义。任何 unknown dispatch、已暴露 Started、accounting/budget integrity failure 或非安全 denial 仍终止 route。
 
 OpenAI-compatible → Anthropic → Gemini 的离线 route 证明继续使用一个 InvocationId、共享 monotonic deadline 和 invocation-global ordinals。Gemini 候选独立执行 pricing/budget admission、reservation、accounting START/FINALIZE；前一候选的 reservation、Retry-After 或 continuation artifact 不会被复用。Gemini continuation 绑定 ProviderId 而不绑定 model alias，因此同 configured provider 内显式模型切换仍可 stateless 重建；其他 protocol family 只把它视为 opaque metadata。
+
+## 10. C-005E4 四协议 route
+
+Registry 新增显式 `AdapterKind.OPENAI_RESPONSES`。它与 openai-compatible、Anthropic、Gemini
+并列；router 仍只解析 exact ProviderId/ModelRef/AdapterKind 配置，不从 model name 推断协议。
+
+离线 route 覆盖
+`openai-compatible → anthropic → gemini → openai-responses`：同一个 InvocationId 延续，physical
+attempt ordinal 为 1/2/3/4，每个 candidate 重新执行 budget admission、reservation、accounting START
+和 finalization。Responses adapter 没有 routing-specific branch；retry/fallback 继续只依据通用 typed
+failure、shared deadline、dispatch certainty、budget/accounting integrity 和 STARTED lock。
+
+Response ID 只是 provider diagnostic，不参与 route identity，也不能替代 LivingWorld-managed history。
+完整协议边界见 [OPENAI_RESPONSES_ADAPTER.md](OPENAI_RESPONSES_ADAPTER.md)。

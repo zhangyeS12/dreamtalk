@@ -129,3 +129,15 @@ STATE_UNCERTAIN、INTEGRITY_DEGRADED、bound violation 和 accounting/budget per
 Gemini 的 `GENERATED_OUTPUT` pricing 把 visible output 与 additive thought tokens 作为一个 output budget meter。HARD preflight 使用请求中单一 `max_output_tokens` 作为该 combined generated-output cap；不能分别对 visible/thought 各套一次 cap，也不能猜测 reasoning 比例。缺可信 model limit、requested-alias pricing envelope 或 GENERATED_OUTPUT rate 时仍在 provider 前 `BUDGET_UNVERIFIABLE`。
 
 被稳定 machine code 证明为 quota exhaustion 且 provider 明确在 execution 前拒绝的 attempt 可释放 reservation；若 RoutePolicy 允许，下一候选必须重新执行完整 admission/reservation/START。未知 dispatch、已执行 exposure 或任何 accounting/budget integrity degradation 继续保留 hold 并终止 route。
+
+## C-005E4：OpenAI combined output bound
+
+OpenAI Responses 的 `max_output_tokens` 同时覆盖 visible output 和包含在 output count 中的 reasoning
+tokens。HARD preflight 使用一个可信 combined generated-output cap，不建立独立 reasoning allowance，
+也不把 `output_tokens + reasoning_tokens` 作为最终 spend。Requested ModelRef 仍决定 budget scope；
+reported model 只用于可安全映射的 actual pricing。
+
+缺 model limit、requested-alias envelope 或可信 rate 仍在 provider 前 fail closed。每个 routed/retried
+candidate 建立自己的 reservation 与 accounting START。Responses continuation ciphertext、Response ID
+和 reasoning text 不进入 budget evidence。Provider-proven quota/billing pre-execution rejection 可以沿用
+现有 safe fallback 规则；unknown dispatch 和任何 integrity failure 继续终止 route。

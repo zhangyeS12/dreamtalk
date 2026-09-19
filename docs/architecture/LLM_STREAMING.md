@@ -116,3 +116,17 @@ Anthropic refusal 只能在 terminal message_delta 识别。基础设施继续�
 Gemini stream 只在合法 `interaction.created` 后发 Started。`step.start` 可携带首段正文，后续 `step.delta` 继续产生 TextDelta；thought 与 thought summary 不进入 visible content。每个 step index 只能启动一次，stop 必须匹配当前 open step。成功必须收到 `interaction.completed`；`done` 或 EOF 不能代替语义 terminal。
 
 Adapter 增量维护 layout、UTF-8 byte count/hash、thought signature 和整体 visible digest，不保留完整正文副本。StreamCompleted 只携带 terminal metadata、latest factual usage snapshot 和 opaque continuation artifact。SSE `error`、known malformed transitions、unexpected tools/status 产生 Failed 且没有 Completed；well-formed unknown future events有界忽略。CancelledError 继续直接传播。详见 [Gemini adapter](GEMINI_INTERACTIONS_ADAPTER.md)。
+
+## 11. C-005E4 OpenAI Responses named SSE
+
+合法 `response.created` 是唯一 STARTED 边界。只有 `response.output_text.delta` 产生 TextDelta；
+`refusal.delta/done`、reasoning text/summary、annotations、encrypted content 和 tool arguments 都不进入
+可见正文。Adapter 增量维护每个 output/content index 的 UTF-8 长度/hash 与整体 digest，不保存第二份
+完整回答；terminal Response 只用于核对 streamed layout 和取得 opaque continuation metadata。
+
+`response.completed` 且 `status=completed` 才是普通成功。Explicit refusal 返回成功的 REFUSAL
+completion；`response.incomplete/max_output_tokens` 返回 OUTPUT_LIMIT；filter/policy reason 返回 filtered
+terminal。`response.failed`、known malformed event、unexpected tool、transport failure 和 terminal 前 EOF
+只产生 Failed。Well-formed unknown future event 安全跳过。STARTED 后 route 永久锁定；CancelledError
+直接传播。UsageUpdate 与 completion usage 是 factual snapshots，不能相加。详见
+[OPENAI_RESPONSES_ADAPTER.md](OPENAI_RESPONSES_ADAPTER.md)。

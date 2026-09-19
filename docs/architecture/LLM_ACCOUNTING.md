@@ -136,3 +136,16 @@ Anthropic raw input、cache creation 与 cache read 规范化为 common total in
 Gemini `total_input_tokens`、`cached_input_tokens`、`total_output_tokens`、`total_thought_tokens` 和 `total_tokens` 映射到既有 `LLMUsage`。`ReasoningTokenRelation.ADDITIVE_TO_OUTPUT` 明确 generated output 为 visible output + thought tokens；它与 OpenAI-compatible/Anthropic 的 included 语义不同，不能使用相同的减法假设。`UsageUpdate` 与 terminal usage 仍是 snapshots，不相加。
 
 Pricing 增加 `GENERATED_OUTPUT` meter：included 取 output，additive 取 output + reasoning，UNKNOWN/missing 则 `PRICING_CONTEXT_INCOMPLETE`。Provider continuation artifact 不写入 attempt/accounting typed JSON；closed codec 仍拒绝 request/response/artifact。新增 relation 依靠 typed-JSON default 兼容旧 rows，没有 Alembic migration，head 仍为 0010。
+
+## C-005E4：OpenAI Responses usage facts
+
+Responses usage 归一化 `input_tokens`、`input_tokens_details.cached_tokens`、`output_tokens`、
+`output_tokens_details.reasoning_tokens` 和 `total_tokens`。Input/cached 同时存在且一致时，uncached 为
+两者之差；未报告事实保持 None。OpenAI reasoning relation 固定为 `INCLUDED_IN_OUTPUT`，因此普通
+output/GENERATED_OUTPUT pricing 不再加一次 reasoning breakdown。
+
+每个 Responses physical attempt 继续经过通用 accounting START/FINALIZE；adapter 内部不重试。
+Response/refusal/stream completion 的 factual usage 正常结算，失败的 safe attempt summary 不包含正文。
+Reasoning text、summary、encrypted content、prompt、raw SSE、Response body 和 continuation artifact 都不
+进入 ledger。`x-request-id`/Response ID 仅为有界 diagnostics，InvocationId 与 global attempt ordinal
+仍是本地 accounting identity。没有 schema migration。

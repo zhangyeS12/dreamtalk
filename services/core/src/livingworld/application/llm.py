@@ -50,6 +50,7 @@ class ProviderId:
 
 class AdapterKind(StrEnum):
     OPENAI_COMPATIBLE = "openai-compatible"
+    OPENAI_RESPONSES = "openai-responses"
     ANTHROPIC = "anthropic"
     GEMINI = "gemini"
 
@@ -292,9 +293,10 @@ class ProviderDiagnostics:
 
     provider_request_id: str | None = field(default=None, repr=False)
     diagnostic_code: str | None = field(default=None, repr=False)
+    provider_response_id: str | None = field(default=None, repr=False)
 
     def __post_init__(self):
-        for label in ("provider_request_id", "diagnostic_code"):
+        for label in ("provider_request_id", "diagnostic_code", "provider_response_id"):
             value = getattr(self, label)
             if value is not None:
                 _text(value, label)
@@ -699,12 +701,15 @@ class LLMStreamCompletion:
             _type(self.usage, LLMUsage, "usage")
             object.__setattr__(self, "usage", _accounting_usage(self.usage))
         _type(self.diagnostics, ProviderDiagnostics, "provider_diagnostics")
-        identifier = self.diagnostics.provider_request_id
-        if identifier is not None and (
-            not 1 <= len(identifier) <= 128
-            or any(not (c.isascii() and (c.isalnum() or c in "_.:-")) for c in identifier)
+        for identifier in (
+            self.diagnostics.provider_request_id,
+            self.diagnostics.provider_response_id,
         ):
-            raise LLMContractError("invalid_stream_request_id")
+            if identifier is not None and (
+                not 1 <= len(identifier) <= 128
+                or any(not (c.isascii() and (c.isalnum() or c in "_.:-")) for c in identifier)
+            ):
+                raise LLMContractError("invalid_stream_request_id")
         if self.diagnostics.diagnostic_code not in {
             None,
             "unknown_finish_reason",

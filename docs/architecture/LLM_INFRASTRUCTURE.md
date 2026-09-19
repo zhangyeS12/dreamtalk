@@ -99,7 +99,7 @@ Fake 可返回 JSON-looking text，却不 validate schema/instance、tokenize、
 
 校验最小 success schema，选择第一项 choice，实际 reported model 保留配置 ProviderId；InvocationId 仍为本地身份。Refusal 是成功响应；usage 缺失保持未知，advanced token counts 只取 allowlist，不计算 price。HTTP/credential errors 转为既有 LLMError，原 exceptions 不保留 context/cause，正常日志只记录固定 category 与本地 trace，finally 清除 wire Authorization。详见 [契约证据、映射与限制](OPENAI_COMPATIBLE_ADAPTER.md) 和 [离线测试](../../tests/core/test_openai_compatible.py)。
 
-本 adapter 未配置为 production default；真实网络兼容性未实测。OpenAI 原生 Responses/其他 provider adapters、structured streaming、repair、fallback/routing/rate-limit scheduler、production catalog、incomplete reconciliation、keychain、Prompt/context assembly、Director/Character Agent/Memory/AI Builder、tool execution 和最终 UI 均未实现。相关边界：[SYSTEM_OVERVIEW.md](SYSTEM_OVERVIEW.md)、[STAGE_2_ACCEPTANCE.md](STAGE_2_ACCEPTANCE.md)、[STAGE_3_ACCEPTANCE.md](STAGE_3_ACCEPTANCE.md)。
+本 adapter 未配置为 production default；真实网络兼容性未实测。后续章节记录已完成的 Anthropic、Gemini 与 OpenAI Responses native adapters；structured streaming、repair、production catalog、incomplete reconciliation、keychain、Prompt/context assembly、Director/Character Agent/Memory/AI Builder、tool execution 和最终 UI 均未实现。相关边界：[SYSTEM_OVERVIEW.md](SYSTEM_OVERVIEW.md)、[STAGE_2_ACCEPTANCE.md](STAGE_2_ACCEPTANCE.md)、[STAGE_3_ACCEPTANCE.md](STAGE_3_ACCEPTANCE.md)。
 
 ## 8. C-005C1 结构化结果与安全失败计量
 
@@ -134,7 +134,7 @@ LLMUsage 保留 input/output/total，新增 optional cached_input/cache_write_in
 HARD 授权 LivingWorld trusted estimated upper-bound spend，不承诺 invoice/余额。SOFT warning 不改变请求、模型/output cap。Budget scope/admission/history/query/retry 统一 exact requested ModelRef；reported metadata 独立用于实际 pricing/analytics。START/reservation 与 final accounting/settlement 各共享 SQLite write transaction；crash/partial/unknown 保留 holds，没有自动 expiry/reconcile。本地 failure 不重放 provider，outcome/cancellation 保持。没有 production default wiring/catalog、routing/UI/智能层。详见 [LLM_BUDGET_GUARD.md](LLM_BUDGET_GUARD.md)。
 ## C-005E1：registry 与 routing
 
-[Model Registry 与 Routing](LLM_ROUTING.md) 位于 application 层、provider adapters 之上。ProviderId 继续表示 configured provider instance；AdapterKind 独立表示 openai-compatible / future anthropic / future gemini protocol family。Registry 使用 exact ModelRef 和显式 ModelCapabilities，不按名字猜测、不发现在线模型，也不保存 secret、client 或价格表。
+[Model Registry 与 Routing](LLM_ROUTING.md) 位于 application 层、provider adapters 之上。ProviderId 继续表示 configured provider instance；AdapterKind 独立表示 openai-compatible / anthropic / gemini / openai-responses protocol family。Registry 使用 exact ModelRef 和显式 ModelCapabilities，不按名字猜测、不发现在线模型，也不保存 secret、client 或价格表。
 
 FAST/BALANCED/BEST 是配置的 policy labels，不是模型客观排名。RoutePlan 纯解析、无 provider IO。Explicit model 默认不换模型；profile 使用配置的 ordered chain。一个 routed Invocation 共享 deadline 与 invocation-global ordinal；candidate-local retry 不重置 deadline。Fallback 仅更改 execution target，messages/purpose/schema/stop/output cap/metadata 保持。Ambiguous dispatch、refusal/filter、structured postprocessing、accounting/budget integrity 和 STARTED 后的 stream 都禁止 fallback。
 
@@ -151,3 +151,22 @@ LLMUsage 增加 optional 5-minute/1-hour cache-write facts；FinishReason 增加
 Provider-neutral `ProviderContinuationArtifact` 只保存 adapter kind、ProviderId、schema version、opaque bytes 和 visible-content digest。Gemini payload 只含 step layout、thought signatures 以及 visible text 的 byte length/hash，不复制正文；外来 adapter/provider artifact 被忽略，本 adapter 的篡改在 credential/network 前失败。它是 stateless provider continuation metadata，不是 Memory、World state、authored content、accounting 或 routing state。
 
 `LLMUsage.reasoning_token_relation` 明确 `UNKNOWN`、`INCLUDED_IN_OUTPUT` 和 `ADDITIVE_TO_OUTPUT`。OpenAI-compatible/Anthropic 规范化为 included；Gemini `thought_tokens` 规范化为 additive。旧 persisted typed JSON 缺字段时为 UNKNOWN；没有表结构变化或新 migration。
+
+## C-005E4：OpenAI 原生 Responses adapter
+
+[OpenAIResponsesGateway](../../services/core/src/livingworld/infrastructure/llm/openai_responses.py)
+是独立的 `AdapterKind.OPENAI_RESPONSES`，不复用或替换
+`AdapterKind.OPENAI_COMPATIBLE`。它直接调用 `POST /v1/responses`，每次 invocation 只有一个
+HTTP attempt，固定 `store=false`、`background=false`、`truncation=disabled`，不发送
+`previous_response_id`、Conversation resource、tools 或 arbitrary metadata。
+
+Responses 原生保留 system/developer/user/assistant 的消息次序和原文。普通结果只暴露 ordered
+`output_text`；explicit refusal 是成功语义。Native JSON Schema 使用原 schema 和稳定安全 wire name，
+provider terminal 分类完成后再进行本地 Draft 2020-12 校验。Reasoning text/summary 永不成为公开
+content；optional encrypted reasoning 只进入短生命周期 `ProviderContinuationArtifact`，不是 memory、
+knowledge、content 或 durable accounting state。
+
+`ProviderDiagnostics` 可分别携带经过 allowlist 校验的 `x-request-id` 和 Response ID；二者都不是
+LivingWorld identity 或 conversation identity。OpenAI usage 将 reasoning tokens 标记为
+`INCLUDED_IN_OUTPUT`，防止 output pricing 二次计费。完整契约和证据见
+[OPENAI_RESPONSES_ADAPTER.md](OPENAI_RESPONSES_ADAPTER.md)。无 migration、SDK 或新依赖。
