@@ -1,3 +1,6 @@
+pub mod credentials;
+pub mod host_control;
+pub mod llm_config;
 pub mod supervisor;
 
 use std::{
@@ -11,7 +14,12 @@ use supervisor::{event, CoreConnection, CoreSupervisor, LaunchConfig};
 use tauri::{Manager, RunEvent, State};
 use tokio::sync::Mutex;
 
+use credentials::{
+    status, CredentialStatus, CredentialStore, CredentialStoreError, NativeCredentialStore,
+};
+
 type SharedSupervisor = Arc<Mutex<CoreSupervisor>>;
+type SharedCredentialStore = Arc<dyn CredentialStore>;
 
 #[tauri::command]
 async fn core_connection(
@@ -61,12 +69,78 @@ async fn report_ui_ready(
     Ok(())
 }
 
+fn credential_error(error: CredentialStoreError) -> String {
+    match error {
+        CredentialStoreError::InvalidReference => "invalid_secret_ref",
+        CredentialStoreError::Missing => "credential_missing",
+        CredentialStoreError::Unavailable => "secure_storage_unavailable",
+    }
+    .to_owned()
+}
+
+#[tauri::command]
+async fn credential_put(
+    secret_ref: String,
+    mut secret: String,
+    credentials: State<'_, SharedCredentialStore>,
+    supervisor: State<'_, SharedSupervisor>,
+) -> Result<(), String> {
+    credentials
+        .put(&secret_ref, &secret)
+        .map_err(credential_error)?;
+    let result = supervisor
+        .lock()
+        .await
+        .provision_credential(&secret_ref, &secret)
+        .await
+        .map_err(str::to_owned);
+    secret.clear();
+    result
+}
+
+#[tauri::command]
+async fn credential_delete(
+    secret_ref: String,
+    credentials: State<'_, SharedCredentialStore>,
+    supervisor: State<'_, SharedSupervisor>,
+) -> Result<(), String> {
+    credentials.delete(&secret_ref).map_err(credential_error)?;
+    let mut supervisor = supervisor.lock().await;
+    if let Err(error) = supervisor.remove_session_credential(&secret_ref).await {
+        // The secure copy is gone. Terminate the session process if its private
+        // control channel cannot confirm removal, so future calls cannot use the
+        // previously provisioned value.
+        let _ = supervisor.stop(Duration::from_secs(3)).await;
+        return Err(error.to_owned());
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn credential_status(
+    secret_ref: String,
+    credentials: State<'_, SharedCredentialStore>,
+) -> Result<CredentialStatus, String> {
+    credentials::validate_secret_ref(&secret_ref).map_err(credential_error)?;
+    Ok(status(credentials.inner().as_ref(), &secret_ref))
+}
+
 pub fn run() {
-    let supervisor = Arc::new(Mutex::new(CoreSupervisor::new()));
+    let credentials: SharedCredentialStore = Arc::new(NativeCredentialStore);
+    let supervisor = Arc::new(Mutex::new(CoreSupervisor::with_credential_store(
+        credentials.clone(),
+    )));
     let stopping = Arc::new(AtomicBool::new(false));
     let app = tauri::Builder::default()
         .manage(supervisor.clone())
-        .invoke_handler(tauri::generate_handler![core_connection, report_ui_ready])
+        .manage(credentials)
+        .invoke_handler(tauri::generate_handler![
+            core_connection,
+            report_ui_ready,
+            credential_put,
+            credential_delete,
+            credential_status
+        ])
         .setup(|app| {
             let config = LaunchConfig {
                 project_root: std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -74,6 +148,7 @@ pub fn run() {
                     .canonicalize()?,
                 app_data: app.path().app_data_dir()?,
                 startup_timeout: Duration::from_secs(12),
+                llm_config_path: app.path().app_data_dir()?.join("config").join("llm.json"),
             };
             let supervisor = app.state::<SharedSupervisor>().inner().clone();
             tauri::async_runtime::spawn(async move {

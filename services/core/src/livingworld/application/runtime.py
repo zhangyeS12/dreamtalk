@@ -4,12 +4,23 @@ from dataclasses import dataclass, field
 
 from livingworld.domain.contracts import RequestId
 
+_LLM_STATUS_VALUES = frozenset({"ready", "partially_configured", "unconfigured", "degraded"})
+
 
 @dataclass
 class RuntimeStatus:
     core_version: str
     generation: str
     ready: bool = False
+    llm_health: Callable[[], str] = lambda: "unconfigured"
+
+    @property
+    def llm_status(self) -> str:
+        try:
+            value = self.llm_health()
+            return value if type(value) is str and value in _LLM_STATUS_VALUES else "degraded"
+        except Exception:
+            return "degraded"
 
 
 @dataclass

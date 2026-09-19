@@ -19,6 +19,7 @@ def test_authenticated_health(runtime_client):
         "core_version": "test-version",
         "api_protocol": API_PROTOCOL,
         "generation": "test-generation",
+        "llm_status": "unconfigured",
     }
 
 

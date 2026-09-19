@@ -149,3 +149,7 @@ Response/refusal/stream completion 的 factual usage 正常结算，失败的 sa
 Reasoning text、summary、encrypted content、prompt、raw SSE、Response body 和 continuation artifact 都不
 进入 ledger。`x-request-id`/Response ID 仅为有界 diagnostics，InvocationId 与 global attempt ordinal
 仍是本地 accounting identity。没有 schema migration。
+
+## C-005E5：production composition
+
+生产 routed gateway 总是注入同一 SQLite `AccountingRepository`/`SqlAlchemyBudgetGuard` 组合；没有 provider-specific accounting shortcut。Provider config、SecretRef availability 和 credential control messages 不形成 attempt。只有获得 fresh admission 并 durable START 的实际物理调用才进入 ledger。配置、API key、prompt、response、reasoning 和 continuation artifact 仍不持久化。C-005E5 无 migration，head 保持 `0010_llm_budget_guard`。见 [生产组装](LLM_PRODUCTION_COMPOSITION.md)。

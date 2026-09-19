@@ -1,6 +1,7 @@
 """Configuration references credentials; requests never receive credential objects."""
 
 from dataclasses import dataclass, field
+from enum import StrEnum
 from typing import Protocol
 from urllib.parse import urlsplit
 from uuid import UUID
@@ -35,6 +36,20 @@ class SecretValue:
 
     def reveal_for_adapter(self) -> str:
         return self.__value
+
+
+class CredentialUnavailableError(RuntimeError):
+    """A local SecretRef lookup failure; never contains the reference or a secret."""
+
+    def __init__(self):
+        super().__init__("credential_unavailable")
+
+
+class LLMRuntimeHealth(StrEnum):
+    READY = "ready"
+    PARTIALLY_CONFIGURED = "partially_configured"
+    UNCONFIGURED = "unconfigured"
+    DEGRADED = "degraded"
 
 
 class CredentialProvider(Protocol):

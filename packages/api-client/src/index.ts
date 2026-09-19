@@ -2,7 +2,14 @@ import contract from "../../../services/core/src/livingworld/domain/api_contract
 
 export const API_PROTOCOL = contract.api_protocol;
 export interface CoreConnection { endpoint: string; token: string; generation: string }
-export interface CoreHealth { ready: boolean; core_version: string; api_protocol: number; generation: string }
+export type LLMRuntimeStatus = "ready" | "partially_configured" | "unconfigured" | "degraded";
+export interface CoreHealth {
+  ready: boolean;
+  core_version: string;
+  api_protocol: number;
+  generation: string;
+  llm_status: LLMRuntimeStatus;
+}
 
 export class CoreClient {
   private readonly endpoint: URL;
@@ -25,7 +32,8 @@ export class CoreClient {
     if (typeof health !== "object" || health === null || !("ready" in health) ||
         health.ready !== true || !("api_protocol" in health) || health.api_protocol !== API_PROTOCOL ||
         !("generation" in health) || health.generation !== this.connection.generation ||
-        !("core_version" in health) || typeof health.core_version !== "string") {
+        !("core_version" in health) || typeof health.core_version !== "string" ||
+        !("llm_status" in health) || !["ready", "partially_configured", "unconfigured", "degraded"].includes(String(health.llm_status))) {
       throw new Error("core_contract_mismatch");
     }
     return health as CoreHealth;

@@ -20,6 +20,7 @@ class HealthResponse(BaseModel):
     core_version: str
     api_protocol: int
     generation: str
+    llm_status: str
 
 
 def create_app(
@@ -72,6 +73,7 @@ def create_app(
             core_version=status.core_version,
             api_protocol=API_PROTOCOL,
             generation=status.generation,
+            llm_status=status.llm_status,
         )
 
     @app.post("/system/shutdown", dependencies=[Depends(authorize)])

@@ -1,0 +1,182 @@
+"""Single production composition root for the complete Stage-4 LLM graph."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from pathlib import Path
+from uuid import uuid4
+
+from livingworld.application.llm import InvocationId
+from livingworld.application.llm_config import LLMRuntimeHealth, SecretRef
+from livingworld.application.llm_registry import ModelRegistry
+from livingworld.application.llm_routing import ConfiguredGateways, RoutedModelGateway
+from livingworld.infrastructure.llm.anthropic_messages import AnthropicMessagesGateway
+from livingworld.infrastructure.llm.credentials import SessionCredentialProvider
+from livingworld.infrastructure.llm.gemini_interactions import GeminiInteractionsGateway
+from livingworld.infrastructure.llm.openai_compatible import OpenAICompatibleChatGateway
+from livingworld.infrastructure.llm.openai_responses import OpenAIResponsesGateway
+from livingworld.infrastructure.llm.production_config import (
+    LLMProductionConfigurationError,
+    ProductionLLMConfiguration,
+    load_configuration,
+)
+from livingworld.infrastructure.logging import StructuredLogger
+from livingworld.infrastructure.persistence.engine import Database
+from livingworld.infrastructure.persistence.llm_budget_repository import BudgetDiagnostics
+from livingworld.infrastructure.persistence.llm_repository import AccountingDiagnostics
+
+
+@dataclass(frozen=True, slots=True)
+class InvocationFactory:
+    def create(self) -> InvocationId:
+        return InvocationId(uuid4())
+
+
+@dataclass(slots=True)
+class ProductionLLMRuntime:
+    """Owns adapter clients; callers receive only the governed routed gateway."""
+
+    configuration: ProductionLLMConfiguration
+    credentials: SessionCredentialProvider
+    gateway: RoutedModelGateway
+    registry: ModelRegistry
+    invocation_factory: InvocationFactory = field(default_factory=InvocationFactory)
+    _owned_gateways: tuple[object, ...] = field(default=(), repr=False)
+
+    @property
+    def health(self) -> LLMRuntimeHealth:
+        if not self.configuration.registry.models:
+            return LLMRuntimeHealth.UNCONFIGURED
+        return self.credentials.health
+
+    async def aclose(self) -> None:
+        for gateway in reversed(self._owned_gateways):
+            await gateway.aclose()
+
+
+@dataclass(slots=True)
+class ProductionLLMSession:
+    """Optional LLM subsystem lifecycle kept outside the generic Core bootstrap."""
+
+    credentials: SessionCredentialProvider
+    runtime: ProductionLLMRuntime | None = None
+
+    def health(self) -> str:
+        return (
+            self.runtime.health.value
+            if self.runtime is not None
+            else LLMRuntimeHealth.DEGRADED.value
+        )
+
+    async def aclose(self) -> None:
+        if self.runtime is not None:
+            await self.runtime.aclose()
+
+
+def _factory(model, configured, provider, credentials, logger):
+    kwargs = {
+        "config": provider.config,
+        "credentials": credentials,
+        "profile": configured.profile,
+        "logger": logger,
+    }
+    kind = configured.adapter_kind
+    from livingworld.application.llm import AdapterKind
+
+    if kind is AdapterKind.OPENAI_COMPATIBLE:
+        return OpenAICompatibleChatGateway(**kwargs)
+    if kind is AdapterKind.ANTHROPIC:
+        return AnthropicMessagesGateway(**kwargs)
+    if kind is AdapterKind.GEMINI:
+        return GeminiInteractionsGateway(**kwargs)
+    if kind is AdapterKind.OPENAI_RESPONSES:
+        return OpenAIResponsesGateway(**kwargs)
+    raise ValueError("adapter_kind_unsupported")
+
+
+async def build_production_llm_runtime(
+    configuration: ProductionLLMConfiguration,
+    database: Database,
+    logger: StructuredLogger,
+    *,
+    credentials: SessionCredentialProvider | None = None,
+) -> ProductionLLMRuntime:
+    enabled = tuple(entry for entry in configuration.registry.models if entry.enabled)
+    expected: tuple[SecretRef, ...] = tuple(
+        dict.fromkeys(
+            configuration.providers[entry.model.provider_id].config.secret_ref for entry in enabled
+        )
+    )
+    credentials = credentials or SessionCredentialProvider(expected)
+    gateways = {}
+    owned = []
+    try:
+        for entry in enabled:
+            configured = configuration.models[entry.model]
+            provider = configuration.providers[entry.model.provider_id]
+            gateway = _factory(entry.model, configured, provider, credentials, logger)
+            gateways[entry.model] = gateway
+            owned.append(gateway)
+    except BaseException:
+        # Construction is synchronous and no request can be in flight here.
+        for gateway in reversed(owned):
+            await gateway.aclose()
+        raise
+
+    provider_refs = {
+        model: configuration.providers[model.provider_id].config.secret_ref for model in gateways
+    }
+    resolver = ConfiguredGateways(
+        gateways,
+        credential_available=lambda model: credentials.contains(provider_refs[model]),
+    )
+    budget = database.llm_budget_guard(
+        bounder=configuration.registry.usage_bounder(),
+        diagnostics=BudgetDiagnostics(logger),
+        catalog=configuration.pricing_catalog,
+        envelopes=configuration.registry.pricing_envelopes(),
+    )
+    routed = RoutedModelGateway(
+        configuration.registry,
+        configuration.routing,
+        resolver,
+        policy=configuration.retry_policy,
+        budget_guard=budget,
+        wall_clock=lambda: datetime.now(UTC),
+        accounting_diagnostics=AccountingDiagnostics(logger),
+    )
+    return ProductionLLMRuntime(
+        configuration,
+        credentials,
+        routed,
+        configuration.registry,
+        _owned_gateways=tuple(owned),
+    )
+
+
+async def start_production_llm_session(
+    config_path: Path | None,
+    database: Database,
+    logger: StructuredLogger,
+) -> ProductionLLMSession:
+    """Load the immutable snapshot while allowing optional LLM failure isolation."""
+    try:
+        configuration = load_configuration(config_path)
+        enabled = tuple(entry for entry in configuration.registry.models if entry.enabled)
+        expected = tuple(
+            dict.fromkeys(
+                configuration.providers[entry.model.provider_id].config.secret_ref
+                for entry in enabled
+            )
+        )
+        credentials = SessionCredentialProvider(expected)
+        runtime = await build_production_llm_runtime(
+            configuration, database, logger, credentials=credentials
+        )
+        return ProductionLLMSession(credentials, runtime)
+    except LLMProductionConfigurationError:
+        credentials = SessionCredentialProvider()
+        credentials.mark_degraded()
+        logger.emit("llm", "llm_configuration_invalid", level="ERROR")
+        return ProductionLLMSession(credentials)

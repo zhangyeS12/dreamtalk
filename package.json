@@ -17,7 +17,8 @@
     "build:desktop": "npm exec --workspace @livingworld/desktop -- tauri build --debug --no-bundle --features custom-protocol",
     "build:core": "uv build --wheel --out-dir artifacts/core",
     "test:desktop": "cargo test --locked --manifest-path apps/desktop/src-tauri/Cargo.toml",
-    "test:desktop-smoke": "uv run python scripts/desktop-smoke.py"
+    "test:desktop-smoke": "uv run python scripts/desktop-smoke.py",
+    "test:llm-live": "uv run python scripts/live-llm-smoke.py"
   },
   "devDependencies": {
     "vite": "^8.3.0",

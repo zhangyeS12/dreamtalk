@@ -107,3 +107,7 @@ failure、shared deadline、dispatch certainty、budget/accounting integrity 和
 
 Response ID 只是 provider diagnostic，不参与 route identity，也不能替代 LivingWorld-managed history。
 完整协议边界见 [OPENAI_RESPONSES_ADAPTER.md](OPENAI_RESPONSES_ADAPTER.md)。
+
+## 11. C-005E5 production wiring
+
+严格配置 v1 将 exact ModelRef、AdapterKind、capabilities、route order 与 allowed fallback 建入真实 registry/router。生产应用只接收 `RoutedModelGateway`，不存在按 model-name 猜 provider 或绕过 budget/accounting 的直接 client。缺 credential 是 provider 前的 `CREDENTIAL_UNAVAILABLE`；explicit selection 不换模型，profile route 仅按显式 policy 处理 locally unavailable candidate。Production registry/bootstrap 已完成；dynamic ranking、hot reload、provider discovery、tools、Director、Agent、Memory 与 settings UI 仍 deferred。详见 [生产组装](LLM_PRODUCTION_COMPOSITION.md) 与 [Stage 4 验收](STAGE4_ACCEPTANCE.md)。

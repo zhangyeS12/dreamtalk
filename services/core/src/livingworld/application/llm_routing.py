@@ -63,6 +63,7 @@ class RouteIssue(StrEnum):
     MODEL_DISABLED = "model_disabled"
     CAPABILITY_MISMATCH = "capability_mismatch"
     CANDIDATE_UNAVAILABLE = "candidate_unavailable"
+    CREDENTIAL_UNAVAILABLE = "credential_unavailable"
     STRUCTURED_STREAM_UNSUPPORTED = "structured_stream_unsupported"
     NO_ELIGIBLE_CANDIDATE = "no_eligible_candidate"
 
@@ -313,7 +314,12 @@ class GatewayResolver(Protocol):
 class ConfiguredGateways:
     """Borrow configured clients separately from registry data; lifecycle stays outside."""
 
-    def __init__(self, gateways: Mapping[ModelRef, ModelGateway]):
+    def __init__(
+        self,
+        gateways: Mapping[ModelRef, ModelGateway],
+        *,
+        credential_available: Callable[[ModelRef], bool] | None = None,
+    ):
         copied = dict(gateways)
         if any(
             not isinstance(m, ModelRef)
@@ -323,9 +329,17 @@ class ConfiguredGateways:
         ):
             raise LLMContractError("invalid_configured_gateways")
         self._gateways = MappingProxyType(copied)
+        self._credential_available = credential_available
 
     def gateway(self, model):
+        if self._credential_available is not None and not self._credential_available(model):
+            return None
         return self._gateways.get(model)
+
+    def issue(self, model):
+        if self._credential_available is not None and not self._credential_available(model):
+            return RouteIssue.CREDENTIAL_UNAVAILABLE
+        return None
 
 
 class RoutingEvent(StrEnum):
@@ -500,20 +514,21 @@ class RoutedModelGateway:
             self._report(plan, RoutingEvent.DEADLINE_EXHAUSTED, hops=hops)
             raise ExecutionDeadlineError()
         candidate = plan.candidates[index]
+        issue = None
         try:
+            issue = getattr(self._gateways, "issue", lambda _model: None)(candidate)
             gateway = self._gateways.gateway(candidate)
         except Exception:
             gateway = None  # Local configuration failure; never expose arbitrary details.
         if gateway is None:
-            self._report(
-                plan, RoutingEvent.SKIPPED, candidate, RouteIssue.CANDIDATE_UNAVAILABLE, hops
-            )
-            return None
+            issue = issue or RouteIssue.CANDIDATE_UNAVAILABLE
+            self._report(plan, RoutingEvent.SKIPPED, candidate, issue, hops)
+            return None, issue
         # Resolver is local but may consume time; gate the actual attempt again.
         if self._clock() >= execution.deadline:
             raise ExecutionDeadlineError()
         self._report(plan, RoutingEvent.SELECTED, candidate, hops=hops)
-        return ExecutingModelGateway(gateway, **self._options)
+        return ExecutingModelGateway(gateway, **self._options), None
 
     async def _terminate(self, plan, execution, outcome, candidate=None, hops=0):
         await self._control._finish_invocation(execution, outcome)
@@ -532,7 +547,7 @@ class RoutedModelGateway:
         hops = 0
         try:
             for index, candidate in enumerate(plan.candidates):
-                target = self._target(plan, execution, index, hops)
+                target, unavailable_issue = self._target(plan, execution, index, hops)
                 if target is None:
                     if self._can_fallback(
                         plan, execution, FallbackReason.CANDIDATE_UNAVAILABLE, index
@@ -546,7 +561,7 @@ class RoutedModelGateway:
                         )
                         hops += 1
                         continue
-                    raise RoutingError(RouteIssue.CANDIDATE_UNAVAILABLE)
+                    raise RoutingError(unavailable_issue)
                 before = execution.ordinal
                 try:
                     result = await target.generate(
@@ -600,7 +615,7 @@ class RoutedModelGateway:
         hops, started, terminal = 0, False, False
         try:
             for index, candidate in enumerate(plan.candidates):
-                target = self._target(plan, execution, index, hops)
+                target, unavailable_issue = self._target(plan, execution, index, hops)
                 if target is None:
                     if self._can_fallback(
                         plan,
@@ -618,7 +633,7 @@ class RoutedModelGateway:
                         )
                         hops += 1
                         continue
-                    raise RoutingError(RouteIssue.CANDIDATE_UNAVAILABLE)
+                    raise RoutingError(unavailable_issue)
                 before = execution.ordinal
                 failure = None
                 try:

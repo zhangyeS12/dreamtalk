@@ -1,6 +1,8 @@
-# Provider-Neutral LLM Infrastructure — C-005A through C-005E2
+# Provider-Neutral LLM Infrastructure — C-005A through C-005E5
 
-状态：C-005A 建立标准库 application contracts、配置/凭据引用边界和 deterministic offline fake；C-005B 增加 OpenAI-compatible Chat Completions adapter；C-005C1 增加显式结构化模式与 infrastructure 本地验证；C-005C2 增加真实非结构化 SSE text streaming 和 content-free stream completion；C-005D1 增加外层 provider-neutral retry orchestration 和 typed dispatch/retry timing metadata；C-005E2 增加独立的 Anthropic 原生 Messages adapter。验证使用离线 MockTransport；没有 provider SDK、真实付费 API 验证或 credential storage；C-005D2A 已增加独立 accounting persistence/migration 和定价估算，见 [LLM_ACCOUNTING.md](LLM_ACCOUNTING.md)。
+状态：Stage 4 已完成并冻结。C-005A 至 E4 建立 provider-neutral contracts、四种协议 adapter、structured/streaming、retry、accounting/pricing、budget 与 routing；C-005E5 增加严格非秘密配置、OS-native desktop credential host、私有 sidecar control protocol 和单一生产 composition root。验证使用离线 fake/MockTransport；没有真实付费 API。见 [生产组装](LLM_PRODUCTION_COMPOSITION.md)、[Stage 4 验收](STAGE4_ACCEPTANCE.md) 和 [LLM_ACCOUNTING.md](LLM_ACCOUNTING.md)。
+
+生产代码仍保持 `application → ModelGateway port ← infrastructure adapters`。SecretRef 可以序列化，SecretValue 只能在 adapter request 时短暂 reveal。Tauri/keyring 不进入 application；Python session provider 不知道 OS credential API。启动不发 provider 请求，缺 key 不阻止 Core boot。
 
 ```text
 Provider != Model != Purpose

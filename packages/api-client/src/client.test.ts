@@ -3,7 +3,7 @@ import { API_PROTOCOL, CoreClient } from "./index";
 
 afterEach(() => vi.restoreAllMocks());
 const connection = { endpoint: "http://127.0.0.1:49152", token: "memory-session", generation: "generation" };
-const health = { ready: true, core_version: "0.1.0", api_protocol: API_PROTOCOL, generation: "generation" };
+const health = { ready: true, core_version: "0.1.0", api_protocol: API_PROTOCOL, generation: "generation", llm_status: "unconfigured" };
 
 describe("CoreClient", () => {
   it("uses discovered endpoint and bearer auth", async () => {

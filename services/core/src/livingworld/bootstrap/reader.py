@@ -18,10 +18,13 @@ class BootstrapInput(BaseModel):
     data_dir: Path
     log_dir: Path
     allowed_origins: list[str] = Field(default_factory=list, max_length=8)
+    llm_config_path: Path | None = None
 
-    @field_validator("data_dir", "log_dir")
+    @field_validator("data_dir", "log_dir", "llm_config_path")
     @classmethod
-    def absolute_path(cls, value: Path) -> Path:
+    def absolute_path(cls, value: Path | None) -> Path | None:
+        if value is None:
+            return None
         if not value.is_absolute():
             raise ValueError("absolute_path_required")
         resolved = value.resolve()

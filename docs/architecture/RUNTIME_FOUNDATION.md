@@ -21,7 +21,7 @@ domain 包含无框架的系统契约、RequestId 及 C-003A 领域快照；appl
 | API | 鉴权 | 语义 |
 | --- | --- | --- |
 | `GET /system/live` | 无 | 进程 liveness，返回 `live`，不返回运行数据 |
-| `GET /system/health` | Bearer | 返回且仅返回 `ready`、`core_version`、`api_protocol`、`generation` |
+| `GET /system/health` | Bearer | 返回 `ready`、`core_version`、`api_protocol`、`generation` 与安全的 `llm_status` |
 | `POST /system/shutdown` | Bearer + UUID `X-Request-Id` | 接受幂等系统关闭请求；同一 generation 重复请求不重复触发关闭 |
 
 没有业务 API、公开 OpenAPI/docs 页面或数据库路径泄漏。shutdown RequestId 是基础设施抽象，不定义未来世界事件的幂等、Outreach 去重或业务 mutation cache。
@@ -37,6 +37,7 @@ domain 包含无框架的系统契约、RequestId 及 C-003A 领域快照；appl
 | `protocol_min` / `protocol_max` | 调用方支持的协议范围；不兼容则拒绝启动 |
 | `data_dir` / `log_dir` | 绝对 app-data 路径；源码与包资源目录拒绝作为数据或日志目录 |
 | `allowed_origins`（可选） | 浏览器/WebView 的精确 CORS origin 列表；默认没有跨 origin 访问 |
+| `llm_config_path`（可选） | 绝对 app-data 非秘密配置路径；不包含 API key |
 
 Core 验证并读取后删除 bootstrap 文件。Core 以 OS 分配端口只绑定 `127.0.0.1`。SQLite 初始化、迁移与服务器启动成功后，原子发布同目录的 `ready.json`：endpoint、core_version、api_protocol、generation、instance_nonce、pid、launcher_pid；文件不含 bearer、bootstrap secret、DB path、用户数据或世界名称。
 
@@ -49,6 +50,8 @@ Core 验证并读取后删除 bootstrap 文件。Core 以 OS 分配端口只绑�
 CoreSupervisor 定义 Starting、Ready、Degraded、Restarting、Failed、Stopping。Rust 直接启动 checkout `.venv` 的 Python，并等待 ready record，校验身份、loopback URL 和契约后进行鉴权 health。失败时清理所属子进程和短期文件。health 失败进入 Degraded；显式 restart 会结束旧进程并建立新 generation。当前未实现自动重启策略。
 
 窗口关闭时 Tauri 暂缓退出，Rust 发送鉴权 shutdown，等待 Core lifespan 完成及进程退出；超时后仅终止自己启动的 Windows 进程树。Core 还监视 Windows supervisor parent PID，在父进程消失后结束。没有实现 macOS/Linux desktop 的特有进程机制。
+
+C-005E5 将 sidecar stdin 保留为 Rust→Python 的 bounded credential control channel。Rust 在 shutdown 前先关闭 stdin writer；Python 使用 unbuffered pipe reader并有限等待其退出，避免解释器结束时的 buffered-reader 竞态。该通道不向 WebView 暴露，也不承载业务 RPC。桌面凭据由 OS-native keyring 持久化，Core 仅保存 session copy；完整边界见 [LLM_PRODUCTION_COMPOSITION.md](LLM_PRODUCTION_COMPOSITION.md)。
 
 Core 的 graceful drain 上限为 5 秒，窗口关闭的 supervisor 等待为 8 秒，留出 transport drain 和进程退出余量；超时 fallback 有单独的 Windows 集成测试。
 

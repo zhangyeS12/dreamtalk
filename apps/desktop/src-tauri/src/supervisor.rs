@@ -4,6 +4,7 @@ use sha2::Sha256;
 use std::{
     path::PathBuf,
     process::Stdio,
+    sync::Arc,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use tokio::{
@@ -11,6 +12,11 @@ use tokio::{
     process::{Child, Command},
 };
 use uuid::Uuid;
+
+use crate::{
+    credentials::{CredentialStore, CredentialStoreError, NativeCredentialStore},
+    host_control, llm_config,
+};
 
 pub const CONTRACT: &str =
     include_str!("../../../../services/core/src/livingworld/domain/api_contract.json");
@@ -73,12 +79,14 @@ pub struct Health {
     pub core_version: String,
     pub api_protocol: u32,
     pub generation: String,
+    pub llm_status: String,
 }
 
 pub struct LaunchConfig {
     pub project_root: PathBuf,
     pub app_data: PathBuf,
     pub startup_timeout: Duration,
+    pub llm_config_path: PathBuf,
 }
 
 // Owner/ACL validation is an explicit packaging extension point. The development
@@ -106,6 +114,7 @@ pub struct CoreSupervisor {
     session: Option<CoreConnection>,
     runtime_dir: Option<PathBuf>,
     http: reqwest::Client,
+    credentials: Arc<dyn CredentialStore>,
 }
 
 impl Default for CoreSupervisor {
@@ -116,6 +125,10 @@ impl Default for CoreSupervisor {
 
 impl CoreSupervisor {
     pub fn new() -> Self {
+        Self::with_credential_store(Arc::new(NativeCredentialStore))
+    }
+
+    pub fn with_credential_store(credentials: Arc<dyn CredentialStore>) -> Self {
         Self {
             state: SupervisorState::Starting,
             child: None,
@@ -127,6 +140,7 @@ impl CoreSupervisor {
                 .timeout(Duration::from_secs(1))
                 .build()
                 .expect("http_client_invalid"),
+            credentials,
         }
     }
 
@@ -159,6 +173,12 @@ impl CoreSupervisor {
         if !config.app_data.is_absolute() || config.app_data.starts_with(&config.project_root) {
             return Err("app_data_directory_required");
         }
+        if !config.llm_config_path.is_absolute()
+            || config.llm_config_path.starts_with(&config.project_root)
+        {
+            return Err("llm_config_path_invalid");
+        }
+        let llm_configuration = llm_config::load(&config.llm_config_path).await?;
         let api = contract();
         let nonce = Uuid::new_v4().to_string();
         let secret = format!("{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple());
@@ -174,6 +194,7 @@ impl CoreSupervisor {
             "protocol_min": api.api_protocol, "protocol_max": api.api_protocol,
             "data_dir": config.app_data.join("data"), "log_dir": config.app_data.join("logs"),
             "allowed_origins": ["http://127.0.0.1:1420", "http://tauri.localhost", "tauri://localhost"]
+            ,"llm_config_path": config.llm_config_path
         });
         let mut file = tokio::fs::OpenOptions::new()
             .write(true)
@@ -203,7 +224,7 @@ impl CoreSupervisor {
             .arg(&bootstrap_path)
             .arg("--parent-pid")
             .arg(std::process::id().to_string())
-            .stdin(Stdio::null())
+            .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
             .kill_on_drop(true);
@@ -279,6 +300,9 @@ impl CoreSupervisor {
                     generation: ready.generation,
                 });
                 self.authenticated_health().await?;
+                self.provision_credentials(&llm_configuration.credential_refs)
+                    .await?;
+                self.authenticated_health().await?;
                 self.state = SupervisorState::Ready;
                 event("supervisor_ready");
                 return Ok(());
@@ -311,7 +335,9 @@ impl CoreSupervisor {
                 if health.ready
                     && health.generation == session.generation
                     && health.api_protocol == contract().api_protocol
-                    && !health.core_version.is_empty() =>
+                    && !health.core_version.is_empty()
+                    && ["ready", "partially_configured", "unconfigured", "degraded"]
+                        .contains(&health.llm_status.as_str()) =>
             {
                 Ok(health)
             }
@@ -320,6 +346,55 @@ impl CoreSupervisor {
                 Err("core_health_contract_failed")
             }
         }
+    }
+
+    async fn send_control(&mut self, frame: &[u8]) -> Result<(), &'static str> {
+        let stdin = self
+            .child
+            .as_mut()
+            .and_then(|child| child.stdin.as_mut())
+            .ok_or("host_control_unavailable")?;
+        host_control::write_frame(stdin, frame).await
+    }
+
+    async fn provision_credentials(&mut self, references: &[String]) -> Result<(), &'static str> {
+        let mut secure_store_available = true;
+        for reference in references {
+            match self.credentials.resolve(reference) {
+                Ok(mut secret) => {
+                    let frame = host_control::credential_upsert(reference, &secret)?;
+                    self.send_control(&frame).await?;
+                    secret.clear();
+                }
+                Err(CredentialStoreError::Missing) => {}
+                Err(_) => secure_store_available = false,
+            }
+        }
+        let frame = host_control::credential_sync_complete(secure_store_available)?;
+        self.send_control(&frame).await
+    }
+
+    pub async fn provision_credential(
+        &mut self,
+        secret_ref: &str,
+        secret: &str,
+    ) -> Result<(), &'static str> {
+        if self.child.is_none() {
+            return Ok(());
+        }
+        let frame = host_control::credential_upsert(secret_ref, secret)?;
+        self.send_control(&frame).await
+    }
+
+    pub async fn remove_session_credential(
+        &mut self,
+        secret_ref: &str,
+    ) -> Result<(), &'static str> {
+        if self.child.is_none() {
+            return Ok(());
+        }
+        let frame = host_control::credential_remove(secret_ref)?;
+        self.send_control(&frame).await
     }
 
     pub async fn restart(&mut self, config: &LaunchConfig) -> Result<(), &'static str> {
@@ -332,6 +407,15 @@ impl CoreSupervisor {
     pub async fn stop(&mut self, grace: Duration) -> Result<StopReport, &'static str> {
         self.state = SupervisorState::Stopping;
         event("supervisor_stopping");
+        // End the private host-control lifecycle before asking the Core to exit.
+        // This also releases the Python stdin reader deterministically.
+        if let Some(child) = self.child.as_mut() {
+            child.stdin.take();
+        }
+        // Give the Core's unbuffered pipe reader a bounded opportunity to see EOF
+        // before a zero-grace forced termination. This prevents interpreter-exit
+        // races while preserving the forced-termination fallback semantics.
+        tokio::time::sleep(Duration::from_millis(75)).await;
         if let Some(session) = self.session.as_ref() {
             let _ = self
                 .http
@@ -369,10 +453,22 @@ impl CoreSupervisor {
                                 .status()
                                 .await
                                 .map_err(|_| "core_tree_terminate_failed")?;
-                            if !result.success()
-                                && child.try_wait().map_err(|_| "core_wait_failed")?.is_none()
-                            {
-                                return Err("core_tree_terminate_failed");
+                            if !result.success() {
+                                // taskkill can lose a race with the authenticated
+                                // shutdown already in progress. Confirm the owned
+                                // process remains alive before treating that exit
+                                // status as a termination failure.
+                                let confirmation_deadline =
+                                    tokio::time::Instant::now() + Duration::from_secs(1);
+                                loop {
+                                    if child.try_wait().map_err(|_| "core_wait_failed")?.is_some() {
+                                        break;
+                                    }
+                                    if tokio::time::Instant::now() >= confirmation_deadline {
+                                        return Err("core_tree_terminate_failed");
+                                    }
+                                    tokio::time::sleep(Duration::from_millis(25)).await;
+                                }
                             }
                         }
                     }

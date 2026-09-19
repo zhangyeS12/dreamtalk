@@ -8,13 +8,13 @@ LivingWorld 是持久化、事件驱动的多角色 AI 世界，不是普通聊�
 
 ## 开发状态
 
-当前阶段：**Stage 4 — C-005E4 OpenAI Native Responses Adapter**。已建立独立于 OpenAI-compatible 的 `/v1/responses` 非流式与流式 text-only adapter、stateless encrypted-reasoning continuation artifact、原生 Structured Outputs、本地 Draft 2020-12 校验，以及 reasoning-included output 计量。每个请求固定 `store=false`、`background=false`、`truncation=disabled`，不使用 `previous_response_id` 或 Conversation resource；流式可见内容只由 `TextDelta` 承载。验证全部离线，没有真实付费 API、production registry/default wiring、continuation persistence、reconciliation 或新 migration。详见 [OpenAI Responses adapter](docs/architecture/OPENAI_RESPONSES_ADAPTER.md)、[Gemini Interactions adapter](docs/architecture/GEMINI_INTERACTIONS_ADAPTER.md)、[Anthropic Messages adapter](docs/architecture/ANTHROPIC_MESSAGES_ADAPTER.md)、[LLM routing](docs/architecture/LLM_ROUTING.md)、[Budget Guard](docs/architecture/LLM_BUDGET_GUARD.md)、[LLM accounting](docs/architecture/LLM_ACCOUNTING.md)、[执行策略](docs/architecture/LLM_EXECUTION_POLICY.md)、[基础契约](docs/architecture/LLM_INFRASTRUCTURE.md)、[结构化生成](docs/architecture/STRUCTURED_GENERATION.md) 和 [真实文本流](docs/architecture/LLM_STREAMING.md)。
+当前阶段：**Stage 4 — LLM Infrastructure 已完成并冻结**。C-005E5 将四种 provider adapter、ModelRegistry、purpose routing、retry、accounting/pricing、Budget Guard 和 session credentials 接入单一生产 composition root。桌面 API key 由 OS credential facilities 持久化；Python Core 只接收内存 session credential。非秘密配置使用严格 version 1 JSON，启动不会发现模型、验证 key 或发起生成。全部验收保持离线，没有真实付费 API；可选 live smoke 必须显式 opt-in。详见 [生产组装](docs/architecture/LLM_PRODUCTION_COMPOSITION.md)、[Stage 4 验收](docs/architecture/STAGE4_ACCEPTANCE.md)、[OpenAI Responses adapter](docs/architecture/OPENAI_RESPONSES_ADAPTER.md)、[Gemini Interactions adapter](docs/architecture/GEMINI_INTERACTIONS_ADAPTER.md)、[Anthropic Messages adapter](docs/architecture/ANTHROPIC_MESSAGES_ADAPTER.md)、[LLM routing](docs/architecture/LLM_ROUTING.md)、[Budget Guard](docs/architecture/LLM_BUDGET_GUARD.md)、[LLM accounting](docs/architecture/LLM_ACCOUNTING.md)、[执行策略](docs/architecture/LLM_EXECUTION_POLICY.md)、[基础契约](docs/architecture/LLM_INFRASTRUCTURE.md)、[结构化生成](docs/architecture/STRUCTURED_GENERATION.md) 和 [真实文本流](docs/architecture/LLM_STREAMING.md)。
 
 Stage 3 已完成 canonical authored-content、Character Card/Lorebook 离线导入、Draft/Preview/confirmed Commit、外部 JSON 导出和 `.lwcontent` 原生内容包。原生包支持显式 roots 的依赖闭包、shared references、完整来源、本地 SHA-256 资产、六种三方冲突与事务化 accepted baseline。详见 [Stage 3 验收](docs/architecture/STAGE_3_ACCEPTANCE.md)、[原生内容包](docs/architecture/NATIVE_CONTENT_PACKAGE.md)、[内容模型](docs/architecture/CONTENT_MODEL.md)、[导入](docs/architecture/IMPORT_MODEL.md)、[导出](docs/architecture/EXPORT_MODEL.md) 和 [持久化](docs/architecture/PERSISTENCE_MODEL.md)。
 
 `.lwcontent` = authored content package；`.lworld` 保留给未来 runtime-world/state package。content package != backup != running world；hash integrity != publisher authentication；filesystem blobs + SQLite 不被宣称为一个 ACID transaction。导入/导出不创建 Runtime World/Character，不断言 Truth 或授予 Belief/PlayerKnowledge。作者文本/regex/activation metadata 保持不可信数据，不执行。
 
-运行内容实例化、automatic Lore→Truth/Belief、activation、prompt assembly、Memory/RAG、Director、Character Agent、AI Builder、checkpoint/branch、`.lworld`、cloud sync、marketplace 和 final UI 尚未实现。外部 PNG/APNG writer、CHARX、任意图复制、签名与 orphan blob GC 仍 deferred。Stage 2 的资源级 CAS、幂等、ledger/rebuild 和知识隔离继续沿用，见 [Stage 2 验收](docs/architecture/STAGE_2_ACCEPTANCE.md)。停止于 C-005E4；provider tools、production registry/default wiring 和真实 OpenAI API 验证尚未实现。
+运行内容实例化、automatic Lore→Truth/Belief、activation、prompt assembly、Memory/RAG、Director、Character Agent、AI Builder、checkpoint/branch、`.lworld`、cloud sync、marketplace 和 final UI 尚未实现。外部 PNG/APNG writer、CHARX、任意图复制、签名与 orphan blob GC 仍 deferred。Stage 2 的资源级 CAS、幂等、ledger/rebuild 和知识隔离继续沿用，见 [Stage 2 验收](docs/architecture/STAGE_2_ACCEPTANCE.md)。停止于 C-005E5；provider tools、settings UI、conversation persistence 和真实付费 API 验证尚未实现。Stage 5 未开始。
 
 C-002 运行时基础继续沿用：共享 React UI、Tauri v2 Windows 开发壳、Python Core 启停协议、系统 API、SQLite 迁移元数据、结构化日志和 CI。页面仅显示 Core Connecting / Ready / Failed。
 
@@ -59,6 +59,10 @@ uv run python scripts/check-doc-links.py
 npm run test:desktop
 npm run build:desktop
 npm run test:desktop-smoke
+
+# Optional real provider smoke: disabled unless --enable-live-provider is added.
+# External API usage may incur cost; this is never run by CI/pytest.
+npm run test:llm-live -- --config <path> --data-dir <path> --provider <id> --model <id> --credential-env <ENV_NAME>
 ```
 
 `build:core` 生成 `artifacts/core/*.whl`；`build:desktop` 生成未签名、未打包的 Windows debug executable。该桌面开发产物依赖当前 checkout 的 `.venv`，尚不是独立安装包。

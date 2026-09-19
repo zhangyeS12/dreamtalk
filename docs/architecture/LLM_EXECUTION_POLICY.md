@@ -139,3 +139,7 @@ post-processing failure，均不重试或 fallback。Streaming 在合法 `respon
 之后的 SSE error、failed/incomplete protocol violation、malformed known event、tool output 或 EOF 都不能
 重放。Provider-proven pre-execution quota rejection 可按已有 policy 考虑下一 candidate；ambiguous
 dispatch、accounting/budget integrity degradation 和 STARTED lock 始终优先终止。
+
+## C-005E5：production execution ownership
+
+生产 composition 只把 single-attempt adapters 注入通用 execution/router。HTTP clients 按 configured model 创建一次并由 runtime 关闭；adapter 不自行 retry。一次 routed Invocation 继续共享 deadline 与 global ordinal；每个 candidate/retry 重新执行 credential precheck、budget admission/reservation 和 accounting START。启动、config load 与 credential sync 不生成 provider request。可选真实 smoke 必须显式 opt-in，正常测试与 CI 没有付费流量。详见 [LLM_PRODUCTION_COMPOSITION.md](LLM_PRODUCTION_COMPOSITION.md)。

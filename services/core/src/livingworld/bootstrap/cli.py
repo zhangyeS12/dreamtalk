@@ -4,6 +4,7 @@ import ctypes
 import json
 import os
 import socket
+import sys
 from importlib.metadata import version
 from pathlib import Path
 from uuid import uuid4
@@ -12,6 +13,8 @@ import uvicorn
 
 from livingworld.adapters.http.app import create_app
 from livingworld.application.runtime import RuntimeStatus, ShutdownRequests
+from livingworld.bootstrap.llm_control import HostControlListener
+from livingworld.bootstrap.llm_runtime import start_production_llm_session
 from livingworld.bootstrap.reader import derive_session, read_bootstrap
 from livingworld.domain.contracts import API_PROTOCOL, LOOPBACK_HOST
 from livingworld.infrastructure.database import bootstrap_database
@@ -37,7 +40,12 @@ def parent_alive(pid: int) -> bool:
         kernel.CloseHandle(handle)
 
 
-async def run(bootstrap_path: Path, parent_pid: int | None = None) -> None:
+async def run(
+    bootstrap_path: Path,
+    parent_pid: int | None = None,
+    *,
+    desktop: bool = False,
+) -> None:
     logger = StructuredLogger()
     config = read_bootstrap(bootstrap_path)
     generation = str(uuid4())
@@ -47,7 +55,6 @@ async def run(bootstrap_path: Path, parent_pid: int | None = None) -> None:
     config.bootstrap_secret = type(config.bootstrap_secret)("")
     config.log_dir.mkdir(parents=True, exist_ok=True)
     logger = StructuredLogger(logfile=config.log_dir / f"core-{generation}.jsonl")
-    status = RuntimeStatus(version("livingworld-core"), generation)
     shutdown = ShutdownRequests()
     ready_path = bootstrap_path.parent / "ready.json"
     ready_path.unlink(missing_ok=True)
@@ -56,7 +63,20 @@ async def run(bootstrap_path: Path, parent_pid: int | None = None) -> None:
     except MigrationCompatibilityError as error:
         logger.emit("migration", error.code.value, level="ERROR")
         raise
+    llm_session = None
+    control_listener = None
     try:
+        llm_session = await start_production_llm_session(config.llm_config_path, database, logger)
+        status = RuntimeStatus(
+            version("livingworld-core"), generation, llm_health=llm_session.health
+        )
+        if desktop:
+            # Read from the unbuffered OS pipe so interpreter shutdown cannot race
+            # a BufferedReader lock held by the control thread.
+            control_listener = HostControlListener(
+                sys.stdin.buffer.raw, llm_session.credentials, logger
+            )
+            control_listener.start()
         app = create_app(status, shutdown, session, lambda: None, logger, config.allowed_origins)
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.bind((LOOPBACK_HOST, 0))
@@ -112,6 +132,10 @@ async def run(bootstrap_path: Path, parent_pid: int | None = None) -> None:
             sock.close()
             session = ""
     finally:
+        if control_listener is not None and not control_listener.join(1.0):
+            logger.emit("host_control", "host_control_close_timeout", level="ERROR")
+        if llm_session is not None:
+            await llm_session.aclose()
         await database.close()
 
 
@@ -124,7 +148,13 @@ def main() -> None:
     if args.desktop and (args.parent_pid is None or args.parent_pid <= 0):
         parser.error("desktop_parent_pid_required")
     try:
-        asyncio.run(run(args.bootstrap_path, args.parent_pid if args.desktop else None))
+        asyncio.run(
+            run(
+                args.bootstrap_path,
+                args.parent_pid if args.desktop else None,
+                desktop=args.desktop,
+            )
+        )
     except KeyboardInterrupt:
         pass
     except Exception:

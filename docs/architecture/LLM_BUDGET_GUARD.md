@@ -141,3 +141,7 @@ reported model 只用于可安全映射的 actual pricing。
 candidate 建立自己的 reservation 与 accounting START。Responses continuation ciphertext、Response ID
 和 reasoning text 不进入 budget evidence。Provider-proven quota/billing pre-execution rejection 可以沿用
 现有 safe fallback 规则；unknown dispatch 和任何 integrity failure 继续终止 route。
+
+## C-005E5：production admission wiring
+
+ProductionLLMRuntime 从严格配置加载 trusted model limits、pricing schedules/aliases/envelopes，并将 registry bounder、catalog 和 SQLite repositories 注入真实 Budget Guard。所有四个 adapter 通过相同 routed/executing path；不存在 provider-specific bypass。价格缺失不被猜测：普通 policy 沿用既有行为，HARD monetary guarantee 在网络前 fail closed。配置价格是 source-labelled Decimal data，不是 source-code model-name branch。C-005E5 无 migration。
