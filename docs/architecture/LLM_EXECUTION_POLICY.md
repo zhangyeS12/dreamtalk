@@ -120,3 +120,9 @@ Fallback 不重置 deadline。Deadline 只限制启动新 attempt，不强制取
 显式 transient HTTP set 现在包含 529。Anthropic adapter 只报告 status、normalized error 和 Retry-After；sleep/retry 仍完全由 ExecutingModelGateway 控制，并受 attempt cap 与共享 route deadline 限制。每次 adapter 调用只执行一个 HTTP attempt。
 
 HTTP 200 后的 Anthropic SSE `error` 没有可证明的 HTTP response status，归一化为 `DISPATCHED_OR_UNKNOWN`；因此不自动 replay，也不跨 provider fallback。合法 `message_start` 暴露 Started 后继续沿用既有永久 route lock。terminal refusal 是成功 completion。详见 [ANTHROPIC_MESSAGES_ADAPTER.md](ANTHROPIC_MESSAGES_ADAPTER.md)。
+
+## C-005E3：Gemini execution classification
+
+Gemini adapter 每次 generate/stream 调用只做一个 HTTP attempt；outer execution/routing policy 仍唯一决定 retry/fallback。稳定 machine code 区分 rate limit 与 provider-proven quota exhaustion。Quota exhaustion 不对同 candidate retry；只有 `REJECTED_BEFORE_EXECUTION` 的 safe PROFILE policy 才能切候选。429/5xx/timeout 继续走既有 dispatch-aware retry classifier。
+
+Gemini SSE `error`、EOF before semantic completion 和 protocol/state failure 不会产生 StreamCompleted。SSE error dispatch 为 unknown，Started 一旦交付永久锁定 candidate。Policy/content filter 是成功 terminal，不触发 retry/fallback。Continuation tamper 是本地 `CONTINUATION_STATE_INVALID`，在 credential resolve 和 HTTP 之前失败。

@@ -19,6 +19,7 @@ from livingworld.application.llm import (
     LLMUsage,
     ModelRef,
     ProviderId,
+    ReasoningTokenRelation,
     StreamOutcome,
 )
 from livingworld.application.llm_accounting import (
@@ -93,6 +94,7 @@ _ENUMS = {
         Meter,
         BudgetMode,
         BoundGuarantee,
+        ReasoningTokenRelation,
     )
 }
 
@@ -238,7 +240,10 @@ class SqlAlchemyUsageLedger:
                 CostStatus(row.cost_status),
                 _decode(row.price_snapshot) if row.price_snapshot else None,
             )  # Never reprice.
-        if facts.dispatch_state is DispatchState.NOT_DISPATCHED:
+        if facts.dispatch_state in {
+            DispatchState.NOT_DISPATCHED,
+            DispatchState.REJECTED_BEFORE_EXECUTION,
+        }:
             quote = PriceQuote(CostStatus.NOT_DISPATCHED)
         elif facts.completeness is UsageCompleteness.UNKNOWN:
             quote = PriceQuote(

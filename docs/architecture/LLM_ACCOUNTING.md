@@ -130,3 +130,9 @@ Disabled/capability-ineligible/missing-policy/budget-denied candidates 不形成
 Anthropic raw input、cache creation 与 cache read 规范化为 common total input，同时分别保存 uncached、cached 和 cache-write partitions。5-minute/1-hour cache creation 是 optional 子分区；`thinking_tokens` 是 output 子集。TTL detail 缺失或与 aggregate 矛盾时不猜：aggregate 可继续保存，TTL-specific pricing 返回 PRICING_CONTEXT_INCOMPLETE。UsageUpdate 与 terminal snapshot 仍不可相加。
 
 这些字段进入既有 `LLMUsage` 和 `AttemptFacts` typed JSON。`llm_attempts` schema 无新列；旧 JSON 不含字段时 dataclass defaults 为 None，不解释为 zero，因此 Alembic head 仍是 0010。原生 adapter 的 physical attempt 继续由通用 budget reservation、START、FINALIZE 和 settlement 管线管理，见 [Anthropic adapter](ANTHROPIC_MESSAGES_ADAPTER.md)。
+
+## C-005E3：Gemini reasoning/output accounting
+
+Gemini `total_input_tokens`、`cached_input_tokens`、`total_output_tokens`、`total_thought_tokens` 和 `total_tokens` 映射到既有 `LLMUsage`。`ReasoningTokenRelation.ADDITIVE_TO_OUTPUT` 明确 generated output 为 visible output + thought tokens；它与 OpenAI-compatible/Anthropic 的 included 语义不同，不能使用相同的减法假设。`UsageUpdate` 与 terminal usage 仍是 snapshots，不相加。
+
+Pricing 增加 `GENERATED_OUTPUT` meter：included 取 output，additive 取 output + reasoning，UNKNOWN/missing 则 `PRICING_CONTEXT_INCOMPLETE`。Provider continuation artifact 不写入 attempt/accounting typed JSON；closed codec 仍拒绝 request/response/artifact。新增 relation 依靠 typed-JSON default 兼容旧 rows，没有 Alembic migration，head 仍为 0010。

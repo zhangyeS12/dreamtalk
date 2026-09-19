@@ -1,17 +1,16 @@
 """Immutable operational model configuration, independent of clients and content."""
 
 from dataclasses import dataclass
-from enum import StrEnum
 
-from livingworld.application.llm import LLMContractError, ModelCapabilities, ModelRef, ProviderId
+from livingworld.application.llm import (
+    AdapterKind,
+    LLMContractError,
+    ModelCapabilities,
+    ModelRef,
+    ProviderId,
+)
 from livingworld.application.llm_budget import ModelLimitUsageBounder, ModelUsageLimits
 from livingworld.application.llm_preflight import RequestedPricingEnvelope
-
-
-class AdapterKind(StrEnum):
-    OPENAI_COMPATIBLE = "openai-compatible"
-    ANTHROPIC = "anthropic"
-    GEMINI = "gemini"
 
 
 @dataclass(frozen=True, slots=True)

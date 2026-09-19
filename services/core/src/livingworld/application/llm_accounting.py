@@ -236,7 +236,8 @@ def summarize(records: tuple[AttemptRecord, ...]) -> AccountingSummary:
         exposure |= (
             facts is None
             or quote.status is CostStatus.POSSIBLY_BILLED_UNKNOWN
-            or facts.dispatch_state is not DispatchState.NOT_DISPATCHED
+            or facts.dispatch_state
+            not in {DispatchState.NOT_DISPATCHED, DispatchState.REJECTED_BEFORE_EXECUTION}
             and quote.estimated_cost is None
         )
         if facts and facts.usage:

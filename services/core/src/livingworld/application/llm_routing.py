@@ -9,9 +9,11 @@ from types import MappingProxyType
 from typing import Protocol
 
 from livingworld.application.llm import (
+    DispatchState,
     InvocationId,
     LLMContractError,
     LLMError,
+    LLMErrorCode,
     LLMFailure,
     LLMPurpose,
     LLMRequest,
@@ -52,6 +54,7 @@ class FallbackReason(StrEnum):
     BUDGET_EXCEEDED = "budget_exceeded"
     BUDGET_UNVERIFIABLE = "budget_unverifiable"
     BUDGET_CURRENCY_UNSUPPORTED = "budget_currency_unsupported"
+    QUOTA_EXHAUSTED = "quota_exhausted"
 
 
 class RouteIssue(StrEnum):
@@ -377,6 +380,12 @@ class RoutingRecord:
 
 
 def provider_fallback_reason(failure: LLMFailure, policy: RetryPolicy) -> FallbackReason | None:
+    if (
+        failure.code is LLMErrorCode.QUOTA_EXHAUSTED
+        and failure.dispatch_state is DispatchState.REJECTED_BEFORE_EXECUTION
+        and failure.attempt is None
+    ):
+        return FallbackReason.QUOTA_EXHAUSTED
     return {
         RetryReason.RATE_LIMITED: FallbackReason.RATE_LIMITED,
         RetryReason.TRANSIENT_HTTP_FAILURE: FallbackReason.TRANSIENT_HTTP_FAILURE,

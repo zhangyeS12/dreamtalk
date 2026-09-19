@@ -87,3 +87,9 @@ Anthropic native Messages adapter 已在 C-005E2 实现；Gemini/Responses adapt
 Registry 用 `AdapterKind.ANTHROPIC` 标识协议族，ProviderId 仍是配置实例身份，capabilities 来自显式 Anthropic profile。受控 route 证明 OpenAI-compatible candidate 的 503/529 类安全 transient attempts 耗尽后，可按 policy 切换到 Anthropic native candidate；同一 InvocationId 延续，global ordinal 不重置，每个 candidate 都重新执行 budget admission、accounting START/FINAL 和 settlement。
 
 Anthropic SSE `event: error` 使用 `DISPATCHED_OR_UNKNOWN`，不会触发 provider shopping；terminal refusal 是成功结果，也不会 fallback。Anthropic adapter 明确禁用 server-side fallback，避免 provider 在 LivingWorld budget/attempt identity 之外更换执行目标。协议细节见 [ANTHROPIC_MESSAGES_ADAPTER.md](ANTHROPIC_MESSAGES_ADAPTER.md)。
+
+## 9. C-005E3 Gemini quota 与三协议 route
+
+Gemini quota exhaustion 只有在稳定 machine code 明确表示 quota、`dispatch_state=REJECTED_BEFORE_EXECUTION`、没有 completed attempt facts，且 PROFILE `RoutePolicy` 显式允许时，才可作为 `QUOTA_EXHAUSTED` 切换候选。同 candidate 不 retry；429 rate limiting 与 quota exhaustion 保持不同语义。任何 unknown dispatch、已暴露 Started、accounting/budget integrity failure 或非安全 denial 仍终止 route。
+
+OpenAI-compatible → Anthropic → Gemini 的离线 route 证明继续使用一个 InvocationId、共享 monotonic deadline 和 invocation-global ordinals。Gemini 候选独立执行 pricing/budget admission、reservation、accounting START/FINALIZE；前一候选的 reservation、Retry-After 或 continuation artifact 不会被复用。Gemini continuation 绑定 ProviderId 而不绑定 model alias，因此同 configured provider 内显式模型切换仍可 stateless 重建；其他 protocol family 只把它视为 opaque metadata。

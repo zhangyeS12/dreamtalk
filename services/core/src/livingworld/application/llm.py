@@ -48,6 +48,12 @@ class ProviderId:
         _text(self.value, "provider_id")
 
 
+class AdapterKind(StrEnum):
+    OPENAI_COMPATIBLE = "openai-compatible"
+    ANTHROPIC = "anthropic"
+    GEMINI = "gemini"
+
+
 @dataclass(frozen=True, slots=True)
 class LLMPurpose:
     """An explicit application label, open to new uses without an exhaustive enum."""
@@ -96,6 +102,35 @@ class TextContent:
 type LLMContent = TextContent
 
 
+@dataclass(frozen=True, slots=True)
+class ProviderContinuationArtifact:
+    """Opaque provider protocol state bound to the visible assistant text.
+
+    The payload is deliberately excluded from repr.  It is neither authored content nor
+    durable LivingWorld state; only the explicit local request codec may round-trip it.
+    """
+
+    adapter_kind: AdapterKind
+    provider_id: ProviderId
+    artifact_schema_version: int
+    opaque_payload: bytes = field(repr=False)
+    visible_content_sha256: str
+
+    def __post_init__(self):
+        _type(self.adapter_kind, AdapterKind, "continuation_adapter_kind")
+        _type(self.provider_id, ProviderId, "continuation_provider_id")
+        _count(self.artifact_schema_version, "continuation_schema_version", minimum=1)
+        if type(self.opaque_payload) is not bytes or not self.opaque_payload:
+            raise LLMContractError("invalid_continuation_payload")
+        digest = self.visible_content_sha256
+        if (
+            type(digest) is not str
+            or len(digest) != 64
+            or any(character not in "0123456789abcdef" for character in digest)
+        ):
+            raise LLMContractError("invalid_continuation_digest")
+
+
 def _content(value):
     if not isinstance(value, (list, tuple)) or any(
         not isinstance(item, TextContent) for item in value
@@ -108,12 +143,17 @@ def _content(value):
 class LLMMessage:
     role: MessageRole
     content: tuple[LLMContent, ...] = field(repr=False)
+    continuation: ProviderContinuationArtifact | None = field(default=None, repr=False)
 
     def __post_init__(self):
         _type(self.role, MessageRole, "message_role")
         object.__setattr__(self, "content", _content(self.content))
         if not self.content:
             raise LLMContractError("empty_message_content")
+        if self.continuation is not None:
+            _type(self.continuation, ProviderContinuationArtifact, "continuation_artifact")
+            if self.role is not MessageRole.ASSISTANT:
+                raise LLMContractError("continuation_requires_assistant_message")
 
 
 @dataclass(frozen=True, slots=True)
@@ -170,6 +210,14 @@ class LLMRequest:
         object.__setattr__(self, "metadata", _json_object(self.metadata))
 
 
+class ReasoningTokenRelation(StrEnum):
+    """How a provider's reasoning count relates to its output count."""
+
+    UNKNOWN = "unknown"
+    INCLUDED_IN_OUTPUT = "included_in_output"
+    ADDITIVE_TO_OUTPUT = "additive_to_output"
+
+
 @dataclass(frozen=True, slots=True)
 class LLMUsage:
     """None means unreported, not zero. Details are provider facts, never prices."""
@@ -184,8 +232,11 @@ class LLMUsage:
     reasoning_output_tokens: int | None = None
     cache_write_5m_input_tokens: int | None = None
     cache_write_1h_input_tokens: int | None = None
+    reasoning_token_relation: ReasoningTokenRelation = ReasoningTokenRelation.UNKNOWN
 
     def __post_init__(self):
+        relation = self.reasoning_token_relation
+        _type(relation, ReasoningTokenRelation, "reasoning_token_relation")
         for label in (
             "input_tokens",
             "output_tokens",
@@ -217,7 +268,8 @@ class LLMUsage:
         ):
             raise LLMContractError("invalid_input_partition")
         if (
-            self.reasoning_output_tokens is not None
+            relation is ReasoningTokenRelation.INCLUDED_IN_OUTPUT
+            and self.reasoning_output_tokens is not None
             and self.output_tokens is not None
             and self.reasoning_output_tokens > self.output_tokens
         ):
@@ -282,6 +334,7 @@ class LLMResponse:
     diagnostics: ProviderDiagnostics = field(default_factory=ProviderDiagnostics, repr=False)
     latency_ms: int | None = None
     processing_tier: str | None = None
+    continuation: ProviderContinuationArtifact | None = field(default=None, repr=False)
 
     def __post_init__(self):
         _type(self.invocation_id, InvocationId, "invocation_id")
@@ -298,6 +351,8 @@ class LLMResponse:
                 raise LLMContractError("refusal_cannot_be_validated_result")
         if self.latency_ms is not None:
             _count(self.latency_ms, "latency")
+        if self.continuation is not None:
+            _type(self.continuation, ProviderContinuationArtifact, "continuation_artifact")
 
     @property
     def text(self) -> str:
@@ -306,6 +361,9 @@ class LLMResponse:
 
 class LLMErrorCode(StrEnum):
     AUTHENTICATION = "authentication"
+    PERMISSION_DENIED = "permission_denied"
+    NOT_FOUND = "not_found"
+    FAILED_PRECONDITION = "failed_precondition"
     CONFIGURATION = "configuration"
     UNSUPPORTED_CAPABILITY = "unsupported_capability"
     INVALID_REQUEST = "invalid_request"
@@ -316,6 +374,8 @@ class LLMErrorCode(StrEnum):
     MALFORMED_RESPONSE = "malformed_response"
     CANCELLED = "cancelled"
     STRUCTURED_OUTPUT_FAILED = "structured_output_failed"
+    CONTINUATION_STATE_INVALID = "continuation_state_invalid"
+    QUOTA_EXHAUSTED = "quota_exhausted"
 
 
 class StructuredOutputMode(StrEnum):
@@ -437,6 +497,7 @@ def _accounting_usage(usage: LLMUsage) -> LLMUsage:
         usage.reasoning_output_tokens,
         usage.cache_write_5m_input_tokens,
         usage.cache_write_1h_input_tokens,
+        usage.reasoning_token_relation,
     )
 
 
@@ -477,6 +538,7 @@ class LLMAttemptSummary:
 
 class DispatchState(StrEnum):
     NOT_DISPATCHED = "not_dispatched"
+    REJECTED_BEFORE_EXECUTION = "rejected_before_execution"
     DISPATCHED_OR_UNKNOWN = "dispatched_or_unknown"
     HTTP_RESPONSE_RECEIVED = "http_response_received"
 
@@ -500,7 +562,10 @@ class LLMFailure:
         if self.http_status is not None:
             if type(self.http_status) is not int or not 100 <= self.http_status <= 599:
                 raise LLMContractError("invalid_http_status")
-            if self.dispatch_state is not DispatchState.HTTP_RESPONSE_RECEIVED:
+            if self.dispatch_state not in {
+                DispatchState.HTTP_RESPONSE_RECEIVED,
+                DispatchState.REJECTED_BEFORE_EXECUTION,
+            }:
                 raise LLMContractError("http_status_requires_response")
         if self.retry_after_seconds is not None:
             if (
@@ -509,7 +574,10 @@ class LLMFailure:
                 or self.retry_after_seconds < 0
             ):
                 raise LLMContractError("invalid_retry_after")
-            if self.dispatch_state is not DispatchState.HTTP_RESPONSE_RECEIVED:
+            if self.dispatch_state not in {
+                DispatchState.HTTP_RESPONSE_RECEIVED,
+                DispatchState.REJECTED_BEFORE_EXECUTION,
+            }:
                 raise LLMContractError("retry_after_requires_response")
         if self.attempt is not None:
             _type(self.attempt, LLMAttemptSummary, "attempt_summary")
@@ -613,6 +681,7 @@ class LLMStreamCompletion:
     latency_ms: int | None = None
     diagnostics: ProviderDiagnostics = field(default_factory=ProviderDiagnostics, repr=False)
     processing_tier: str | None = None
+    continuation: ProviderContinuationArtifact | None = field(default=None, repr=False)
 
     def __post_init__(self):
         _type(self.invocation_id, InvocationId, "invocation_id")
@@ -640,8 +709,11 @@ class LLMStreamCompletion:
             None,
             "unknown_finish_reason",
             "cache_write_ttl_breakdown_incomplete",
+            "thinking_summary_ignored",
         }:
             raise LLMContractError("invalid_stream_diagnostic")
+        if self.continuation is not None:
+            _type(self.continuation, ProviderContinuationArtifact, "continuation_artifact")
 
 
 @dataclass(frozen=True, slots=True)

@@ -143,3 +143,11 @@ FAST/BALANCED/BEST 是配置的 policy labels，不是模型客观排名。Route
 [AnthropicMessagesGateway](../../services/core/src/livingworld/infrastructure/llm/anthropic_messages.py) 是独立的 `AdapterKind.ANTHROPIC` transport，不经过 OpenAI compatibility endpoint。它直接映射 `/v1/messages`、top-level system blocks、required max_tokens、原生 `output_config.format`、Anthropic named SSE、`message_stop` 和独有 usage/cache facts；不使用 `[DONE]`、SDK、beta、tool loop、thinking controls 或 provider-side fallback。详细 contract、限制和离线证据见 [ANTHROPIC_MESSAGES_ADAPTER.md](ANTHROPIC_MESSAGES_ADAPTER.md)。
 
 LLMUsage 增加 optional 5-minute/1-hour cache-write facts；FinishReason 增加 CONTEXT_LIMIT。两者均为 provider-neutral value，不让 application/domain import Anthropic schema。旧 persisted usage 缺少新 JSON fields 时保持 None；无表结构变化或新 migration。
+
+## C-005E3：Gemini 原生 Interactions adapter
+
+[GeminiInteractionsGateway](../../services/core/src/livingworld/infrastructure/llm/gemini_interactions.py) 使用稳定 `POST /v1/interactions`、`x-goog-api-key` late authentication、`store=false` 和 `background=false`。它不使用 OpenAI compatibility、SDK、server-side history、tools、Search、Agent 或 provider fallback。完整 wire contract、限制和离线证据见 [GEMINI_INTERACTIONS_ADAPTER.md](GEMINI_INTERACTIONS_ADAPTER.md)。
+
+Provider-neutral `ProviderContinuationArtifact` 只保存 adapter kind、ProviderId、schema version、opaque bytes 和 visible-content digest。Gemini payload 只含 step layout、thought signatures 以及 visible text 的 byte length/hash，不复制正文；外来 adapter/provider artifact 被忽略，本 adapter 的篡改在 credential/network 前失败。它是 stateless provider continuation metadata，不是 Memory、World state、authored content、accounting 或 routing state。
+
+`LLMUsage.reasoning_token_relation` 明确 `UNKNOWN`、`INCLUDED_IN_OUTPUT` 和 `ADDITIVE_TO_OUTPUT`。OpenAI-compatible/Anthropic 规范化为 included；Gemini `thought_tokens` 规范化为 additive。旧 persisted typed JSON 缺字段时为 UNKNOWN；没有表结构变化或新 migration。

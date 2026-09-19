@@ -1,9 +1,11 @@
 """Explicit local request round-trip codec, not a provider wire schema or a logger."""
 
+from base64 import b64decode, b64encode
 from collections.abc import Mapping
 from uuid import UUID
 
 from livingworld.application.llm import (
+    AdapterKind,
     InvocationId,
     LLMContractError,
     LLMMessage,
@@ -11,6 +13,7 @@ from livingworld.application.llm import (
     LLMRequest,
     MessageRole,
     ModelRef,
+    ProviderContinuationArtifact,
     ProviderId,
     StructuredOutputRequest,
     TextContent,
@@ -40,6 +43,17 @@ def request_to_data(request: LLMRequest) -> dict:
             {
                 "role": message.role.value,
                 "content": [{"kind": "text", "text": block.text} for block in message.content],
+                "continuation": {
+                    "adapter_kind": message.continuation.adapter_kind.value,
+                    "provider_id": message.continuation.provider_id.value,
+                    "artifact_schema_version": message.continuation.artifact_schema_version,
+                    "opaque_payload_b64": b64encode(message.continuation.opaque_payload).decode(
+                        "ascii"
+                    ),
+                    "visible_content_sha256": message.continuation.visible_content_sha256,
+                }
+                if message.continuation
+                else None,
             }
             for message in request.messages
         ],
@@ -100,7 +114,12 @@ def request_from_data(value: dict) -> LLMRequest:
             raise LLMContractError("invalid_request_encoding")
         messages = []
         for message in data["messages"]:
-            _keys(message, {"role", "content"})
+            if (
+                type(message) is not dict
+                or not {"role", "content"} <= set(message)
+                or set(message) - {"role", "content", "continuation"}
+            ):
+                raise LLMContractError("invalid_request_encoding")
             if type(message["content"]) is not list:
                 raise LLMContractError("invalid_request_encoding")
             blocks = []
@@ -109,7 +128,33 @@ def request_from_data(value: dict) -> LLMRequest:
                 if block["kind"] != "text":
                     raise LLMContractError("unsupported_content_kind")
                 blocks.append(TextContent(block["text"]))
-            messages.append(LLMMessage(MessageRole(message["role"]), tuple(blocks)))
+            encoded_artifact = message.get("continuation")
+            artifact = None
+            if encoded_artifact is not None:
+                artifact_data = _keys(
+                    encoded_artifact,
+                    {
+                        "adapter_kind",
+                        "provider_id",
+                        "artifact_schema_version",
+                        "opaque_payload_b64",
+                        "visible_content_sha256",
+                    },
+                )
+                encoded_payload = artifact_data["opaque_payload_b64"]
+                if type(encoded_payload) is not str:
+                    raise LLMContractError("invalid_request_encoding")
+                payload = b64decode(encoded_payload, validate=True)
+                if b64encode(payload).decode("ascii") != encoded_payload:
+                    raise LLMContractError("invalid_request_encoding")
+                artifact = ProviderContinuationArtifact(
+                    AdapterKind(artifact_data["adapter_kind"]),
+                    ProviderId(artifact_data["provider_id"]),
+                    artifact_data["artifact_schema_version"],
+                    payload,
+                    artifact_data["visible_content_sha256"],
+                )
+            messages.append(LLMMessage(MessageRole(message["role"]), tuple(blocks), artifact))
         structured = data["structured_output"]
         if structured is not None:
             _keys(structured, {"schema_name", "schema"})

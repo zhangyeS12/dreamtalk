@@ -6,7 +6,7 @@ from decimal import ROUND_HALF_EVEN, Decimal, localcontext
 from enum import StrEnum
 from typing import Protocol
 
-from livingworld.application.llm import LLMContractError, ModelRef
+from livingworld.application.llm import LLMContractError, ModelRef, ReasoningTokenRelation
 from livingworld.domain.values import utc_timestamp
 
 QUANTUM = Decimal("0.000000001")
@@ -36,6 +36,7 @@ class Meter(StrEnum):
     OUTPUT = "output_tokens"
     NON_REASONING_OUTPUT = "non_reasoning_output_tokens"
     REASONING_OUTPUT = "reasoning_output_tokens"
+    GENERATED_OUTPUT = "generated_output_tokens"
 
 
 def _label(value):
@@ -144,7 +145,10 @@ class PricingVariant:
             or Meter.CACHE_WRITE_INPUT in meters
             and meters & {Meter.CACHE_WRITE_5M_INPUT, Meter.CACHE_WRITE_1H_INPUT}
             or Meter.OUTPUT in meters
-            and meters & {Meter.REASONING_OUTPUT, Meter.NON_REASONING_OUTPUT}
+            and meters
+            & {Meter.REASONING_OUTPUT, Meter.NON_REASONING_OUTPUT, Meter.GENERATED_OUTPUT}
+            or Meter.GENERATED_OUTPUT in meters
+            and meters & {Meter.OUTPUT, Meter.REASONING_OUTPUT, Meter.NON_REASONING_OUTPUT}
         ):
             raise PricingConfigurationError("overlapping_billing_meters")
         ttl_meters = {Meter.CACHE_WRITE_5M_INPUT, Meter.CACHE_WRITE_1H_INPUT}
@@ -385,6 +389,17 @@ class PricingEngine:
                     and usage.reasoning_output_tokens is not None
                 ):
                     quantity = usage.output_tokens - usage.reasoning_output_tokens
+                if rate.meter is Meter.GENERATED_OUTPUT:
+                    if usage.reasoning_token_relation is ReasoningTokenRelation.INCLUDED_IN_OUTPUT:
+                        quantity = usage.output_tokens
+                    elif (
+                        usage.reasoning_token_relation is ReasoningTokenRelation.ADDITIVE_TO_OUTPUT
+                        and usage.output_tokens is not None
+                        and usage.reasoning_output_tokens is not None
+                    ):
+                        quantity = usage.output_tokens + usage.reasoning_output_tokens
+                    else:
+                        quantity = None
                 if quantity is None:
                     return PriceQuote(CostStatus.PRICING_CONTEXT_INCOMPLETE)
                 if not 0 <= quantity <= 2**63 - 1:

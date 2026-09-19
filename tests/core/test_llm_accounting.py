@@ -22,6 +22,7 @@ from livingworld.application.llm import (
     LLMUsage,
     ModelRef,
     ProviderId,
+    ReasoningTokenRelation,
     StreamCompleted,
     StreamFailed,
     StreamOutcome,
@@ -92,6 +93,7 @@ STANDARD_USAGE = LLMUsage(
     cache_write_input_tokens=100,
     uncached_input_tokens=700,
     reasoning_output_tokens=20,
+    reasoning_token_relation=ReasoningTokenRelation.INCLUDED_IN_OUTPUT,
 )
 
 

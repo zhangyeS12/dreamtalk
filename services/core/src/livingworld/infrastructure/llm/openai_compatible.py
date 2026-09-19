@@ -25,6 +25,7 @@ from livingworld.application.llm import (
     ModelCapabilities,
     ModelRef,
     ProviderDiagnostics,
+    ReasoningTokenRelation,
     StreamCompleted,
     StreamFailed,
     StreamOutcome,
@@ -197,6 +198,7 @@ def _usage(value) -> LLMUsage | None:
             reasoning_output_tokens=details.get("completion_tokens_details", {}).get(
                 "reasoning_tokens"
             ),
+            reasoning_token_relation=ReasoningTokenRelation.INCLUDED_IN_OUTPUT,
         )
     except LLMContractError:
         raise _InvalidResponse from None

@@ -110,3 +110,9 @@ Started 暴露后永久禁止自动 replay，即使无正文；actual timeout/di
 同一 `SSEDecoder` 现在可保留 `event:` 名称；原 OpenAI-compatible data-only `[DONE]` path 保持不变。Anthropic native path 在合法 `message_start` 后才发 Started，只把 `content_block_delta.text_delta` 作为正文，并要求 terminal `message_delta` stop semantics 后出现 `message_stop`。它不接受 `[DONE]`，不累计全文；ping 与 well-formed unknown future event 忽略，known malformed event 失败。
 
 Anthropic refusal 只能在 terminal message_delta 识别。基础设施继续实时交付此前的 TextDelta，最终 `StreamCompleted.outcome=REFUSAL` 决定权威语义；不为了可能的拒绝而缓存全文。SSE error event 产生 `DISPATCHED_OR_UNKNOWN` Failed，无 completion/status/replay。message_start/input 与 message_delta/cumulative output usage 合成 latest factual snapshot，不能相加。完整状态机见 [ANTHROPIC_MESSAGES_ADAPTER.md](ANTHROPIC_MESSAGES_ADAPTER.md)。
+
+## 10. C-005E3 Gemini named SSE
+
+Gemini stream 只在合法 `interaction.created` 后发 Started。`step.start` 可携带首段正文，后续 `step.delta` 继续产生 TextDelta；thought 与 thought summary 不进入 visible content。每个 step index 只能启动一次，stop 必须匹配当前 open step。成功必须收到 `interaction.completed`；`done` 或 EOF 不能代替语义 terminal。
+
+Adapter 增量维护 layout、UTF-8 byte count/hash、thought signature 和整体 visible digest，不保留完整正文副本。StreamCompleted 只携带 terminal metadata、latest factual usage snapshot 和 opaque continuation artifact。SSE `error`、known malformed transitions、unexpected tools/status 产生 Failed 且没有 Completed；well-formed unknown future events有界忽略。CancelledError 继续直接传播。详见 [Gemini adapter](GEMINI_INTERACTIONS_ADAPTER.md)。

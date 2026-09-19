@@ -27,6 +27,7 @@ from livingworld.application.llm import (
     ModelCapabilities,
     ModelRef,
     ProviderDiagnostics,
+    ReasoningTokenRelation,
     StreamCompleted,
     StreamFailed,
     StreamOutcome,
@@ -261,6 +262,7 @@ def _usage(value):
                 reasoning_output_tokens=reasoning,
                 cache_write_5m_input_tokens=five,
                 cache_write_1h_input_tokens=one,
+                reasoning_token_relation=ReasoningTokenRelation.INCLUDED_IN_OUTPUT,
             ),
             incomplete,
         )

@@ -16,6 +16,7 @@ from livingworld.application.llm import (
     LLMStreamCompletion,
     LLMUsage,
     ProviderDiagnostics,
+    ReasoningTokenRelation,
     StreamCompleted,
     StreamFailed,
     StreamOutcome,
@@ -196,7 +197,12 @@ def test_official_shape_fixtures_preserve_order_across_arbitrary_boundaries(name
     assert result.model_used.model_id == "controlled-model"
     assert result.finish_reason is FinishReason.STOP
     assert result.usage == LLMUsage(
-        12, 4, 16, {"completion_tokens_details": {"reasoning_tokens": 2}}, reasoning_output_tokens=2
+        12,
+        4,
+        16,
+        {"completion_tokens_details": {"reasoning_tokens": 2}},
+        reasoning_output_tokens=2,
+        reasoning_token_relation=ReasoningTokenRelation.INCLUDED_IN_OUTPUT,
     )
     assert result.latency_ms >= 0
     assert result.diagnostics.provider_request_id == "req-controlled-stream"
@@ -321,7 +327,11 @@ def test_usage_snapshots_are_factual_ordered_deduplicated_and_not_added(usage_on
     events = asyncio.run(collect(Wire([sse(*chunks)])))
     updates = [event.usage for event in events if isinstance(event, UsageUpdate)]
     assert [value.output_tokens for value in updates] == [5, 3, 7]
-    assert completed(events).usage == updates[-1] == LLMUsage(12, 7, 19)
+    assert (
+        completed(events).usage
+        == updates[-1]
+        == LLMUsage(12, 7, 19, reasoning_token_relation=ReasoningTokenRelation.INCLUDED_IN_OUTPUT)
+    )
 
 
 def test_unreported_counters_and_unknown_metadata_are_never_fabricated_or_copied():
@@ -344,6 +354,7 @@ def test_unreported_counters_and_unknown_metadata_are_never_fabricated_or_copied
         None,
         {"completion_tokens_details": {"reasoning_tokens": 2}},
         reasoning_output_tokens=2,
+        reasoning_token_relation=ReasoningTokenRelation.INCLUDED_IN_OUTPUT,
     )
     assert RAW not in str(serialized(events)) and REASONING not in str(serialized(events))
 
@@ -540,7 +551,10 @@ def test_partial_disconnect_retains_observed_usage_but_has_no_completed_attempt(
     )
     assert [event.text for event in events if isinstance(event, TextDelta)] == [OUTPUT]
     assert [event.usage for event in events if isinstance(event, UsageUpdate)] == [
-        LLMUsage(output_tokens=7)
+        LLMUsage(
+            output_tokens=7,
+            reasoning_token_relation=ReasoningTokenRelation.INCLUDED_IN_OUTPUT,
+        )
     ]
     assert len(wire.requests) == 1
 

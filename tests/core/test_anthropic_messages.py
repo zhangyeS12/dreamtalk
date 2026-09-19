@@ -28,6 +28,7 @@ from livingworld.application.llm import (
     ModelCapabilities,
     ModelRef,
     ProviderId,
+    ReasoningTokenRelation,
     StreamCompleted,
     StreamFailed,
     StreamOutcome,
@@ -466,6 +467,7 @@ def test_plain_response_preserves_facts_hides_thinking_and_normalizes_anthropic_
         reasoning_output_tokens=1,
         cache_write_5m_input_tokens=1,
         cache_write_1h_input_tokens=2,
+        reasoning_token_relation=ReasoningTokenRelation.INCLUDED_IN_OUTPUT,
     )
     assert result.processing_tier == "standard"
     assert result.diagnostics.provider_request_id == "req_anthropic_fixture"
@@ -645,6 +647,7 @@ def test_named_sse_lifecycle_text_usage_ping_unknown_and_message_stop(size):
         reasoning_output_tokens=1,
         cache_write_5m_input_tokens=1,
         cache_write_1h_input_tokens=2,
+        reasoning_token_relation=ReasoningTokenRelation.INCLUDED_IN_OUTPUT,
     )
     completion = events[-1].completion
     assert completion.usage == updates[-1]

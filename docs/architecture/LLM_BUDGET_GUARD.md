@@ -123,3 +123,9 @@ Admission transaction 返回 immutable BudgetAdmissionSummary；成功时确认 
 Repository 只报告事实，不选择模型。只有 PROFILE RoutePolicy 明确允许且 summary 证明健康时，EXCEEDED / UNVERIFIABLE / CURRENCY_UNSUPPORTED 可切换候选。Global/purpose budget 也对下一候选的独立 upper bound 重新做原子检查，因此较低 bound 可被授权而没有绕过 global policy。下一候选不复用 reservation。
 
 STATE_UNCERTAIN、INTEGRITY_DEGRADED、bound violation 和 accounting/budget persistence/finalization failure 都终止 route。缺完整 typed summary 的 custom denial fail closed。C-005E1 没有新表或 migration；head 仍是 0010。
+
+## C-005E3：Gemini combined output bound
+
+Gemini 的 `GENERATED_OUTPUT` pricing 把 visible output 与 additive thought tokens 作为一个 output budget meter。HARD preflight 使用请求中单一 `max_output_tokens` 作为该 combined generated-output cap；不能分别对 visible/thought 各套一次 cap，也不能猜测 reasoning 比例。缺可信 model limit、requested-alias pricing envelope 或 GENERATED_OUTPUT rate 时仍在 provider 前 `BUDGET_UNVERIFIABLE`。
+
+被稳定 machine code 证明为 quota exhaustion 且 provider 明确在 execution 前拒绝的 attempt 可释放 reservation；若 RoutePolicy 允许，下一候选必须重新执行完整 admission/reservation/START。未知 dispatch、已执行 exposure 或任何 accounting/budget integrity degradation 继续保留 hold 并终止 route。
