@@ -271,6 +271,21 @@ def test_unsupported_requests_fail_before_transport_and_credentials(feature):
     assert wire.requests == []
 
 
+@pytest.mark.parametrize(
+    ("changes", "code"),
+    [
+        ({"max_output_tokens": None}, LLMErrorCode.INVALID_REQUEST),
+        ({"temperature": 0.25}, LLMErrorCode.UNSUPPORTED_CAPABILITY),
+    ],
+)
+def test_new_generic_request_options_fail_closed_before_openai_transport(changes, code):
+    creds = Credentials()
+    wire = Wire()
+    assert_failure(wire, code, req=request(**changes), creds=creds)
+    assert creds.calls == []
+    assert wire.requests == []
+
+
 def test_unsupported_stream_profile_fails_before_started_and_never_calls_generate():
     async def scenario():
         creds = Credentials()

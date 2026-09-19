@@ -1,6 +1,6 @@
-# Provider-Neutral LLM Infrastructure — C-005A through C-005E1
+# Provider-Neutral LLM Infrastructure — C-005A through C-005E2
 
-状态：C-005A 建立标准库 application contracts、配置/凭据引用边界和 deterministic offline fake；C-005B 增加 OpenAI-compatible Chat Completions adapter；C-005C1 增加显式结构化模式与 infrastructure 本地验证；C-005C2 增加真实非结构化 SSE text streaming 和 content-free stream completion；C-005D1 增加外层 provider-neutral retry orchestration 和 typed dispatch/retry timing metadata。验证使用离线 MockTransport；没有 provider SDK、真实付费 API 验证或 credential storage；C-005D2A 已增加独立 accounting persistence/migration 和定价估算，见 [LLM_ACCOUNTING.md](LLM_ACCOUNTING.md)。
+状态：C-005A 建立标准库 application contracts、配置/凭据引用边界和 deterministic offline fake；C-005B 增加 OpenAI-compatible Chat Completions adapter；C-005C1 增加显式结构化模式与 infrastructure 本地验证；C-005C2 增加真实非结构化 SSE text streaming 和 content-free stream completion；C-005D1 增加外层 provider-neutral retry orchestration 和 typed dispatch/retry timing metadata；C-005E2 增加独立的 Anthropic 原生 Messages adapter。验证使用离线 MockTransport；没有 provider SDK、真实付费 API 验证或 credential storage；C-005D2A 已增加独立 accounting persistence/migration 和定价估算，见 [LLM_ACCOUNTING.md](LLM_ACCOUNTING.md)。
 
 ```text
 Provider != Model != Purpose
@@ -26,11 +26,11 @@ ModelCatalog/ModelRegistry 提供按完整 ModelRef 的显式能力查询，unkn
 
 ## 2. 请求与文本内容
 
-LLMRequest 包含 invocation_id、model、purpose、messages、必填正整数 max_output_tokens，以及 optional structured_output、stop_sequences、correlation_id、JSON metadata 与 streaming flag。
+LLMRequest 包含 invocation_id、model、purpose、messages、optional 正整数 max_output_tokens、optional temperature，以及 structured_output、stop_sequences、correlation_id、JSON metadata 与 streaming flag。max_output_tokens 缺失表示由 adapter 的显式 model profile 决定；没有显式 default 的必填协议必须在网络前失败。
 
 LLMMessage 使用 LivingWorld 自有 SYSTEM / DEVELOPER / USER / ASSISTANT roles 与 typed TextContent blocks。消息必须有至少一个 block；text 原样保留，作者/消息数组顺序有语义，不自动 trim/merge。当前只实现 text。未来 image/file/tool-result 可通过 closed content union 增加新类型，不能注入任意 provider block，当前也没有 tool execution。
 
-max_output_tokens 表示请求的输出 token 上限，不定义全球统一 tokenizer。stop_sequences 是 ordered nonempty literal text sequences 的停止请求，不是 regex；未来 adapter 必须明确支持或返回 unsupported capability，不能 silently drop。SYSTEM / DEVELOPER 的 provider translation、token-limit 字段与 finish-code 映射需在 C-005B/C 基于实际能力验证，不假定不同 provider 等价。temperature/top_p/seed 等 sampling semantics 尚不在本契约中，避免提前承诺不可证明的跨提供方映射。
+max_output_tokens 表示请求的输出 token 上限，不定义全球统一 tokenizer。stop_sequences 是 ordered nonempty literal text sequences 的停止请求，不是 regex；adapter 必须明确支持或返回 unsupported capability，不能 silently drop。SYSTEM / DEVELOPER translation、token-limit 字段与 finish-code mapping 是 protocol-profile 事实，不假定不同 provider 等价。temperature 是可选请求意图；只有显式 provider/model profile 能证明支持范围时才允许发送，不能 clamp、改写或按模型名猜测。top_p/seed 等 sampling semantics 仍未进入公共契约。
 
 所有模型 defensively copy/freeze 输入集合与有限 JSON。非 typed role/block、未知 object/SDK/credential 值、非法预算等明确失败，错误仅包含 structural label。Prompt/content/metadata/schema/stop text 默认隐藏于 repr。
 
@@ -46,7 +46,7 @@ StructuredOutputRequest 携带 schema_name 与 JSON Schema document，包含的 
 
 ValidatedStructuredResult 是可信 validator 的 typed output claim，含 schema_name 与防御性冻结的 JSON value。它与 raw model text 分离；构造这个值本身**不执行或证明 schema validation**。C-005C1 真实 adapter 仅在严格解析和显式 Draft202012Validator 验证后构造；fake 不创建此 claim。Tests 手工创建受控 claim 仅验证类型边界。看起来是 JSON 的文本不能直接写 canonical 世界状态。
 
-FinishReason 为 STOP / OUTPUT_LIMIT / REFUSAL / UNKNOWN。**模型内容/政策拒绝是正常 round trip 的 REFUSAL response**，可保留 usage/latency，不能改成 transport exception；REFUSAL 不允许携带 validated structured result。未知 provider finish code 的翻译留待真实 adapter。
+FinishReason 为 STOP / OUTPUT_LIMIT / REFUSAL / CONTEXT_LIMIT / UNKNOWN。**模型内容/政策拒绝是正常 round trip 的 REFUSAL response**，可保留 usage/latency，不能改成 transport exception；REFUSAL 不允许携带 validated structured result。CONTEXT_LIMIT 与普通 stop/output budget 不混淆。
 
 ## 4. 流、错误与取消
 
@@ -137,3 +137,9 @@ HARD 授权 LivingWorld trusted estimated upper-bound spend，不承诺 invoice/
 [Model Registry 与 Routing](LLM_ROUTING.md) 位于 application 层、provider adapters 之上。ProviderId 继续表示 configured provider instance；AdapterKind 独立表示 openai-compatible / future anthropic / future gemini protocol family。Registry 使用 exact ModelRef 和显式 ModelCapabilities，不按名字猜测、不发现在线模型，也不保存 secret、client 或价格表。
 
 FAST/BALANCED/BEST 是配置的 policy labels，不是模型客观排名。RoutePlan 纯解析、无 provider IO。Explicit model 默认不换模型；profile 使用配置的 ordered chain。一个 routed Invocation 共享 deadline 与 invocation-global ordinal；candidate-local retry 不重置 deadline。Fallback 仅更改 execution target，messages/purpose/schema/stop/output cap/metadata 保持。Ambiguous dispatch、refusal/filter、structured postprocessing、accounting/budget integrity 和 STARTED 后的 stream 都禁止 fallback。
+
+## C-005E2：Anthropic 原生 Messages adapter
+
+[AnthropicMessagesGateway](../../services/core/src/livingworld/infrastructure/llm/anthropic_messages.py) 是独立的 `AdapterKind.ANTHROPIC` transport，不经过 OpenAI compatibility endpoint。它直接映射 `/v1/messages`、top-level system blocks、required max_tokens、原生 `output_config.format`、Anthropic named SSE、`message_stop` 和独有 usage/cache facts；不使用 `[DONE]`、SDK、beta、tool loop、thinking controls 或 provider-side fallback。详细 contract、限制和离线证据见 [ANTHROPIC_MESSAGES_ADAPTER.md](ANTHROPIC_MESSAGES_ADAPTER.md)。
+
+LLMUsage 增加 optional 5-minute/1-hour cache-write facts；FinishReason 增加 CONTEXT_LIMIT。两者均为 provider-neutral value，不让 application/domain import Anthropic schema。旧 persisted usage 缺少新 JSON fields 时保持 None；无表结构变化或新 migration。

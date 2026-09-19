@@ -1,6 +1,6 @@
-# LLM Accounting — C-005D2A through C-005E1
+# LLM Accounting — C-005D2A through C-005E2
 
-状态：已实现离线验证的物理 attempt 账本、effective-dated pricing、费用估算、invocation 汇总，以及跨 routed candidates 的共同 lifecycle。没有 production catalog、真实付费 API 验证、在线价格抓取或 UI；C-005D2B 增加 Budget Guard，C-005E1 增加显式 routing。实现复用现有 SQLAlchemy/Alembic/SQLite，无新增依赖。
+状态：已实现离线验证的物理 attempt 账本、effective-dated pricing、费用估算、invocation 汇总，以及跨 routed candidates 的共同 lifecycle。C-005E2 增加 Anthropic cache-read/cache-write TTL/reasoning facts，但仍使用同一账本。没有 production catalog、真实付费 API 验证、在线价格抓取或 UI；实现复用现有 SQLAlchemy/Alembic/SQLite，无新增依赖。
 
 ## 1. 永久边界
 
@@ -73,7 +73,7 @@ Variant 仅支持 factual input-token min/max-exclusive、实际 processing tier
 
 Reported model 有有效映射时优先；explicit exact ModelAlias 可以配置映射。Unknown reported model 不自动回退 requested；只有明确 `allow_requested_fallback` alias policy 允许该回退。没有 substring heuristics。零匹配 PRICE_UNKNOWN；多个匹配抛 PricingConfigurationError(ambiguous_pricing_variants)，不 first-match。缺失 context 可能影响唯一选择时不猜。
 
-Meters 包括 INPUT(total)、UNCACHED_INPUT、CACHED_INPUT、CACHE_WRITE_INPUT、OUTPUT(total)。总 input 与其分区不可并列收费；总 output 与 reasoning/non-reasoning 分区不可并列收费。只有显式选择 NON_REASONING_OUTPUT + REASONING_OUTPUT 的 schedule 才将输出分区分别估价，NON_REASONING_OUTPUT 使用 factual output-reasoning。通常仅 OUTPUT 收费，reasoning 是诊断明细。
+Meters 包括 INPUT(total)、UNCACHED_INPUT、CACHED_INPUT、CACHE_WRITE_INPUT、CACHE_WRITE_5M_INPUT、CACHE_WRITE_1H_INPUT、OUTPUT(total)。总 input 与其分区不可并列收费；aggregate cache-write 与 TTL cache-write meters 不可并列收费；TTL pricing 必须同时定义 5m/1h 两种 rate。总 output 与 reasoning/non-reasoning 分区不可并列收费。只有显式选择 NON_REASONING_OUTPUT + REASONING_OUTPUT 的 schedule 才将输出分区分别估价，NON_REASONING_OUTPUT 使用 factual output-reasoning。通常仅 OUTPUT 收费，reasoning 是诊断明细。
 
 每个 line item 保留 meter、quantity、精确 rate、unit_tokens、currency/subtotal。Money 为 currency + Decimal，持久化 SQLite TEXT，禁止 float。金额/费率最多 9 位小数、40 位有效数字；计算和跨 attempt 汇总使用独立 precision=100 Decimal context，不受外部 context 影响。每行按 `quantity * rate / unit_tokens` 计算，**ROUND_HALF_EVEN 到 1e-9**，总额为已取整行金额之和。同货币相加，不同 currency 分组，绝不自动汇兑。
 
@@ -124,3 +124,9 @@ Budget matching/window queries **只用 requested ModelRef**。LedgerQuery 的 r
 Route context 延迟 logical terminal，直到整个 route 成功或最终失败；candidate failure 不会提前关闭 ledger。Retry 与 fallback 共用 InvocationId 和 invocation-global ordinal，所以 A1/A2→B3 继续满足 (invocation_id, attempt_ordinal) uniqueness。每个 START 的 requested ModelRef 是实际 dispatched candidate，预算归属不会被 reported model 重定义。
 
 Disabled/capability-ineligible/missing-policy/budget-denied candidates 不形成 fake zero-cost attempt。每个 admitted attempt 独立 START/FINALIZE；accounting persistence 或 integrity degradation 立即锁定 route，禁止下一个 candidate。
+
+## C-005E2：Anthropic usage facts
+
+Anthropic raw input、cache creation 与 cache read 规范化为 common total input，同时分别保存 uncached、cached 和 cache-write partitions。5-minute/1-hour cache creation 是 optional 子分区；`thinking_tokens` 是 output 子集。TTL detail 缺失或与 aggregate 矛盾时不猜：aggregate 可继续保存，TTL-specific pricing 返回 PRICING_CONTEXT_INCOMPLETE。UsageUpdate 与 terminal snapshot 仍不可相加。
+
+这些字段进入既有 `LLMUsage` 和 `AttemptFacts` typed JSON。`llm_attempts` schema 无新列；旧 JSON 不含字段时 dataclass defaults 为 None，不解释为 zero，因此 Alembic head 仍是 0010。原生 adapter 的 physical attempt 继续由通用 budget reservation、START、FINALIZE 和 settlement 管线管理，见 [Anthropic adapter](ANTHROPIC_MESSAGES_ADAPTER.md)。

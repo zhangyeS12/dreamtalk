@@ -104,3 +104,9 @@ HTTP/status/credential 错误复用 C-005B 分类；read timeout→TIMEOUT，mid
 Direct adapter stream 仍 single-attempt。新增 [ExecutingModelGateway](LLM_EXECUTION_POLICY.md) 只在 application 尚未见到 Started 前按 normalized dispatch/status/Retry-After 重试；将要重试的 Failed 只作为内部决策，旧 iterator 在等待前关闭。最终只交付一个 logical lifecycle；所有 pre-start attempts 失败则单一最终 Failed，后续成功则只有一次 Started。
 
 Started 暴露后永久禁止自动 replay，即使无正文；actual timeout/disconnect、malformed/EOF 都保持一次 Failed/no Completed。没有 prefix resume、multiple-attempt text merging 或 buffer。InvocationId/request/provider/model 不变，ordinal 仅 execution metadata。UsageUpdate/terminal usage 仍同一物理 stream 的事实快照，不求和/不混合隐藏尝试的 usage；missing None。取消在 stream/backoff 直接传播、不产生 synthetic terminal；每次 provider attempt 独立 resolve credentials。没有 per-attempt usage persistence、price 或 routing/fallback。
+
+## 9. C-005E2 Anthropic named SSE
+
+同一 `SSEDecoder` 现在可保留 `event:` 名称；原 OpenAI-compatible data-only `[DONE]` path 保持不变。Anthropic native path 在合法 `message_start` 后才发 Started，只把 `content_block_delta.text_delta` 作为正文，并要求 terminal `message_delta` stop semantics 后出现 `message_stop`。它不接受 `[DONE]`，不累计全文；ping 与 well-formed unknown future event 忽略，known malformed event 失败。
+
+Anthropic refusal 只能在 terminal message_delta 识别。基础设施继续实时交付此前的 TextDelta，最终 `StreamCompleted.outcome=REFUSAL` 决定权威语义；不为了可能的拒绝而缓存全文。SSE error event 产生 `DISPATCHED_OR_UNKNOWN` Failed，无 completion/status/replay。message_start/input 与 message_delta/cumulative output usage 合成 latest factual snapshot，不能相加。完整状态机见 [ANTHROPIC_MESSAGES_ADAPTER.md](ANTHROPIC_MESSAGES_ADAPTER.md)。

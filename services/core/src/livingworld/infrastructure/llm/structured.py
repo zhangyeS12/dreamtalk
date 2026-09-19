@@ -161,7 +161,7 @@ def process_structured(
 ) -> LLMResponse | LLMFailure:
     if response.finish_reason is FinishReason.REFUSAL:
         return response
-    if response.finish_reason is FinishReason.OUTPUT_LIMIT:
+    if response.finish_reason in {FinishReason.OUTPUT_LIMIT, FinishReason.CONTEXT_LIMIT}:
         result = StructuredFailureDetail(StructuredFailureReason.OUTPUT_TRUNCATED)
     else:
         result = validate_text(request, validator, response.text)

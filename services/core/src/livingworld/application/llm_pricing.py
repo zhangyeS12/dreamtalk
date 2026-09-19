@@ -31,6 +31,8 @@ class Meter(StrEnum):
     UNCACHED_INPUT = "uncached_input_tokens"
     CACHED_INPUT = "cached_input_tokens"
     CACHE_WRITE_INPUT = "cache_write_input_tokens"
+    CACHE_WRITE_5M_INPUT = "cache_write_5m_input_tokens"
+    CACHE_WRITE_1H_INPUT = "cache_write_1h_input_tokens"
     OUTPUT = "output_tokens"
     NON_REASONING_OUTPUT = "non_reasoning_output_tokens"
     REASONING_OUTPUT = "reasoning_output_tokens"
@@ -131,11 +133,23 @@ class PricingVariant:
         meters = {rate.meter for rate in self.rates}
         if (
             Meter.INPUT in meters
-            and meters & {Meter.UNCACHED_INPUT, Meter.CACHED_INPUT, Meter.CACHE_WRITE_INPUT}
+            and meters
+            & {
+                Meter.UNCACHED_INPUT,
+                Meter.CACHED_INPUT,
+                Meter.CACHE_WRITE_INPUT,
+                Meter.CACHE_WRITE_5M_INPUT,
+                Meter.CACHE_WRITE_1H_INPUT,
+            }
+            or Meter.CACHE_WRITE_INPUT in meters
+            and meters & {Meter.CACHE_WRITE_5M_INPUT, Meter.CACHE_WRITE_1H_INPUT}
             or Meter.OUTPUT in meters
             and meters & {Meter.REASONING_OUTPUT, Meter.NON_REASONING_OUTPUT}
         ):
             raise PricingConfigurationError("overlapping_billing_meters")
+        ttl_meters = {Meter.CACHE_WRITE_5M_INPUT, Meter.CACHE_WRITE_1H_INPUT}
+        if meters & ttl_meters and not ttl_meters <= meters:
+            raise PricingConfigurationError("incomplete_cache_write_ttl_rates")
         for value in (self.input_min, self.input_max_exclusive):
             if value is not None and (type(value) is not int or not 0 <= value <= 2**63 - 1):
                 raise PricingConfigurationError("invalid_input_threshold")

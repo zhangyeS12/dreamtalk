@@ -4,10 +4,6 @@ import json
 import re
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, replace
-from datetime import UTC, datetime
-from email.utils import parsedate_to_datetime
-from math import isfinite
-from sys import float_info
 from time import perf_counter
 from urllib.parse import unquote, urlsplit
 
@@ -39,6 +35,12 @@ from livingworld.application.llm import (
     UsageUpdate,
 )
 from livingworld.application.llm_config import CredentialProvider, ProviderConfig, SecretValue
+from livingworld.infrastructure.llm.http_transport import (
+    bounded_body,
+    is_event_stream,
+    normalize_retry_after,
+    normalize_transport_failure,
+)
 from livingworld.infrastructure.llm.sse import SSEDecoder, SSEProtocolError, StreamLimits
 from livingworld.infrastructure.llm.structured import (
     InvalidStructuredSchema,
@@ -313,40 +315,11 @@ _UNREAD = object()
 
 
 def _retry_after(value, *, now_utc=None):
-    """Normalize standard HTTP hints once; never retain the original header."""
-    if not isinstance(value, str):
-        return None
-    value = value.strip()
-    if re.fullmatch(r"-?[0-9]+", value):
-        if value.startswith("-"):
-            return 0.0
-        seconds = float(value)
-        # An exceptionally large valid hint must stop retries, not become unavailable.
-        return max(0.0, seconds) if isfinite(seconds) else float_info.max
-    try:
-        date = parsedate_to_datetime(value)
-        if date.tzinfo is None:
-            return None
-        return max(0.0, (date - (now_utc or datetime.now(UTC))).total_seconds())
-    except (ValueError, TypeError, OverflowError):
-        return None
+    return normalize_retry_after(value, now_utc=now_utc)
 
 
 def _transport_failure(error, *, response_received=False):
-    """Concrete HTTPX phase knowledge stops here; uncertain send/read/write is unsafe."""
-    if isinstance(error, httpx.InvalidURL):
-        return LLMErrorCode.CONFIGURATION, DispatchState.NOT_DISPATCHED
-    code = (
-        LLMErrorCode.TIMEOUT
-        if isinstance(error, httpx.TimeoutException)
-        else LLMErrorCode.PROVIDER_UNAVAILABLE
-    )
-    not_dispatched = not response_received and isinstance(
-        error, (httpx.PoolTimeout, httpx.ConnectTimeout, httpx.ConnectError)
-    )
-    return code, (
-        DispatchState.NOT_DISPATCHED if not_dispatched else DispatchState.DISPATCHED_OR_UNKNOWN
-    )
+    return normalize_transport_failure(error, response_received=response_received)
 
 
 def _status_failure(response, request, secret, *, data=_UNREAD):
@@ -388,24 +361,12 @@ def _status_failure(response, request, secret, *, data=_UNREAD):
 
 
 def _event_stream_type(value):
-    parts = [part.strip().lower() for part in value.split(";")]
-    if parts[0] != "text/event-stream":
-        return False
-    for part in parts[1:]:
-        name, _, parameter = part.partition("=")
-        if name.strip() == "charset" and parameter.strip().strip('"') not in {"utf-8", "utf8"}:
-            return False
-    return True
+    return is_event_stream(value)
 
 
 async def _bounded_error_body(response, limit):
-    body = bytearray()
-    try:
-        async for fragment in response.aiter_bytes():
-            if len(body) + len(fragment) > limit:
-                return None  # Status remains factual; an oversized body is not parsed.
-            body.extend(fragment)
-    except httpx.HTTPError:
+    body = await bounded_body(response, limit)
+    if body is None:
         return None
     try:
         return json.loads(body, parse_constant=_invalid_json_constant)
@@ -696,6 +657,10 @@ class OpenAICompatibleChatGateway:
                 else LLMErrorCode.INVALID_REQUEST
             )
             raise self._error(request, code)
+        if request.max_output_tokens is None:
+            raise self._error(request, LLMErrorCode.INVALID_REQUEST)
+        if request.temperature is not None:
+            raise self._error(request, LLMErrorCode.UNSUPPORTED_CAPABILITY)
         if streaming and (
             not self._profile.supports_streaming or request.structured_output is not None
         ):

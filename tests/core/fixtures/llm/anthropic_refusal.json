@@ -1,0 +1,18 @@
+{
+  "id": "msg_01LWRefusalFixture",
+  "type": "message",
+  "role": "assistant",
+  "model": "claude-test-version-20260901",
+  "content": [
+    {
+      "type": "text",
+      "text": "LW_ANTHROPIC_REFUSAL_TEXT"
+    }
+  ],
+  "stop_reason": "refusal",
+  "stop_sequence": null,
+  "usage": {
+    "input_tokens": 5,
+    "output_tokens": 2
+  }
+}

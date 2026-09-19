@@ -1,0 +1,7 @@
+{
+  "type": "error",
+  "error": {
+    "type": "overloaded_error",
+    "message": "LW_ANTHROPIC_CONTROLLED_529"
+  }
+}

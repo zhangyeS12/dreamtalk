@@ -54,6 +54,7 @@ def request_to_data(request: LLMRequest) -> dict:
         "stop_sequences": list(request.stop_sequences),
         "correlation_id": request.correlation_id.value.hex if request.correlation_id else None,
         "metadata": _json_data(request.metadata),
+        "temperature": request.temperature,
     }
 
 
@@ -74,21 +75,26 @@ def _uuid(value):
 
 def request_from_data(value: dict) -> LLMRequest:
     try:
-        data = _keys(
-            value,
-            {
-                "invocation_id",
-                "model",
-                "purpose",
-                "messages",
-                "max_output_tokens",
-                "streaming",
-                "structured_output",
-                "stop_sequences",
-                "correlation_id",
-                "metadata",
-            },
-        )
+        required = {
+            "invocation_id",
+            "model",
+            "purpose",
+            "messages",
+            "max_output_tokens",
+            "streaming",
+            "structured_output",
+            "stop_sequences",
+            "correlation_id",
+            "metadata",
+        }
+        if (
+            type(value) is not dict
+            or not required <= set(value)
+            or (set(value) - required) - {"temperature"}
+        ):
+            raise LLMContractError("invalid_request_encoding")
+        data = dict(value)
+        data.setdefault("temperature", None)
         model = _keys(data["model"], {"provider_id", "model_id"})
         if type(data["messages"]) is not list:
             raise LLMContractError("invalid_request_encoding")
@@ -121,6 +127,7 @@ def request_from_data(value: dict) -> LLMRequest:
             if data["correlation_id"] is not None
             else None,
             metadata=data["metadata"],
+            temperature=data["temperature"],
         )
     except (ValueError, TypeError, KeyError, AttributeError):
         raise LLMContractError("invalid_request_encoding") from None

@@ -1,6 +1,6 @@
-# LLM Attempt Orchestration, Retry, Backoff & Routing — C-005D1 through C-005E1
+# LLM Attempt Orchestration, Retry, Backoff & Routing — C-005D1 through C-005E2
 
-状态：provider-neutral sequential retry wrapper 与其上层 deterministic routing 已实现，离线测试使用虚拟时钟、可控 sleeper/jitter、fake gateways 和 MockTransport。没有真实付费 API 验证、production default wiring 或 semantic repair。C-005D2A 增加 accounting，C-005D2B 增加 [预算准入](LLM_BUDGET_GUARD.md)，C-005E1 增加 [显式 fallback](LLM_ROUTING.md)；下文 1–8 节主要保留 D1 单候选 retry policy 语境。
+状态：provider-neutral sequential retry wrapper 与其上层 deterministic routing 已实现，离线测试使用虚拟时钟、可控 sleeper/jitter、fake gateways 和 MockTransport。没有真实付费 API 验证、production default wiring 或 semantic repair。C-005D2A 增加 accounting，C-005D2B 增加 [预算准入](LLM_BUDGET_GUARD.md)，C-005E1 增加 [显式 fallback](LLM_ROUTING.md)，C-005E2 增加原生 Anthropic 529 与跨协议证明；下文 1–8 节主要保留 D1 单候选 retry policy 语境。
 
 ```text
 logical invocation != physical attempt
@@ -114,3 +114,9 @@ ExecutingModelGateway 的 budget_guard 参数替代 accounting sink，不能同�
 Retry 是同一 candidate；fallback 是显式 RoutePolicy 中的下一 candidate。两者复用本文件的 typed failure classifier，router 不复制 HTTP heuristics。Candidate 有独立 max-attempt/backoff counter，但一个 routed Invocation 共用 monotonic deadline 与全局 ordinal：A1/A2→B3。
 
 Fallback 不重置 deadline。Deadline 只限制启动新 attempt，不强制取消已经 dispatch 的调用。某 candidate 的 Retry-After 无法放进剩余窗口时，停止该 candidate retry；在 route deadline 仍有效且 policy 允许时，可立即尝试 unrelated candidate。完整 eligibility 和 stream STARTED lock 见 [LLM_ROUTING.md](LLM_ROUTING.md)。
+
+## C-005E2：529 与 Anthropic stream dispatch
+
+显式 transient HTTP set 现在包含 529。Anthropic adapter 只报告 status、normalized error 和 Retry-After；sleep/retry 仍完全由 ExecutingModelGateway 控制，并受 attempt cap 与共享 route deadline 限制。每次 adapter 调用只执行一个 HTTP attempt。
+
+HTTP 200 后的 Anthropic SSE `error` 没有可证明的 HTTP response status，归一化为 `DISPATCHED_OR_UNKNOWN`；因此不自动 replay，也不跨 provider fallback。合法 `message_start` 暴露 Started 后继续沿用既有永久 route lock。terminal refusal 是成功 completion。详见 [ANTHROPIC_MESSAGES_ADAPTER.md](ANTHROPIC_MESSAGES_ADAPTER.md)。

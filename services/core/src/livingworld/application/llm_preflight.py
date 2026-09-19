@@ -152,6 +152,8 @@ class PreflightPricingEngine:
                             Meter.UNCACHED_INPUT,
                             Meter.CACHED_INPUT,
                             Meter.CACHE_WRITE_INPUT,
+                            Meter.CACHE_WRITE_5M_INPUT,
+                            Meter.CACHE_WRITE_1H_INPUT,
                         }
                         else 1
                     )

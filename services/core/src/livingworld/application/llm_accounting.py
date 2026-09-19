@@ -61,6 +61,8 @@ def factual_usage(usage):
                 "cache_write_input_tokens",
                 "uncached_input_tokens",
                 "reasoning_output_tokens",
+                "cache_write_5m_input_tokens",
+                "cache_write_1h_input_tokens",
             )
         )
         and not safe.details

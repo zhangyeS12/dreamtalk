@@ -1,6 +1,6 @@
 # Model Registry, Purpose Routing & Safe Provider Fallback — C-005E1
 
-状态：已实现 provider-neutral、deterministic、opt-in 的 operational Model Registry 与路由层。全部验证使用 offline fake、可控 gateway 和临时 SQLite；没有真实 provider 调用、production default registry 或新 migration。
+状态：已实现 provider-neutral、deterministic、opt-in 的 operational Model Registry 与路由层；C-005E2 已用独立 Anthropic 原生 Messages adapter 验证不同协议可以进入同一路由管线。全部验证使用 offline fixtures、可控 gateway 和临时 SQLite；没有真实 provider 调用、production default registry 或新 migration。
 
 ```text
 Application → immutable RoutePlan → routed invocation context
@@ -80,4 +80,10 @@ Pre-STARTED candidate failures可隐藏并 fallback。Application 只看到一�
 
 ## 7. Deferred scope
 
-没有 Anthropic/Gemini/Responses adapter、tools、vision、provider discovery、online pricing、dynamic ranking、circuit breaker、semantic repair、Director、Agent、Memory 或 UI。Production registry loading/bootstrap composition 留给后续任务；C-005E1 只建立可验证的中立 contract 和 deterministic execution baseline。
+Anthropic native Messages adapter 已在 C-005E2 实现；Gemini/Responses adapter、tools、vision、provider discovery、online pricing、dynamic ranking、circuit breaker、semantic repair、Director、Agent、Memory 或 UI 仍未实现。Production registry loading/bootstrap composition 留给后续任务。
+
+## 8. C-005E2 跨协议证明
+
+Registry 用 `AdapterKind.ANTHROPIC` 标识协议族，ProviderId 仍是配置实例身份，capabilities 来自显式 Anthropic profile。受控 route 证明 OpenAI-compatible candidate 的 503/529 类安全 transient attempts 耗尽后，可按 policy 切换到 Anthropic native candidate；同一 InvocationId 延续，global ordinal 不重置，每个 candidate 都重新执行 budget admission、accounting START/FINAL 和 settlement。
+
+Anthropic SSE `event: error` 使用 `DISPATCHED_OR_UNKNOWN`，不会触发 provider shopping；terminal refusal 是成功结果，也不会 fallback。Anthropic adapter 明确禁用 server-side fallback，避免 provider 在 LivingWorld budget/attempt identity 之外更换执行目标。协议细节见 [ANTHROPIC_MESSAGES_ADAPTER.md](ANTHROPIC_MESSAGES_ADAPTER.md)。

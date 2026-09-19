@@ -133,18 +133,24 @@ class LLMRequest:
     model: ModelRef
     purpose: LLMPurpose
     messages: tuple[LLMMessage, ...] = field(repr=False)
-    max_output_tokens: int
+    max_output_tokens: int | None = None
     streaming: bool = False
     structured_output: StructuredOutputRequest | None = field(default=None, repr=False)
     stop_sequences: tuple[str, ...] = field(default=(), repr=False)
     correlation_id: CorrelationId | None = None
     metadata: Mapping[str, JsonValue] = field(default_factory=dict, repr=False)
+    temperature: float | None = None
 
     def __post_init__(self):
         _type(self.invocation_id, InvocationId, "invocation_id")
         _type(self.model, ModelRef, "model_ref")
         _type(self.purpose, LLMPurpose, "purpose")
-        _count(self.max_output_tokens, "output_budget", minimum=1)
+        if self.max_output_tokens is not None:
+            _count(self.max_output_tokens, "output_budget", minimum=1)
+        if self.temperature is not None and (
+            type(self.temperature) not in {int, float} or not isfinite(self.temperature)
+        ):
+            raise LLMContractError("invalid_temperature")
         if type(self.streaming) is not bool:
             raise LLMContractError("invalid_streaming_flag")
         if self.structured_output is not None:
@@ -176,6 +182,8 @@ class LLMUsage:
     cache_write_input_tokens: int | None = None
     uncached_input_tokens: int | None = None
     reasoning_output_tokens: int | None = None
+    cache_write_5m_input_tokens: int | None = None
+    cache_write_1h_input_tokens: int | None = None
 
     def __post_init__(self):
         for label in (
@@ -186,6 +194,8 @@ class LLMUsage:
             "cache_write_input_tokens",
             "uncached_input_tokens",
             "reasoning_output_tokens",
+            "cache_write_5m_input_tokens",
+            "cache_write_1h_input_tokens",
         ):
             value = getattr(self, label)
             if value is not None:
@@ -212,6 +222,15 @@ class LLMUsage:
             and self.reasoning_output_tokens > self.output_tokens
         ):
             raise LLMContractError("invalid_reasoning_partition")
+        cache_ttl = (self.cache_write_5m_input_tokens, self.cache_write_1h_input_tokens)
+        if self.cache_write_input_tokens is not None:
+            if any(
+                value is not None and value > self.cache_write_input_tokens for value in cache_ttl
+            ) or (
+                all(value is not None for value in cache_ttl)
+                and sum(cache_ttl) != self.cache_write_input_tokens
+            ):
+                raise LLMContractError("invalid_cache_write_partition")
         object.__setattr__(self, "details", _json_object(self.details))
 
 
@@ -233,6 +252,7 @@ class FinishReason(StrEnum):
     STOP = "stop"
     OUTPUT_LIMIT = "output_limit"
     REFUSAL = "refusal"
+    CONTEXT_LIMIT = "context_limit"
     UNKNOWN = "unknown"
 
 
@@ -385,7 +405,11 @@ def _accounting_usage(usage: LLMUsage) -> LLMUsage:
             "accepted_prediction_tokens",
             "rejected_prediction_tokens",
         ),
-        "": ("prompt_cache_hit_tokens", "prompt_cache_miss_tokens"),
+        "": (
+            "prompt_cache_hit_tokens",
+            "prompt_cache_miss_tokens",
+            "cache_write_ttl_breakdown_incomplete",
+        ),
     }.items():
         source = usage.details.get(group, {}) if group else usage.details
         if not isinstance(source, Mapping):
@@ -411,6 +435,8 @@ def _accounting_usage(usage: LLMUsage) -> LLMUsage:
         usage.cache_write_input_tokens,
         usage.uncached_input_tokens,
         usage.reasoning_output_tokens,
+        usage.cache_write_5m_input_tokens,
+        usage.cache_write_1h_input_tokens,
     )
 
 
@@ -610,7 +636,11 @@ class LLMStreamCompletion:
             or any(not (c.isascii() and (c.isalnum() or c in "_.:-")) for c in identifier)
         ):
             raise LLMContractError("invalid_stream_request_id")
-        if self.diagnostics.diagnostic_code not in {None, "unknown_finish_reason"}:
+        if self.diagnostics.diagnostic_code not in {
+            None,
+            "unknown_finish_reason",
+            "cache_write_ttl_breakdown_incomplete",
+        }:
             raise LLMContractError("invalid_stream_diagnostic")
 
 

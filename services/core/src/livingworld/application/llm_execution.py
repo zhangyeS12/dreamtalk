@@ -155,7 +155,7 @@ def retry_failure_reason(failure: LLMFailure, policy: RetryPolicy) -> RetryReaso
             return RetryReason.RATE_LIMITED
         if (
             failure.code is LLMErrorCode.PROVIDER_UNAVAILABLE
-            and failure.http_status in {500, 502, 503, 504}
+            and failure.http_status in {500, 502, 503, 504, 529}
             and policy.retry_transient_http
         ):
             return RetryReason.TRANSIENT_HTTP_FAILURE

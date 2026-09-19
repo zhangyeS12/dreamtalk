@@ -9,6 +9,14 @@ class SSEProtocolError(ValueError):
 
 
 @dataclass(frozen=True, slots=True)
+class SSEEvent:
+    """One bounded SSE event. The event name is protocol metadata, never payload text."""
+
+    event: str | None
+    data: str
+
+
+@dataclass(frozen=True, slots=True)
 class StreamLimits:
     max_event_bytes: int = 1024 * 1024
     max_line_bytes: int = 256 * 1024
@@ -41,9 +49,16 @@ class SSEDecoder:
         self._line = bytearray()
         self._data: list[str] = []
         self._event_bytes = 0
+        self._event_name: str | None = None
         self._first_line = True
 
     def feed(self, fragment: bytes) -> Iterator[str]:
+        """Compatibility view for data-only protocols such as Chat Completions."""
+        for event in self.feed_named(fragment):
+            yield event.data
+
+    def feed_named(self, fragment: bytes) -> Iterator[SSEEvent]:
+        """Decode named events without buffering more than one line and event."""
         offset = 0
         while offset < len(fragment):
             newline = fragment.find(b"\n", offset)
@@ -73,15 +88,24 @@ class SSEDecoder:
                     data = "\n".join(self._data)
                     self._data.clear()
                     self._event_bytes = 0
-                    yield data
+                    event = SSEEvent(self._event_name, data)
+                    self._event_name = None
+                    yield event
+                else:
+                    self._event_name = None
                 continue
             if line.startswith(":"):
                 continue
             field, _, value = line.partition(":")
-            if field != "data":
-                continue  # event/id/retry fields have no Chat Completions semantics.
             if value.startswith(" "):
                 value = value[1:]  # SSE removes one field separator space only.
+            if field == "event":
+                if "\x00" in value:
+                    raise SSEProtocolError("sse_invalid_event_name")
+                self._event_name = value or None
+                continue
+            if field != "data":
+                continue  # id/retry fields are not application semantics.
             self._event_bytes += len(value.encode("utf-8")) + 1
             if self._event_bytes > self._limits.max_event_bytes:
                 raise SSEProtocolError("sse_event_limit")
