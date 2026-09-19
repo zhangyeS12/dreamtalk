@@ -1,6 +1,6 @@
-# LLM Accounting — C-005D2A / C-005D2B
+# LLM Accounting — C-005D2A through C-005E1
 
-状态：已实现离线验证的物理 attempt 账本、effective-dated pricing contracts、确定性费用估算和 invocation 汇总。没有 production catalog、真实付费 API 验证、在线价格抓取、routing/fallback 或 UI；C-005D2B 已增加独立 opt-in Budget Guard。实现复用现有 SQLAlchemy/Alembic/SQLite，无新增依赖。
+状态：已实现离线验证的物理 attempt 账本、effective-dated pricing、费用估算、invocation 汇总，以及跨 routed candidates 的共同 lifecycle。没有 production catalog、真实付费 API 验证、在线价格抓取或 UI；C-005D2B 增加 Budget Guard，C-005E1 增加显式 routing。实现复用现有 SQLAlchemy/Alembic/SQLite，无新增依赖。
 
 ## 1. 永久边界
 
@@ -112,10 +112,15 @@ Accounting 是 operational metadata，不是 WorldEvent/WorldTruth/CharacterBeli
 
 ## 8. Deferred
 
-C-005D2B 已实现可信 usage/cost bounds、persistent reservations 与 opt-in enforcement。Production catalog publication/update、incomplete reconciliation、billing/balance APIs、repricing workflows、dashboard、routing/fallback/repair、Director/Agent/Memory 全部 deferred。本任务不进行真实付费模型验证，不设置 production default accounting/gateway wiring。
+C-005D2B 已实现可信 usage/cost bounds、persistent reservations 与 opt-in enforcement；C-005E1 已实现 deterministic routing/fallback。Production catalog publication/update、incomplete reconciliation、billing/balance APIs、repricing workflows、dashboard、semantic repair、Director/Agent/Memory 全部 deferred。不进行真实付费模型验证，不设置 production default accounting/gateway/registry wiring。
 
 ## C-005D2B：同事务预算边界
 
 Budgeted execution 使用 SqlAlchemyBudgetGuard.admit，ALL matching HARD reservations + START 同一 BEGIN IMMEDIATE transaction；不能叠加另一个独立 accounting sink。Final accounting + settlement 同事务；失败 rollback，START 保持 INCOMPLETE、hold 保持，原 response/failure/completion/cancellation 不改写、不 replay/retry。Known final accounting + stale held state 为 integrity degraded，future HARD fail closed；正常可信 unknown hold 是 bounded exposure，不能解释为 zero。详见 [LLM_BUDGET_GUARD.md](LLM_BUDGET_GUARD.md)。
 
 Budget matching/window queries **只用 requested ModelRef**。LedgerQuery 的 requested OR reported 筛选保留为 analytics，不能复用为准入 SQL。Reported model 可安全映射 actual pricing，但不重新归属预算；alias HARD 需要 exhaustive trusted pricing envelope。当前 head 为 [0010_llm_budget_guard](../../services/core/src/livingworld/infrastructure/persistence/migrations/versions/0010_llm_budget_guard.py)；0009/旧 accounting rows 与 audit 原样保留，operational budgets 不进入 WorldEvent/content/knowledge/package。
+## C-005E1：跨候选的一个 logical lifecycle
+
+Route context 延迟 logical terminal，直到整个 route 成功或最终失败；candidate failure 不会提前关闭 ledger。Retry 与 fallback 共用 InvocationId 和 invocation-global ordinal，所以 A1/A2→B3 继续满足 (invocation_id, attempt_ordinal) uniqueness。每个 START 的 requested ModelRef 是实际 dispatched candidate，预算归属不会被 reported model 重定义。
+
+Disabled/capability-ineligible/missing-policy/budget-denied candidates 不形成 fake zero-cost attempt。每个 admitted attempt 独立 START/FINALIZE；accounting persistence 或 integrity degradation 立即锁定 route，禁止下一个 candidate。

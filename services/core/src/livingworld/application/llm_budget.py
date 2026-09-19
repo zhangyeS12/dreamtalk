@@ -42,11 +42,108 @@ class BudgetReason(StrEnum):
     INTEGRITY_DEGRADED = "budget_integrity_degraded"
 
 
+@dataclass(frozen=True, slots=True)
+class BudgetScope:
+    purpose: LLMPurpose | None = None
+    provider: ProviderId | None = None
+    model: ModelRef | None = None
+
+    def __post_init__(self):
+        for value, kind in (
+            (self.purpose, LLMPurpose),
+            (self.provider, ProviderId),
+            (self.model, ModelRef),
+        ):
+            if value is not None and not isinstance(value, kind):
+                raise LLMContractError("invalid_budget_scope")
+        if self.model is not None and self.provider != self.model.provider_id:
+            if self.provider is None:
+                object.__setattr__(self, "provider", self.model.provider_id)
+            else:
+                raise LLMContractError("conflicting_budget_scope")
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class BudgetAdmissionFact:
+    """One matching HARD policy's transaction-local facts, never routing policy."""
+
+    budget_id: BudgetId
+    scope: BudgetScope
+    reason: BudgetReason | None
+    limit: Money
+    known_spend: Money
+    held: Money
+    remaining: Money | None
+    requested_upper_bound: Money | None
+    integrity_degraded: bool
+    unbounded_exposure: bool
+
+    def __post_init__(self):
+        if not isinstance(self.budget_id, BudgetId) or not isinstance(self.scope, BudgetScope):
+            raise LLMContractError("invalid_budget_admission_fact")
+        if self.reason is not None and not isinstance(self.reason, BudgetReason):
+            raise LLMContractError("invalid_budget_admission_reason")
+        for money in (self.limit, self.known_spend, self.held):
+            if not isinstance(money, Money):
+                raise LLMContractError("invalid_budget_admission_money")
+        for money in (self.remaining, self.requested_upper_bound):
+            if money is not None and not isinstance(money, Money):
+                raise LLMContractError("invalid_budget_admission_money")
+        if any(type(v) is not bool for v in (self.integrity_degraded, self.unbounded_exposure)):
+            raise LLMContractError("invalid_budget_admission_integrity")
+
+
+@dataclass(frozen=True, slots=True)
+class BudgetAdmissionSummary:
+    """Complete transaction result; admitted=False proves no START/reservation commit."""
+
+    facts: tuple[BudgetAdmissionFact, ...]
+    admitted: bool = False
+    reservations_committed: bool = False
+
+    def __post_init__(self):
+        if type(self.facts) is not tuple or any(
+            not isinstance(f, BudgetAdmissionFact) for f in self.facts
+        ):
+            raise LLMContractError("invalid_budget_admission_summary")
+        if (
+            len({f.budget_id for f in self.facts}) != len(self.facts)
+            or type(self.admitted) is not bool
+            or type(self.reservations_committed) is not bool
+            or self.reservations_committed
+            and not self.admitted
+            or self.admitted == any(f.reason for f in self.facts)
+        ):
+            raise LLMContractError("invalid_budget_admission_summary")
+
+    @property
+    def integrity_healthy(self) -> bool:
+        return not any(
+            f.integrity_degraded
+            or f.unbounded_exposure
+            or f.reason in {BudgetReason.STATE_UNCERTAIN, BudgetReason.INTEGRITY_DEGRADED}
+            for f in self.facts
+        )
+
+
 class BudgetAdmissionError(RuntimeError):
     """Local denial, never a provider error and never eligible for provider retry."""
 
-    def __init__(self, reason: BudgetReason, budget_id: BudgetId):
-        self.reason, self.budget_id = reason, budget_id
+    def __init__(
+        self,
+        reason: BudgetReason,
+        budget_id: BudgetId,
+        *,
+        summary: BudgetAdmissionSummary | None = None,
+    ):
+        if not isinstance(reason, BudgetReason) or not isinstance(budget_id, BudgetId):
+            raise LLMContractError("invalid_budget_admission_error")
+        if summary is not None and (
+            not isinstance(summary, BudgetAdmissionSummary)
+            or not any(f.budget_id == budget_id and f.reason == reason for f in summary.facts)
+        ):
+            raise LLMContractError("invalid_budget_admission_summary")
+        self.reason, self.budget_id, self.summary = reason, budget_id, summary
         super().__init__(reason.value)
 
 
@@ -231,7 +328,7 @@ class BudgetDiagnostic:
 
 
 class BudgetedAttemptAccountingSink(AttemptAccountingSink, Protocol):
-    async def admit(self, start: AttemptStart, request: LLMRequest) -> None: ...
+    async def admit(self, start: AttemptStart, request: LLMRequest) -> BudgetAdmissionSummary: ...
 
 
 class BudgetRepository(Protocol):

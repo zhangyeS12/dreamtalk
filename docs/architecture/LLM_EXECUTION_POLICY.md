@@ -1,6 +1,6 @@
-# LLM Attempt Orchestration, Retry & Backoff — C-005D1 / C-005D2A / C-005D2B
+# LLM Attempt Orchestration, Retry, Backoff & Routing — C-005D1 through C-005E1
 
-状态：provider-neutral opt-in sequential retry wrapper 已实现，离线测试使用虚拟时钟、可控 sleeper/jitter 和 MockTransport。没有真实付费 API 验证、production default wiring、fallback 或 repair。C-005D2A 增加独立 accounting port、usage persistence/migration 与 pricing estimates，详见 [LLM_ACCOUNTING.md](LLM_ACCOUNTING.md)。C-005D2B 已增加 opt-in [预算准入](LLM_BUDGET_GUARD.md)；下文 1–8 节保留 D1 retry policy 语境。
+状态：provider-neutral sequential retry wrapper 与其上层 deterministic routing 已实现，离线测试使用虚拟时钟、可控 sleeper/jitter、fake gateways 和 MockTransport。没有真实付费 API 验证、production default wiring 或 semantic repair。C-005D2A 增加 accounting，C-005D2B 增加 [预算准入](LLM_BUDGET_GUARD.md)，C-005E1 增加 [显式 fallback](LLM_ROUTING.md)；下文 1–8 节主要保留 D1 单候选 retry policy 语境。
 
 ```text
 logical invocation != physical attempt
@@ -52,7 +52,7 @@ LLMFailure 新增 typed DispatchState、optional http_status 和 optional retry_
 | Successful response、refusal/filter | 立即返回成功，不再尝试 |
 | Started stream 的任何失败 | 不重试 |
 
-四类 transient 候选有独立显式 enable flags。Eligibility 不等于立即发送，仍须通过次数/时间/Retry-After bounds。没有允许 ambiguous replay 的开关、fallback 或 semantic repair。默认 429 分类沿用已有 HTTP status normalization；未实现 provider-specific quota/billing code taxonomy，当前没有 production wiring。
+四类 transient 候选有独立显式 enable flags。Eligibility 不等于立即发送，仍须通过次数/时间/Retry-After bounds。没有允许 ambiguous replay 的开关或 semantic repair；C-005E1 的上层 fallback 只复用安全分类。默认 429 分类沿用已有 HTTP status normalization；未实现 provider-specific quota/billing code taxonomy，当前没有 production wiring。
 
 ## 5. Backoff、Retry-After 与预算
 
@@ -90,7 +90,7 @@ CancelledError 在 provider await 和 backoff sleep 自然传播，不改成 fai
 
 每次物理尝试通过 adapter 的 CredentialProvider.resolve；orchestrator 不读取/缓存明文。Adapter 的 Authorization/cookie scrub 保持，旧 direct single-attempt tests 继续验证。Optional observer 只获取上述闭合安全诊断，正常日志可使用现有 StructuredLogger 的固定 reason label + InvocationId trace；没有扩展 arbitrary log payload fields，ordinal 通过 observer 直接检查。稳定原因包括 rate_limited、transient_http_failure、not_dispatched_transport_failure、ambiguous_dispatch_not_replayed、attempt_limit_reached、elapsed_budget_exhausted、retry_after_exceeds_budget、permanent_failure、started_stream_not_replayable 和 success。
 
-Retry 可能增加 provider quota/paid attempt 消耗，不能把 logical invocation 当作唯一计费尝试。没有价格、预算、usage tables、database migration、routing/fallback、repair、circuit breaker、parallel/hedged retry、tools、Director/Agent/Memory 或真实 API tests。
+Retry/fallback 可能增加 provider quota/paid attempt 消耗，不能把 logical invocation 当作唯一计费尝试。C-005E1 没有新增 database migration，也没有 repair、circuit breaker、parallel/hedged execution、tools、Director/Agent/Memory 或真实 API tests。
 
 ## 8. 离线证明
 
@@ -109,3 +109,8 @@ START write failure → AccountingInfrastructureError → 零 provider calls。F
 ExecutingModelGateway 的 budget_guard 参数替代 accounting sink，不能同时配置二者，以保证 reservation + START 同事务。每 ordinal 在 provider 前 admit，同 requested ModelRef、同 immutable request、同 InvocationId，独立 reservation。Denied attempt 无 START/provider call，终止为 typed local BudgetAdmissionError，不是 LLMFailure/provider retry；保留已有 physical outcome，retry denial 的 logical terminal 为 LOCAL_ERROR。
 
 含 hidden pre-STARTED attempts 在内，每次 retry 重新授权。Unknown first exposure 保留 hold；proven NOT_DISPATCHED 可释放。FINALIZE/settlement failure 或 bound violation 原样保留 response/failure/completion/cancellation，安全 severe diagnostic 表达 integrity degradation并禁止下一 attempt；本地 DB failure 永远不是 provider replay 理由。STARTED 后 no retry、TextDelta 内容边界、latest snapshot 非 additive 不变。无匹配 enabled budget 时不要求 bounder，D1 行为保持。详见 [LLM_BUDGET_GUARD.md](LLM_BUDGET_GUARD.md)。
+## C-005E1：retry 与 fallback 的组合
+
+Retry 是同一 candidate；fallback 是显式 RoutePolicy 中的下一 candidate。两者复用本文件的 typed failure classifier，router 不复制 HTTP heuristics。Candidate 有独立 max-attempt/backoff counter，但一个 routed Invocation 共用 monotonic deadline 与全局 ordinal：A1/A2→B3。
+
+Fallback 不重置 deadline。Deadline 只限制启动新 attempt，不强制取消已经 dispatch 的调用。某 candidate 的 Retry-After 无法放进剩余窗口时，停止该 candidate retry；在 route deadline 仍有效且 policy 允许时，可立即尝试 unrelated candidate。完整 eligibility 和 stream STARTED lock 见 [LLM_ROUTING.md](LLM_ROUTING.md)。

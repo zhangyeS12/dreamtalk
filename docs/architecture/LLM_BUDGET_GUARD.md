@@ -1,6 +1,6 @@
-# LLM Budget Guard & Persistent Spend Reservations — C-005D2B
+# LLM Budget Guard, Reservations & Routing Admission Facts — C-005D2B / C-005E1
 
-状态：opt-in application budget policy、可信 preflight bounds、SQLite 原子准入/结算、持久化 reservation 和安全查询已实现并离线验证。没有生产价格目录、真实付费 API 测试、预算 UI、routing/fallback 或 reconciliation。
+状态：opt-in application budget policy、可信 preflight bounds、SQLite 原子准入/结算、持久化 reservation、安全拒绝事实与 route integration 已实现并离线验证。没有生产价格目录、真实付费 API 测试、预算 UI 或 reconciliation。
 
 **Hard Budget = 对 LivingWorld 可信 estimated upper-bound spend 的硬授权；不是 provider invoice、余额、信用卡或预付费上限保证。**
 
@@ -53,7 +53,7 @@ ModelLimitUsageBounder 使用 exact ModelRef → explicitly trusted ModelUsageLi
 
 ### Requested alias
 
-RequestedPricingEnvelope 是显式可信、完整、有限的 `requested → possible priced targets` reference data，可包含多个 exact ModelRef。取所有 reachable target costs 的最大值。D2A ModelAlias 的一个便宜映射不自动证明它是 exhaustive；无 envelope 的 catalog alias 无法 HARD 准入。Opaque model name 不用于识别 alias；直接 exact schedule 本身由 trusted configuration 声明适用。未来 C-005E registry、自动 alias resolution/routing 未实现。
+RequestedPricingEnvelope 是显式可信、完整、有限的 `requested → possible priced targets` reference data，可包含多个 exact ModelRef。取所有 reachable target costs 的最大值。D2A ModelAlias 的一个便宜映射不自动证明它是 exhaustive；无 envelope 的 catalog alias 无法 HARD 准入。Opaque model name 不用于识别 alias；直接 exact schedule 本身由 trusted configuration 声明适用。C-005E1 registry 可引用该既有 envelope，但不自动解析 alias 或抓取价格。
 
 最终历史估价仍可使用 reported model 的安全映射，但 settlement 只作用于 requested scope 原先创建的 reservations。Missing reported price 保留 hold，不回退猜价格或重定义预算归属。完整 preflight schedules/usage bound/context 与 policy snapshot 持久化为安全 operational evidence。
 
@@ -115,4 +115,11 @@ Stream 在 transport 前建立 reservation。STARTED 后既有 no retry 不变�
 
 测试：[budget invariants](../../tests/core/test_llm_budget.py)、[populated knowledge/content isolation](../../tests/application/test_llm_accounting_isolation.py)。证明 $1/.40/.20/.30 准入后 .20 拒绝；两独立 engines 并发只有一次 provider call；多预算原子 START、retry/stream、unknown/crash/finalize、broken bounds、alias scope、raw SQLite/diagnostic canaries、DDL rollback 和 prior-row preservation。完整 Python Stage 0–3、C-005A/B/C1/C2/D1/D2A 回归继续执行。
 
-预算是 operational metadata，不产生 WorldEvent、authored content/knowledge/memory，不进入 `.lwcontent`。没有新增依赖、付费 API 验证、online prices、FX、tokenizer/count APIs、expiry、reconciliation、fallback/routing、max-token mutation、UI、Director/Agent/Memory。Production wiring/catalog 和 richer Model Registry deferred；停止于 C-005D2B。
+预算是 operational metadata，不产生 WorldEvent、authored content/knowledge/memory，不进入 `.lwcontent`。没有新增依赖、付费 API 验证、online prices、FX、tokenizer/count APIs、expiry、reconciliation、max-token mutation、UI、Director/Agent/Memory。C-005E1 提供 deterministic fallback integration；production wiring/catalog、dynamic ranking 和 richer registry loading deferred。
+## C-005E1：完整拒绝事实与 routing
+
+Admission transaction 返回 immutable BudgetAdmissionSummary；成功时确认 admission/reservations 的 atomic commit，拒绝时证明没有 reservation 或 accounting START。它包含全部 matching HARD policies 的 budget identity/scope、typed reason、currency/limit、known spend、held、remaining、requested upper bound、unbounded exposure 与 integrity state。没有 prompt/output/reasoning/credential/SQL error。Integrity degraded/state uncertain 优先于 ordinary affordability。
+
+Repository 只报告事实，不选择模型。只有 PROFILE RoutePolicy 明确允许且 summary 证明健康时，EXCEEDED / UNVERIFIABLE / CURRENCY_UNSUPPORTED 可切换候选。Global/purpose budget 也对下一候选的独立 upper bound 重新做原子检查，因此较低 bound 可被授权而没有绕过 global policy。下一候选不复用 reservation。
+
+STATE_UNCERTAIN、INTEGRITY_DEGRADED、bound violation 和 accounting/budget persistence/finalization failure 都终止 route。缺完整 typed summary 的 custom denial fail closed。C-005E1 没有新表或 migration；head 仍是 0010。

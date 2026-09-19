@@ -15,6 +15,8 @@ from livingworld.application.llm_accounting import AttemptFacts
 from livingworld.application.llm_budget import (
     BoundGuarantee,
     BudgetAdmissionError,
+    BudgetAdmissionFact,
+    BudgetAdmissionSummary,
     BudgetDiagnostic,
     BudgetId,
     BudgetIntegrityError,
@@ -22,6 +24,7 @@ from livingworld.application.llm_budget import (
     BudgetPolicy,
     BudgetReason,
     BudgetReservation,
+    BudgetScope,
     BudgetView,
     ReservationStatus,
 )
@@ -143,6 +146,7 @@ class SqlAlchemyBudgetGuard(SqlAlchemyUsageLedger):
             raise LLMContractError("conflicting_budget_attempt")
         denial = None
         warnings = []
+        hard_facts = []
         async with self._sessions() as session, session.begin():
             await session.connection(execution_options={"livingworld_write_intent": True})
             # Re-delivery is observer idempotency, not permission to replay generation.
@@ -171,7 +175,7 @@ class SqlAlchemyBudgetGuard(SqlAlchemyUsageLedger):
                     )
                 except Exception:
                     pass  # Configuration exceptions are not safe public diagnostics.
-            for policy in policies:
+            for policy in sorted(policies, key=lambda p: p.budget_id.value.int):
                 view = await self._view_in_session(session, policy)
                 with localcontext() as context:
                     context.prec = 100
@@ -193,10 +197,36 @@ class SqlAlchemyBudgetGuard(SqlAlchemyUsageLedger):
                         else None
                     )
                 if reason is not None:
-                    if policy.mode is BudgetMode.HARD:
-                        denial = BudgetAdmissionError(reason, policy.budget_id)
-                        break
-                    warnings.append((reason.value, policy.budget_id))
+                    if policy.mode is not BudgetMode.HARD:
+                        warnings.append((reason.value, policy.budget_id))
+                if policy.mode is BudgetMode.HARD:
+                    hard_facts.append(
+                        BudgetAdmissionFact(
+                            budget_id=policy.budget_id,
+                            scope=BudgetScope(policy.purpose, policy.provider, policy.model),
+                            reason=reason,
+                            limit=policy.limit,
+                            known_spend=view.known_estimated_spend,
+                            held=view.held,
+                            remaining=view.remaining,
+                            requested_upper_bound=bound.money if bound else None,
+                            integrity_degraded=view.integrity_degraded,
+                            unbounded_exposure=view.has_unbounded_exposure,
+                        )
+                    )
+            rejected = [f for f in hard_facts if f.reason is not None]
+            if rejected:
+                priority = {
+                    BudgetReason.INTEGRITY_DEGRADED: 0,
+                    BudgetReason.STATE_UNCERTAIN: 1,
+                    BudgetReason.CURRENCY_UNSUPPORTED: 2,
+                    BudgetReason.UNVERIFIABLE: 3,
+                    BudgetReason.EXCEEDED: 4,
+                }
+                first = min(rejected, key=lambda f: (priority[f.reason], f.budget_id.value.int))
+                denial = BudgetAdmissionError(
+                    first.reason, first.budget_id, summary=BudgetAdmissionSummary(tuple(hard_facts))
+                )
             if denial is None:
                 await self._start_in_session(session, start)
                 await session.flush()  # Parent START precedes reservation FK inserts.
@@ -222,6 +252,11 @@ class SqlAlchemyBudgetGuard(SqlAlchemyUsageLedger):
             raise denial
         for event, budget_id in warnings:
             self._report(start, event, budget_id)
+        return BudgetAdmissionSummary(
+            tuple(hard_facts),
+            admitted=True,
+            reservations_committed=bool(hard_facts),
+        )
 
     async def put_policy(self, policy, expected_revision):
         if not isinstance(policy, BudgetPolicy):
