@@ -1,6 +1,6 @@
 # LivingWorld 领域概念模型
 
-状态：Stage 0 领域语言保留；Stage 2 已建立领域模型、SQLite 映射、命令事务、知识隔离、canonical ledger、回放及资源级乐观并发。C-003E2 按用户确认增加内部 CharacterBelief 形成路径，复用已有 KnowledgeAssertion；Stage 3 C-004A 新增独立创作内容模型及导入边界。见 [COMMAND_MODEL.md](COMMAND_MODEL.md)、[PERSISTENCE_MODEL.md](PERSISTENCE_MODEL.md)、[STAGE_2_ACCEPTANCE.md](STAGE_2_ACCEPTANCE.md) 和 [CONTENT_MODEL.md](CONTENT_MODEL.md)。其余概念仍是定义；Director、Agent、业务 HTTP API 与世界模拟未实现。
+状态：Stage 0 领域语言保留；Stage 2 已建立领域模型、SQLite 映射、命令事务、知识隔离、canonical ledger、回放及资源级乐观并发；Stage 3 建立独立创作内容边界；C-006A 新增 game-neutral ScheduledSimulationTrigger / SimulationActivation。见 [COMMAND_MODEL.md](COMMAND_MODEL.md)、[PERSISTENCE_MODEL.md](PERSISTENCE_MODEL.md)、[STAGE_2_ACCEPTANCE.md](STAGE_2_ACCEPTANCE.md)、[CONTENT_MODEL.md](CONTENT_MODEL.md) 和 [SIMULATION_SCHEDULER.md](SIMULATION_SCHEDULER.md)。Director、Agent、业务 HTTP API 与世界业务模拟仍未实现。
 
 ## C-004A 内容与运行状态边界
 
@@ -761,6 +761,56 @@ Token、Latency 和 Cost 的使用记录含义，以及这些使用记录与模�
 - 产品必须记录 Token、Latency 和 Cost，并支持预算与模型路由（FR-24）。
 - Developer Mode 能查看 Director、Agent、Memory、LLM 使用等决策 Trace（FR-23）。
 - Token 统计口径、Latency 测量范围、Cost 实际值与估算值、预算周期、超限行为，以及分支/恢复后的费用归属，待确认。
+
+## 29. ScheduledSimulationTrigger
+
+### Purpose
+
+表示某个世界中一项确定性 simulation work 在 WorldTime 到期的 durable one-shot 安排。
+
+### Owns
+
+TriggerId、WorldId、due WorldTime、机械 priority、world-scoped enqueue position、allowlisted kind/version、bounded immutable JSON payload、PENDING/FIRED/CANCELLED 状态、UTC 审计时间和 Revision。
+
+### Does not own
+
+不拥有 Character 目标/欲望、Director 剧情判断、WorldEvent、WorldTruth、Knowledge、Relationship、Memory、LLM 调用、calendar、recurrence 或 catch-up policy。
+
+### Relationships
+
+属于一个 World，按其 WorldClock 的 effective WorldTime 判断 due；一个 fired Trigger 对应至多一个 SimulationActivation。enqueue position 与 WorldEvent ledger position 完全独立。
+
+### Important invariants
+
+- due 当且仅当 `due_at <= effective WorldTime`。
+- 顺序固定为 `(due_at ASC, priority ASC, enqueue_position ASC)`；较小 priority 先执行，同 due/priority 按插入顺序。
+- payload 只允许显式 registry 支持的 kind/version 和最大 16 KiB JSON object，不执行动态 import/callable/expression。
+- RequestId 精确重试返回原 Trigger，不同语义冲突；cancel 不删除 fired 历史。
+
+## 30. SimulationActivation
+
+### Purpose
+
+表示 ScheduledSimulationTrigger 已到期并被原子 materialize 的 durable work item，供未来 Kernel/Director/Character runtime 消费。
+
+### Owns
+
+ActivationId、WorldId、唯一 source TriggerId、kind/version、安全 payload、due WorldTime、materialized UTC 与当前 PENDING 状态。
+
+### Does not own
+
+不声明 fictional event 已发生，不直接拥有 WorldEvent、Truth/Belief/PlayerKnowledge、Observation、关系变化、对话或行动结果。
+
+### Relationships
+
+从一个 FIRED ScheduledSimulationTrigger 产生；future resolver 可以消费 Activation 后提出/提交后续 canonical WorldEvent，但 C-006A 不实现消费或结算。
+
+### Important invariants
+
+- **SimulationActivation != WorldEvent**。
+- `(world_id, source_trigger_id)` 唯一；one-shot Trigger 最多一个 Activation。
+- Trigger→FIRED 与 Activation insert 在同一 transaction：commit 前失败两者都不存在，commit 后两者都存在。
+- 世界隔离不可跨越；materialization 不自动修改任何 Knowledge、Relationship 或 WorldEvent 表。
 
 ## 待确认问题索引
 

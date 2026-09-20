@@ -13,6 +13,14 @@ class EntityAlreadyExistsError(ValueError):
     """An explicit creation target already exists."""
 
 
+class UnsupportedTriggerError(ValueError):
+    """The allowlisted scheduler registry does not support a kind/version."""
+
+
+class TriggerAlreadyFiredError(ValueError):
+    """Cancellation lost to materialization; the durable activation remains valid."""
+
+
 class ReplayError(Exception):
     """Rebuild rejected; old projections remain usable."""
 

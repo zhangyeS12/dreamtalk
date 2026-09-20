@@ -1,12 +1,12 @@
 # SQLite Persistence, Canonical Ledger & Resource CAS
 
-状态：Stage 2 SQLite/Alembic、持久化幂等、主体知识隔离、canonical ledger、原子投影重建及资源级 CAS 已实现。C-003E2 的内部信念形成复用既有 KnowledgeAssertion 存储。自动传播、语义检索与世界模拟未实现。产品冻结规则不变，见 [COMMAND_MODEL.md](COMMAND_MODEL.md)、[KNOWLEDGE_ACCESS_MODEL.md](KNOWLEDGE_ACCESS_MODEL.md) 与 [REPLAY_MODEL.md](REPLAY_MODEL.md)。
+状态：Stage 2 SQLite/Alembic、持久化幂等、主体知识隔离、canonical ledger、原子投影重建及资源级 CAS 已实现；C-006A 新增独立 durable scheduling/activation operational schema。自动传播、语义检索与世界业务模拟未实现。产品冻结规则不变，见 [COMMAND_MODEL.md](COMMAND_MODEL.md)、[KNOWLEDGE_ACCESS_MODEL.md](KNOWLEDGE_ACCESS_MODEL.md)、[REPLAY_MODEL.md](REPLAY_MODEL.md) 与 [SIMULATION_SCHEDULER.md](SIMULATION_SCHEDULER.md)。
 
 ## C-004A / C-004C1 独立内容库
 
 **Imported Content != Runtime State；CharacterDefinition != Character；WorldContent != World；LoreEntry != WorldTruth；LoreCollection != WorldContent != Runtime World != WorldTruth。**
 
-Alembic head 现为 [0010_llm_budget_guard](../../services/core/src/livingworld/infrastructure/persistence/migrations/versions/0010_llm_budget_guard.py)，down_revision=0009_llm_accounting，只新增 operational budget/reservation tables，不修改 prior rows/world/content；详见 [LLM_BUDGET_GUARD.md](LLM_BUDGET_GUARD.md)。前序 [0009_llm_accounting](../../services/core/src/livingworld/infrastructure/persistence/migrations/versions/0009_llm_accounting.py)，down_revision=0008_native_content_packages。0009 只新增独立 AccountingBase 的 operational llm_attempts，不修改 world/content schema 或历史 rows；详见 [LLM_ACCOUNTING.md](LLM_ACCOUNTING.md)。0008 只增加 accepted baseline 与 immutable blob binding 两张本地元数据表；不存 ZIP structure、不修改旧 rows/JSON/hash/audit/runtime。0006 建立五个内容表；0007 只新增集合表与条目归属 FK，不修改 Stage 2 表、事件、回执、cursor、typed/world-scoped IDs 或审计行。下文 Stage 2 的 0005 head 描述保留其阶段语境，不表示当前 head。
+Alembic head 现为 [0011_simulation_scheduler](../../services/core/src/livingworld/infrastructure/persistence/migrations/versions/0011_simulation_scheduler.py)，down_revision=0010_llm_budget_guard，只新增 scheduler/activation/cursor/receipt 四张表，不修改 prior rows、WorldEvent、world/content/LLM tables。前序 [0010_llm_budget_guard](../../services/core/src/livingworld/infrastructure/persistence/migrations/versions/0010_llm_budget_guard.py) 只新增 operational budget/reservation tables；详见 [LLM_BUDGET_GUARD.md](LLM_BUDGET_GUARD.md)。再前序 0009 只新增独立 AccountingBase 的 operational llm_attempts。下文各阶段旧 head 描述保留其阶段语境，不表示当前 head。
 
 | 内容表 | 可直接校验/查询的结构 | 正文边界 |
 | --- | --- | --- |
@@ -90,6 +90,10 @@ SQL echo 默认关闭，hide_parameters=True；结构化日志继续沿用 allow
 | knowledge_assertions | (world_id, assertion_id) | scope/owner、subject/predicate/value、认知标签、confidence、世界有效期、来源、Revision |
 | observations | (world_id, observation_id) | 独立 occurrence 身份、显式观察坐标及可选 UTC 审计时间 |
 | command_receipts | (world_id, request_id)；新命令 request_id partial unique | 类型、status、结果事件引用、UTC 创建/完成时间、Revision、独立语义指纹与原始结果 |
+| simulation_queue_cursors | world_id，FK worlds | scheduler last enqueue position；与 WorldEvent ledger cursor 分离 |
+| simulation_scheduled_triggers | (world_id, trigger_id)；world/enqueue unique | due WorldTime、priority、allowlisted kind/version/bounded JSON、PENDING/FIRED/CANCELLED、审计 UTC、Revision |
+| simulation_activations | (world_id, activation_id)；world/source_trigger unique | durable due work；复制安全 kind/version/payload、due WorldTime、materialized UTC；不是 WorldEvent |
+| simulation_schedule_receipts | (world_id, request_id)；request_id unique | schedule semantic fingerprint、result TriggerId 和创建 UTC；不是 canonical CommandReceipt |
 
 Observation 身份歧义已按用户确认解决：独立 typed ObservationId 沿用世界作用域 UUID 风格，不将 world_id 编码到 UUID。principal/target/channel/observed_at 仅描述语义坐标，不是 UNIQUE 身份；不同 ID 的同坐标记录可共存。运行时 UUIDv4 独立于 RequestId；成功重试从回执返回原 ID。没有历史 presence、Timeline 或分支政策。
 
@@ -107,6 +111,8 @@ Observation 身份歧义已按用户确认解决：独立 typed ObservationId �
 
 WorldTime 是逻辑坐标，不是 UTC，也不是事件唯一键；相同 WorldTime 可存储多个不同 EventId。没有日历、推进、catch-up 或现实/世界时间转换。SQLite 存储类型限制参考 [SQLite datatypes](https://www.sqlite.org/datatype3.html)。
 
+C-006A 只增加无副作用 effective-time derivation 和 runtime monotonic guard；没有持久化推进或 catch-up policy。scheduler 的 `due_at`/activation `due_at` 复用同一个 WorldTimeStorage，现实审计继续使用 aware UTC。
+
 ## 4. Alembic 接管与审计语义
 
 [migration.py](../../services/core/src/livingworld/infrastructure/persistence/migration.py) 仅属于 infrastructure/bootstrap。Alembic 是唯一迁移执行器，alembic_version 是唯一权威 cursor；原 C-002 Migration/migrate 自定义 runner 已移除。通过 AsyncConnection.run_sync 将已有事务连接交给 Alembic，参考 [Alembic asyncio integration](https://alembic.sqlalchemy.org/en/latest/cookbook.html#using-asyncio-with-alembic)。
@@ -118,6 +124,7 @@ WorldTime 是逻辑坐标，不是 UTC，也不是事件唯一键；相同 World
 | [0003_command_pipeline](../../services/core/src/livingworld/infrastructure/persistence/migrations/versions/0003_command_pipeline.py) | 原生 ADD COLUMN 增加关系三项指标、integer/range CHECK，旧行默认 0；原回执增加可空指纹/原始结果与配对 CHECK、新命令 RequestId partial unique index；不触碰事件及旧审计行 |
 | [0004_observation_identity](../../services/core/src/livingworld/infrastructure/persistence/migrations/versions/0004_observation_identity.py) | 仅增加 ObservationId 并确定性回填，SQLite batch 替换原坐标主键为 (world_id, observation_id)，保留所有语义列、行、FK/CHECK；无坐标 UNIQUE |
 | [0005_canonical_ledger](../../services/core/src/livingworld/infrastructure/persistence/migrations/versions/0005_canonical_ledger.py) | 原生 ADD COLUMN 增加 ledger_position 与正整数 CHECK，按每世界旧 rowid 回填，创建 world/position unique index 与世界游标；保留旧事件语义及审计行 |
+| [0011_simulation_scheduler](../../services/core/src/livingworld/infrastructure/persistence/migrations/versions/0011_simulation_scheduler.py) | 在既有 0010 后新增 queue cursor、scheduled trigger、activation 与 schedule receipt；world/source、world/enqueue、RequestId uniqueness 和 due-query index 加固 deterministic/crash-safe scheduler；不修改 WorldEvent 或旧行 |
 
 启动行为：
 

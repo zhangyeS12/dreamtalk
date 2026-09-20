@@ -422,6 +422,119 @@ class CommandReceiptRecord(Base):
     )
 
 
+class SimulationQueueCursorRecord(Base):
+    __tablename__ = "simulation_queue_cursors"
+    world_id: Mapped[UUID] = mapped_column(
+        UUIDStorage(), ForeignKey("worlds.world_id"), primary_key=True
+    )
+    last_position: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    __table_args__ = (
+        CheckConstraint("last_position >= 0", name="ck_simulation_queue_cursor_position"),
+    )
+
+
+class ScheduledSimulationTriggerRecord(Base):
+    __tablename__ = "simulation_scheduled_triggers"
+    world_id: Mapped[UUID] = mapped_column(
+        UUIDStorage(), ForeignKey("worlds.world_id"), primary_key=True
+    )
+    trigger_id: Mapped[UUID] = mapped_column(UUIDStorage(), primary_key=True)
+    due_at: Mapped[WorldTime] = mapped_column(WorldTimeStorage(), nullable=False)
+    priority: Mapped[int] = mapped_column(Integer, nullable=False)
+    enqueue_position: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    kind: Mapped[str] = mapped_column(String(128), nullable=False)
+    payload_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    payload: Mapped[object] = mapped_column(JSONTextStorage(), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    created_at_utc: Mapped[datetime] = mapped_column(UTCTimestampStorage(), nullable=False)
+    fired_at_utc: Mapped[datetime | None] = mapped_column(UTCTimestampStorage())
+    cancelled_at_utc: Mapped[datetime | None] = mapped_column(UTCTimestampStorage())
+    revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    causation_request_id: Mapped[UUID | None] = mapped_column(UUIDStorage())
+    correlation_id: Mapped[UUID | None] = mapped_column(UUIDStorage())
+    __table_args__ = (
+        UniqueConstraint(
+            "world_id", "enqueue_position", name="uq_simulation_trigger_enqueue_position"
+        ),
+        Index(
+            "ix_simulation_trigger_due",
+            "world_id",
+            "status",
+            "due_at",
+            "priority",
+            "enqueue_position",
+        ),
+        CheckConstraint("typeof(due_at) = 'integer'", name="ck_simulation_trigger_due_at_type"),
+        CheckConstraint("priority IN (-1,0,1)", name="ck_simulation_trigger_priority"),
+        CheckConstraint("enqueue_position > 0", name="ck_simulation_trigger_enqueue_position"),
+        CheckConstraint(
+            "payload_version >= 1 AND payload_version <= 65535",
+            name="ck_simulation_trigger_payload_version",
+        ),
+        CheckConstraint(
+            "length(kind) >= 1 AND length(kind) <= 128", name="ck_simulation_trigger_kind"
+        ),
+        CheckConstraint(
+            "(status = 'pending' AND fired_at_utc IS NULL AND cancelled_at_utc IS NULL) OR "
+            "(status = 'fired' AND fired_at_utc IS NOT NULL AND cancelled_at_utc IS NULL) OR "
+            "(status = 'cancelled' AND fired_at_utc IS NULL AND cancelled_at_utc IS NOT NULL)",
+            name="ck_simulation_trigger_status",
+        ),
+    )
+
+
+class SimulationActivationRecord(Base):
+    __tablename__ = "simulation_activations"
+    world_id: Mapped[UUID] = mapped_column(
+        UUIDStorage(), ForeignKey("worlds.world_id"), primary_key=True
+    )
+    activation_id: Mapped[UUID] = mapped_column(UUIDStorage(), primary_key=True)
+    source_trigger_id: Mapped[UUID] = mapped_column(UUIDStorage(), nullable=False)
+    kind: Mapped[str] = mapped_column(String(128), nullable=False)
+    payload_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    due_at: Mapped[WorldTime] = mapped_column(WorldTimeStorage(), nullable=False)
+    payload: Mapped[object] = mapped_column(JSONTextStorage(), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    materialized_at_utc: Mapped[datetime] = mapped_column(UTCTimestampStorage(), nullable=False)
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["world_id", "source_trigger_id"],
+            ["simulation_scheduled_triggers.world_id", "simulation_scheduled_triggers.trigger_id"],
+        ),
+        UniqueConstraint("world_id", "source_trigger_id", name="uq_simulation_activation_source"),
+        CheckConstraint("typeof(due_at) = 'integer'", name="ck_simulation_activation_due_at_type"),
+        CheckConstraint(
+            "payload_version >= 1 AND payload_version <= 65535",
+            name="ck_simulation_activation_payload_version",
+        ),
+        CheckConstraint(
+            "length(kind) >= 1 AND length(kind) <= 128", name="ck_simulation_activation_kind"
+        ),
+        CheckConstraint("status = 'pending'", name="ck_simulation_activation_status"),
+    )
+
+
+class SimulationScheduleReceiptRecord(Base):
+    __tablename__ = "simulation_schedule_receipts"
+    world_id: Mapped[UUID] = mapped_column(
+        UUIDStorage(), ForeignKey("worlds.world_id"), primary_key=True
+    )
+    request_id: Mapped[UUID] = mapped_column(UUIDStorage(), primary_key=True)
+    fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    trigger_id: Mapped[UUID] = mapped_column(UUIDStorage(), nullable=False)
+    created_at_utc: Mapped[datetime] = mapped_column(UTCTimestampStorage(), nullable=False)
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["world_id", "trigger_id"],
+            ["simulation_scheduled_triggers.world_id", "simulation_scheduled_triggers.trigger_id"],
+        ),
+        Index("uq_simulation_schedule_request", "request_id", unique=True),
+        CheckConstraint(
+            "length(fingerprint) = 64", name="ck_simulation_schedule_receipt_fingerprint"
+        ),
+    )
+
+
 for _record in (
     WorldRecord,
     WorldClockRecord,
@@ -434,6 +547,7 @@ for _record in (
     RelationshipRecord,
     KnowledgeAssertionRecord,
     CommandReceiptRecord,
+    ScheduledSimulationTriggerRecord,
 ):
     _record.__table__.append_constraint(
         CheckConstraint("revision >= 0", name=f"ck_{_record.__tablename__}_revision")

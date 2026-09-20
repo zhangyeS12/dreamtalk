@@ -28,6 +28,42 @@ class StructuredLogger:
             from livingworld.domain.contracts import RequestId
 
             record["trace_id"] = str(RequestId.parse(trace_id))
+        self._write(record)
+
+    def emit_scheduler(
+        self,
+        event: str,
+        *,
+        world_id: str,
+        scheduler_state: str,
+        trigger_kind: str | None = None,
+        due_world_time: int | None = None,
+        queue_lag_world_time: int | None = None,
+        batch_size: int | None = None,
+        activation_count: int | None = None,
+    ) -> None:
+        """Write only the fixed scheduler metadata allowlist; payload is impossible here."""
+        if not re.fullmatch(r"[a-z][a-z0-9_.]*", event):
+            raise ValueError("invalid_log_label")
+        record = {
+            "timestamp": datetime.now(UTC).isoformat(),
+            "level": "INFO",
+            "component": "simulation_scheduler",
+            "event": event,
+            "world_id": world_id,
+            "scheduler_state": scheduler_state,
+        }
+        optional = {
+            "trigger_kind": trigger_kind,
+            "due_world_time": due_world_time,
+            "queue_lag_world_time": queue_lag_world_time,
+            "batch_size": batch_size,
+            "activation_count": activation_count,
+        }
+        record.update({key: value for key, value in optional.items() if value is not None})
+        self._write(record)
+
+    def _write(self, record: dict[str, object]) -> None:
         line = json.dumps(record) + "\n"
         self.stream.write(line)
         self.stream.flush()

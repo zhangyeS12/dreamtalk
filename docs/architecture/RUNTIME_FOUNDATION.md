@@ -10,7 +10,7 @@ domain ← application ← infrastructure / adapters
                        bootstrap（composition root）
 ```
 
-domain 包含无框架的系统契约、RequestId 及 C-003A 领域快照；application 协调 readiness 与 shutdown；infrastructure 提供 SQLAlchemy AsyncEngine / aiosqlite / Alembic 的 SQLite 基础及结构化日志；HTTP adapter 使用 FastAPI / Pydantic v2；bootstrap 负责 asyncio/Uvicorn/Database 生命周期与组装。内层依赖方向由 AST 架构测试检查。
+domain 包含无框架的系统契约、RequestId、领域快照及 C-006A typed scheduling values；application 协调 readiness、shutdown 与 tickless scheduler；infrastructure 提供 SQLAlchemy AsyncEngine / aiosqlite / Alembic 的 SQLite 基础及结构化日志；HTTP adapter 使用 FastAPI / Pydantic v2；bootstrap 负责 asyncio/Uvicorn/Database/scheduler 生命周期与组装。内层依赖方向由 AST 架构测试检查。
 
 共享 React UI 位于 `apps/web`，Tauri 壳位于 `apps/desktop`；所有 UI Core 请求经过 `packages/api-client` 的 CoreClient。UI 不知道固定 Core 端口。C-003B 引入任务指定的 SQLAlchemy ORM / Alembic；没有引入消息队列、Agent 框架或云数据库。
 
@@ -55,6 +55,8 @@ C-005E5 将 sidecar stdin 保留为 Rust→Python 的 bounded credential control
 
 Core 的 graceful drain 上限为 5 秒，窗口关闭的 supervisor 等待为 8 秒，留出 transport drain 和进程退出余量；超时 fallback 有单独的 Windows 集成测试。
 
+C-006A composition root 还持有 `SimulationSchedulerRuntime`。每个显式 active World 最多一个可中断 asyncio task；shutdown 先 wake/join scheduler waits，再 dispose Database，不会把未到期 Trigger 标为 FIRED。schedule/cancel/未来 clock mutation 使用进程内 signal 唤醒，但 SQLite queue 仍是事实来源。详见 [SIMULATION_SCHEDULER.md](SIMULATION_SCHEDULER.md)。
+
 `report_ui_ready` 是可信 WebView 对 compatible authenticated health 的反馈，不是业务 API。Windows debug smoke 模式在该反馈后关闭实际窗口，检查日志中的完整生命周期，并要求走 graceful 路径。
 
 桌面 build 显式启用 `custom-protocol`，从内嵌 Web 资源加载 UI；desktop dev 使用独立 Vite server。CoreClient 将浏览器原生 fetch 绑定到 globalThis，避免 native browser/WebView 的调用上下文错误。
@@ -71,7 +73,7 @@ Core 的 graceful drain 上限为 5 秒，窗口关闭的 supervisor 等待为 8
 
 Alembic 是唯一迁移执行器，alembic_version 是权威 cursor：0001 精确表示旧 C-002 基础，0002 增加领域表。旧库必须先验证版本、历史 checksum 与 schema 形状，才 stamp 0001 并 upgrade；任何歧义失败关闭，不自动修复或重建。旧 schema_version=1 和 migration_history 原始行作为兼容/历史证据保留，不再表示当前 schema cursor，也不驱动迁移。迁移失败事务回滚，重复启动不重放、不重复审计。
 
-日志只接受 timestamp、level、component、event 与可选已验证 UUID trace_id；不接受任意 payload 或异常原文。Core stdout 与 app-data `logs/core-<generation>.jsonl` 使用同一结构。HTTP access log 被禁用；secret/token/prompt/user conversation 默认不记录。日志轮转/保留策略尚未实现。
+普通日志只接受 timestamp、level、component、event 与可选已验证 UUID trace_id；不接受任意 payload 或异常原文。C-006A 增加专用 scheduler metadata allowlist：world id、kind、due/lag WorldTime、batch/activation count 和 state，接口不能接收 trigger payload。Core stdout 与 app-data `logs/core-<generation>.jsonl` 使用同一结构。HTTP access log 被禁用；secret/token/prompt/user conversation 默认不记录。日志轮转/保留策略尚未实现。
 
 ## 明确的扩展与测试点
 

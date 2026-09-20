@@ -80,6 +80,24 @@ class ObservationId:
 
 
 @dataclass(frozen=True, slots=True)
+class TriggerId:
+    world_id: WorldId
+    value: UUID
+
+    def __post_init__(self) -> None:
+        _scoped(self.world_id, self.value)
+
+
+@dataclass(frozen=True, slots=True)
+class ActivationId:
+    world_id: WorldId
+    value: UUID
+
+    def __post_init__(self) -> None:
+        _scoped(self.world_id, self.value)
+
+
+@dataclass(frozen=True, slots=True)
 class CorrelationId:
     """Groups related work; it is neither a world coordinate nor an event identity."""
 

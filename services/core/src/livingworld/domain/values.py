@@ -12,16 +12,27 @@ from livingworld.domain.errors import (
     DomainInvariantError,
 )
 from livingworld.domain.identifiers import (
+    ActivationId,
     CharacterId,
     EventId,
     KnowledgeAssertionId,
     LocationId,
     ObservationId,
     PlayerId,
+    TriggerId,
     WorldId,
 )
 
-type ScopedId = LocationId | PlayerId | CharacterId | EventId | KnowledgeAssertionId | ObservationId
+type ScopedId = (
+    LocationId
+    | PlayerId
+    | CharacterId
+    | EventId
+    | KnowledgeAssertionId
+    | ObservationId
+    | TriggerId
+    | ActivationId
+)
 type JsonValue = None | bool | int | float | str | tuple[JsonValue, ...] | Mapping[str, JsonValue]
 
 
@@ -70,7 +81,16 @@ def same_world(world_id: WorldId, *references: ScopedId) -> None:
     for reference in references:
         require_type(
             reference,
-            (LocationId, PlayerId, CharacterId, EventId, KnowledgeAssertionId, ObservationId),
+            (
+                LocationId,
+                PlayerId,
+                CharacterId,
+                EventId,
+                KnowledgeAssertionId,
+                ObservationId,
+                TriggerId,
+                ActivationId,
+            ),
             "world-scoped reference",
         )
         if reference.world_id != world_id:

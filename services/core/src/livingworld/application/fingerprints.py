@@ -25,6 +25,7 @@ from livingworld.domain.identifiers import (
     LocationId,
     ObservationId,
     PlayerId,
+    TriggerId,
     WorldId,
 )
 
@@ -36,7 +37,8 @@ def id_input(
     | CharacterId
     | KnowledgeAssertionId
     | ObservationId
-    | EventId,
+    | EventId
+    | TriggerId,
 ) -> dict[str, str]:
     result = {"kind": type(identity).__name__, "id": str(identity.value)}
     if not isinstance(identity, WorldId):

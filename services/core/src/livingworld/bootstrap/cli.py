@@ -13,13 +13,25 @@ import uvicorn
 
 from livingworld.adapters.http.app import create_app
 from livingworld.application.runtime import RuntimeStatus, ShutdownRequests
+from livingworld.application.scheduler import (
+    SchedulerWakeSignal,
+    SimulationScheduler,
+    SimulationSchedulerRuntime,
+    TriggerKindRegistry,
+)
+from livingworld.application.simulation_clock import (
+    EffectiveWorldTimeSource,
+    SystemMonotonicClock,
+)
 from livingworld.bootstrap.llm_control import HostControlListener
 from livingworld.bootstrap.llm_runtime import start_production_llm_session
 from livingworld.bootstrap.reader import derive_session, read_bootstrap
 from livingworld.domain.contracts import API_PROTOCOL, LOOPBACK_HOST
+from livingworld.infrastructure.clock import SystemWallClock
 from livingworld.infrastructure.database import bootstrap_database
 from livingworld.infrastructure.logging import StructuredLogger
 from livingworld.infrastructure.persistence.errors import MigrationCompatibilityError
+from livingworld.infrastructure.scheduler_runtime import StructuredSchedulerDiagnosticSink
 
 
 def parent_alive(pid: int) -> bool:
@@ -65,7 +77,22 @@ async def run(
         raise
     llm_session = None
     control_listener = None
+    scheduler_runtime = None
     try:
+        trigger_registry = TriggerKindRegistry()
+        wake_signal = SchedulerWakeSignal()
+        wall_clock = SystemWallClock()
+        scheduler = SimulationScheduler(
+            database.simulation_scheduler_store(trigger_registry),
+            wall_clock,
+            wake_signal,
+        )
+        scheduler_runtime = SimulationSchedulerRuntime(
+            scheduler,
+            EffectiveWorldTimeSource(wall_clock, SystemMonotonicClock()),
+            wake_signal,
+            diagnostics=StructuredSchedulerDiagnosticSink(logger),
+        )
         llm_session = await start_production_llm_session(config.llm_config_path, database, logger)
         status = RuntimeStatus(
             version("livingworld-core"), generation, llm_health=llm_session.health
@@ -132,6 +159,8 @@ async def run(
             sock.close()
             session = ""
     finally:
+        if scheduler_runtime is not None:
+            await scheduler_runtime.aclose()
         if control_listener is not None and not control_listener.join(1.0):
             logger.emit("host_control", "host_control_close_timeout", level="ERROR")
         if llm_session is not None:

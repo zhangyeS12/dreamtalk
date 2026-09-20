@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 from datetime import datetime
-from decimal import Decimal
+from decimal import ROUND_FLOOR, Decimal
 from enum import StrEnum
 
 from livingworld.domain.errors import CrossWorldReferenceError, DomainInvariantError
@@ -44,6 +44,23 @@ class WorldClock:
             "observed_wall_time_utc",
             utc_timestamp(self.observed_wall_time_utc, "observed_wall_time_utc"),
         )
+
+    def effective_time(self, at_utc: datetime) -> WorldTime:
+        """Derive logical time without mutating the persisted clock anchor."""
+
+        observed = utc_timestamp(at_utc, "at_utc")
+        if self.state is ClockState.PAUSED or self.time_scale == 0:
+            return self.logical_time
+        elapsed = observed - self.observed_wall_time_utc
+        elapsed_microseconds = (
+            elapsed.days * 86_400_000_000 + elapsed.seconds * 1_000_000 + elapsed.microseconds
+        )
+        # A UTC rollback may not move an ordinary reading behind its persisted anchor.
+        elapsed_microseconds = max(0, elapsed_microseconds)
+        scaled = (Decimal(elapsed_microseconds) * self.time_scale).to_integral_value(
+            rounding=ROUND_FLOOR
+        )
+        return WorldTime(self.logical_time.microseconds + int(scaled))
 
 
 @dataclass(frozen=True, slots=True)

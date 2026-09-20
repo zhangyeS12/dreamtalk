@@ -121,6 +121,14 @@ class Database:
     def unit_of_work(self) -> SqlAlchemyUnitOfWork:
         return SqlAlchemyUnitOfWork(self._sessions)
 
+    def simulation_scheduler_store(self, registry):
+        """Durable scheduler capability, isolated from canonical WorldEvent append."""
+        from livingworld.infrastructure.persistence.scheduler import (
+            SqlAlchemySimulationSchedulerStore,
+        )
+
+        return SqlAlchemySimulationSchedulerStore(self._sessions, registry)
+
     def canonical_event_reader(self, world_id: WorldId) -> ports.CanonicalEventReader:
         return replay.CanonicalEventReader(self._sessions, world_id)
 

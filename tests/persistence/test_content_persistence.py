@@ -21,6 +21,7 @@ from livingworld.infrastructure.persistence.errors import (
 from livingworld.infrastructure.persistence.migration import (
     HEAD_REVISION,
     LEDGER_REVISION,
+    SIMULATION_TABLES,
     _alembic_config,
 )
 from livingworld.infrastructure.persistence.models import Base
@@ -241,7 +242,9 @@ def test_stored_semantic_hash_corruption_fails_closed(tmp_path, canonical_draft,
 def test_0005_takeover_preserves_every_runtime_and_audit_row(tmp_path, populate, monkeypatch, fail):
     async def run():
         database = Database(tmp_path)
-        tables = tuple(Base.metadata.tables) + ("schema_version", "migration_history")
+        tables = tuple(
+            table for table in Base.metadata.tables if table not in SIMULATION_TABLES
+        ) + ("schema_version", "migration_history")
         try:
             async with database.engine.begin() as connection:
                 await connection.run_sync(
