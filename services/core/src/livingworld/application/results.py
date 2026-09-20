@@ -2,14 +2,17 @@
 
 from dataclasses import dataclass
 
+from livingworld.domain.actions import ActionRejectionReason, ActionResolutionStatus
 from livingworld.domain.contracts import RequestId
 from livingworld.domain.identifiers import (
     CharacterId,
+    EventId,
     KnowledgeAssertionId,
     LocationId,
     ObservationId,
     PlayerId,
     PrincipalId,
+    SceneId,
     WorldId,
 )
 from livingworld.domain.values import Revision
@@ -34,3 +37,21 @@ class CommandResult:
     resulting_revision: Revision
     replayed: bool = False
     observation_id: ObservationId | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ActionResult:
+    request_id: RequestId
+    status: ActionResolutionStatus
+    reason: ActionRejectionReason | None
+    event_ids: tuple[EventId, ...]
+    resulting_revision: Revision | None
+    replayed: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class SceneResult:
+    request_id: RequestId
+    scene_id: SceneId
+    resulting_revision: Revision
+    replayed: bool = False

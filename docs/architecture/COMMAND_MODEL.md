@@ -1,6 +1,6 @@
 # Command Transaction, Idempotency & Concurrency（C-003C～C-003E2）
 
-状态：Stage 2 命令事务、持久化幂等、主体知识隔离、canonical ledger、回放及资源级乐观并发已实现。C-003E2 按用户确认增加内部 FormCharacterBelief。业务 HTTP API、Director、Agent、自动知识传播与 catch-up 未实现。系统 API 与桌面协议不变。综合验证见 [STAGE_2_ACCEPTANCE.md](STAGE_2_ACCEPTANCE.md)。
+状态：Stage 2 命令事务、持久化幂等、主体知识隔离、canonical ledger、回放及资源级乐观并发已实现。C-006B 复用同一事务/receipt/CAS 约定建立 action resolution 和 Scene lifecycle。业务 HTTP API、Director、Agent、自动知识传播与 catch-up 未实现。系统 API 与桌面协议不变。综合验证见 [STAGE_2_ACCEPTANCE.md](STAGE_2_ACCEPTANCE.md) 与 [ACTION_RESOLUTION.md](ACTION_RESOLUTION.md)。
 
 ## 1. 唯一生产变更入口
 
@@ -35,6 +35,8 @@ Command
 | FormCharacterBelief | 可信内部调用；新断言仅归属一个现存同世界 Character；可无 source、可与 Truth 矛盾；无自动 Observation | 0: CharacterBeliefFormed |
 | AcquireKnowledge | 可信内部合法渠道；世界/接收方/源断言存在且同世界，派生 ID 未使用 | 0: ObservationRecorded；1: KnowledgeAcquired |
 
+C-006B 的 `ResolveAction` 不是并列的 mutation engine：typed proposal 经 allowlisted deterministic resolver 后，复用同一 WorldEvent、ledger allocator、repository CAS、ObservationAppender 和 CommandReceipt transaction。当前 `move_player` v1 复用 PlayerPresence 的 `at_location` 与 `replace_presence`。Scene create/join/leave/end 使用相同 RequestId fingerprint/receipt convention，但作为内部 runtime state 操作不伪造 player-visible WorldEvent。
+
 **玩家创建歧义已解决：** 成功创建的普通玩家必须有初始物理地点。命令接收 initial_location_id、activity_state、availability_state，复用 PlayerActivity/PlayerAvailability；默认 active/available。inactive 保留地点，不自动产生见证。指纹使用默认值解析后的完整语义值。
 
 **关系变化歧义已解决：** RelationshipMetrics 是不可变整数值：affinity、trust 范围 [-100,100]，familiarity 范围 [0,100]，分别表示态度、信任、熟悉程度。仅供内部模拟，普通玩家不获得好感分数 UI。
@@ -51,7 +53,7 @@ RequestId 标识一次命令操作。新管线全局查找回执；跨命令类�
 
 指纹排除 RequestId 自身、生成的现实时间、session、内存地址和当前可变投影。相同请求且指纹相同，直接返回持久化原始结果；即使后续独立命令改变当前状态，返回的仍是原结果。相同请求但指纹不同，显式 IdempotencyConflictError，不写新事件或投影。
 
-回执沿用领域 CommandReceipt。0003 在原表增加独立 command_fingerprint 和 versioned result_payload；指纹不藏在结果引用中。result_reference 指向该命令最后一个事件，原始实体/版本结果另行保存；多事件属于同一回执。
+回执沿用领域 CommandReceipt。0003 在原表增加独立 command_fingerprint 和 versioned result_payload；指纹不藏在结果引用中。产生事件的命令 result_reference 指向最后一个事件，原始实体/版本结果另行保存；多事件属于同一回执。0012 允许 typed rejected action 和 Scene result 在 completed receipt 中没有虚构事件引用；这不会把拒绝或 engine lifecycle 伪装成 WorldEvent。
 
 C-003D 结果新增 KnowledgeAssertionId 实体引用和可选 ObservationId，versioned JSON 保存原 ID；旧结果没有 observation_id key 时兼容为 None。ObservationId 不从 RequestId 推导，运行时由每次新执行生成独立 UUIDv4；成功重试先读取 receipt，不生成新 occurrence。完全回滚可在后续合法执行生成新身份。
 
@@ -71,7 +73,7 @@ C-003D 结果新增 KnowledgeAssertionId 实体引用和可选 ObservationId，v
 
 ## 5. UnitOfWork 与原子失败
 
-[ports.py](../../services/core/src/livingworld/application/ports.py) 定义 World/Location/Player/Character/Relationship repository、内部 exact-source KnowledgeMutationRepository、ObservationAppender、EventAppender、CommandReceiptRepository、WallClock 和 UnitOfWork。主体查询另用只读绑定 reader，不获得内部 mutation repository。仅暴露任务需要的操作，没有通用 save(anything)、SQL execute 或 session。
+[ports.py](../../services/core/src/livingworld/application/ports.py) 定义 World/Location/Player/Character/Relationship/Scene focused repository、内部 exact-source KnowledgeMutationRepository、ObservationAppender、EventAppender、CommandReceiptRepository、WallClock 和 UnitOfWork。主体查询另用只读绑定 reader，不获得内部 mutation repository。仅暴露任务需要的操作，没有通用 save(anything)、SQL execute 或 session。
 
 [SqlAlchemyUnitOfWork](../../services/core/src/livingworld/infrastructure/persistence/unit_of_work.py) 从 Database 的集中 session factory 创建一次执行的 session，所有能力共享它。handler 仅在事件、投影和回执均写入后显式 commit；异常或未提交退出 rollback，最后关闭 session。
 

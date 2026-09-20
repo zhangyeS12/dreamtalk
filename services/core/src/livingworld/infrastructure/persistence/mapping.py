@@ -14,12 +14,15 @@ from livingworld.domain.identifiers import (
     ObservationId,
     PlayerId,
     PrincipalId,
+    SceneId,
+    SceneParticipantId,
     WorldId,
 )
 from livingworld.domain.knowledge import (
     KnowledgeAssertion,
     KnowledgeScope,
     Observation,
+    ObservationBasis,
     ObservationChannel,
 )
 from livingworld.domain.participants import (
@@ -31,6 +34,7 @@ from livingworld.domain.participants import (
     PlayerPresence,
 )
 from livingworld.domain.relationships import Relationship, RelationshipMetrics
+from livingworld.domain.scenes import Scene, SceneParticipant, SceneStatus
 from livingworld.domain.values import Revision
 from livingworld.domain.world import ClockState, Location, LocationConnection, World, WorldClock
 from livingworld.infrastructure.persistence.errors import PersistenceDataError
@@ -46,6 +50,8 @@ from livingworld.infrastructure.persistence.models import (
     PlayerPresenceRecord,
     PlayerRecord,
     RelationshipRecord,
+    SceneParticipantRecord,
+    SceneRecord,
     WorldClockRecord,
     WorldEventRecord,
     WorldRecord,
@@ -60,6 +66,8 @@ type DomainObject = (
     | PlayerPresence
     | Character
     | CharacterState
+    | Scene
+    | SceneParticipant
     | Relationship
     | WorldEvent
     | KnowledgeAssertion
@@ -165,6 +173,30 @@ def to_record(entity: DomainObject) -> Base:
             location_id=entity.location_id.value,
             revision=entity.revision.value,
         )
+    if isinstance(entity, Scene):
+        return SceneRecord(
+            world_id=entity.world_id.value,
+            scene_id=entity.scene_id.value,
+            location_id=entity.location_id.value,
+            status=entity.status.value,
+            started_at=entity.started_at,
+            ended_at=entity.ended_at,
+            revision=entity.revision.value,
+            created_at_utc=entity.created_at_utc,
+        )
+    if isinstance(entity, SceneParticipant):
+        kind, principal_id, character_id, player_id = _principal_parts(entity.principal_id)
+        return SceneParticipantRecord(
+            world_id=entity.world_id.value,
+            participant_id=entity.participant_id.value,
+            scene_id=entity.scene_id.value,
+            principal_kind=kind,
+            principal_id=principal_id,
+            principal_character_id=character_id,
+            principal_player_id=player_id,
+            joined_at=entity.joined_at,
+            left_at=entity.left_at,
+        )
     if isinstance(entity, Relationship):
         source_kind, source_id, source_character, source_player = _principal_parts(entity.source_id)
         target_kind, target_id, target_character, target_player = _principal_parts(entity.target_id)
@@ -232,7 +264,7 @@ def to_record(entity: DomainObject) -> Base:
             entity.principal_id
         )
         target_kind, target_id, target_event, target_assertion = _target_parts(entity.target_id)
-        return ObservationRecord(
+        record = ObservationRecord(
             observation_id=entity.observation_id.value,
             world_id=entity.world_id.value,
             principal_kind=principal_kind,
@@ -247,6 +279,9 @@ def to_record(entity: DomainObject) -> Base:
             target_assertion_id=target_assertion,
             created_at=entity.created_at,
         )
+        if entity.basis is not None:
+            record.basis = entity.basis.value
+        return record
     if isinstance(entity, CommandReceipt):
         if entity.result_reference is None:
             result_kind = result_id = result_event = result_assertion = None
@@ -320,6 +355,26 @@ def to_domain(record: Base) -> DomainObject:
             LocationId(world, record.location_id),
             Revision(record.revision),
         )
+    if isinstance(record, SceneRecord):
+        return Scene(
+            SceneId(world, record.scene_id),
+            world,
+            LocationId(world, record.location_id),
+            SceneStatus(record.status),
+            record.started_at,
+            record.ended_at,
+            Revision(record.revision),
+            record.created_at_utc,
+        )
+    if isinstance(record, SceneParticipantRecord):
+        return SceneParticipant(
+            SceneParticipantId(world, record.participant_id),
+            world,
+            SceneId(world, record.scene_id),
+            _principal(world, record.principal_kind, record.principal_id),
+            record.joined_at,
+            record.left_at,
+        )
     if isinstance(record, RelationshipRecord):
         return Relationship(
             world,
@@ -381,6 +436,7 @@ def to_domain(record: Base) -> DomainObject:
             record.observed_at,
             record.created_at,
             observation_id=ObservationId(world, record.observation_id),
+            basis=ObservationBasis(record.basis) if record.basis is not None else None,
         )
     if isinstance(record, CommandReceiptRecord):
         result = (

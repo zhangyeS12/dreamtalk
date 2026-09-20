@@ -115,6 +115,13 @@ class PlayerPresenceRecord(Base):
         ),
         CheckConstraint("activity IN ('active', 'inactive')", name="ck_presence_activity"),
         CheckConstraint("availability IN ('busy', 'available')", name="ck_presence_availability"),
+        Index(
+            "ix_player_presence_active_location",
+            "world_id",
+            "location_id",
+            "player_id",
+            sqlite_where=text("activity = 'active'"),
+        ),
     )
 
 
@@ -142,6 +149,97 @@ class CharacterStateRecord(Base):
         ),
         ForeignKeyConstraint(
             ["world_id", "location_id"], ["locations.world_id", "locations.location_id"]
+        ),
+        Index(
+            "ix_character_state_location",
+            "world_id",
+            "location_id",
+            "character_id",
+        ),
+    )
+
+
+class SceneRecord(Base):
+    __tablename__ = "scenes"
+    world_id: Mapped[UUID] = mapped_column(
+        UUIDStorage(), ForeignKey("worlds.world_id"), primary_key=True
+    )
+    scene_id: Mapped[UUID] = mapped_column(UUIDStorage(), primary_key=True)
+    location_id: Mapped[UUID] = mapped_column(UUIDStorage(), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    started_at: Mapped[WorldTime] = mapped_column(WorldTimeStorage(), nullable=False)
+    ended_at: Mapped[WorldTime | None] = mapped_column(WorldTimeStorage())
+    revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at_utc: Mapped[datetime] = mapped_column(UTCTimestampStorage(), nullable=False)
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["world_id", "location_id"], ["locations.world_id", "locations.location_id"]
+        ),
+        CheckConstraint("status IN ('open', 'closed')", name="ck_scene_status"),
+        CheckConstraint(
+            "(status = 'open' AND ended_at IS NULL) OR "
+            "(status = 'closed' AND ended_at IS NOT NULL AND ended_at >= started_at)",
+            name="ck_scene_lifecycle",
+        ),
+        CheckConstraint("revision >= 0", name="ck_scene_revision"),
+        Index("ix_scenes_world_status", "world_id", "status", "scene_id"),
+    )
+
+
+class SceneParticipantRecord(Base):
+    __tablename__ = "scene_participants"
+    world_id: Mapped[UUID] = mapped_column(
+        UUIDStorage(), ForeignKey("worlds.world_id"), primary_key=True
+    )
+    participant_id: Mapped[UUID] = mapped_column(UUIDStorage(), primary_key=True)
+    scene_id: Mapped[UUID] = mapped_column(UUIDStorage(), nullable=False)
+    principal_kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    principal_id: Mapped[UUID] = mapped_column(UUIDStorage(), nullable=False)
+    principal_character_id: Mapped[UUID | None] = mapped_column(UUIDStorage())
+    principal_player_id: Mapped[UUID | None] = mapped_column(UUIDStorage())
+    joined_at: Mapped[WorldTime] = mapped_column(WorldTimeStorage(), nullable=False)
+    left_at: Mapped[WorldTime | None] = mapped_column(WorldTimeStorage())
+    __table_args__ = (
+        ForeignKeyConstraint(["world_id", "scene_id"], ["scenes.world_id", "scenes.scene_id"]),
+        ForeignKeyConstraint(
+            ["world_id", "principal_character_id"],
+            ["characters.world_id", "characters.character_id"],
+        ),
+        ForeignKeyConstraint(
+            ["world_id", "principal_player_id"], ["players.world_id", "players.player_id"]
+        ),
+        CheckConstraint(
+            "(principal_kind = 'character' AND principal_character_id IS NOT NULL "
+            "AND principal_character_id = principal_id AND principal_player_id IS NULL) OR "
+            "(principal_kind = 'player' AND principal_player_id IS NOT NULL "
+            "AND principal_player_id = principal_id AND principal_character_id IS NULL)",
+            name="ck_scene_participant_principal",
+        ),
+        CheckConstraint(
+            "left_at IS NULL OR left_at >= joined_at", name="ck_scene_participant_time"
+        ),
+        Index(
+            "uq_scene_active_principal",
+            "world_id",
+            "principal_kind",
+            "principal_id",
+            unique=True,
+            sqlite_where=text("left_at IS NULL"),
+        ),
+        Index(
+            "ix_scene_active_participants",
+            "world_id",
+            "scene_id",
+            "left_at",
+            "principal_kind",
+            "principal_id",
+        ),
+        Index(
+            "ix_scene_participant_history",
+            "world_id",
+            "principal_kind",
+            "principal_id",
+            "joined_at",
         ),
     )
 
@@ -311,6 +409,7 @@ class KnowledgeAssertionRecord(Base):
 
 class ObservationRecord(Base):
     __tablename__ = "observations"
+    __mapper_args__ = {"eager_defaults": False}
     world_id: Mapped[UUID] = mapped_column(
         UUIDStorage(), ForeignKey("worlds.world_id"), primary_key=True
     )
@@ -326,6 +425,7 @@ class ObservationRecord(Base):
     target_assertion_id: Mapped[UUID | None] = mapped_column(UUIDStorage())
     created_at: Mapped[datetime | None] = mapped_column(UTCTimestampStorage())
     observation_id: Mapped[UUID] = mapped_column(UUIDStorage(), primary_key=True)
+    basis: Mapped[str | None] = mapped_column(String(32), server_default=text("NULL"))
     __table_args__ = (
         ForeignKeyConstraint(
             ["world_id", "principal_character_id"],
@@ -363,6 +463,23 @@ class ObservationRecord(Base):
             "channel IN ('witnessed', 'told', 'message', 'news', 'document', 'inferred')",
             name="ck_observation_channel",
         ),
+        Index(
+            "uq_observation_event_principal",
+            "world_id",
+            "target_event_id",
+            "principal_kind",
+            "principal_id",
+            unique=True,
+            sqlite_where=text("target_kind = 'event' AND basis = 'event_occurrence'"),
+        ),
+        Index(
+            "ix_observation_principal_history",
+            "world_id",
+            "principal_kind",
+            "principal_id",
+            "target_kind",
+            "observed_at",
+        ),
     )
 
 
@@ -387,8 +504,8 @@ class CommandReceiptRecord(Base):
         CheckConstraint(
             "(command_fingerprint IS NULL AND result_payload IS NULL) OR "
             "(command_fingerprint IS NOT NULL AND length(command_fingerprint) = 64 "
-            "AND result_payload IS NOT NULL AND status = 'committed' "
-            "AND completed_at IS NOT NULL AND result_event_id IS NOT NULL)",
+            "AND result_payload IS NOT NULL AND status IN ('committed', 'rejected') "
+            "AND completed_at IS NOT NULL)",
             name="ck_command_receipt_command_result",
         ),
         Index(

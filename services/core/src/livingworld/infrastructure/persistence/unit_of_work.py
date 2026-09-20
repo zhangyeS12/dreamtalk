@@ -12,7 +12,13 @@ from sqlalchemy.orm import selectinload
 
 from livingworld.application.errors import EntityAlreadyExistsError, IdempotencyConflictError
 from livingworld.application.fingerprints import canonical_json, id_input
-from livingworld.application.results import CommandResult, RelationshipReference
+from livingworld.application.results import (
+    ActionResult,
+    CommandResult,
+    RelationshipReference,
+    SceneResult,
+)
+from livingworld.domain.actions import ActionRejectionReason, ActionResolutionStatus
 from livingworld.domain.commands import CommandReceipt
 from livingworld.domain.contracts import RequestId
 from livingworld.domain.errors import ConcurrencyConflictError, DomainInvariantError
@@ -25,12 +31,14 @@ from livingworld.domain.identifiers import (
     ObservationId,
     PlayerId,
     PrincipalId,
+    SceneId,
     WorldId,
 )
 from livingworld.domain.knowledge import KnowledgeAssertion, Observation
 from livingworld.domain.participants import Character, CharacterState, Player, PlayerPresence
 from livingworld.domain.relationships import Relationship
-from livingworld.domain.values import Revision
+from livingworld.domain.scenes import Scene, SceneParticipant
+from livingworld.domain.values import Revision, WorldTime
 from livingworld.domain.world import Location, World
 from livingworld.infrastructure.persistence.errors import (
     PersistenceConflictError,
@@ -46,6 +54,8 @@ from livingworld.infrastructure.persistence.models import (
     PlayerPresenceRecord,
     PlayerRecord,
     RelationshipRecord,
+    SceneParticipantRecord,
+    SceneRecord,
     WorldEventRecord,
     WorldLedgerCursorRecord,
     WorldRecord,
@@ -164,6 +174,20 @@ class PlayerRepository:
             _conflict("PlayerPresence", presence.player_id, expected_revision),
         )
 
+    async def at_location(self, location_id: LocationId) -> tuple[PlayerId, ...]:
+        values = (
+            await self._session.scalars(
+                select(PlayerPresenceRecord.player_id)
+                .where(
+                    PlayerPresenceRecord.world_id == location_id.world_id.value,
+                    PlayerPresenceRecord.location_id == location_id.value,
+                    PlayerPresenceRecord.activity == "active",
+                )
+                .order_by(PlayerPresenceRecord.player_id)
+            )
+        ).all()
+        return tuple(PlayerId(location_id.world_id, value) for value in values)
+
 
 class CharacterRepository:
     def __init__(self, session: AsyncSession):
@@ -208,6 +232,143 @@ class CharacterRepository:
                 .values(location_id=state.location_id.value, revision=state.revision.value),
                 conflict,
             )
+
+    async def at_location(self, location_id: LocationId) -> tuple[CharacterId, ...]:
+        values = (
+            await self._session.scalars(
+                select(CharacterStateRecord.character_id)
+                .where(
+                    CharacterStateRecord.world_id == location_id.world_id.value,
+                    CharacterStateRecord.location_id == location_id.value,
+                )
+                .order_by(CharacterStateRecord.character_id)
+            )
+        ).all()
+        return tuple(CharacterId(location_id.world_id, value) for value in values)
+
+
+def _principal_columns(principal: PrincipalId) -> tuple[str, UUID]:
+    return (
+        ("character", principal.value)
+        if isinstance(principal, CharacterId)
+        else ("player", principal.value)
+    )
+
+
+class SceneRepository:
+    def __init__(self, session: AsyncSession):
+        self._session = session
+
+    async def get(self, scene_id: SceneId) -> Scene | None:
+        record = await self._session.get(SceneRecord, (scene_id.world_id.value, scene_id.value))
+        return to_domain(record) if record is not None else None
+
+    async def add(self, scene: Scene, participants: tuple[SceneParticipant, ...]) -> None:
+        await _add_unique(
+            self._session, to_record(scene), EntityAlreadyExistsError("Scene already exists")
+        )
+        for participant in participants:
+            await self.add_participant(participant)
+
+    async def replace(self, scene: Scene, expected_revision: Revision) -> None:
+        _result_revision(scene.revision, expected_revision)
+        row = SceneRecord
+        await _cas(
+            self._session,
+            update(row)
+            .where(
+                row.world_id == scene.world_id.value,
+                row.scene_id == scene.scene_id.value,
+                row.revision == expected_revision.value,
+            )
+            .values(
+                status=scene.status.value,
+                ended_at=scene.ended_at,
+                revision=scene.revision.value,
+            ),
+            _conflict("Scene", scene.scene_id, expected_revision),
+        )
+
+    async def active_participants(self, scene_id: SceneId) -> tuple[SceneParticipant, ...]:
+        records = (
+            await self._session.scalars(
+                select(SceneParticipantRecord)
+                .where(
+                    SceneParticipantRecord.world_id == scene_id.world_id.value,
+                    SceneParticipantRecord.scene_id == scene_id.value,
+                    SceneParticipantRecord.left_at.is_(None),
+                )
+                .order_by(
+                    SceneParticipantRecord.principal_kind,
+                    SceneParticipantRecord.principal_id,
+                )
+            )
+        ).all()
+        return tuple(to_domain(record) for record in records)
+
+    async def active_for_principal(self, principal_id: PrincipalId) -> SceneParticipant | None:
+        kind, value = _principal_columns(principal_id)
+        record = (
+            await self._session.scalars(
+                select(SceneParticipantRecord).where(
+                    SceneParticipantRecord.world_id == principal_id.world_id.value,
+                    SceneParticipantRecord.principal_kind == kind,
+                    SceneParticipantRecord.principal_id == value,
+                    SceneParticipantRecord.left_at.is_(None),
+                )
+            )
+        ).one_or_none()
+        return to_domain(record) if record is not None else None
+
+    async def add_participant(self, participant: SceneParticipant) -> None:
+        await _add_unique(
+            self._session,
+            to_record(participant),
+            ConcurrencyConflictError(
+                "Principal already participates in an active Scene",
+                resource_kind="SceneParticipant",
+                resource_identity=participant.principal_id,
+            ),
+        )
+
+    async def leave_participant(self, participant: SceneParticipant) -> None:
+        if participant.left_at is None:
+            raise DomainInvariantError("Leaving participant requires left_at")
+        row = SceneParticipantRecord
+        result = await self._session.execute(
+            update(row)
+            .where(
+                row.world_id == participant.world_id.value,
+                row.participant_id == participant.participant_id.value,
+                row.left_at.is_(None),
+            )
+            .values(left_at=participant.left_at)
+        )
+        if result.rowcount != 1:
+            raise _conflict("SceneParticipant", participant.participant_id, None)
+
+    async def leave_all(self, scene_id: SceneId, left_at: WorldTime) -> None:
+        await self._session.execute(
+            update(SceneParticipantRecord)
+            .where(
+                SceneParticipantRecord.world_id == scene_id.world_id.value,
+                SceneParticipantRecord.scene_id == scene_id.value,
+                SceneParticipantRecord.left_at.is_(None),
+            )
+            .values(left_at=left_at)
+        )
+
+    async def leave_active_for_principal(
+        self, principal_id: PrincipalId, left_at: WorldTime
+    ) -> None:
+        participant = await self.active_for_principal(principal_id)
+        if participant is None:
+            return
+        scene = await self.get(participant.scene_id)
+        if scene is None:
+            raise PersistenceDataError("active_scene_missing")
+        await self.replace(scene.advance(scene.revision), scene.revision)
+        await self.leave_participant(participant.leave(left_at))
 
 
 def relationship_key(source: PrincipalId, target: PrincipalId) -> tuple:
@@ -420,6 +581,104 @@ class CommandReceiptRepository:
             IdempotencyConflictError("CommandReceipt identity already committed"),
         )
 
+    async def _typed_record(
+        self, request_id: RequestId, fingerprint: str
+    ) -> CommandReceiptRecord | None:
+        records = (
+            await self._session.scalars(
+                select(CommandReceiptRecord).where(
+                    CommandReceiptRecord.request_id == request_id.value
+                )
+            )
+        ).all()
+        if not records:
+            return None
+        if len(records) != 1 or records[0].command_fingerprint != fingerprint:
+            raise IdempotencyConflictError(
+                "RequestId has different or unverifiable command semantics"
+            )
+        return records[0]
+
+    async def existing_action(self, request_id: RequestId, fingerprint: str) -> ActionResult | None:
+        record = await self._typed_record(request_id, fingerprint)
+        if record is None:
+            return None
+        try:
+            value = json.loads(record.result_payload)
+            if value["result_version"] != 2:
+                raise ValueError("Unknown action result version")
+            world = WorldId(record.world_id)
+            return ActionResult(
+                request_id,
+                ActionResolutionStatus(value["status"]),
+                ActionRejectionReason(value["reason"]) if value["reason"] is not None else None,
+                tuple(EventId(world, UUID(event_id)) for event_id in value["event_ids"]),
+                Revision(value["resulting_revision"])
+                if value["resulting_revision"] is not None
+                else None,
+            )
+        except (ValueError, KeyError, TypeError):
+            raise PersistenceDataError("invalid_action_result") from None
+
+    async def add_action(
+        self, receipt: CommandReceipt, fingerprint: str, result: ActionResult
+    ) -> None:
+        record = to_record(receipt)
+        record.command_fingerprint = fingerprint
+        record.result_payload = canonical_json(
+            {
+                "result_version": 2,
+                "status": result.status.value,
+                "reason": result.reason.value if result.reason is not None else None,
+                "event_ids": [str(event_id.value) for event_id in result.event_ids],
+                "resulting_revision": (
+                    result.resulting_revision.value
+                    if result.resulting_revision is not None
+                    else None
+                ),
+            }
+        )
+        await _add_unique(
+            self._session,
+            record,
+            IdempotencyConflictError("CommandReceipt identity already committed"),
+        )
+
+    async def existing_scene(self, request_id: RequestId, fingerprint: str) -> SceneResult | None:
+        record = await self._typed_record(request_id, fingerprint)
+        if record is None:
+            return None
+        try:
+            value = json.loads(record.result_payload)
+            if value["result_version"] != 3:
+                raise ValueError("Unknown scene result version")
+            world = WorldId(record.world_id)
+            return SceneResult(
+                request_id,
+                SceneId(world, UUID(value["scene_id"])),
+                Revision(value["resulting_revision"]),
+            )
+        except (ValueError, KeyError, TypeError):
+            raise PersistenceDataError("invalid_scene_result") from None
+
+    async def add_scene(
+        self, receipt: CommandReceipt, fingerprint: str, result: SceneResult
+    ) -> None:
+        record = to_record(receipt)
+        record.command_fingerprint = fingerprint
+        record.result_payload = canonical_json(
+            {
+                "result_version": 3,
+                "scene_id": str(result.scene_id.value),
+                "resulting_revision": result.resulting_revision.value,
+            }
+        )
+        await _add_unique(
+            self._session,
+            record,
+            IdempotencyConflictError("CommandReceipt identity already committed"),
+        )
+
 
 class SqlAlchemyUnitOfWork:
     def __init__(self, sessions: async_sessionmaker):
@@ -440,6 +699,7 @@ class SqlAlchemyUnitOfWork:
         self.players = PlayerRepository(self._session)
         self.characters = CharacterRepository(self._session)
         self.relationships = RelationshipRepository(self._session)
+        self.scenes = SceneRepository(self._session)
         self.knowledge = KnowledgeMutationRepository(self._session)
         self.observations = ObservationAppender(self._session)
         self.events = EventAppender(self._session)

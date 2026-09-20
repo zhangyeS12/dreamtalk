@@ -19,6 +19,7 @@ from livingworld.infrastructure.persistence.errors import (
     PersistenceDataError,
 )
 from livingworld.infrastructure.persistence.migration import (
+    ACTION_TABLES,
     HEAD_REVISION,
     LEDGER_REVISION,
     SIMULATION_TABLES,
@@ -54,6 +55,27 @@ async def rows(database, tables):
         return {
             table: (await connection.execute(text(f"SELECT * FROM {table}"))).all()
             for table in tables
+        }
+
+
+async def table_columns(database, tables):
+    async with database.engine.connect() as connection:
+        return {
+            table: tuple(
+                row.name
+                for row in (await connection.execute(text(f"PRAGMA table_info({table})"))).all()
+            )
+            for table in tables
+        }
+
+
+async def rows_for_columns(database, columns):
+    async with database.engine.connect() as connection:
+        return {
+            table: (
+                await connection.execute(text(f"SELECT {', '.join(table_columns)} FROM {table}"))
+            ).all()
+            for table, table_columns in columns.items()
         }
 
 
@@ -243,7 +265,9 @@ def test_0005_takeover_preserves_every_runtime_and_audit_row(tmp_path, populate,
     async def run():
         database = Database(tmp_path)
         tables = tuple(
-            table for table in Base.metadata.tables if table not in SIMULATION_TABLES
+            table
+            for table in Base.metadata.tables
+            if table not in SIMULATION_TABLES | ACTION_TABLES
         ) + ("schema_version", "migration_history")
         try:
             async with database.engine.begin() as connection:
@@ -251,7 +275,8 @@ def test_0005_takeover_preserves_every_runtime_and_audit_row(tmp_path, populate,
                     lambda sync: command.upgrade(_alembic_config(sync), LEDGER_REVISION)
                 )
             await populate(database)
-            before = await rows(database, tables)
+            preserved_columns = await table_columns(database, tables)
+            before = await rows_for_columns(database, preserved_columns)
             original = Operations.create_table
             if fail:
 
@@ -272,11 +297,11 @@ def test_0005_takeover_preserves_every_runtime_and_audit_row(tmp_path, populate,
                             text("SELECT name FROM sqlite_master WHERE name LIKE 'content_%'")
                         )
                     ).all()
-                assert await rows(database, tables) == before
+                assert await rows_for_columns(database, preserved_columns) == before
                 monkeypatch.setattr(Operations, "create_table", original)
             await database.initialize()
             await database.initialize()
-            assert await rows(database, tables) == before
+            assert await rows_for_columns(database, preserved_columns) == before
             async with database.engine.connect() as connection:
                 assert (
                     await connection.execute(text("SELECT version_num FROM alembic_version"))

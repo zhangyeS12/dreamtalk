@@ -25,7 +25,8 @@ LORE_REVISION = "0007_lore_collections"
 PACKAGE_REVISION = "0008_native_content_packages"
 ACCOUNTING_REVISION = "0009_llm_accounting"
 BUDGET_REVISION = "0010_llm_budget_guard"
-HEAD_REVISION = "0011_simulation_scheduler"
+SIMULATION_REVISION = "0011_simulation_scheduler"
+HEAD_REVISION = "0012_action_scenes_perception"
 BUDGET_TABLES = {"llm_budgets", "llm_budget_reservations"}
 SIMULATION_TABLES = {
     "simulation_queue_cursors",
@@ -33,6 +34,7 @@ SIMULATION_TABLES = {
     "simulation_activations",
     "simulation_schedule_receipts",
 }
+ACTION_TABLES = {"scenes", "scene_participants"}
 PACKAGE_TABLES = {"content_import_baselines", "content_asset_blob_bindings"}
 LEGACY_CHECKSUM = "0345ec9d50fd45b01ba0f97ff6f14a25f683fb8d01f08f04ff9dc4892ad1cac5"
 LEGACY_TABLES = {"schema_version", "migration_history"}
@@ -184,6 +186,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         PACKAGE_REVISION,
         ACCOUNTING_REVISION,
         BUDGET_REVISION,
+        SIMULATION_REVISION,
         HEAD_REVISION,
     }:
         _fail("alembic_revision_unsupported")
@@ -200,6 +203,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
             PACKAGE_REVISION,
             ACCOUNTING_REVISION,
             BUDGET_REVISION,
+            SIMULATION_REVISION,
             HEAD_REVISION,
         }:
             expected -= {"world_ledger_cursors"}
@@ -209,6 +213,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         PACKAGE_REVISION,
         ACCOUNTING_REVISION,
         BUDGET_REVISION,
+        SIMULATION_REVISION,
         HEAD_REVISION,
     }:
         expected |= CONTENT_TABLES
@@ -216,17 +221,20 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
             PACKAGE_REVISION,
             ACCOUNTING_REVISION,
             BUDGET_REVISION,
+            SIMULATION_REVISION,
             HEAD_REVISION,
         }:
             expected -= PACKAGE_TABLES
         if revision == CONTENT_REVISION:
             expected -= {"content_lore_collections"}
-    if revision in {ACCOUNTING_REVISION, BUDGET_REVISION, HEAD_REVISION}:
+    if revision in {ACCOUNTING_REVISION, BUDGET_REVISION, SIMULATION_REVISION, HEAD_REVISION}:
         expected |= set(AccountingBase.metadata.tables)
         if revision == ACCOUNTING_REVISION:
             expected -= BUDGET_TABLES
-    if revision != HEAD_REVISION:
+    if revision not in {SIMULATION_REVISION, HEAD_REVISION}:
         expected -= SIMULATION_TABLES
+    if revision != HEAD_REVISION:
+        expected -= ACTION_TABLES
     if tables != expected:
         _fail("alembic_schema_state_mismatch")
     _validate_auxiliary_objects(connection, domain_present)
@@ -238,11 +246,12 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         PACKAGE_REVISION,
         ACCOUNTING_REVISION,
         BUDGET_REVISION,
+        SIMULATION_REVISION,
         HEAD_REVISION,
     }:
         _validate_domain_shape(connection, revision, ContentBase.metadata)
 
-    if revision in {ACCOUNTING_REVISION, BUDGET_REVISION, HEAD_REVISION}:
+    if revision in {ACCOUNTING_REVISION, BUDGET_REVISION, SIMULATION_REVISION, HEAD_REVISION}:
         _validate_domain_shape(connection, revision, AccountingBase.metadata)
 
 
@@ -279,7 +288,9 @@ def _validate_domain_shape(
         "ck_command_receipt_command_result",
     }
     for table in metadata.sorted_tables:
-        if revision != HEAD_REVISION and table.name in SIMULATION_TABLES:
+        if revision not in {SIMULATION_REVISION, HEAD_REVISION} and table.name in SIMULATION_TABLES:
+            continue
+        if revision != HEAD_REVISION and table.name in ACTION_TABLES:
             continue
         if revision == ACCOUNTING_REVISION and table.name in BUDGET_TABLES:
             continue
@@ -289,6 +300,7 @@ def _validate_domain_shape(
                 PACKAGE_REVISION,
                 ACCOUNTING_REVISION,
                 BUDGET_REVISION,
+                SIMULATION_REVISION,
                 HEAD_REVISION,
             }
             and table.name in PACKAGE_TABLES
@@ -305,6 +317,7 @@ def _validate_domain_shape(
                 PACKAGE_REVISION,
                 ACCOUNTING_REVISION,
                 BUDGET_REVISION,
+                SIMULATION_REVISION,
                 HEAD_REVISION,
             }
             and table.name == "world_ledger_cursors"
@@ -324,6 +337,11 @@ def _validate_domain_shape(
                 and column.name == "observation_id"
             )
             and not (
+                revision != HEAD_REVISION
+                and table.name == "observations"
+                and column.name == "basis"
+            )
+            and not (
                 revision
                 not in {
                     LEDGER_REVISION,
@@ -332,6 +350,7 @@ def _validate_domain_shape(
                     PACKAGE_REVISION,
                     ACCOUNTING_REVISION,
                     BUDGET_REVISION,
+                    SIMULATION_REVISION,
                     HEAD_REVISION,
                 }
                 and table.name == "world_events"
@@ -391,11 +410,35 @@ def _validate_domain_shape(
                     PACKAGE_REVISION,
                     ACCOUNTING_REVISION,
                     BUDGET_REVISION,
+                    SIMULATION_REVISION,
                     HEAD_REVISION,
                 }
                 and constraint.name == "ck_world_event_ledger_position"
             )
         }
+        if table.name == "command_receipts" and revision != HEAD_REVISION and not baseline:
+            expected_checks.discard(
+                (
+                    "ck_command_receipt_command_result",
+                    _normalized_sql(
+                        "(command_fingerprint IS NULL AND result_payload IS NULL) OR "
+                        "(command_fingerprint IS NOT NULL AND length(command_fingerprint) = 64 "
+                        "AND result_payload IS NOT NULL AND status IN ('committed', 'rejected') "
+                        "AND completed_at IS NOT NULL)"
+                    ),
+                )
+            )
+            expected_checks.add(
+                (
+                    "ck_command_receipt_command_result",
+                    _normalized_sql(
+                        "(command_fingerprint IS NULL AND result_payload IS NULL) OR "
+                        "(command_fingerprint IS NOT NULL AND length(command_fingerprint) = 64 "
+                        "AND result_payload IS NOT NULL AND status = 'committed' "
+                        "AND completed_at IS NOT NULL AND result_event_id IS NOT NULL)"
+                    ),
+                )
+            )
         actual_checks = {
             (constraint["name"], _normalized_sql(constraint["sqltext"]))
             for constraint in inspector.get_check_constraints(table.name)
@@ -431,9 +474,20 @@ def _validate_domain_shape(
                     PACKAGE_REVISION,
                     ACCOUNTING_REVISION,
                     BUDGET_REVISION,
+                    SIMULATION_REVISION,
                     HEAD_REVISION,
                 }
                 and index.name == "uq_world_event_ledger_position"
+            )
+            and not (
+                revision != HEAD_REVISION
+                and index.name
+                in {
+                    "ix_character_state_location",
+                    "ix_observation_principal_history",
+                    "ix_player_presence_active_location",
+                    "uq_observation_event_principal",
+                }
             )
         }
         actual_indexes = {

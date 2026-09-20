@@ -55,6 +55,8 @@ FormCharacterBelief（可信内部命令，非玩家 API）
 
 **FormCharacterBelief 不自动创建 Observation**：内部形成不是默认 exposure channel。断言是新 immutable epistemic record，不引入 expected revision、修改既有信念或自动纠正。AcquireKnowledge 继续保持下述 source → Observation → receiver-owned assertion；它可以将 Alice 的 false belief 转述给 Billy，而不改写 WorldTruth。
 
+**C-006B event perception 不自动创建 KnowledgeAssertion**：`Observation(target_id=EventId, channel=witnessed, basis=event_occurrence)` 只证明该主体在事件发生时具有访问依据。可空 basis 将 Kernel audience snapshot 与普通 Observation occurrence 区分，不改变 C-003D identity。它没有 proposition，也不授予 Truth/Belief/PlayerKnowledge；Stage 6 才能定义如何从事件感知形成认知或记忆。该 event-target Observation 是不可重算的历史授权快照，知识读取器不会因此越权遍历全局 WorldEvent。
+
 Stage 2 验收以 AssertWorldTruth `door=locked` + FormCharacterBelief `Alice: door=unlocked` 创建两条 canonical state，隔离读者在重建前后仍分别返回 locked/unlocked。历史 stale Truth 可成为未来过时认知的一种来源，但不是本验收的 canonical 主观根机制。
 
 AcquireKnowledge 表示权威应用已经确认渠道合法；当前消费者没有自行调用来扩权的公开 API，也不把地点、inactive Presence 或收到消息自动解释为获知证据。

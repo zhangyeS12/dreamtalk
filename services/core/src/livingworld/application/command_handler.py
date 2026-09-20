@@ -24,6 +24,11 @@ from livingworld.application.errors import (
     IdempotencyConflictError,
 )
 from livingworld.application.fingerprints import command_fingerprint, decimal_input, id_input
+from livingworld.application.player_movement import (
+    apply_player_movement,
+    player_moved_payload,
+    resolve_player_movement,
+)
 from livingworld.application.ports import UnitOfWork, WallClock
 from livingworld.application.results import CommandResult, EntityReference, RelationshipReference
 from livingworld.domain.commands import CommandReceipt
@@ -250,26 +255,20 @@ class CommandHandler:
                     before.revision,
                     command.expected_presence_revision,
                 )
-                after = before.at_location(
-                    command.destination_id, expected_revision=command.expected_presence_revision
+                after = resolve_player_movement(
+                    before, command.destination_id, command.expected_presence_revision
                 )
-                events = [
-                    (
-                        "PlayerMoved",
-                        {
-                            "player_id": str(after.player_id.value),
-                            "from_location_id": str(before.location_id.value),
-                            "to_location_id": str(after.location_id.value),
-                            "activity": after.activity.value,
-                            "availability": after.availability.value,
-                            "revision": after.revision.value,
-                        },
-                    )
-                ]
+                events = [("PlayerMoved", player_moved_payload(before, after))]
                 reference, revision = after.player_id, after.revision
 
                 async def apply() -> None:
-                    await uow.players.replace_presence(after, command.expected_presence_revision)
+                    await apply_player_movement(
+                        uow,
+                        before,
+                        after,
+                        command.expected_presence_revision,
+                        world.clock.logical_time,
+                    )
 
             case CreateCharacter():
                 character = Character(world.world_id, command.character_id, command.name)
@@ -327,6 +326,10 @@ class CommandHandler:
 
                 async def apply() -> None:
                     await uow.characters.put_state(state, command.expected_state_revision)
+                    if before is not None and before.location_id != state.location_id:
+                        await uow.scenes.leave_active_for_principal(
+                            state.character_id, world.clock.logical_time
+                        )
 
             case ChangeRelationship():
                 same_world(world.world_id, command.source_id, command.target_id)

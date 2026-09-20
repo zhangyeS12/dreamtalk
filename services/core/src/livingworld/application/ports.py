@@ -5,7 +5,7 @@ from typing import Protocol, Self
 
 from livingworld.application.ledger import CanonicalEvent
 from livingworld.application.projections import ProjectionSnapshot
-from livingworld.application.results import CommandResult
+from livingworld.application.results import ActionResult, CommandResult, SceneResult
 from livingworld.domain.commands import CommandReceipt
 from livingworld.domain.contracts import RequestId
 from livingworld.domain.events import WorldEvent
@@ -16,12 +16,14 @@ from livingworld.domain.identifiers import (
     LocationId,
     PlayerId,
     PrincipalId,
+    SceneId,
     WorldId,
 )
 from livingworld.domain.knowledge import KnowledgeAssertion, Observation
 from livingworld.domain.participants import Character, CharacterState, Player, PlayerPresence
 from livingworld.domain.relationships import Relationship
-from livingworld.domain.values import Revision
+from livingworld.domain.scenes import Scene, SceneParticipant
+from livingworld.domain.values import Revision, WorldTime
 from livingworld.domain.world import Location, World
 
 
@@ -46,6 +48,7 @@ class PlayerRepository(Protocol):
     async def replace_presence(
         self, presence: PlayerPresence, expected_revision: Revision
     ) -> None: ...
+    async def at_location(self, location_id: LocationId) -> tuple[PlayerId, ...]: ...
 
 
 class CharacterRepository(Protocol):
@@ -54,6 +57,21 @@ class CharacterRepository(Protocol):
     async def add(self, character: Character) -> None: ...
     async def put_state(
         self, state: CharacterState, expected_revision: Revision | None
+    ) -> None: ...
+    async def at_location(self, location_id: LocationId) -> tuple[CharacterId, ...]: ...
+
+
+class SceneRepository(Protocol):
+    async def get(self, scene_id: SceneId) -> Scene | None: ...
+    async def add(self, scene: Scene, participants: tuple[SceneParticipant, ...]) -> None: ...
+    async def replace(self, scene: Scene, expected_revision: Revision) -> None: ...
+    async def active_participants(self, scene_id: SceneId) -> tuple[SceneParticipant, ...]: ...
+    async def active_for_principal(self, principal_id: PrincipalId) -> SceneParticipant | None: ...
+    async def add_participant(self, participant: SceneParticipant) -> None: ...
+    async def leave_participant(self, participant: SceneParticipant) -> None: ...
+    async def leave_all(self, scene_id: SceneId, left_at: WorldTime) -> None: ...
+    async def leave_active_for_principal(
+        self, principal_id: PrincipalId, left_at: WorldTime
     ) -> None: ...
 
 
@@ -109,6 +127,18 @@ class CommandReceiptRepository(Protocol):
     async def add(
         self, receipt: CommandReceipt, fingerprint: str, result: CommandResult
     ) -> None: ...
+    async def existing_action(
+        self, request_id: RequestId, fingerprint: str
+    ) -> ActionResult | None: ...
+    async def add_action(
+        self, receipt: CommandReceipt, fingerprint: str, result: ActionResult
+    ) -> None: ...
+    async def existing_scene(
+        self, request_id: RequestId, fingerprint: str
+    ) -> SceneResult | None: ...
+    async def add_scene(
+        self, receipt: CommandReceipt, fingerprint: str, result: SceneResult
+    ) -> None: ...
 
 
 class UnitOfWork(Protocol):
@@ -117,6 +147,7 @@ class UnitOfWork(Protocol):
     players: PlayerRepository
     characters: CharacterRepository
     relationships: RelationshipRepository
+    scenes: SceneRepository
     knowledge: KnowledgeMutationRepository
     observations: ObservationAppender
     events: EventAppender

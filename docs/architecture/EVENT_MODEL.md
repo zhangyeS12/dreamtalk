@@ -1,6 +1,6 @@
 # Event Model
 
-> 状态：保留 Stage 0 概念边界；Stage 2 已建立不可变事件、命令原子提交、知识隔离、canonical ledger、回放及资源级 CAS。C-003E2 增加 CharacterBeliefFormed v1。候选激活、世界模拟、Director 与 Agent 未实现。
+> 状态：保留 Stage 0 概念边界；Stage 2 已建立不可变事件、命令原子提交、知识隔离、canonical ledger、回放及资源级 CAS。C-006B 增加 deterministic ActionProposal→resolution→WorldEvent 路径和发生时感知快照。候选计划、Director、Agent 与 Character cognition 未实现。
 
 规则来源：[PRODUCT_SPEC.md](../product/PRODUCT_SPEC.md) 中的 FR-01、FR-02、FR-04 至 FR-15、FR-22 至 FR-24。规划责任见 [DIRECTOR_MODEL.md](DIRECTOR_MODEL.md)，信息归属见 [KNOWLEDGE_MODEL.md](KNOWLEDGE_MODEL.md)。
 
@@ -12,7 +12,7 @@ CandidateEvent != WorldEvent
 
 **候选事件只有被激活后才成为真正的世界事实。**
 
-CandidateEvent 表达一个可能发生、尚待处理的世界事件；WorldEvent 表达已经实际发生的世界事件。来自候选的 WorldEvent 必须经过激活；是否所有 WorldEvent 都必须先成为候选、玩家即时行为如何形成事件，仍待确认。World Plan 与 Event Reservoir 中存在某个候选，不意味着该事件已发生。延期或取消候选也不意味着发生过该候选描述的事情。
+CandidateEvent 表达一个可能发生、尚待处理的世界事件；WorldEvent 表达已经实际发生的世界事件。来自候选的 WorldEvent 必须经过激活；玩家即时行动可经 C-006B 的 typed ActionProposal、authority/precondition validation 和 deterministic resolver 成为 WorldEvent，不要求先建立 CandidateEvent。World Plan 与 Event Reservoir 中存在某个候选，不意味着该事件已发生。延期或取消候选也不意味着发生过该候选描述的事情。
 
 | 概念 | Purpose | 事实边界 |
 | --- | --- | --- |
@@ -97,6 +97,14 @@ Source 指针不赋予 source owner 的知识读取权限。AcquireKnowledge 仍
 
 只在事件、投影、回执均成功后 commit；异常全部 rollback，同一未提交请求可由调用方明确重试。成功重试包含进程/engine 重启，不产生第二组事件或额外 revision。C-003E1 已建立 canonical 顺序与投影重建，C-003E2 已建立资源级乐观并发；没有自动 semantic retry。
 
+### C-006B Action 与 Perception 合约
+
+`ActionProposal != WorldEvent`。Proposal 只是 typed proposer 请求 actor 执行动作；普通 `REJECTED` 只保存 bounded typed result/receipt，不产生 WorldEvent、projection mutation、Observation、KnowledgeAssertion 或 Memory。当前生产 proof resolver 为 `move_player` v1，成功沿用现有 `PlayerMoved` v1 payload/replay 合约，不创建第二套事件目录或移动语义。
+
+accepted action 在同一个 UoW 中按固定 event ordinal 分配 canonical ledger position、CAS mutation、写 occurrence audience 的 event-target Observation 并保存 receipt。单事件移动的显式 occurrence rule 是 actor、origin location 的 pre-transition present principals、destination location 的 pre-transition present principals之并集；每个 event/principal 最多一条 `witnessed + event_occurrence` Observation。可空 basis 保持普通 Observation 可有相同坐标的独立 occurrence。零 observer 不妨碍 WorldEvent 成为事实。
+
+`WorldEvent != Perception != Knowledge != Memory`。WorldEvent 回答发生了什么；Observation(EventId) 回答当时谁有访问依据。后者不带 proposition，不自动授予知识。已经提交的 audience 是不可变历史快照，后续 movement/Scene/relationship/clock 变化和 projection replay 均不得依据当前状态重算。详见 [SCENES_AND_PERCEPTION.md](SCENES_AND_PERCEPTION.md)。
+
 ## C-003E1 Canonical Ledger Position
 
 C-003E2 再次审计 PlayerMoved、CharacterPlaced、RelationshipChanged：此前 fold 提供 previous revision，现有 resulting revision 与前态字段足以验证转换，保留 v1 不改写历史。新增信念事件后目录共 12 类 v1。并发 loser 不进入 ledger，winner 重建结果等于已提交状态；完整验收见 [STAGE_2_ACCEPTANCE.md](STAGE_2_ACCEPTANCE.md)。CAS 或 INSERT 冲突时，事件、分配游标、投影和成功 receipt 同事务完整回滚，不发“attempted but conflicted” canonical event。
@@ -111,7 +119,7 @@ C-003E2 再次审计 PlayerMoved、CharacterPlaced、RelationshipChanged：此�
 - 旧历史经核验普通 SQLite rowid 与追加路径后，每世界 `_rowid_ ASC` 一次性回填 1..N。**legacy migration order != future canonical replay semantics**；未知旧顺序明确失败，无 timestamp/UUID fallback。
 - 原 UPDATE/DELETE/REPLACE 保护覆盖位置；重建从不修改事件或解除触发器，也不产生回执。
 
-11 类已发出的 v1 payload 均已在实现前逐项核验，可以从 ledger 恢复已有 Stage 2 状态，不依赖当前投影。Knowledge 与 Observation 的完整身份、owner/source/provenance、值与时间直接来自 payload，ObservationId 保留，不重新生成。按 `(event_type, payload_version)` 显式分发，未知类型/版本、非法 payload、顺序或约束失败会完整回滚。审计目录和重建边界见 [REPLAY_MODEL.md](REPLAY_MODEL.md)，迁移与原子分配见 [PERSISTENCE_MODEL.md](PERSISTENCE_MODEL.md)。
+12 类已发出的 v1 payload 均已在实现前逐项核验，可以从 ledger 恢复已有 Stage 2 状态，不依赖当前投影。知识命令产生的 assertion-target Observation 身份、owner/source/provenance、值与时间直接来自 payload，ObservationId 保留，不重新生成。C-006B event-target Observation 不是从事件 payload 重建的投影，而是原子提交并原样保留的发生时授权记录。按 `(event_type, payload_version)` 显式分发，未知类型/版本、非法 payload、顺序或约束失败会完整回滚。审计目录和重建边界见 [REPLAY_MODEL.md](REPLAY_MODEL.md)，迁移与原子分配见 [PERSISTENCE_MODEL.md](PERSISTENCE_MODEL.md)。
 
 ## 2. 候选的语义生命周期
 

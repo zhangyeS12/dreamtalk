@@ -1,6 +1,6 @@
 # LivingWorld 领域概念模型
 
-状态：Stage 0 领域语言保留；Stage 2 已建立领域模型、SQLite 映射、命令事务、知识隔离、canonical ledger、回放及资源级乐观并发；Stage 3 建立独立创作内容边界；C-006A 新增 game-neutral ScheduledSimulationTrigger / SimulationActivation。见 [COMMAND_MODEL.md](COMMAND_MODEL.md)、[PERSISTENCE_MODEL.md](PERSISTENCE_MODEL.md)、[STAGE_2_ACCEPTANCE.md](STAGE_2_ACCEPTANCE.md)、[CONTENT_MODEL.md](CONTENT_MODEL.md) 和 [SIMULATION_SCHEDULER.md](SIMULATION_SCHEDULER.md)。Director、Agent、业务 HTTP API 与世界业务模拟仍未实现。
+状态：Stage 0 领域语言保留；Stage 2 已建立领域模型、SQLite 映射、命令事务、知识隔离、canonical ledger、回放及资源级乐观并发；Stage 3 建立独立创作内容边界；C-006A 新增 game-neutral ScheduledSimulationTrigger / SimulationActivation；C-006B 新增 typed ActionProposal、persistent Scene 和 event-time perception。见 [COMMAND_MODEL.md](COMMAND_MODEL.md)、[ACTION_RESOLUTION.md](ACTION_RESOLUTION.md)、[SCENES_AND_PERCEPTION.md](SCENES_AND_PERCEPTION.md)、[PERSISTENCE_MODEL.md](PERSISTENCE_MODEL.md)、[CONTENT_MODEL.md](CONTENT_MODEL.md) 和 [SIMULATION_SCHEDULER.md](SIMULATION_SCHEDULER.md)。Director、Agent、Character cognition 与业务 HTTP API 仍未实现。
 
 ## C-004A 内容与运行状态边界
 
@@ -23,7 +23,7 @@ Stage 2 已建立 canonical ledger、内部回放及资源级乐观并发；Dire
 
 ## 阅读约定
 
-- 本文包含 28 个领域对象。`Owns` 表示概念上负责的内容，不表示数据库字段、存储位置、服务边界或程序类。
+- 本文按编号保留 Stage 0 概念，并在对应阶段增加已冻结的运行时对象。`Owns` 表示概念上负责的内容，不表示数据库字段、存储位置、服务边界或程序类。
 - `Important invariants` 中引用的 FR 编号对应 [PRODUCT_SPEC.md](../product/PRODUCT_SPEC.md) 的 24 条冻结产品规则。
 - 已冻结规则保持明确约束；尚未冻结的具体语义以“待确认”标出，不在本文中替产品作决定。
 - Director 与 Character Agent 是职责角色：Director 改变世界、调度活动；Character Agent 负责自己拥有的记忆、人格表达及与玩家对话。Director 不能直接替 Character Agent 编写最终对玩家台词。
@@ -48,13 +48,15 @@ Stage 2 已建立 canonical ledger、内部回放及资源级乐观并发；Dire
 
 | 模块 | 已实现模型 / 值 | 当前职责 |
 | --- | --- | --- |
-| [identifiers.py](../../services/core/src/livingworld/domain/identifiers.py) | WorldId、LocationId、PlayerId、CharacterId、EventId、KnowledgeAssertionId、ObservationId、CorrelationId、PrincipalId | UUID 的具体类型；地点/参与者/事件/断言/观察引用携带 WorldId；PrincipalId 为 CharacterId 或 PlayerId |
+| [identifiers.py](../../services/core/src/livingworld/domain/identifiers.py) | WorldId、LocationId、PlayerId、CharacterId、SceneId、SceneParticipantId、EventId、KnowledgeAssertionId、ObservationId、CorrelationId、PrincipalId | UUID 的具体类型；地点/参与者/场景/事件/断言/观察引用携带 WorldId；PrincipalId 为 CharacterId 或 PlayerId |
 | [values.py](../../services/core/src/livingworld/domain/values.py) | WorldTime、Revision、不可变 JSON 值、UTC 校验 | 两条时间轴、版本检查、嵌套结构的防御性复制 |
 | [world.py](../../services/core/src/livingworld/domain/world.py) | World、WorldClock、Location、LocationConnection | 世界身份、双时间时钟快照、地点及有序拓扑连接；不定义移动耗时或通行策略 |
 | [participants.py](../../services/core/src/livingworld/domain/participants.py) | Player、PlayerPresence、Character、CharacterState | 静态定义和运行状态分离；玩家单一位置、activity 与 Busy/Available 独立 |
 | [relationships.py](../../services/core/src/livingworld/domain/relationships.py) | Relationship、RelationshipMetrics | 同世界主体的有向关系及版本；C-003C 三项内部整数指标，无普通玩家数值接口 |
 | [events.py](../../services/core/src/livingworld/domain/events.py) | WorldEvent | 独立事件身份、双时间、版本化不可变 payload 和因果/关联/幂等元数据 |
 | [knowledge.py](../../services/core/src/livingworld/domain/knowledge.py) | KnowledgeAssertion、Observation | scope/owner 约束、结构化断言、世界有效期、来源和显式观察渠道 |
+| [actions.py](../../services/core/src/livingworld/domain/actions.py) | ActionProposal、ActionProposer、MovePlayerPayload、PerceptionAudience | typed proposal/payload、proposer/actor 分离、稳定结果原因与 allowlisted audience selector |
+| [scenes.py](../../services/core/src/livingworld/domain/scenes.py) | Scene、SceneParticipant | 单地点 OPEN/CLOSED 场景、不可删除的参与历史与版本转换 |
 | [commands.py](../../services/core/src/livingworld/domain/commands.py) | CommandReceipt | 复用 [contracts.py](../../services/core/src/livingworld/domain/contracts.py) 的 RequestId，定义未来回执元数据；不执行命令或去重 |
 | [errors.py](../../services/core/src/livingworld/domain/errors.py) | DomainInvariantError、CrossWorldReferenceError、InvalidKnowledgeOwnershipError、InvalidPresenceError、ConcurrencyConflictError | 对本任务不变量失败提供明确错误 |
 
@@ -74,6 +76,12 @@ Stage 2 已建立 canonical ledger、内部回放及资源级乐观并发；Dire
 ObservationId 是不可变的同世界 typed UUID，沿用现有 world_id + value 的标识符约定，不把 world_id 编码进 UUID。Observation 必须持有自身 observation_id；principal_id、target_id、channel、observed_at 描述发生了什么，不决定 occurrence 身份。两个独立观察可以拥有完全相同的语义坐标但不同 ObservationId。
 
 RequestId 是命令幂等身份，ObservationId 是观察发生身份；运行时新获知执行生成独立 UUIDv4，既不 hash RequestId，也不 hash 坐标。成功提交后重试由回执返回原 ObservationId；完全回滚的身份从未成为 canonical state，后续合法重试可以生成新身份。旧自然键仅用于 0004 的确定性迁移回填，**legacy backfill identity != runtime identity generation**。迁移与查询边界见 [持久化模型](PERSISTENCE_MODEL.md) 和 [知识访问模型](KNOWLEDGE_ACCESS_MODEL.md)。
+
+### C-006B Action 与事件感知决策：已解决
+
+`ActionProposal != WorldEvent`。ActionProposal 是 typed 请求，分离提出者与虚构 Actor；它只有通过 authority、state/precondition 和 allowlisted deterministic resolver 后，才能在单一事务中提交投影、WorldEvent、发生时 Observation 快照与 RequestId receipt。普通拒绝只有 typed result/receipt，没有虚构事实或知识副作用。Director、System 和 Character Runtime 均不能替 Player 作有意义的选择；Director 也不能冒充 Character。
+
+`WorldEvent != Perception != Knowledge != Memory`。C-006B 复用 Observation 的 EventId target，并以可空 `event_occurrence` basis 标记 Kernel occurrence audience；这不会改变 C-003D 对普通独立 Observation 身份的规则。该 `WITNESSED` observation 没有 proposition，不自动建立 Truth、CharacterBelief、PlayerKnowledge 或 Memory。发生时 audience 一旦提交即为权威历史记录，后续位置、Scene 或 clock 变化不得重算。详细边界见 [ACTION_RESOLUTION.md](ACTION_RESOLUTION.md) 与 [SCENES_AND_PERCEPTION.md](SCENES_AND_PERCEPTION.md)。
 
 测试见 [tests/domain](../../tests/domain/)；领域依赖约束由 [架构测试](../../tests/core/test_architecture.py) 验证。详细事件和知识定义见下方相关文档。
 
@@ -178,25 +186,27 @@ RequestId 是命令幂等身份，ObservationId 是观察发生身份；运行�
 
 ### Purpose
 
-为一段有共同情境的活动或互动提供叙事语境；其精确开始、结束与划分标准待确认。
+表示同一 Location 内一段有界的互动上下文。
 
 ### Owns
 
-场景层面的情境描述及参与者、地点、活动之间的关联。
+不可变 Location、OPEN/CLOSED 生命周期、世界时间起止、Revision，以及 typed Player/Character 参与历史。
 
 ### Does not own
 
-不替代 Location，不自动决定世界事实或知识归属，也不承担角色最终台词生成职责。
+不替代 Location/Presence，不放置或传送主体，不拥有对话文本、Knowledge、Memory，也不承担角色最终台词生成职责。
 
 ### Relationships
 
-关联 Location、Player、Character、WorldEvent、Conversation；可与 Mission 或 OutreachEpisode 发生联系，具体对应关系待确认。
+属于一个 World 和一个不可变 Location；通过 SceneParticipant 关联 Player/Character。WorldEvent 可在发生时选取 active scene participants 作为感知 audience，但 Scene 本身不自动产生事件或知识。
 
 ### Important invariants
 
-- 场景划分不能绕过玩家单一物理地点约束（FR-06）。
-- 出现在场景描述中的后台内容仍受玩家知识边界约束（FR-04、FR-05）。
-- 一个 Scene 是否跨地点、跨时间，以及 Scene 与 Conversation 的边界，待确认。
+- **Scene != Location**；PlayerPresence / CharacterState 是物理位置权威。加入 Scene 要求主体已在 Scene.Location，membership 不会移动主体（FR-06）。
+- Scene 至少一个初始参与者；OPEN 才能 join；CLOSED 不可重开。end 原子关闭所有 active membership；最后一人离开不自动关闭 Scene。
+- 每个 typed principal 同时最多参加一个 active Scene；离开只写 `left_at`，不删除历史。PlayerId 与 CharacterId 即使 UUID bytes 相同也不冲突。
+- 任何 canonical movement 离开 Scene.Location 必须与位置更新同事务结束 active membership；Scene 可继续 OPEN 且无人。
+- Scene 不等于 Conversation；不存在 speaker arbitration、turn history 或对话生成。场景状态不自动生成 KnowledgeAssertion、Memory 或玩家可见内容（FR-04、FR-05）。
 
 ## 6. Player
 

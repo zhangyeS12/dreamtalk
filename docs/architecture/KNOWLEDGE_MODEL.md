@@ -1,6 +1,6 @@
 # 知识模型
 
-状态：保留 Stage 0 语义；C-003A/B 建立领域与独立存储，C-003D 实现绑定主体的 SQL 隔离读取、内部 AssertWorldTruth/AcquireKnowledge 命令与独立 ObservationId。未实现自动传播、推理、Memory 或语义检索。访问与事务细节见 [KNOWLEDGE_ACCESS_MODEL.md](KNOWLEDGE_ACCESS_MODEL.md)。依据 [PRODUCT_SPEC.md](../product/PRODUCT_SPEC.md) 的 FR-03、FR-04、FR-05、FR-07、FR-17 至 FR-20、FR-22、FR-23，以及已接受的 [Architecture Review 001](ARCHITECTURE_REVIEW_001.md)。
+状态：保留 Stage 0 语义；C-003A/B 建立领域与独立存储，C-003D 实现绑定主体的 SQL 隔离读取、内部 AssertWorldTruth/AcquireKnowledge 命令与独立 ObservationId；C-006B 复用 event-target Observation 记录事件发生时的感知访问。未实现自动传播、推理、Memory 或语义检索。访问与事务细节见 [KNOWLEDGE_ACCESS_MODEL.md](KNOWLEDGE_ACCESS_MODEL.md) 与 [SCENES_AND_PERCEPTION.md](SCENES_AND_PERCEPTION.md)。依据 [PRODUCT_SPEC.md](../product/PRODUCT_SPEC.md) 的 FR-03、FR-04、FR-05、FR-07、FR-17 至 FR-20、FR-22、FR-23，以及已接受的 [Architecture Review 001](ARCHITECTURE_REVIEW_001.md)。
 
 ## 1. 三种不同的语义
 
@@ -38,13 +38,15 @@ channel 必须为 ObservationChannel 的 `witnessed / told / message / news / do
 
 Observation 身份歧义已解决：自身 ID、主体、目标须同世界；相同 receiver/source/channel/observed_at 可以对应不同 observation_id，坐标不再是 UNIQUE 身份。RequestId 仅保护命令重试，成功重试返回已提交的原 ObservationId。新执行随机生成 UUIDv4；旧行仅在迁移时由原坐标规范序列化后 UUIDv5 回填：**legacy backfill identity != runtime identity generation**。
 
+C-006B 明确使用 `target_id=EventId`、`channel=witnessed`、`basis=event_occurrence` 表示主体在 WorldEvent 发生时具备感知访问。可空 basis 只标记 Kernel occurrence audience；basis=None 的既有/普通 Observation 继续允许相同语义坐标的独立 occurrence。它只记录 event-time access/provenance，不复制事件 payload，不自动生成 KnowledgeAssertion 或 Memory。无观察者的 WorldEvent 合法；未入 audience 的主体没有 Observation，不能用“所有人可读事件再由 Prompt 保密”代替该授权边界。已经提交的 event-target Observation 不随当前 Presence/Scene 重算。
+
 权限过滤必须先于 semantic retrieval / prompt assembly；C-003D 在 SQL 中执行世界/scope/owner 条件。错误所有权抛出 InvalidKnowledgeOwnershipError，跨世界引用抛出 CrossWorldReferenceError。
 
 ### C-003B 存储约束
 
 详见 [PERSISTENCE_MODEL.md](PERSISTENCE_MODEL.md)。KnowledgeAssertionRecord 以 CHECK 强制上述 scope/owner 组合，复合外键保证 owner、来源事件和来源断言存在于同一 world；valid_from/to 保存整数 WorldTime，拒绝倒序。confidence 使用精确 Decimal 文本，value 以 JSON 保存并在返回领域时冻结；不同主体可保留相互冲突的认知。
 
-ObservationRecord 使用具体 principal/target 类型分支及同世界 FK，channel 限制为已定义枚举，observed_at 保存 WorldTime，可选 created_at 保留 aware UTC 语义。0004 改为 (world_id, observation_id) 主键，保留旧语义字段、所有行和 FK/CHECK，取消坐标唯一性。单独保存 Observation 不授予知识；AcquireKnowledge 原子建立接收方自有断言。数据库 ownership CHECK 与 SQL 读取授权共同保持边界。
+ObservationRecord 使用具体 principal/target 类型分支及同世界 FK，channel 限制为已定义枚举，observed_at 保存 WorldTime，可选 created_at 保留 aware UTC 语义。0004 改为 (world_id, observation_id) 主键，保留旧语义字段、所有行和 FK/CHECK，取消坐标唯一性。0012 增加可空 basis，只对 `event_occurrence` event-target rows 增加每 event/principal 唯一，并增加主体历史索引；basis=None 及 assertion-target occurrence 仍可独立存在。单独保存 Observation 不授予知识；AcquireKnowledge 原子建立接收方自有断言。数据库 ownership CHECK 与 SQL 读取授权共同保持边界。
 
 ### C-003D 显式获知与读取
 

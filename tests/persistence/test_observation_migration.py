@@ -88,9 +88,14 @@ def test_legacy_observations_preserved_and_backfill_deterministic(tmp_path):
                 await database.initialize()
                 after = await observations(database)
                 assert [
-                    {key: value for key, value in row.items() if key != "observation_id"}
+                    {
+                        key: value
+                        for key, value in row.items()
+                        if key not in {"observation_id", "basis"}
+                    }
                     for row in after
                 ] == before
+                assert all(row["basis"] is None for row in after)
                 migration = import_module(
                     "livingworld.infrastructure.persistence.migrations.versions.0004_observation_identity"
                 )

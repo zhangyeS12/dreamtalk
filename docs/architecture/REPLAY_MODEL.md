@@ -1,6 +1,6 @@
 # Canonical Ledger & Projection Replay（C-003E1 / C-003E2）
 
-状态：内部 canonical reader、纯 versioned fold、世界内原子重建已实现；C-003E2 新增 CharacterBeliefFormed v1 回放与并发赢家重建验收。不增加业务 API、自动启动修复、世界推进、Timeline/Checkpoint 或智能层。
+状态：内部 canonical reader、纯 versioned fold、世界内原子重建已实现；C-003E2 新增 CharacterBeliefFormed v1 回放与并发赢家重建验收；C-006B 明确 event-time perception 是原样保留的历史授权记录。不增加业务 API、自动启动修复、世界推进、Timeline/Checkpoint 或智能层。
 
 ## 1. 顺序与身份
 
@@ -61,6 +61,8 @@ fold 的中间状态只来自先前 canonical event。它不读取数据库当�
 
 世界 identity 行保留作为 immutable ledger/receipt/cursor 的 FK anchor，其完整 mutable name/revision 与 WorldClock 均从 WorldCreated 恢复。临时 defer 外键使投影父项可在同事务内恢复；foreign_keys 和追加保护始终有效。最终检查该世界的完整引用，commit 前不能留下悬空关系。
 
+C-006B event-target Observation 不由 WorldEvent payload 推导：它是在原 action transaction 内按 occurrence audience 提交的 authoritative historical access record。重建只删除并恢复由 ObservationRecorded/KnowledgeAcquired 表达的 assertion-target Observation；`target_kind=event` 的行原样保留，绝不根据当前 Presence、Scene membership 或关系重算，也不会因 replay 重复插入。Scene 生命周期当前没有 canonical event，因此 Scene/participant state 同样不在此重建范围。
+
 空 ledger、跨世界 entry、位置非严格递增、重复事件/投影身份、未知类型/版本、非法 payload、缺失来源、领域错误或 DB 约束失败：不提交，所有清理/写回完整回滚，旧投影可继续读取。错误消息不输出 payload 内容。没有 best-effort 跳过、部分 commit 或自动重试。
 
 ## 4. 可回放边界
@@ -73,7 +75,9 @@ fold 的中间状态只来自先前 canonical event。它不读取数据库当�
 | Character / CharacterState | 恢复身份和已明确放置的状态；未放置角色不虚构位置 |
 | Relationship | 恢复有向边与内部三项 metrics/revision，不生成反向边或玩家评分展示 |
 | KnowledgeAssertion | 恢复 Truth / CharacterBelief / PlayerKnowledge 及原 owner/source/provenance、有效期/值/认知元数据 |
-| Observation | 保留原 ObservationId 及完整语义，允许同坐标独立 occurrence |
+| assertion-target Observation | 从知识事件恢复原 ObservationId 及完整语义，允许同坐标独立 occurrence |
+| event-target Observation | 原样保留发生时 audience snapshot；不从当前 state 重算或重复插入 |
+| Scene / SceneParticipant | 当前生命周期没有 canonical event，原样保留；不由 PlayerMoved replay 推导 membership history |
 | WorldEvent / CommandReceipt / ledger cursor | 全部保持原样，**CommandReceipt 不从事件重建** |
 | Alembic / legacy audit / runtime metadata | 全部保持原样 |
 | LocationConnection | 当前没有 canonical 创建事件，保持原样；无法恢复其引用时失败，而非复制旧地点补救 |

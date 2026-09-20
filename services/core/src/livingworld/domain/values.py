@@ -19,6 +19,8 @@ from livingworld.domain.identifiers import (
     LocationId,
     ObservationId,
     PlayerId,
+    SceneId,
+    SceneParticipantId,
     TriggerId,
     WorldId,
 )
@@ -32,6 +34,8 @@ type ScopedId = (
     | ObservationId
     | TriggerId
     | ActivationId
+    | SceneId
+    | SceneParticipantId
 )
 type JsonValue = None | bool | int | float | str | tuple[JsonValue, ...] | Mapping[str, JsonValue]
 
@@ -90,6 +94,8 @@ def same_world(world_id: WorldId, *references: ScopedId) -> None:
                 ObservationId,
                 TriggerId,
                 ActivationId,
+                SceneId,
+                SceneParticipantId,
             ),
             "world-scoped reference",
         )

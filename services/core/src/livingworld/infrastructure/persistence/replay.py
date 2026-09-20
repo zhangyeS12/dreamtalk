@@ -88,8 +88,15 @@ class SqlAlchemyProjectionRebuildUnitOfWork:
             raise ReplayError("Projection constraint validation failed") from None
 
     async def clear(self) -> None:
+        # Event-target Observations are immutable event-time perception snapshots.
+        # They are not reconstructed from current Presence/Scene state during replay.
+        await self._session.execute(
+            delete(ObservationRecord).where(
+                ObservationRecord.world_id == self._world_id.value,
+                ObservationRecord.target_kind == "assertion",
+            )
+        )
         for record in (
-            ObservationRecord,
             KnowledgeAssertionRecord,
             RelationshipRecord,
             CharacterStateRecord,

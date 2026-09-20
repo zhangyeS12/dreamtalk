@@ -39,10 +39,11 @@ priority 是 `HIGH=-1 / NORMAL=0 / LOW=1` 的小型机械枚举，数值越小�
 ```text
 ScheduledSimulationTrigger = 未来某项工作何时到期
 SimulationActivation       = 该工作已到期且可被后续系统消费
+ActionProposal             = typed 来源请求某个动作发生
 WorldEvent                 = fictional world 中已经被 Kernel 接受并提交的事实
 ```
 
-**Activation != WorldEvent**。计时器在 08:00 唤醒“考虑 Billy 的早晨活动”，不等于 Billy 已去咖啡店，也不创建 WorldTruth、CharacterBelief、PlayerKnowledge、Observation 或 Relationship 变化。
+**Activation != ActionProposal != WorldEvent**。计时器在 08:00 唤醒“考虑 Billy 的早晨活动”，不等于 Billy 已去咖啡店，也不创建 WorldTruth、CharacterBelief、PlayerKnowledge、Observation 或 Relationship 变化。C-006B 的 ActionProposal 可选保存 source ActivationId 作为后续因果追踪，但 action 的存在、接受或拒绝均不会自动消费、完成或改写 Activation；消费政策仍属于后续 runtime 任务。
 
 一个 one-shot trigger 的 materialization 在一个 `BEGIN IMMEDIATE` transaction 中完成：读取 deterministic due batch，插入唯一 source_trigger_id 的 Activation，并把 Trigger 从 PENDING 改为 FIRED。commit 前失败会整体 rollback，留下 PENDING 且无 Activation；commit 后两者都 durable；重试不产生第二个 Activation。没有容易永久卡住的 RUNNING 状态。
 

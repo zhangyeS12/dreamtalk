@@ -42,6 +42,10 @@ class ObservationChannel(StrEnum):
     INFERRED = "inferred"
 
 
+class ObservationBasis(StrEnum):
+    EVENT_OCCURRENCE = "event_occurrence"
+
+
 @dataclass(frozen=True, slots=True)
 class KnowledgeAssertion:
     assertion_id: KnowledgeAssertionId
@@ -106,6 +110,7 @@ class Observation:
     observed_at: WorldTime
     created_at: datetime | None = None
     observation_id: ObservationId = field(kw_only=True)
+    basis: ObservationBasis | None = None
 
     def __post_init__(self) -> None:
         require_type(self.observation_id, ObservationId, "observation_id")
@@ -114,5 +119,14 @@ class Observation:
         same_world(self.world_id, self.observation_id, self.principal_id, self.target_id)
         require_type(self.channel, ObservationChannel, "channel")
         require_type(self.observed_at, WorldTime, "observed_at")
+        if self.basis is not None:
+            require_type(self.basis, ObservationBasis, "observation basis")
+            if self.basis is ObservationBasis.EVENT_OCCURRENCE and (
+                not isinstance(self.target_id, EventId)
+                or self.channel is not ObservationChannel.WITNESSED
+            ):
+                raise DomainInvariantError(
+                    "event_occurrence Observation requires an Event target and witnessed channel"
+                )
         if self.created_at is not None:
             object.__setattr__(self, "created_at", utc_timestamp(self.created_at, "created_at"))
