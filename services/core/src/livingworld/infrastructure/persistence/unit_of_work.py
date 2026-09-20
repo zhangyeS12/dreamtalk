@@ -40,6 +40,7 @@ from livingworld.domain.relationships import Relationship
 from livingworld.domain.scenes import Scene, SceneParticipant
 from livingworld.domain.values import Revision, WorldTime
 from livingworld.domain.world import Location, World
+from livingworld.infrastructure.persistence.activation import SqlAlchemyActivationRepository
 from livingworld.infrastructure.persistence.errors import (
     PersistenceConflictError,
     PersistenceDataError,
@@ -51,6 +52,7 @@ from livingworld.infrastructure.persistence.models import (
     CommandReceiptRecord,
     KnowledgeAssertionRecord,
     LocationRecord,
+    ObservationRecord,
     PlayerPresenceRecord,
     PlayerRecord,
     RelationshipRecord,
@@ -320,6 +322,27 @@ class SceneRepository:
         ).one_or_none()
         return to_domain(record) if record is not None else None
 
+    async def active_characters_bounded(
+        self, scene_id: SceneId, limit: int
+    ) -> tuple[tuple[CharacterId, ...], bool]:
+        values = (
+            await self._session.scalars(
+                select(SceneParticipantRecord.principal_id)
+                .where(
+                    SceneParticipantRecord.world_id == scene_id.world_id.value,
+                    SceneParticipantRecord.scene_id == scene_id.value,
+                    SceneParticipantRecord.principal_kind == "character",
+                    SceneParticipantRecord.left_at.is_(None),
+                )
+                .order_by(SceneParticipantRecord.principal_id)
+                .limit(limit + 1)
+            )
+        ).all()
+        return (
+            tuple(CharacterId(scene_id.world_id, value) for value in values[:limit]),
+            len(values) > limit,
+        )
+
     async def add_participant(self, participant: SceneParticipant) -> None:
         await _add_unique(
             self._session,
@@ -487,6 +510,23 @@ class ObservationAppender:
     async def add(self, observation: Observation) -> None:
         self._session.add(to_record(observation))
         await self._session.flush()
+
+    async def has_event_access(self, character_id: CharacterId, event_id: EventId) -> bool:
+        if character_id.world_id != event_id.world_id:
+            return False
+        value = await self._session.scalar(
+            select(ObservationRecord.observation_id)
+            .where(
+                ObservationRecord.world_id == character_id.world_id.value,
+                ObservationRecord.principal_kind == "character",
+                ObservationRecord.principal_id == character_id.value,
+                ObservationRecord.target_kind == "event",
+                ObservationRecord.target_event_id == event_id.value,
+                ObservationRecord.basis == "event_occurrence",
+            )
+            .limit(1)
+        )
+        return value is not None
 
 
 def _decode_id(value: dict):
@@ -702,6 +742,7 @@ class SqlAlchemyUnitOfWork:
         self.scenes = SceneRepository(self._session)
         self.knowledge = KnowledgeMutationRepository(self._session)
         self.observations = ObservationAppender(self._session)
+        self.activations = SqlAlchemyActivationRepository(self._session)
         self.events = EventAppender(self._session)
         self.event_references = EventReferenceReader(self._session)
         self.receipts = CommandReceiptRepository(self._session)

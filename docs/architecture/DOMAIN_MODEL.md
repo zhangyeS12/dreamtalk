@@ -1,6 +1,6 @@
 # LivingWorld 领域概念模型
 
-状态：Stage 0 领域语言保留；Stage 2 已建立领域模型、SQLite 映射、命令事务、知识隔离、canonical ledger、回放及资源级乐观并发；Stage 3 建立独立创作内容边界；C-006A 新增 game-neutral ScheduledSimulationTrigger / SimulationActivation；C-006B 新增 typed ActionProposal、persistent Scene 和 event-time perception。见 [COMMAND_MODEL.md](COMMAND_MODEL.md)、[ACTION_RESOLUTION.md](ACTION_RESOLUTION.md)、[SCENES_AND_PERCEPTION.md](SCENES_AND_PERCEPTION.md)、[PERSISTENCE_MODEL.md](PERSISTENCE_MODEL.md)、[CONTENT_MODEL.md](CONTENT_MODEL.md) 和 [SIMULATION_SCHEDULER.md](SIMULATION_SCHEDULER.md)。Director、Agent、Character cognition 与业务 HTTP API 仍未实现。
+状态：Stage 0 领域语言保留；Stage 2 已建立领域模型、SQLite 映射、命令事务、知识隔离、canonical ledger、回放及资源级乐观并发；Stage 3 建立独立创作内容边界；C-006A/B 建立 scheduler、typed ActionProposal、persistent Scene 和 event-time perception；C-006C 泛化 SimulationActivation 的 target/cause/coalescing/fidelity 边界。见 [COMMAND_MODEL.md](COMMAND_MODEL.md)、[ACTION_RESOLUTION.md](ACTION_RESOLUTION.md)、[SCENES_AND_PERCEPTION.md](SCENES_AND_PERCEPTION.md)、[SPARSE_ACTIVATION.md](SPARSE_ACTIVATION.md)、[SIMULATION_FIDELITY.md](SIMULATION_FIDELITY.md)、[PERSISTENCE_MODEL.md](PERSISTENCE_MODEL.md) 和 [SIMULATION_SCHEDULER.md](SIMULATION_SCHEDULER.md)。Director、Agent、Character cognition 与业务 HTTP API 仍未实现。
 
 ## C-004A 内容与运行状态边界
 
@@ -780,15 +780,15 @@ Token、Latency 和 Cost 的使用记录含义，以及这些使用记录与模�
 
 ### Owns
 
-TriggerId、WorldId、due WorldTime、机械 priority、world-scoped enqueue position、allowlisted kind/version、bounded immutable JSON payload、PENDING/FIRED/CANCELLED 状态、UTC 审计时间和 Revision。
+TriggerId、WorldId、due WorldTime、机械 priority、world-scoped enqueue position、allowlisted trigger kind/version、bounded immutable JSON payload、typed activation target/kind/version/coalescing/attention、PENDING/FIRED/CANCELLED 状态、UTC 审计时间和 Revision。
 
 ### Does not own
 
-不拥有 Character 目标/欲望、Director 剧情判断、WorldEvent、WorldTruth、Knowledge、Relationship、Memory、LLM 调用、calendar、recurrence 或 catch-up policy。
+不拥有 Character 欲望、Director 剧情判断、WorldEvent、WorldTruth、Knowledge、Relationship、Memory、LLM 调用、calendar、recurrence 或 catch-up policy。Character target 只是明确未来 work recipient，不表示 cognition 已执行。
 
 ### Relationships
 
-属于一个 World，按其 WorldClock 的 effective WorldTime 判断 due；一个 fired Trigger 对应至多一个 SimulationActivation。enqueue position 与 WorldEvent ledger position 完全独立。
+属于一个 World，按其 WorldClock 的 effective WorldTime 判断 due；fired Trigger 原子附着一个 typed ScheduledTrigger cause，可能创建独立 SimulationActivation，也可能进入显式兼容的 pending activation。enqueue position 与 WorldEvent ledger position 完全独立。
 
 ### Important invariants
 
@@ -796,16 +796,17 @@ TriggerId、WorldId、due WorldTime、机械 priority、world-scoped enqueue pos
 - 顺序固定为 `(due_at ASC, priority ASC, enqueue_position ASC)`；较小 priority 先执行，同 due/priority 按插入顺序。
 - payload 只允许显式 registry 支持的 kind/version 和最大 16 KiB JSON object，不执行动态 import/callable/expression。
 - RequestId 精确重试返回原 Trigger，不同语义冲突；cancel 不删除 fired 历史。
+- 默认 target 是 WORLD，PLAYER 永远不是 activation target；Character target 必须明确、存在且同世界。
 
 ## 30. SimulationActivation
 
 ### Purpose
 
-表示 ScheduledSimulationTrigger 已到期并被原子 materialize 的 durable work item，供未来 Kernel/Director/Character runtime 消费。
+表示由明确原因产生、供未来 Kernel/Director/Character runtime bounded selection 的 durable work item。它可以来自到期 trigger、可见 WorldEvent、Scene activity 或受信 explicit system seam。
 
 ### Owns
 
-ActivationId、WorldId、唯一 source TriggerId、kind/version、安全 payload、due WorldTime、materialized UTC 与当前 PENDING 状态。
+ActivationId、WorldId、typed WORLD/CHARACTER target、allowlisted ActivationKind/version、due WorldTime、机械 priority、稳定 enqueue position、显式 coalescing key、operational attention、安全 payload、materialized UTC 与当前 PENDING 状态；normalized cause records 保存所有来源。
 
 ### Does not own
 
@@ -813,14 +814,64 @@ ActivationId、WorldId、唯一 source TriggerId、kind/version、安全 payload
 
 ### Relationships
 
-从一个 FIRED ScheduledSimulationTrigger 产生；future resolver 可以消费 Activation 后提出/提交后续 canonical WorldEvent，但 C-006A 不实现消费或结算。
+属于一个 World并关联一个 typed target；通过 SimulationActivationCause 关联一到多个同世界来源。future resolver 可以读取 bounded due candidate 与当前 Character fidelity 后提出后续 ActionProposal，但 C-006C 不实现消费、认知或结算。
 
 ### Important invariants
 
 - **SimulationActivation != WorldEvent**。
-- `(world_id, source_trigger_id)` 唯一；one-shot Trigger 最多一个 Activation。
-- Trigger→FIRED 与 Activation insert 在同一 transaction：commit 前失败两者都不存在，commit 后两者都存在。
-- 世界隔离不可跨越；materialization 不自动修改任何 Knowledge、Relationship 或 WorldEvent 表。
+- WORLD activation 不表示每个 Character 都激活；PLAYER 不是 target。
+- 合并只发生于相同 world/typed target/kind/version/explicit key 的 PENDING work；最早 due 与更紧急 priority 获胜，enqueue position 稳定，全部唯一 cause 保留。
+- `(world_id, source_trigger_id)` 保留 C-006A 的首个 direct audit linkage；one-shot Trigger 的 cause 只附着一次。
+- Trigger→FIRED 与 Activation/cause 在同一 transaction；accepted action 的 projection/Event/Observation/Activation/cause/receipt 也在同一 transaction。
+- 世界隔离不可跨越；WORLD_EVENT→Character 必须已有 EVENT_OCCURRENCE Observation；activation 不授予 Knowledge、Memory 或事件访问。
+
+## 31. SimulationActivationCause
+
+### Purpose
+
+表示某条 sparse work 被创建或合并的一个规范化、可审计原因。
+
+### Owns
+
+typed cause kind、对应 TriggerId/EventId/SceneId/RequestId reference、activation 内稳定 position、semantic request fingerprint 与 safe UTC attachment audit。
+
+### Does not own
+
+不复制 WorldEvent payload，不保存 prompt/dialogue/private memory/secret，不自动拥有 Observation、Knowledge 或动作结果。
+
+### Relationships
+
+属于一个 SimulationActivation；source identity 可在不同 target activation 中重复，例如同一可见事件唤醒多个 Character，但在同一 compatible work 中只出现一次。
+
+### Important invariants
+
+- 原因形状由 kind 严格决定，全部世界内引用必须同世界。
+- 原因查询必须 bounded、按 position 稳定排序并返回 `more_causes`。
+- 精确 source request 重试返回原 work；相同 identity 的不同语义冲突。
+
+## 32. SimulationFidelity
+
+### Purpose
+
+表示 Character activation 被选择时的当前 operational context：DORMANT、BACKGROUND、ACTIVE、SCENE_ACTIVE 或 PLAYER_FACING。
+
+### Owns
+
+基于当前 CharacterState、OPEN Scene active membership、同 Scene Player membership 与受信 attention 的派生分类。
+
+### Does not own
+
+不拥有或改变 WorldTruth、剧情重要性、队列 priority、动作合法性、知识、Memory、LLM model 或 token policy。
+
+### Relationships
+
+只附在 bounded Character activation candidate 上；WORLD candidate 的 fidelity 为 None。它从当前 canonical state 派生，不作为永久 creation-time label 持久化。
+
+### Important invariants
+
+- PLAYER_FACING 要求 Character 与 active Player 实际共享同一个 OPEN Scene；相同 Location 不足以成立。
+- Player 加入/离开后，尚未处理的 activation 在 selection 时升级/降级。
+- fidelity 与 queue priority 永久分离；低 fidelity 不放宽 Kernel rules。
 
 ## 待确认问题索引
 

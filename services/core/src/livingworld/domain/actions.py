@@ -101,6 +101,7 @@ class ActionRejectionReason(StrEnum):
     INVALID_DESTINATION = "invalid_destination"
     CONFLICT = "conflict"
     UNSUPPORTED_ACTION = "unsupported_action"
+    WAKE_FANOUT_TOO_LARGE = "wake_fanout_too_large"
 
 
 class AudienceSelectorKind(StrEnum):

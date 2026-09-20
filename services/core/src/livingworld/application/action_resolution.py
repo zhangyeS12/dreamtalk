@@ -5,7 +5,12 @@ from dataclasses import dataclass, replace
 from hashlib import sha256
 from uuid import uuid4, uuid5
 
-from livingworld.application.errors import EntityNotFoundError, IdempotencyConflictError
+from livingworld.application.activation import ActivationPlanner
+from livingworld.application.errors import (
+    ActivationFanoutTooLargeError,
+    EntityNotFoundError,
+    IdempotencyConflictError,
+)
 from livingworld.application.fingerprints import canonical_json, id_input
 from livingworld.application.player_movement import (
     apply_player_movement,
@@ -38,6 +43,7 @@ from livingworld.domain.identifiers import (
 from livingworld.domain.knowledge import Observation, ObservationBasis, ObservationChannel
 from livingworld.domain.participants import PlayerPresence
 from livingworld.domain.scenes import SceneStatus
+from livingworld.domain.simulation import EventWakeKind, EventWakeSpec, TriggerPriority
 from livingworld.domain.values import utc_timestamp
 
 EVENT_PAYLOAD_VERSION = 1
@@ -79,6 +85,7 @@ class _AcceptedMove:
     before: PlayerPresence
     after: PlayerPresence
     audience: PerceptionAudience
+    wake: EventWakeSpec
 
 
 class AudienceResolver:
@@ -150,10 +157,12 @@ class ActionKindRegistry:
 
 
 class ActionResolutionService:
-    def __init__(self, uow_factory, clock: WallClock):
+    def __init__(self, uow_factory, clock: WallClock, wake_signal=None, activation_planner=None):
         self._uow_factory = uow_factory
         self._clock = clock
+        self._wake_signal = wake_signal
         self._audiences = AudienceResolver()
+        self._activations = activation_planner or ActivationPlanner()
         self._registry = ActionKindRegistry({(ActionKind.MOVE_PLAYER, 1): self._resolve_move})
 
     async def execute(self, request_id: RequestId, proposal: ActionProposal) -> ActionResult:
@@ -185,24 +194,9 @@ class ActionResolutionService:
                 else await resolver(uow, proposal)
             )
             if rejected is not None:
-                result = ActionResult(
-                    request_id,
-                    ActionResolutionStatus.REJECTED,
-                    rejected,
-                    (),
-                    None,
+                return await self._commit_rejection(
+                    uow, request_id, proposal, fingerprint, rejected, now
                 )
-                receipt = CommandReceipt(
-                    request_id,
-                    proposal.world_id,
-                    "ResolveAction",
-                    "rejected",
-                    now,
-                    now,
-                )
-                await uow.receipts.add_action(receipt, fingerprint, result)
-                await uow.commit()
-                return result
 
             assert accepted is not None
             event_id = EventId(
@@ -233,6 +227,22 @@ class ActionResolutionService:
                 actor_id=proposal.actor_id,
                 world_id=proposal.world_id,
             )
+            try:
+                wake_targets = await self._activations.wakes.resolve(
+                    uow,
+                    accepted.wake,
+                    actor_id=proposal.actor_id,
+                    world_id=proposal.world_id,
+                )
+            except ActivationFanoutTooLargeError:
+                return await self._commit_rejection(
+                    uow,
+                    request_id,
+                    proposal,
+                    fingerprint,
+                    ActionRejectionReason.WAKE_FANOUT_TOO_LARGE,
+                    now,
+                )
             await uow.events.append(event)
             await apply_player_movement(
                 uow,
@@ -254,6 +264,15 @@ class ActionResolutionService:
                         basis=ObservationBasis.EVENT_OCCURRENCE,
                     )
                 )
+            activation_results = await self._activations.materialize_event_targets(
+                uow,
+                wake_targets,
+                world_id=proposal.world_id,
+                event_id=event_id,
+                due_at=world.clock.logical_time,
+                priority=TriggerPriority.NORMAL,
+                materialized_at_utc=now,
+            )
             result = ActionResult(
                 request_id,
                 ActionResolutionStatus.ACCEPTED,
@@ -272,7 +291,39 @@ class ActionResolutionService:
             )
             await uow.receipts.add_action(receipt, fingerprint, result)
             await uow.commit()
+            if self._wake_signal is not None and any(
+                item.schedule_changed for item in activation_results
+            ):
+                self._wake_signal.wake(proposal.world_id)
             return result
+
+    @staticmethod
+    async def _commit_rejection(
+        uow,
+        request_id: RequestId,
+        proposal: ActionProposal,
+        fingerprint: str,
+        reason: ActionRejectionReason,
+        now,
+    ) -> ActionResult:
+        result = ActionResult(
+            request_id,
+            ActionResolutionStatus.REJECTED,
+            reason,
+            (),
+            None,
+        )
+        receipt = CommandReceipt(
+            request_id,
+            proposal.world_id,
+            "ResolveAction",
+            "rejected",
+            now,
+            now,
+        )
+        await uow.receipts.add_action(receipt, fingerprint, result)
+        await uow.commit()
+        return result
 
     async def _resolve_move(
         self, uow: UnitOfWork, proposal: ActionProposal
@@ -324,4 +375,12 @@ class ActionResolutionService:
                 ),
             )
         )
-        return None, _AcceptedMove(before, after, audience)
+        wake = (
+            EventWakeSpec(
+                EventWakeKind.SCENE_CHARACTER_PARTICIPANTS,
+                scene_id=proposal.scene_id,
+            )
+            if proposal.scene_id is not None
+            else EventWakeSpec()
+        )
+        return None, _AcceptedMove(before, after, audience, wake)

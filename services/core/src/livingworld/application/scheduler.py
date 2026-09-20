@@ -16,10 +16,15 @@ from livingworld.domain.contracts import RequestId
 from livingworld.domain.errors import DomainInvariantError
 from livingworld.domain.identifiers import CorrelationId, TriggerId, WorldId
 from livingworld.domain.simulation import (
+    ActivationAttention,
+    ActivationKind,
+    ActivationTarget,
     ScheduledSimulationTrigger,
     SimulationActivation,
     SimulationPayload,
     TriggerPriority,
+    validate_activation_contract,
+    validate_coalescing_key,
 )
 from livingworld.domain.values import WorldTime, require_type
 from livingworld.domain.world import ClockState, World
@@ -58,6 +63,11 @@ class ScheduleTrigger:
     payload_version: int
     payload: SimulationPayload
     correlation_id: CorrelationId | None = None
+    activation_target: ActivationTarget | None = None
+    activation_kind: ActivationKind = ActivationKind.WORLD_ORCHESTRATION
+    activation_version: int = 1
+    activation_coalescing_key: str | None = None
+    activation_attention: ActivationAttention = ActivationAttention.NONE
 
     def __post_init__(self) -> None:
         require_type(self.request_id, RequestId, "request_id")
@@ -68,6 +78,17 @@ class ScheduleTrigger:
         require_type(self.due_at, WorldTime, "due_at")
         require_type(self.priority, TriggerPriority, "priority")
         require_type(self.payload, SimulationPayload, "payload")
+        target = self.activation_target or ActivationTarget.world(self.world_id)
+        require_type(target, ActivationTarget, "activation_target")
+        if target.world_id != self.world_id:
+            raise DomainInvariantError("activation target belongs to a different world")
+        object.__setattr__(self, "activation_target", target)
+        require_type(self.activation_kind, ActivationKind, "activation_kind")
+        validate_activation_contract(self.activation_kind, self.activation_version)
+        validate_coalescing_key(self.activation_coalescing_key)
+        require_type(self.activation_attention, ActivationAttention, "activation_attention")
+        if self.activation_attention is ActivationAttention.ACTIVE and target.character_id is None:
+            raise DomainInvariantError("ACTIVE attention is valid only for Character targets")
         if self.correlation_id is not None:
             require_type(self.correlation_id, CorrelationId, "correlation_id")
 
@@ -141,6 +162,18 @@ def schedule_fingerprint(request: ScheduleTrigger) -> str:
         "payload_version": request.payload_version,
         "payload": request.payload.data,
         "correlation_id": str(request.correlation_id.value) if request.correlation_id else None,
+        "activation_target": {
+            "kind": request.activation_target.kind.value,
+            "character_id": (
+                id_input(request.activation_target.character_id)
+                if request.activation_target.character_id is not None
+                else None
+            ),
+        },
+        "activation_kind": request.activation_kind.value,
+        "activation_version": request.activation_version,
+        "activation_coalescing_key": request.activation_coalescing_key,
+        "activation_attention": request.activation_attention.value,
     }
     return sha256(canonical_json(value).encode("utf-8")).hexdigest()
 

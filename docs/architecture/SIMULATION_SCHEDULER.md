@@ -1,6 +1,6 @@
 # Durable Tickless Simulation Scheduler
 
-状态：C-006A 已建立 Stage 5 的确定性时间调度与 durable activation 基础。本文只定义 **何时工作到期**；没有 Director、Character Agent、场景结算、知识传播、关系变化、对话、Memory、LLM 调用或离线 catch-up 策略。
+状态：C-006A 已建立 Stage 5 的确定性时间调度；C-006C 将到期结果接入 typed sparse activation。本文只定义 **何时工作到期**；没有 Director、Character Agent、场景结算、知识传播、关系变化、对话、Memory、LLM 调用或离线 catch-up 策略。定向、合并与 fidelity 见 [Sparse Activation](SPARSE_ACTIVATION.md) 和 [Simulation Fidelity](SIMULATION_FIDELITY.md)。
 
 ## 1. 三种时间
 
@@ -45,7 +45,9 @@ WorldEvent                 = fictional world 中已经被 Kernel 接受并提交
 
 **Activation != ActionProposal != WorldEvent**。计时器在 08:00 唤醒“考虑 Billy 的早晨活动”，不等于 Billy 已去咖啡店，也不创建 WorldTruth、CharacterBelief、PlayerKnowledge、Observation 或 Relationship 变化。C-006B 的 ActionProposal 可选保存 source ActivationId 作为后续因果追踪，但 action 的存在、接受或拒绝均不会自动消费、完成或改写 Activation；消费政策仍属于后续 runtime 任务。
 
-一个 one-shot trigger 的 materialization 在一个 `BEGIN IMMEDIATE` transaction 中完成：读取 deterministic due batch，插入唯一 source_trigger_id 的 Activation，并把 Trigger 从 PENDING 改为 FIRED。commit 前失败会整体 rollback，留下 PENDING 且无 Activation；commit 后两者都 durable；重试不产生第二个 Activation。没有容易永久卡住的 RUNNING 状态。
+一个 one-shot trigger 的 materialization 在一个 `BEGIN IMMEDIATE` transaction 中完成：读取 deterministic due batch，通过 generalized activation repository 插入/合并 Activation 与 typed `SCHEDULED_TRIGGER` cause，并把 Trigger 从 PENDING 改为 FIRED。直接 `source_trigger_id` 仍保留首个历史 linkage，normalized cause history 保留所有合并来源。commit 前失败会整体 rollback，留下 PENDING 且无 Activation/cause；commit 后全部 durable；重试不重复来源。没有容易永久卡住的 RUNNING 状态。
+
+Trigger 明确携带 activation target、ActivationKind/version、可选 coalescing key 与 attention。默认保持 C-006A 的 WORLD / `world_orchestration` v1 / non-coalescing 语义；Character schedule 必须显式使用 typed Character target 和 registry 支持的 kind。PLAYER 不是 target。
 
 ## 4. Application contract
 
@@ -78,10 +80,11 @@ paused World 先 drain 已经 `due_at <= logical anchor` 的工作，然后等�
 | --- | --- |
 | `simulation_queue_cursors` | 每世界最后分配的 enqueue position |
 | `simulation_scheduled_triggers` | durable one-shot queue、状态和安全 payload |
-| `simulation_activations` | 到期 work item；`(world_id, source_trigger_id)` UNIQUE |
+| `simulation_activations` | typed WORLD/CHARACTER work item；source trigger audit linkage、due/priority/enqueue 与可选 coalescing identity |
+| `simulation_activation_causes` | normalized typed cause history；每 activation 稳定 position 与 bounded query |
 | `simulation_schedule_receipts` | schedule RequestId fingerprint/result |
 
-due query 使用 `(world_id,status,due_at,priority,enqueue_position)` 索引。SQLite WAL 下 `BEGIN IMMEDIATE` 先取得 writer 资格；唯一约束、状态事务和 source uniqueness 是正确性依据，asyncio Event/Lock 不是。设计不假装 SQLite 支持 PostgreSQL `FOR UPDATE`。
+due query 使用 `(world_id,status,due_at,priority,enqueue_position)` 索引；另有 typed target、pending coalescing、cause identity 与 cause order 索引。SQLite WAL 下 `BEGIN IMMEDIATE` 先取得 writer 资格；唯一约束、状态事务和 source uniqueness 是正确性依据，asyncio Event/Lock 不是。设计不假装 SQLite 支持 PostgreSQL `FOR UPDATE`。
 
 ## 7. Observability 与边界
 

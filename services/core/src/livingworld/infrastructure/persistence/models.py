@@ -569,6 +569,13 @@ class ScheduledSimulationTriggerRecord(Base):
     revision: Mapped[int] = mapped_column(Integer, nullable=False)
     causation_request_id: Mapped[UUID | None] = mapped_column(UUIDStorage())
     correlation_id: Mapped[UUID | None] = mapped_column(UUIDStorage())
+    activation_target_kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    activation_target_id: Mapped[UUID] = mapped_column(UUIDStorage(), nullable=False)
+    activation_target_character_id: Mapped[UUID | None] = mapped_column(UUIDStorage())
+    activation_kind: Mapped[str] = mapped_column(String(64), nullable=False)
+    activation_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    activation_coalescing_key: Mapped[str | None] = mapped_column(String(128))
+    activation_attention: Mapped[str] = mapped_column(String(16), nullable=False)
     __table_args__ = (
         UniqueConstraint(
             "world_id", "enqueue_position", name="uq_simulation_trigger_enqueue_position"
@@ -597,6 +604,26 @@ class ScheduledSimulationTriggerRecord(Base):
             "(status = 'cancelled' AND fired_at_utc IS NULL AND cancelled_at_utc IS NOT NULL)",
             name="ck_simulation_trigger_status",
         ),
+        ForeignKeyConstraint(
+            ["world_id", "activation_target_character_id"],
+            ["characters.world_id", "characters.character_id"],
+        ),
+        CheckConstraint(
+            "(activation_target_kind = 'world' AND activation_target_id = world_id "
+            "AND activation_target_character_id IS NULL) OR "
+            "(activation_target_kind = 'character' "
+            "AND activation_target_character_id = activation_target_id)",
+            name="ck_simulation_trigger_activation_target",
+        ),
+        CheckConstraint(
+            "activation_version >= 1 AND activation_version <= 65535",
+            name="ck_simulation_trigger_activation_version",
+        ),
+        CheckConstraint(
+            "activation_attention IN ('none','active') "
+            "AND NOT (activation_target_kind = 'world' AND activation_attention = 'active')",
+            name="ck_simulation_trigger_activation_attention",
+        ),
     )
 
 
@@ -606,19 +633,52 @@ class SimulationActivationRecord(Base):
         UUIDStorage(), ForeignKey("worlds.world_id"), primary_key=True
     )
     activation_id: Mapped[UUID] = mapped_column(UUIDStorage(), primary_key=True)
-    source_trigger_id: Mapped[UUID] = mapped_column(UUIDStorage(), nullable=False)
+    source_trigger_id: Mapped[UUID | None] = mapped_column(UUIDStorage())
     kind: Mapped[str] = mapped_column(String(128), nullable=False)
     payload_version: Mapped[int] = mapped_column(Integer, nullable=False)
     due_at: Mapped[WorldTime] = mapped_column(WorldTimeStorage(), nullable=False)
     payload: Mapped[object] = mapped_column(JSONTextStorage(), nullable=False)
     status: Mapped[str] = mapped_column(String(16), nullable=False)
     materialized_at_utc: Mapped[datetime] = mapped_column(UTCTimestampStorage(), nullable=False)
+    target_kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    target_id: Mapped[UUID] = mapped_column(UUIDStorage(), nullable=False)
+    target_character_id: Mapped[UUID | None] = mapped_column(UUIDStorage())
+    activation_kind: Mapped[str] = mapped_column(String(64), nullable=False)
+    activation_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    priority: Mapped[int] = mapped_column(Integer, nullable=False)
+    enqueue_position: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    coalescing_key: Mapped[str | None] = mapped_column(String(128))
+    attention: Mapped[str] = mapped_column(String(16), nullable=False)
     __table_args__ = (
         ForeignKeyConstraint(
             ["world_id", "source_trigger_id"],
             ["simulation_scheduled_triggers.world_id", "simulation_scheduled_triggers.trigger_id"],
         ),
         UniqueConstraint("world_id", "source_trigger_id", name="uq_simulation_activation_source"),
+        UniqueConstraint(
+            "world_id", "enqueue_position", name="uq_simulation_activation_enqueue_position"
+        ),
+        ForeignKeyConstraint(
+            ["world_id", "target_character_id"],
+            ["characters.world_id", "characters.character_id"],
+        ),
+        CheckConstraint(
+            "(target_kind = 'world' AND target_id = world_id "
+            "AND target_character_id IS NULL) OR "
+            "(target_kind = 'character' AND target_character_id = target_id)",
+            name="ck_simulation_activation_target",
+        ),
+        CheckConstraint(
+            "activation_version >= 1 AND activation_version <= 65535",
+            name="ck_simulation_activation_version",
+        ),
+        CheckConstraint("priority IN (-1,0,1)", name="ck_simulation_activation_priority"),
+        CheckConstraint("enqueue_position > 0", name="ck_simulation_activation_enqueue_position"),
+        CheckConstraint(
+            "attention IN ('none','active') "
+            "AND NOT (target_kind = 'world' AND attention = 'active')",
+            name="ck_simulation_activation_attention",
+        ),
         CheckConstraint("typeof(due_at) = 'integer'", name="ck_simulation_activation_due_at_type"),
         CheckConstraint(
             "payload_version >= 1 AND payload_version <= 65535",
@@ -628,6 +688,96 @@ class SimulationActivationRecord(Base):
             "length(kind) >= 1 AND length(kind) <= 128", name="ck_simulation_activation_kind"
         ),
         CheckConstraint("status = 'pending'", name="ck_simulation_activation_status"),
+        Index(
+            "ix_simulation_activation_due",
+            "world_id",
+            "status",
+            "due_at",
+            "priority",
+            "enqueue_position",
+        ),
+        Index("ix_simulation_activation_target", "world_id", "target_kind", "target_id"),
+        Index(
+            "uq_simulation_activation_pending_coalescing",
+            "world_id",
+            "target_kind",
+            "target_id",
+            "activation_kind",
+            "activation_version",
+            "coalescing_key",
+            unique=True,
+            sqlite_where=text("status = 'pending' AND coalescing_key IS NOT NULL"),
+        ),
+    )
+
+
+class SimulationActivationCauseRecord(Base):
+    __tablename__ = "simulation_activation_causes"
+    world_id: Mapped[UUID] = mapped_column(
+        UUIDStorage(), ForeignKey("worlds.world_id"), primary_key=True
+    )
+    activation_id: Mapped[UUID] = mapped_column(UUIDStorage(), primary_key=True)
+    cause_identity: Mapped[str] = mapped_column(String(160), primary_key=True)
+    position: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    cause_kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    source_trigger_id: Mapped[UUID | None] = mapped_column(UUIDStorage())
+    source_event_id: Mapped[UUID | None] = mapped_column(UUIDStorage())
+    source_scene_id: Mapped[UUID | None] = mapped_column(UUIDStorage())
+    scene_activity: Mapped[str | None] = mapped_column(String(32))
+    source_request_id: Mapped[UUID | None] = mapped_column(UUIDStorage())
+    request_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    attached_at_utc: Mapped[datetime] = mapped_column(UTCTimestampStorage(), nullable=False)
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["world_id", "activation_id"],
+            ["simulation_activations.world_id", "simulation_activations.activation_id"],
+        ),
+        ForeignKeyConstraint(
+            ["world_id", "source_trigger_id"],
+            ["simulation_scheduled_triggers.world_id", "simulation_scheduled_triggers.trigger_id"],
+        ),
+        ForeignKeyConstraint(
+            ["world_id", "source_event_id"],
+            ["world_events.world_id", "world_events.event_id"],
+        ),
+        ForeignKeyConstraint(
+            ["world_id", "source_scene_id"], ["scenes.world_id", "scenes.scene_id"]
+        ),
+        UniqueConstraint(
+            "world_id", "activation_id", "position", name="uq_simulation_activation_cause_position"
+        ),
+        CheckConstraint("position > 0", name="ck_simulation_activation_cause_position"),
+        CheckConstraint(
+            "length(request_fingerprint) = 64",
+            name="ck_simulation_activation_cause_fingerprint",
+        ),
+        CheckConstraint(
+            "(cause_kind = 'scheduled_trigger' AND source_trigger_id IS NOT NULL "
+            "AND source_event_id IS NULL AND source_scene_id IS NULL "
+            "AND scene_activity IS NULL AND source_request_id IS NULL) OR "
+            "(cause_kind = 'world_event' AND source_trigger_id IS NULL "
+            "AND source_event_id IS NOT NULL AND source_scene_id IS NULL "
+            "AND scene_activity IS NULL AND source_request_id IS NULL) OR "
+            "(cause_kind = 'scene_activity' AND source_trigger_id IS NULL "
+            "AND source_event_id IS NULL AND source_scene_id IS NOT NULL "
+            "AND scene_activity IS NOT NULL AND source_request_id IS NOT NULL) OR "
+            "(cause_kind = 'explicit_system' AND source_trigger_id IS NULL "
+            "AND source_event_id IS NULL AND source_scene_id IS NULL "
+            "AND scene_activity IS NULL AND source_request_id IS NOT NULL)",
+            name="ck_simulation_activation_cause_shape",
+        ),
+        Index(
+            "ix_simulation_activation_cause_order",
+            "world_id",
+            "activation_id",
+            "position",
+            "cause_identity",
+        ),
+        Index(
+            "ix_simulation_activation_cause_identity",
+            "world_id",
+            "cause_identity",
+        ),
     )
 
 

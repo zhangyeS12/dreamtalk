@@ -26,15 +26,18 @@ PACKAGE_REVISION = "0008_native_content_packages"
 ACCOUNTING_REVISION = "0009_llm_accounting"
 BUDGET_REVISION = "0010_llm_budget_guard"
 SIMULATION_REVISION = "0011_simulation_scheduler"
-HEAD_REVISION = "0012_action_scenes_perception"
+ACTION_REVISION = "0012_action_scenes_perception"
+HEAD_REVISION = "0013_sparse_simulation_activation"
 BUDGET_TABLES = {"llm_budgets", "llm_budget_reservations"}
 SIMULATION_TABLES = {
     "simulation_queue_cursors",
     "simulation_scheduled_triggers",
     "simulation_activations",
+    "simulation_activation_causes",
     "simulation_schedule_receipts",
 }
 ACTION_TABLES = {"scenes", "scene_participants"}
+SPARSE_TABLES = {"simulation_activation_causes"}
 PACKAGE_TABLES = {"content_import_baselines", "content_asset_blob_bindings"}
 LEGACY_CHECKSUM = "0345ec9d50fd45b01ba0f97ff6f14a25f683fb8d01f08f04ff9dc4892ad1cac5"
 LEGACY_TABLES = {"schema_version", "migration_history"}
@@ -187,6 +190,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         ACCOUNTING_REVISION,
         BUDGET_REVISION,
         SIMULATION_REVISION,
+        ACTION_REVISION,
         HEAD_REVISION,
     }:
         _fail("alembic_revision_unsupported")
@@ -204,6 +208,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
             ACCOUNTING_REVISION,
             BUDGET_REVISION,
             SIMULATION_REVISION,
+            ACTION_REVISION,
             HEAD_REVISION,
         }:
             expected -= {"world_ledger_cursors"}
@@ -214,6 +219,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         ACCOUNTING_REVISION,
         BUDGET_REVISION,
         SIMULATION_REVISION,
+        ACTION_REVISION,
         HEAD_REVISION,
     }:
         expected |= CONTENT_TABLES
@@ -222,18 +228,27 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
             ACCOUNTING_REVISION,
             BUDGET_REVISION,
             SIMULATION_REVISION,
+            ACTION_REVISION,
             HEAD_REVISION,
         }:
             expected -= PACKAGE_TABLES
         if revision == CONTENT_REVISION:
             expected -= {"content_lore_collections"}
-    if revision in {ACCOUNTING_REVISION, BUDGET_REVISION, SIMULATION_REVISION, HEAD_REVISION}:
+    if revision in {
+        ACCOUNTING_REVISION,
+        BUDGET_REVISION,
+        SIMULATION_REVISION,
+        ACTION_REVISION,
+        HEAD_REVISION,
+    }:
         expected |= set(AccountingBase.metadata.tables)
         if revision == ACCOUNTING_REVISION:
             expected -= BUDGET_TABLES
-    if revision not in {SIMULATION_REVISION, HEAD_REVISION}:
+    if revision not in {SIMULATION_REVISION, ACTION_REVISION, HEAD_REVISION}:
         expected -= SIMULATION_TABLES
-    if revision != HEAD_REVISION:
+    elif revision != HEAD_REVISION:
+        expected -= SPARSE_TABLES
+    if revision not in {ACTION_REVISION, HEAD_REVISION}:
         expected -= ACTION_TABLES
     if tables != expected:
         _fail("alembic_schema_state_mismatch")
@@ -247,11 +262,18 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         ACCOUNTING_REVISION,
         BUDGET_REVISION,
         SIMULATION_REVISION,
+        ACTION_REVISION,
         HEAD_REVISION,
     }:
         _validate_domain_shape(connection, revision, ContentBase.metadata)
 
-    if revision in {ACCOUNTING_REVISION, BUDGET_REVISION, SIMULATION_REVISION, HEAD_REVISION}:
+    if revision in {
+        ACCOUNTING_REVISION,
+        BUDGET_REVISION,
+        SIMULATION_REVISION,
+        ACTION_REVISION,
+        HEAD_REVISION,
+    }:
         _validate_domain_shape(connection, revision, AccountingBase.metadata)
 
 
@@ -288,9 +310,14 @@ def _validate_domain_shape(
         "ck_command_receipt_command_result",
     }
     for table in metadata.sorted_tables:
-        if revision not in {SIMULATION_REVISION, HEAD_REVISION} and table.name in SIMULATION_TABLES:
+        if (
+            revision not in {SIMULATION_REVISION, ACTION_REVISION, HEAD_REVISION}
+            and table.name in SIMULATION_TABLES
+        ):
             continue
-        if revision != HEAD_REVISION and table.name in ACTION_TABLES:
+        if revision != HEAD_REVISION and table.name in SPARSE_TABLES:
+            continue
+        if revision not in {ACTION_REVISION, HEAD_REVISION} and table.name in ACTION_TABLES:
             continue
         if revision == ACCOUNTING_REVISION and table.name in BUDGET_TABLES:
             continue
@@ -301,6 +328,7 @@ def _validate_domain_shape(
                 ACCOUNTING_REVISION,
                 BUDGET_REVISION,
                 SIMULATION_REVISION,
+                ACTION_REVISION,
                 HEAD_REVISION,
             }
             and table.name in PACKAGE_TABLES
@@ -318,6 +346,7 @@ def _validate_domain_shape(
                 ACCOUNTING_REVISION,
                 BUDGET_REVISION,
                 SIMULATION_REVISION,
+                ACTION_REVISION,
                 HEAD_REVISION,
             }
             and table.name == "world_ledger_cursors"
@@ -328,7 +357,17 @@ def _validate_domain_shape(
             for column in inspector.get_columns(table.name)
         ]
         expected = [
-            (column.name, column.type.compile(dialect=connection.dialect).upper(), column.nullable)
+            (
+                column.name,
+                column.type.compile(dialect=connection.dialect).upper(),
+                False
+                if (
+                    revision != HEAD_REVISION
+                    and table.name == "simulation_activations"
+                    and column.name == "source_trigger_id"
+                )
+                else column.nullable,
+            )
             for column in table.columns
             if not (baseline and column.name in added_columns.get(table.name, set()))
             and not (
@@ -337,9 +376,39 @@ def _validate_domain_shape(
                 and column.name == "observation_id"
             )
             and not (
-                revision != HEAD_REVISION
+                revision not in {ACTION_REVISION, HEAD_REVISION}
                 and table.name == "observations"
                 and column.name == "basis"
+            )
+            and not (
+                revision != HEAD_REVISION
+                and table.name == "simulation_scheduled_triggers"
+                and column.name
+                in {
+                    "activation_target_kind",
+                    "activation_target_id",
+                    "activation_target_character_id",
+                    "activation_kind",
+                    "activation_version",
+                    "activation_coalescing_key",
+                    "activation_attention",
+                }
+            )
+            and not (
+                revision != HEAD_REVISION
+                and table.name == "simulation_activations"
+                and column.name
+                in {
+                    "target_kind",
+                    "target_id",
+                    "target_character_id",
+                    "activation_kind",
+                    "activation_version",
+                    "priority",
+                    "enqueue_position",
+                    "coalescing_key",
+                    "attention",
+                }
             )
             and not (
                 revision
@@ -351,6 +420,7 @@ def _validate_domain_shape(
                     ACCOUNTING_REVISION,
                     BUDGET_REVISION,
                     SIMULATION_REVISION,
+                    ACTION_REVISION,
                     HEAD_REVISION,
                 }
                 and table.name == "world_events"
@@ -385,6 +455,11 @@ def _validate_domain_shape(
             )
             for foreign_key in table.foreign_key_constraints
             if not (
+                revision != HEAD_REVISION
+                and table.name in {"simulation_scheduled_triggers", "simulation_activations"}
+                and foreign_key.referred_table.name == "characters"
+            )
+            if not (
                 revision == CONTENT_REVISION
                 and table.name == "content_lore_entries"
                 and foreign_key.referred_table.name == "content_lore_collections"
@@ -402,6 +477,20 @@ def _validate_domain_shape(
             if isinstance(constraint, CheckConstraint)
             and not (baseline and constraint.name in added_checks)
             and not (
+                revision != HEAD_REVISION
+                and constraint.name
+                in {
+                    "ck_simulation_trigger_activation_target",
+                    "ck_simulation_trigger_activation_version",
+                    "ck_simulation_trigger_activation_attention",
+                    "ck_simulation_activation_target",
+                    "ck_simulation_activation_version",
+                    "ck_simulation_activation_priority",
+                    "ck_simulation_activation_enqueue_position",
+                    "ck_simulation_activation_attention",
+                }
+            )
+            and not (
                 revision
                 not in {
                     LEDGER_REVISION,
@@ -411,12 +500,17 @@ def _validate_domain_shape(
                     ACCOUNTING_REVISION,
                     BUDGET_REVISION,
                     SIMULATION_REVISION,
+                    ACTION_REVISION,
                     HEAD_REVISION,
                 }
                 and constraint.name == "ck_world_event_ledger_position"
             )
         }
-        if table.name == "command_receipts" and revision != HEAD_REVISION and not baseline:
+        if (
+            table.name == "command_receipts"
+            and revision not in {ACTION_REVISION, HEAD_REVISION}
+            and not baseline
+        ):
             expected_checks.discard(
                 (
                     "ck_command_receipt_command_result",
@@ -449,6 +543,10 @@ def _validate_domain_shape(
             tuple(column.name for column in constraint.columns)
             for constraint in table.constraints
             if isinstance(constraint, UniqueConstraint)
+            and not (
+                revision != HEAD_REVISION
+                and constraint.name == "uq_simulation_activation_enqueue_position"
+            )
         }
         actual_uniques = {
             tuple(constraint["column_names"])
@@ -475,18 +573,30 @@ def _validate_domain_shape(
                     ACCOUNTING_REVISION,
                     BUDGET_REVISION,
                     SIMULATION_REVISION,
+                    ACTION_REVISION,
                     HEAD_REVISION,
                 }
                 and index.name == "uq_world_event_ledger_position"
             )
             and not (
-                revision != HEAD_REVISION
+                revision not in {ACTION_REVISION, HEAD_REVISION}
                 and index.name
                 in {
                     "ix_character_state_location",
                     "ix_observation_principal_history",
                     "ix_player_presence_active_location",
                     "uq_observation_event_principal",
+                }
+            )
+            and not (
+                revision != HEAD_REVISION
+                and index.name
+                in {
+                    "ix_simulation_activation_due",
+                    "ix_simulation_activation_target",
+                    "uq_simulation_activation_pending_coalescing",
+                    "ix_simulation_activation_cause_order",
+                    "ix_simulation_activation_cause_identity",
                 }
             )
         }

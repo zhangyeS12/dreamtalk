@@ -521,6 +521,13 @@ def test_due_query_is_indexed_and_runtime_is_world_bounded(scheduler_environment
                     "revision": 0,
                     "causation_request_id": None,
                     "correlation_id": None,
+                    "activation_target_kind": "world",
+                    "activation_target_id": env.world.value,
+                    "activation_target_character_id": None,
+                    "activation_kind": "world_orchestration",
+                    "activation_version": 1,
+                    "activation_coalescing_key": None,
+                    "activation_attention": "none",
                 }
                 for position in range(1, 10_001)
             ]

@@ -10,6 +10,7 @@ from livingworld.domain.commands import CommandReceipt
 from livingworld.domain.contracts import RequestId
 from livingworld.domain.events import WorldEvent
 from livingworld.domain.identifiers import (
+    ActivationId,
     CharacterId,
     EventId,
     KnowledgeAssertionId,
@@ -23,6 +24,12 @@ from livingworld.domain.knowledge import KnowledgeAssertion, Observation
 from livingworld.domain.participants import Character, CharacterState, Player, PlayerPresence
 from livingworld.domain.relationships import Relationship
 from livingworld.domain.scenes import Scene, SceneParticipant
+from livingworld.domain.simulation import (
+    ActivationCandidate,
+    ActivationCausePage,
+    ActivationRequest,
+    ActivationRequestResult,
+)
 from livingworld.domain.values import Revision, WorldTime
 from livingworld.domain.world import Location, World
 
@@ -67,6 +74,9 @@ class SceneRepository(Protocol):
     async def replace(self, scene: Scene, expected_revision: Revision) -> None: ...
     async def active_participants(self, scene_id: SceneId) -> tuple[SceneParticipant, ...]: ...
     async def active_for_principal(self, principal_id: PrincipalId) -> SceneParticipant | None: ...
+    async def active_characters_bounded(
+        self, scene_id: SceneId, limit: int
+    ) -> tuple[tuple[CharacterId, ...], bool]: ...
     async def add_participant(self, participant: SceneParticipant) -> None: ...
     async def leave_participant(self, participant: SceneParticipant) -> None: ...
     async def leave_all(self, scene_id: SceneId, left_at: WorldTime) -> None: ...
@@ -120,6 +130,19 @@ class KnowledgeMutationRepository(Protocol):
 
 class ObservationAppender(Protocol):
     async def add(self, observation: Observation) -> None: ...
+    async def has_event_access(self, character_id: CharacterId, event_id: EventId) -> bool: ...
+
+
+class ActivationRepository(Protocol):
+    async def request(
+        self, request: ActivationRequest, fingerprint: str, materialized_at_utc: datetime
+    ) -> ActivationRequestResult: ...
+    async def list_due_candidates(
+        self, world_id: WorldId, through: WorldTime, max_items: int
+    ) -> tuple[ActivationCandidate, ...]: ...
+    async def causes(
+        self, activation_id: ActivationId, limit: int, offset: int = 0
+    ) -> ActivationCausePage: ...
 
 
 class CommandReceiptRepository(Protocol):
@@ -150,6 +173,7 @@ class UnitOfWork(Protocol):
     scenes: SceneRepository
     knowledge: KnowledgeMutationRepository
     observations: ObservationAppender
+    activations: ActivationRepository
     events: EventAppender
     event_references: EventReferenceReader
     receipts: CommandReceiptRepository

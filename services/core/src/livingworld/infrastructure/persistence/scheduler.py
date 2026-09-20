@@ -4,14 +4,16 @@ from __future__ import annotations
 
 from datetime import datetime
 from sqlite3 import SQLITE_CONSTRAINT_PRIMARYKEY, SQLITE_CONSTRAINT_UNIQUE
-from uuid import uuid4
 
 from sqlalchemy import select
-from sqlalchemy.dialects.sqlite import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import selectinload
 
+from livingworld.application.activation import (
+    ActivationKindRegistry,
+    activation_request_fingerprint,
+)
 from livingworld.application.errors import (
     EntityAlreadyExistsError,
     EntityNotFoundError,
@@ -25,9 +27,15 @@ from livingworld.application.scheduler import (
     TriggerKindRegistry,
 )
 from livingworld.domain.contracts import RequestId
-from livingworld.domain.identifiers import ActivationId, CorrelationId, TriggerId, WorldId
+from livingworld.domain.identifiers import CharacterId, CorrelationId, TriggerId, WorldId
 from livingworld.domain.simulation import (
-    ActivationStatus,
+    ActivationAttention,
+    ActivationCause,
+    ActivationCauseKind,
+    ActivationKind,
+    ActivationRequest,
+    ActivationTarget,
+    ActivationTargetKind,
     ScheduledSimulationTrigger,
     SimulationActivation,
     SimulationPayload,
@@ -36,12 +44,17 @@ from livingworld.domain.simulation import (
 )
 from livingworld.domain.values import Revision, WorldTime
 from livingworld.domain.world import World
+from livingworld.infrastructure.persistence.activation import (
+    SqlAlchemyActivationRepository,
+    activation_from_record,
+    allocate_simulation_position,
+)
 from livingworld.infrastructure.persistence.errors import PersistenceConflictError
 from livingworld.infrastructure.persistence.mapping import to_domain
 from livingworld.infrastructure.persistence.models import (
+    CharacterRecord,
     ScheduledSimulationTriggerRecord,
     SimulationActivationRecord,
-    SimulationQueueCursorRecord,
     SimulationScheduleReceiptRecord,
     WorldRecord,
 )
@@ -58,6 +71,17 @@ def _trigger(record: ScheduledSimulationTriggerRecord) -> ScheduledSimulationTri
         kind=record.kind,
         payload_version=record.payload_version,
         payload=SimulationPayload(record.payload),
+        activation_target=(
+            ActivationTarget.world(world_id)
+            if record.activation_target_kind == ActivationTargetKind.WORLD.value
+            else ActivationTarget.character(
+                CharacterId(world_id, record.activation_target_character_id)
+            )
+        ),
+        activation_kind=ActivationKind(record.activation_kind),
+        activation_version=record.activation_version,
+        activation_coalescing_key=record.activation_coalescing_key,
+        activation_attention=ActivationAttention(record.activation_attention),
         status=TriggerStatus(record.status),
         created_at_utc=record.created_at_utc,
         fired_at_utc=record.fired_at_utc,
@@ -70,30 +94,63 @@ def _trigger(record: ScheduledSimulationTriggerRecord) -> ScheduledSimulationTri
     )
 
 
-def _activation(record: SimulationActivationRecord) -> SimulationActivation:
-    world_id = WorldId(record.world_id)
-    return SimulationActivation(
-        activation_id=ActivationId(world_id, record.activation_id),
-        world_id=world_id,
-        source_trigger_id=TriggerId(world_id, record.source_trigger_id),
-        kind=record.kind,
-        payload_version=record.payload_version,
-        due_at=record.due_at,
-        payload=SimulationPayload(record.payload),
-        status=ActivationStatus(record.status),
-        materialized_at_utc=record.materialized_at_utc,
-    )
-
-
 async def _begin_write(session: AsyncSession) -> None:
     await session.begin()
     await session.connection(execution_options={"livingworld_write_intent": True})
 
 
+def _activation_request_from_schedule(request: ScheduleTrigger) -> ActivationRequest:
+    return ActivationRequest(
+        world_id=request.world_id,
+        target=request.activation_target,
+        activation_kind=request.activation_kind,
+        activation_version=request.activation_version,
+        cause=ActivationCause(
+            request.world_id,
+            ActivationCauseKind.SCHEDULED_TRIGGER,
+            source_trigger_id=request.trigger_id,
+        ),
+        due_at=request.due_at,
+        priority=request.priority,
+        coalescing_key=request.activation_coalescing_key,
+        attention=request.activation_attention,
+        payload=request.payload,
+        source_contract_kind=request.kind,
+        source_contract_version=request.payload_version,
+    )
+
+
+def _activation_request_from_trigger(trigger: ScheduledSimulationTrigger) -> ActivationRequest:
+    return ActivationRequest(
+        world_id=trigger.world_id,
+        target=trigger.activation_target,
+        activation_kind=trigger.activation_kind,
+        activation_version=trigger.activation_version,
+        cause=ActivationCause(
+            trigger.world_id,
+            ActivationCauseKind.SCHEDULED_TRIGGER,
+            source_trigger_id=trigger.trigger_id,
+        ),
+        due_at=trigger.due_at,
+        priority=trigger.priority,
+        coalescing_key=trigger.activation_coalescing_key,
+        attention=trigger.activation_attention,
+        payload=trigger.payload,
+        source_contract_kind=trigger.kind,
+        source_contract_version=trigger.payload_version,
+    )
+
+
 class SqlAlchemySimulationSchedulerStore:
-    def __init__(self, sessions: async_sessionmaker, registry: TriggerKindRegistry) -> None:
+    def __init__(
+        self,
+        sessions: async_sessionmaker,
+        registry: TriggerKindRegistry,
+        activation_registry: ActivationKindRegistry | None = None,
+    ) -> None:
         self._sessions = sessions
         self._registry = registry
+        self._activation_registry = activation_registry or ActivationKindRegistry()
 
     async def schedule(
         self, request: ScheduleTrigger, fingerprint: str, created_at_utc: datetime
@@ -123,18 +180,23 @@ class SqlAlchemySimulationSchedulerStore:
                     await session.rollback()
                     return ScheduleResult(result, replayed=True)
                 self._registry.validate(request.kind, request.payload_version, request.payload)
+                activation_request = _activation_request_from_schedule(request)
+                self._activation_registry.validate(activation_request)
                 if await session.get(WorldRecord, request.world_id.value) is None:
                     raise EntityNotFoundError("World does not exist")
-                allocation = (
-                    insert(SimulationQueueCursorRecord)
-                    .values(world_id=request.world_id.value, last_position=1)
-                    .on_conflict_do_update(
-                        index_elements=[SimulationQueueCursorRecord.world_id],
-                        set_={"last_position": SimulationQueueCursorRecord.last_position + 1},
+                if (
+                    request.activation_target.kind is ActivationTargetKind.CHARACTER
+                    and await session.get(
+                        CharacterRecord,
+                        (
+                            request.world_id.value,
+                            request.activation_target.character_id.value,
+                        ),
                     )
-                    .returning(SimulationQueueCursorRecord.last_position)
-                )
-                position = (await session.execute(allocation)).scalar_one()
+                    is None
+                ):
+                    raise EntityNotFoundError("Activation Character does not exist")
+                position = await allocate_simulation_position(session, request.world_id)
                 trigger = ScheduledSimulationTrigger(
                     trigger_id=request.trigger_id,
                     world_id=request.world_id,
@@ -144,6 +206,11 @@ class SqlAlchemySimulationSchedulerStore:
                     kind=request.kind,
                     payload_version=request.payload_version,
                     payload=request.payload,
+                    activation_target=request.activation_target,
+                    activation_kind=request.activation_kind,
+                    activation_version=request.activation_version,
+                    activation_coalescing_key=request.activation_coalescing_key,
+                    activation_attention=request.activation_attention,
                     status=TriggerStatus.PENDING,
                     created_at_utc=created_at_utc,
                     causation_request_id=request.request_id,
@@ -168,6 +235,21 @@ class SqlAlchemySimulationSchedulerStore:
                         correlation_id=request.correlation_id.value
                         if request.correlation_id
                         else None,
+                        activation_target_kind=request.activation_target.kind.value,
+                        activation_target_id=(
+                            request.world_id.value
+                            if request.activation_target.kind is ActivationTargetKind.WORLD
+                            else request.activation_target.character_id.value
+                        ),
+                        activation_target_character_id=(
+                            request.activation_target.character_id.value
+                            if request.activation_target.character_id is not None
+                            else None
+                        ),
+                        activation_kind=request.activation_kind.value,
+                        activation_version=request.activation_version,
+                        activation_coalescing_key=request.activation_coalescing_key,
+                        activation_attention=request.activation_attention.value,
                     )
                 )
                 session.add(
@@ -265,27 +347,21 @@ class SqlAlchemySimulationSchedulerStore:
                 ).all()
                 more_due = len(records) > max_items
                 activations: list[SimulationActivation] = []
+                activation_repository = SqlAlchemyActivationRepository(session)
                 for record in records[:max_items]:
                     trigger = _trigger(record)
                     self._registry.validate(trigger.kind, trigger.payload_version, trigger.payload)
-                    activation = self._new_activation(trigger, materialized_at_utc)
-                    session.add(
-                        SimulationActivationRecord(
-                            world_id=world_id.value,
-                            activation_id=activation.activation_id.value,
-                            source_trigger_id=trigger.trigger_id.value,
-                            kind=trigger.kind,
-                            payload_version=trigger.payload_version,
-                            due_at=trigger.due_at,
-                            payload=trigger.payload.data,
-                            status=activation.status.value,
-                            materialized_at_utc=materialized_at_utc,
-                        )
+                    request = _activation_request_from_trigger(trigger)
+                    self._activation_registry.validate(request)
+                    result = await activation_repository.request(
+                        request,
+                        activation_request_fingerprint(request),
+                        materialized_at_utc,
                     )
                     record.status = TriggerStatus.FIRED.value
                     record.fired_at_utc = materialized_at_utc
                     record.revision += 1
-                    activations.append(activation)
+                    activations.append(result.activation)
                 await session.flush()
                 await self._before_materialization_commit(session)
                 await session.commit()
@@ -319,7 +395,7 @@ class SqlAlchemySimulationSchedulerStore:
                     )
                 )
             ).all()
-            return tuple(_activation(record) for record in records)
+            return tuple(activation_from_record(record) for record in records)
 
     @staticmethod
     def _ordered_pending(world_id: WorldId):
@@ -328,22 +404,6 @@ class SqlAlchemySimulationSchedulerStore:
             select(row)
             .where(row.world_id == world_id.value, row.status == TriggerStatus.PENDING.value)
             .order_by(row.due_at, row.priority, row.enqueue_position)
-        )
-
-    @staticmethod
-    def _new_activation(
-        trigger: ScheduledSimulationTrigger, materialized_at_utc: datetime
-    ) -> SimulationActivation:
-        return SimulationActivation(
-            activation_id=ActivationId(trigger.world_id, uuid4()),
-            world_id=trigger.world_id,
-            source_trigger_id=trigger.trigger_id,
-            kind=trigger.kind,
-            payload_version=trigger.payload_version,
-            due_at=trigger.due_at,
-            payload=trigger.payload,
-            status=ActivationStatus.PENDING,
-            materialized_at_utc=materialized_at_utc,
         )
 
     async def _before_materialization_commit(self, session: AsyncSession) -> None:

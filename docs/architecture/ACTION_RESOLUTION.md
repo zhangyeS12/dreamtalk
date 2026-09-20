@@ -12,7 +12,8 @@ ActionProposal
 → ACCEPTED | REJECTED(reason)
 → one transaction:
    projection mutation + ordered WorldEvent(s)
-   + event-time Observation snapshot(s) + RequestId receipt
+   + event-time Observation snapshot(s)
+   + explicit bounded activation/cause work + RequestId receipt
 → commit
 ```
 
@@ -47,7 +48,7 @@ payload 中出现 ActorId 不会自动授予权限。角色运行时、System �
 
 ## 5. Results, failures, idempotency
 
-普通拒绝 reason 是小型稳定 taxonomy：`unauthorized_actor`、`invalid_scene`、`not_present`、`precondition_failed`、`invalid_destination`、`conflict`、`unsupported_action`。DB/CAS/serialization 故障仍是 infrastructure failure，不伪装成虚构失败。
+普通拒绝 reason 是小型稳定 taxonomy：`unauthorized_actor`、`invalid_scene`、`not_present`、`precondition_failed`、`invalid_destination`、`conflict`、`unsupported_action`、`wake_fanout_too_large`。wake fanout 在任何 canonical mutation 前 bounded resolve；超过上限时保存 typed rejection，不做随机截断。DB/CAS/serialization 故障仍是 infrastructure failure，不伪装成虚构失败。
 
 semantic fingerprint 在默认值解析后的 typed proposal 上计算，不含 RequestId 或 wall time。精确 RequestId 重试返回原 ACCEPTED/REJECTED result；不同语义冲突。accepted result 保留原 event IDs/revision，不重复事件、移动或感知。receipt 的 versioned result payload 只保存 typed status/reason/event IDs/revision，不保存原始 action payload。
 
@@ -58,3 +59,9 @@ CAS 使用 world + resource identity + expected revision。结算后状态变化
 Action service 不记录 payload；事件只保存该 event type 所需的 canonical movement facts。receipt 只保存 SHA-256 fingerprint 和 bounded typed result。日志、Scene 元数据、scheduler diagnostics、receipt 中没有 dialogue、prompt、knowledge、credential 或 rejected raw payload。
 
 ActionProposal 可引用 source ActivationId；accepted action 将该 typed ID 作为 WorldEvent 的安全 provenance 字段保存，供未来 causation tracing，但 C-006B 不消费、完成或改写 Activation。`Activation != ActionProposal != WorldEvent`；消费政策留给后续 Stage 5 runtime 任务。
+
+## 7. C-006C wake integration
+
+`move_player` 只有在 proposal 显式引用 Actor 当前所属 OPEN Scene 时，才使用 `SCENE_CHARACTER_PARTICIPANTS` wake；普通移动保持 `NONE`。Scene wake 只选择发生时仍 active 的 Character members，排除 Player、历史成员和同地点非成员。perception audience 仍按 C-006B 完整计算，activation fanout 不改变 Observation history。
+
+accepted action 先解析 bounded wake targets，再在同一 UoW 中写 projection、WorldEvent、Observations、activation causes 和 receipt。Character event activation 会验证该 Character 已有同事务内的 EVENT_OCCURRENCE Observation。commit 前任何 activation/cause DB failure 会把 mutation、event、Observation、activation/cause 与 receipt 一起回滚；commit 后全部 durable。Activation 不创建知识或 Memory。详见 [Sparse Activation](SPARSE_ACTIVATION.md)。

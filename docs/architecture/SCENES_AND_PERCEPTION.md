@@ -58,7 +58,13 @@ event perception 是发生时快照。之后 move、join、leave、relationship 
 
 Projection rebuild 继续按 ledger_position 重建 replayable projections，但不会用当前 Presence/Scene 重算 event-target Observations。rebuild 只清理并恢复由知识事件产生的 assertion-target Observation；event-target rows作为 authoritative historical access record 原样保留，因此不会重复插入或改变 audience。
 
-## 6. Persistence
+## 6. Perception 与 activation
+
+`Perception != Activation`。Observation 是历史访问事实；Activation 是当前/未来 bounded work。事件可以有 500 个合法 witnesses，而 wake policy 明确选择 `NONE`、bounded Character targets 或一个 WORLD aggregate。fanout bound 只限制立即 work，不删除或截断 Observation。
+
+Character `WORLD_EVENT` activation 必须已有同世界该 WorldEvent 的 `EVENT_OCCURRENCE` Observation；Activation 自身不能绕过访问隔离，也不会反向创建 Observation。Scene activity wake 只面向 OPEN Scene 当前 active Character members，不包括 Player、历史成员或同地点非成员。`PLAYER_FACING` fidelity 也只来自实际共享 active Scene，同 Location 不足以成立。详见 [Sparse Activation](SPARSE_ACTIVATION.md) 与 [Simulation Fidelity](SIMULATION_FIDELITY.md)。
+
+## 7. Persistence
 
 [0012_action_scenes_perception](../../services/core/src/livingworld/infrastructure/persistence/migrations/versions/0012_action_scenes_perception.py) 新增 `scenes`、`scene_participants`、active/history/status/current-location 索引，为 observations 增加可空 basis、EVENT_OCCURRENCE event/principal unique 与 principal history 索引，并扩展现有 command receipt CHECK 以保存无 WorldEvent 的 typed rejected action/Scene result。Alembic 仍是唯一迁移权威；0011 rows、events、receipts 与 legacy audit 原样保留，旧 Observation 的 basis 为 NULL。
 

@@ -1,12 +1,12 @@
 # SQLite Persistence, Canonical Ledger & Resource CAS
 
-状态：Stage 2 SQLite/Alembic、持久化幂等、主体知识隔离、canonical ledger、原子投影重建及资源级 CAS 已实现；C-006A 新增独立 durable scheduling/activation operational schema；C-006B 新增 Scene、参与历史和 event-time perception 索引。自动知识传播、语义检索与 Character/Director 智能层未实现。产品冻结规则不变，见 [COMMAND_MODEL.md](COMMAND_MODEL.md)、[SCENES_AND_PERCEPTION.md](SCENES_AND_PERCEPTION.md)、[KNOWLEDGE_ACCESS_MODEL.md](KNOWLEDGE_ACCESS_MODEL.md)、[REPLAY_MODEL.md](REPLAY_MODEL.md) 与 [SIMULATION_SCHEDULER.md](SIMULATION_SCHEDULER.md)。
+状态：Stage 2 SQLite/Alembic、持久化幂等、主体知识隔离、canonical ledger、原子投影重建及资源级 CAS 已实现；C-006A/B 建立 scheduler、Action、Scene 与 event-time perception；C-006C 将 activation 泛化为 typed sparse target、normalized cause 与 deterministic coalescing。自动知识传播、语义检索与 Character/Director 智能层未实现。产品冻结规则不变，见 [COMMAND_MODEL.md](COMMAND_MODEL.md)、[SCENES_AND_PERCEPTION.md](SCENES_AND_PERCEPTION.md)、[SPARSE_ACTIVATION.md](SPARSE_ACTIVATION.md)、[KNOWLEDGE_ACCESS_MODEL.md](KNOWLEDGE_ACCESS_MODEL.md)、[REPLAY_MODEL.md](REPLAY_MODEL.md) 与 [SIMULATION_SCHEDULER.md](SIMULATION_SCHEDULER.md)。
 
 ## C-004A / C-004C1 独立内容库
 
 **Imported Content != Runtime State；CharacterDefinition != Character；WorldContent != World；LoreEntry != WorldTruth；LoreCollection != WorldContent != Runtime World != WorldTruth。**
 
-Alembic head 现为 [0012_action_scenes_perception](../../services/core/src/livingworld/infrastructure/persistence/migrations/versions/0012_action_scenes_perception.py)，down_revision=0011_simulation_scheduler。它新增 Scene/participant tables、event perception indexes，并安全扩展 receipt CHECK；不改写既有 rows、WorldEvent 或 LLM/content state。前序 [0011_simulation_scheduler](../../services/core/src/livingworld/infrastructure/persistence/migrations/versions/0011_simulation_scheduler.py) 建立 scheduler/activation/cursor/receipt 四张表。下文各阶段旧 head 描述保留其阶段语境，不表示当前 head。
+Alembic head 现为 [0013_sparse_simulation_activation](../../services/core/src/livingworld/infrastructure/persistence/migrations/versions/0013_sparse_simulation_activation.py)，down_revision=0012_action_scenes_perception。它保留所有 C-006A rows，为 trigger/activation 回填 WORLD target 与 allowlisted kind/version，增加 queue/coalescing 字段和 normalized cause table；不改写 WorldEvent、Observation、LLM/content state。前序 0011/0012 继续保持原语义。下文各阶段旧 head 描述保留其阶段语境，不表示当前 head。
 
 | 内容表 | 可直接校验/查询的结构 | 正文边界 |
 | --- | --- | --- |
@@ -94,7 +94,8 @@ SQL echo 默认关闭，hide_parameters=True；结构化日志继续沿用 allow
 | command_receipts | (world_id, request_id)；新命令 request_id partial unique | 类型、committed/rejected status、可空结果事件引用、UTC 创建/完成时间、Revision、独立语义指纹与 typed 结果 |
 | simulation_queue_cursors | world_id，FK worlds | scheduler last enqueue position；与 WorldEvent ledger cursor 分离 |
 | simulation_scheduled_triggers | (world_id, trigger_id)；world/enqueue unique | due WorldTime、priority、allowlisted kind/version/bounded JSON、PENDING/FIRED/CANCELLED、审计 UTC、Revision |
-| simulation_activations | (world_id, activation_id)；world/source_trigger unique | durable due work；复制安全 kind/version/payload、due WorldTime、materialized UTC；不是 WorldEvent |
+| simulation_activations | (world_id, activation_id)；world/source_trigger unique；pending compatible key partial unique | typed WORLD/CHARACTER durable work、ActivationKind/version、due/priority/enqueue、attention；不是 WorldEvent |
+| simulation_activation_causes | (world_id, activation_id, cause_identity)；activation/position unique | normalized SCHEDULED_TRIGGER/WORLD_EVENT/SCENE_ACTIVITY/EXPLICIT_SYSTEM references、request fingerprint、stable position；不复制事件 payload |
 | simulation_schedule_receipts | (world_id, request_id)；request_id unique | schedule semantic fingerprint、result TriggerId 和创建 UTC；不是 canonical CommandReceipt |
 
 Observation 身份歧义已按用户确认解决：独立 typed ObservationId 沿用世界作用域 UUID 风格，不将 world_id 编码到 UUID。principal/target/channel/observed_at 仅描述语义坐标，不是 UNIQUE 身份；不同 ID 的同坐标记录可共存。运行时 UUIDv4 独立于 RequestId；成功重试从回执返回原 ID。没有历史 presence、Timeline 或分支政策。
@@ -128,10 +129,11 @@ C-006A 只增加无副作用 effective-time derivation 和 runtime monotonic gua
 | [0005_canonical_ledger](../../services/core/src/livingworld/infrastructure/persistence/migrations/versions/0005_canonical_ledger.py) | 原生 ADD COLUMN 增加 ledger_position 与正整数 CHECK，按每世界旧 rowid 回填，创建 world/position unique index 与世界游标；保留旧事件语义及审计行 |
 | [0011_simulation_scheduler](../../services/core/src/livingworld/infrastructure/persistence/migrations/versions/0011_simulation_scheduler.py) | 在既有 0010 后新增 queue cursor、scheduled trigger、activation 与 schedule receipt；world/source、world/enqueue、RequestId uniqueness 和 due-query index 加固 deterministic/crash-safe scheduler；不修改 WorldEvent 或旧行 |
 | [0012_action_scenes_perception](../../services/core/src/livingworld/infrastructure/persistence/migrations/versions/0012_action_scenes_perception.py) | 新增 Scene 与 typed participant history、current-location indexes；partial unique 保证每主体至多一个 active Scene；Observation 增加可空 basis，只对 event_occurrence 增加 event/principal 唯一，并增加 observer history 索引；receipt CHECK 允许无 WorldEvent 的 typed rejection/Scene 结果 |
+| [0013_sparse_simulation_activation](../../services/core/src/livingworld/infrastructure/persistence/migrations/versions/0013_sparse_simulation_activation.py) | 泛化 trigger/activation target 与 kind/version，增加 due queue/coalescing/attention，建立 normalized cause history；0011 rows deterministic backfill 为 WORLD / world_orchestration v1 / scheduled-trigger cause；SQLite batch recreation 最终运行 foreign_key_check，保留历史 linkage 与 payload |
 
 启动行为：
 
-1. 空 DB：直接 Alembic upgrade head，按 revision chain 执行至当前 0012。
+1. 空 DB：直接 Alembic upgrade head，按 revision chain 执行至当前 0013。
 2. 无 Alembic cursor 的 C-002 DB：只接受精确 legacy 表/列/PK/DDL、schema_version=(1,1)、一条匹配名称与 checksum 的历史记录和合法 UTC 审计时间；验证通过后 stamp 0001，再正常 upgrade head。旧迁移不重跑，已有行原样保留。
 3. 已有 Alembic cursor：由该 revision 驱动升级；legacy 元数据只做一致性检查。不能用 schema_version 推算或选择待执行迁移。
 4. 未知版本、checksum 漂移、缺失/损坏历史、结构差异、部分领域表、cursor 冲突或未知额外 schema 对象：抛出 MigrationCompatibilityError，事务回滚并停止启动；不自动修复、drop/recreate 或 stamp head。
@@ -161,10 +163,11 @@ Repeat startup 正常调用 Alembic upgrade head，不重放 revision、不重�
 - Observation 的渠道 CHECK 与同世界主体/目标 FK 保留明确观察语义，不自动授予知识或查询权限。
 - Scene 的同世界 Location FK、OPEN/CLOSED CHECK 和时间约束固化生命周期；SceneParticipant 的 typed FK 区分 Player/Character，partial unique `(world, kind, principal) WHERE left_at IS NULL` 保证单一 active Scene，历史 membership 保留。
 - Event-target Observation 使用既有 target discriminator/FK；partial unique `(world,event,principal kind,principal) WHERE basis='event_occurrence'` 防止 Kernel audience union 重复，同时不改变 C-003D 普通 Observation 的独立身份语义。observer/history index 支持授权读取。Location audience 通过 current Presence/CharacterState 的 location 索引，Scene audience只查 active membership，不扫描全世界主体。
+- SimulationActivation 用 target kind + target ID 明确区分 WORLD/CHARACTER；WORLD target ID 必须等于 world，Character target 以复合 FK 保持世界隔离。pending coalescing partial unique 覆盖 world/target/kind/version/key；cause PK 在 activation 内去重，使同一事件可合法唤醒多个有权限 target，又不会在同一 compatible work 中重复。WORLD_EVENT→Character 写入前还必须通过 Observation access application check；activation row不授予访问。
 - Receipt 沿用 (world_id, request_id) 主键和完成时间检查。新命令 fingerprint/result_payload 成对保存，status 可为 committed 或 rejected；无事件的 typed rejection/Scene result 不伪造事件引用。旧回执没有指纹时不视为可验证成功；新管线全局查找 RequestId，相同语义返回原结果，变化语义显式冲突。
 - Revision 在 DB 中非负。C-003E2 的 focused repository 使用完整 PK + expected revision 的 SQL UPDATE；rowcount=0 明确 ConcurrencyConflictError，不 merge 或无条件覆盖。期待缺失使用 INSERT，PK/UNIQUE 竞争明确归类为该领域冲突，不把 FK/CHECK 失败误判为竞争。
 
-额外索引有 world_events 的 (world_id, occurred_at, event_id)、事件幂等 unique、knowledge 的 world/scope/character-owner 与 world/scope/player-owner、C-003C 回执 request_id partial unique，以及 C-006B Scene active/history 与 event perception scoped indexes。未创建向量、Memory 或计划表。
+额外索引有 world_events 的 (world_id, occurred_at, event_id)、事件幂等 unique、knowledge 的 world/scope/character-owner 与 world/scope/player-owner、C-003C 回执 request_id partial unique、C-006B Scene active/history 与 event perception scoped indexes，以及 C-006C activation due/target/pending-coalescing/cause identity/order indexes。未创建向量、Memory 或计划表。
 
 [PersistenceStore](../../services/core/src/livingworld/infrastructure/persistence/store.py) 在 C-003C 仅提供 reload(snapshot)，返回新领域值/None，不暴露 Record/Session。原逐对象写入工具移至 [测试辅助](../../tests/persistence/snapshot_support.py)，保持 C-003B 无损映射/约束测试意图。生产变更由 [SqlAlchemyUnitOfWork](../../services/core/src/livingworld/infrastructure/persistence/unit_of_work.py) 实现 focused repository 和单一 command 事务；见 [COMMAND_MODEL.md](COMMAND_MODEL.md)。
 
@@ -174,7 +177,7 @@ Repeat startup 正常调用 Alembic upgrade head，不重放 revision、不重�
 
 权限过滤必须先于 semantic retrieval / prompt assembly；C-003D 的 list/get SQL 强制 world/scope/owner 条件，见 [knowledge_readers.py](../../services/core/src/livingworld/infrastructure/persistence/knowledge_readers.py)。内部 exact-source repository 与 snapshot inspection 不分发给角色/玩家；返回 source_assertion_id 也不授予源读取权限。CommandReceipt 的 versioned JSON 结果新增可选 typed ObservationId，兼容旧结果无此 key，不需额外回执 schema 迁移。
 
-C-003C 回归见 [命令集成测试](../../tests/application/test_commands.py) 和 [0003 迁移回归](../../tests/persistence/test_command_migration.py)；C-003D 验证见 [知识访问集成测试](../../tests/application/test_knowledge_access.py) 和 [Observation 迁移回归](../../tests/persistence/test_observation_migration.py)。C-003E1 见 [ledger 测试](../../tests/application/test_ledger.py)、[0005 迁移测试](../../tests/persistence/test_ledger_migration.py) 与 [重建测试](../../tests/application/test_replay.py)。C-006B 见 [action tests](../../tests/application/test_action_resolution.py)、[scene tests](../../tests/application/test_scenes.py) 与 [0012 migration test](../../tests/persistence/test_action_scene_migration.py)。Timeline/Checkpoint 与智能层仍未实现；独立 operational 预算见 [LLM_BUDGET_GUARD.md](LLM_BUDGET_GUARD.md)。
+C-003C 回归见 [命令集成测试](../../tests/application/test_commands.py) 和 [0003 迁移回归](../../tests/persistence/test_command_migration.py)；C-003D 验证见 [知识访问集成测试](../../tests/application/test_knowledge_access.py) 和 [Observation 迁移回归](../../tests/persistence/test_observation_migration.py)。C-003E1 见 [ledger 测试](../../tests/application/test_ledger.py)、[0005 迁移测试](../../tests/persistence/test_ledger_migration.py) 与 [重建测试](../../tests/application/test_replay.py)。C-006B 见 [action tests](../../tests/application/test_action_resolution.py)、[scene tests](../../tests/application/test_scenes.py) 与 [0012 migration test](../../tests/persistence/test_action_scene_migration.py)。C-006C 见 [sparse activation tests](../../tests/application/test_sparse_activation.py)、[scheduler tests](../../tests/application/test_simulation_scheduler.py) 与 [0013 migration tests](../../tests/persistence/test_simulation_migration.py)。Timeline/Checkpoint 与智能层仍未实现；独立 operational 预算见 [LLM_BUDGET_GUARD.md](LLM_BUDGET_GUARD.md)。
 
 ## 7. Canonical 分配与投影重建
 

@@ -21,6 +21,18 @@ class TriggerAlreadyFiredError(ValueError):
     """Cancellation lost to materialization; the durable activation remains valid."""
 
 
+class UnsupportedActivationError(ValueError):
+    """The allowlisted activation registry rejects a kind/version/target combination."""
+
+
+class ActivationFanoutTooLargeError(ValueError):
+    """A direct Character activation fanout exceeded its deterministic hard bound."""
+
+
+class ActivationAccessDeniedError(ValueError):
+    """A Character activation tried to reference an event it could not observe."""
+
+
 class ReplayError(Exception):
     """Rebuild rejected; old projections remain usable."""
 
