@@ -46,8 +46,8 @@ try:
         errors = []
         page.on("pageerror", lambda _error: errors.append(True))
         page.goto("http://127.0.0.1:5173/", wait_until="networkidle")
-        page.get_by_role("status").filter(has_text="Core Ready").wait_for(timeout=20_000)
-        page.get_by_role("heading", name="Developer Runtime Inspector").wait_for(timeout=20_000)
+        page.get_by_role("status").filter(has_text="核心已就绪").wait_for(timeout=20_000)
+        page.get_by_role("heading", name="开发者运行时检查器").wait_for(timeout=20_000)
         if errors:
             raise RuntimeError("browser_page_error")
         browser.close()
@@ -59,7 +59,7 @@ try:
         json.dumps(
             {
                 "event": "browser_smoke_passed",
-                "state": "Core Ready",
+                "state": "核心已就绪",
                 "inspector": "visible",
                 "page_errors": 0,
             }

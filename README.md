@@ -10,7 +10,7 @@ LivingWorld 是持久化、事件驱动的多角色 AI 世界，不是普通聊�
 
 当前阶段：**Stage 6 — Memory & Cognition，C-007A Episodic Memory Foundation 已完成**。系统支持 Character 从自身已授权 Observation 显式形成不可变、evidence-backed 的主观 EpisodicMemory，并提供 owner-bound SQL 读取、稳定分页、原子幂等写入和 Alembic 0014 persistence。Observation 不自动创建 Memory；Memory 不授予 Truth、Knowledge 或 Belief，也不进入 authored content package 或 projection replay。详见 [Episodic Memory](docs/architecture/EPISODIC_MEMORY.md) 与 [Memory Model](docs/architecture/MEMORY_MODEL.md)。
 
-Q-001B 提供仅开发环境启用的 [Developer Runtime Inspector](docs/architecture/RUNTIME_INSPECTOR.md)，用于通过真实 API/application 路径观察时钟、位置、Scene、trigger、activation、WorldEvent、Observation 与 owner-scoped EpisodicMemory。它不是最终产品 UI，也没有加入 Activation consumer 或自动 Observation→Memory。
+Q-001B 提供仅开发环境启用的 [开发者运行时检查器](docs/architecture/RUNTIME_INSPECTOR.md)，用于通过真实 API/application 路径观察时钟、位置、Scene、trigger、activation、WorldEvent、Observation 与 owner-scoped EpisodicMemory。它不是最终产品 UI，也没有加入 Activation consumer 或自动 Observation→Memory。
 
 Stage 5 — World Kernel & Simulation Runtime 已完成并冻结。C-006D 的 clock reconciliation、C-006C sparse activation/coalescing 与 C-006B deterministic Action/Scene/event-time perception 继续作为 Stage 6 substrate。详见 [Stage 5 验收](docs/architecture/STAGE5_ACCEPTANCE.md)、[Clock Reconciliation](docs/architecture/CLOCK_RECONCILIATION.md)、[Sparse Activation](docs/architecture/SPARSE_ACTIVATION.md)、[Action Resolution](docs/architecture/ACTION_RESOLUTION.md) 和 [Scenes and Perception](docs/architecture/SCENES_AND_PERCEPTION.md)。
 
@@ -22,7 +22,7 @@ Stage 3 已完成 canonical authored-content、Character Card/Lorebook 离线导
 
 运行内容实例化、automatic Lore→Truth/Belief、prompt assembly、Reflection、memory consolidation/forgetting/semantic retrieval/RAG、Director、Character Agent、AI Builder、activation consumption、checkpoint/branch、`.lworld`、cloud sync、marketplace 和 final UI 尚未实现。Stage 5 catch-up 只 materialize 到期 work，不编造离线叙事或角色决定；fidelity 只表示 operational context，不是剧情重要性、WorldTruth 或 LLM 策略。Scene 只是互动上下文，Observation 只记录历史访问；形成 EpisodicMemory 必须走 C-007A 的显式 owner-authorized command。外部 PNG/APNG writer、CHARX、任意图复制、签名与 orphan blob GC 仍 deferred。Stage 2 的资源级 CAS、幂等、ledger/rebuild 和知识隔离继续沿用，见 [Stage 2 验收](docs/architecture/STAGE_2_ACCEPTANCE.md)。provider tools、settings UI、conversation persistence 和真实付费 API 验证尚未实现。
 
-C-002 运行时基础继续沿用：共享 React UI、Tauri v2 Windows 开发壳、Python Core 启停协议、系统 API、SQLite 迁移元数据、结构化日志和 CI。连接阶段继续显示 Core Connecting / Ready / Failed；开发启动在 Ready 后显示 Runtime Inspector。
+C-002 运行时基础继续沿用：共享 React UI、Tauri v2 Windows 开发壳、Python Core 启停协议、系统 API、SQLite 迁移元数据、结构化日志和 CI。连接阶段显示“正在连接核心 / 核心已就绪 / 核心连接失败”；开发启动在就绪后显示开发者运行时检查器。
 
 Director、Character Agent、认知消费、业务 HTTP API、自动知识传播、语义检索及最终 UI 尚未实现。当前生产 action registry 只有 `move_player` v1；Scene lifecycle 是内部应用操作。生产 snapshot store 只读，正式世界变更通过 Kernel/UoW 管线执行；投影恢复另用内部 ProjectionRebuilder。P-01 的时间推进/离线/暂停部分已由 C-006D 解决；其余待确认问题见 [PRODUCT_SPEC.md](docs/product/PRODUCT_SPEC.md)。Stage 0 审查见 [ARCHITECTURE_REVIEW_001.md](docs/architecture/ARCHITECTURE_REVIEW_001.md)，运行时边界见 [RUNTIME_FOUNDATION.md](docs/architecture/RUNTIME_FOUNDATION.md)。
 

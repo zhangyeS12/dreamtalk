@@ -65,7 +65,7 @@ Q-001A 通过 application `WorldRuntimeRegistrar` seam 将运行期成功提交�
 
 ## Browser 开发连接
 
-`dev:web` 的 Node launcher以 `--developer-tools` 启动同一 Core、校验 ready record，将派生 session 通过仅开发模式的 Vite virtual module 交给页面；Vite 只监听 loopback。正常 build 不嵌入 session，Tauri build 从 Rust IPC 获取连接。独立发布的 browser transport/session delivery 尚未实现；未配置的生产 Web 页面显示 Core Failed。
+`dev:web` 的 Node launcher以 `--developer-tools` 启动同一 Core、校验 ready record，将派生 session 通过仅开发模式的 Vite virtual module 交给页面；Vite 只监听 loopback。正常 build 不嵌入 session，Tauri build 从 Rust IPC 获取连接。独立发布的 browser transport/session delivery 尚未实现；未配置的生产 Web 页面显示“核心连接失败”。
 
 该开发通道不能暴露到 LAN 或互联网。服务器/云 transport 留待后续任务，不在本阶段加入。
 

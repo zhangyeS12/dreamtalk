@@ -32,5 +32,6 @@ export function App({ discover, onReady }: Props) {
     void connect();
     return () => { active = false; clearTimeout(timeout); controller.abort(); };
   }, [discover, onReady]);
-  return <main><div className="brand"><h1>LivingWorld</h1><p role="status" aria-live="polite">Core {state}</p></div>{state === "Ready" && client ? <Inspector client={client} /> : null}</main>;
+  const stateLabel = { Connecting: "正在连接核心", Ready: "核心已就绪", Failed: "核心连接失败" }[state];
+  return <main><div className="brand"><h1>LivingWorld</h1><p role="status" aria-live="polite">{stateLabel}</p></div>{state === "Ready" && client ? <Inspector client={client} /> : null}</main>;
 }
