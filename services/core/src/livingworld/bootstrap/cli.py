@@ -23,6 +23,10 @@ from livingworld.application.simulation_clock import (
     EffectiveWorldTimeSource,
     SystemMonotonicClock,
 )
+from livingworld.application.simulation_runtime import (
+    WorldClockService,
+    WorldSimulationRuntime,
+)
 from livingworld.bootstrap.llm_control import HostControlListener
 from livingworld.bootstrap.llm_runtime import start_production_llm_session
 from livingworld.bootstrap.reader import derive_session, read_bootstrap
@@ -31,7 +35,10 @@ from livingworld.infrastructure.clock import SystemWallClock
 from livingworld.infrastructure.database import bootstrap_database
 from livingworld.infrastructure.logging import StructuredLogger
 from livingworld.infrastructure.persistence.errors import MigrationCompatibilityError
-from livingworld.infrastructure.scheduler_runtime import StructuredSchedulerDiagnosticSink
+from livingworld.infrastructure.scheduler_runtime import (
+    StructuredCatchUpDiagnosticSink,
+    StructuredSchedulerDiagnosticSink,
+)
 
 
 def parent_alive(pid: int) -> bool:
@@ -78,10 +85,13 @@ async def run(
     llm_session = None
     control_listener = None
     scheduler_runtime = None
+    simulation_runtime = None
     try:
         trigger_registry = TriggerKindRegistry()
         wake_signal = SchedulerWakeSignal()
         wall_clock = SystemWallClock()
+        monotonic_clock = SystemMonotonicClock()
+        time_source = EffectiveWorldTimeSource(wall_clock, monotonic_clock)
         scheduler = SimulationScheduler(
             database.simulation_scheduler_store(trigger_registry),
             wall_clock,
@@ -89,10 +99,25 @@ async def run(
         )
         scheduler_runtime = SimulationSchedulerRuntime(
             scheduler,
-            EffectiveWorldTimeSource(wall_clock, SystemMonotonicClock()),
+            time_source,
             wake_signal,
             diagnostics=StructuredSchedulerDiagnosticSink(logger),
         )
+        clock_service = WorldClockService(
+            database.world_clock_store(),
+            wall_clock,
+            time_source,
+            on_clock_changed=scheduler_runtime.clock_reanchored,
+        )
+        simulation_runtime = WorldSimulationRuntime(
+            clock_service,
+            scheduler,
+            scheduler_runtime,
+            time_source,
+            monotonic_clock,
+            diagnostics=StructuredCatchUpDiagnosticSink(logger),
+        )
+        await simulation_runtime.start_all()
         llm_session = await start_production_llm_session(config.llm_config_path, database, logger)
         status = RuntimeStatus(
             version("livingworld-core"), generation, llm_health=llm_session.health
@@ -150,7 +175,6 @@ async def run(
             server.should_exit = True
             logger.emit("core", "core_shutdown_started")
             await task
-            logger.emit("core", "core_shutdown_completed")
         finally:
             server.should_exit = True
             if not task.done():
@@ -159,13 +183,24 @@ async def run(
             sock.close()
             session = ""
     finally:
-        if scheduler_runtime is not None:
-            await scheduler_runtime.aclose()
-        if control_listener is not None and not control_listener.join(1.0):
-            logger.emit("host_control", "host_control_close_timeout", level="ERROR")
-        if llm_session is not None:
-            await llm_session.aclose()
-        await database.close()
+        shutdown_error = None
+        try:
+            if simulation_runtime is not None:
+                await simulation_runtime.aclose()
+            elif scheduler_runtime is not None:
+                await scheduler_runtime.aclose()
+        except BaseException as error:
+            shutdown_error = error
+            logger.emit("simulation_runtime", "clock_checkpoint_failed", level="ERROR")
+        finally:
+            if control_listener is not None and not control_listener.join(1.0):
+                logger.emit("host_control", "host_control_close_timeout", level="ERROR")
+            if llm_session is not None:
+                await llm_session.aclose()
+            await database.close()
+        if shutdown_error is not None:
+            raise shutdown_error
+        logger.emit("core", "core_shutdown_completed")
 
 
 def main() -> None:

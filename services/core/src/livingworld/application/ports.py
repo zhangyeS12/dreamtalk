@@ -31,11 +31,19 @@ from livingworld.domain.simulation import (
     ActivationRequestResult,
 )
 from livingworld.domain.values import Revision, WorldTime
-from livingworld.domain.world import Location, World
+from livingworld.domain.world import Location, World, WorldClock
 
 
 class WallClock(Protocol):
     def now_utc(self) -> datetime: ...
+
+
+class WorldTimeSource(Protocol):
+    def read(self, clock: WorldClock) -> WorldTime: ...
+
+
+class TemporalMutationBarrier(Protocol):
+    async def assert_mutation_allowed(self, world_id: WorldId) -> None: ...
 
 
 class WorldRepository(Protocol):

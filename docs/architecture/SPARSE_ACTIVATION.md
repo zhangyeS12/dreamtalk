@@ -81,6 +81,6 @@ C-006B accepted action 可带明确 wake policy。Kernel 先 bounded resolve tar
 
 ## 7. Scale、privacy 与 deferred scope
 
-验证场景包括 10,000 Characters 中只有 3 个明确目标时只产生 3 条 work，且不创建 per-character tasks；100 个兼容原因合并为 1 条 Billy activation、保留 100 条 cause，并可按 20 条分页；256 个合法 witnesses 的 event 使用 WORLD policy 时只有 1 条 WORLD activation。
+验证场景包括 10,000 Characters 中只有 3 个明确目标时只产生 3 条 work，且不创建 per-character tasks；100 个兼容原因合并为 1 条 character_a activation、保留 100 条 cause，并可按 20 条分页；256 个合法 witnesses 的 event 使用 WORLD policy 时只有 1 条 WORLD activation。
 
-C-006C 不实现 consumption lifecycle、distributed leasing、Director importance、随机抽样、Character goal/emotion/plan/dialogue、Memory/RAG、LLM、speaker loop 或 closed-app catch-up policy。C-006D 可复用 bounded due selection、coalescing 与 WORLD aggregation，不需要把每个 missed background fact 扩张成角色 cognition call。
+C-006C 不实现 consumption lifecycle、distributed leasing、Director importance、随机抽样、Character goal/emotion/plan/dialogue、Memory/RAG、LLM 或 speaker loop。C-006D 已复用 bounded due selection、coalescing 与 WORLD aggregation 完成 deterministic catch-up，没有把 missed cause 扩张成角色 cognition call；实际 activation consumption 仍属于后续阶段。

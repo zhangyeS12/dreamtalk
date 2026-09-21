@@ -291,6 +291,11 @@ class SimulationSchedulerRuntime:
         self._time_source.invalidate(world_id)
         self._wake_signal.wake(world_id)
 
+    def clock_reanchored(self, world_id: WorldId) -> None:
+        """Wake after the shared clock service has already installed the new base."""
+
+        self._wake_signal.wake(world_id)
+
     async def aclose(self) -> None:
         self._closing = True
         for world_id in tuple(self._tasks):

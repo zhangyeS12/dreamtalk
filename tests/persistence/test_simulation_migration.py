@@ -6,6 +6,7 @@ from alembic import command
 from alembic.operations import Operations
 from livingworld.application.command_handler import CommandHandler
 from livingworld.application.commands import CreateWorld
+from livingworld.application.simulation_clock import EffectiveWorldTimeSource, SystemMonotonicClock
 from livingworld.domain.contracts import RequestId
 from livingworld.domain.identifiers import WorldId
 from livingworld.infrastructure.clock import SystemWallClock
@@ -39,7 +40,12 @@ def test_0011_upgrade_preserves_0010_world_and_rolls_back_ddl(
                     lambda sync: command.upgrade(_alembic_config(sync), BUDGET_REVISION)
                 )
             world_id = WorldId(uuid4())
-            handler = CommandHandler(database.unit_of_work, SystemWallClock())
+            clock = SystemWallClock()
+            handler = CommandHandler(
+                database.unit_of_work,
+                clock,
+                world_time_source=EffectiveWorldTimeSource(clock, SystemMonotonicClock()),
+            )
             await handler.execute(
                 CreateWorld(
                     request_id=RequestId(uuid4()), world_id=world_id, name="Preserved World"
@@ -161,7 +167,12 @@ def test_0013_upgrade_preserves_legacy_activation_and_backfills_typed_provenance
                 await connection.run_sync(
                     lambda sync: command.upgrade(_alembic_config(sync), ACTION_REVISION)
                 )
-            handler = CommandHandler(database.unit_of_work, SystemWallClock())
+            clock = SystemWallClock()
+            handler = CommandHandler(
+                database.unit_of_work,
+                clock,
+                world_time_source=EffectiveWorldTimeSource(clock, SystemMonotonicClock()),
+            )
             await handler.execute(
                 CreateWorld(
                     request_id=RequestId(uuid4()), world_id=world_id, name="Legacy Scheduler World"

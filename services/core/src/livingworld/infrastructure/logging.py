@@ -63,6 +63,51 @@ class StructuredLogger:
         record.update({key: value for key, value in optional.items() if value is not None})
         self._write(record)
 
+    def emit_catch_up(
+        self,
+        event: str,
+        *,
+        world_id: str,
+        from_world_time: int | None = None,
+        target_world_time: int | None = None,
+        offline_elapsed_microseconds: int | None = None,
+        batches: int | None = None,
+        triggers_materialized: int | None = None,
+        distinct_activations: int | None = None,
+        anomalies: tuple[str, ...] = (),
+        more_due: bool | None = None,
+        completed: bool | None = None,
+        runtime_nanoseconds: int | None = None,
+        level: str = "INFO",
+    ) -> None:
+        """Write only bounded clock/catch-up facts; trigger payloads are impossible."""
+        if level not in {"INFO", "WARNING", "ERROR"}:
+            raise ValueError("invalid_log_level")
+        if not re.fullmatch(r"[a-z][a-z0-9_.]*", event):
+            raise ValueError("invalid_log_label")
+        record: dict[str, object] = {
+            "timestamp": datetime.now(UTC).isoformat(),
+            "level": level,
+            "component": "simulation_catch_up",
+            "event": event,
+            "world_id": world_id,
+        }
+        optional = {
+            "from_world_time": from_world_time,
+            "target_world_time": target_world_time,
+            "offline_elapsed_microseconds": offline_elapsed_microseconds,
+            "batches": batches,
+            "triggers_materialized": triggers_materialized,
+            "distinct_activations": distinct_activations,
+            "more_due": more_due,
+            "completed": completed,
+            "runtime_nanoseconds": runtime_nanoseconds,
+        }
+        record.update({key: value for key, value in optional.items() if value is not None})
+        if anomalies:
+            record["anomalies"] = list(anomalies)
+        self._write(record)
+
     def _write(self, record: dict[str, object]) -> None:
         line = json.dumps(record) + "\n"
         self.stream.write(line)

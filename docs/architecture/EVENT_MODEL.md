@@ -40,7 +40,7 @@ WorldEvent、RelationshipEvent 与 WorldTruth 的关系属于概念分工。本�
 | correlation_id | 可选独立 UUID CorrelationId，用于关联一组工作，不等同于事件身份 |
 | idempotency_key | 可选非空语义键；本任务不执行去重 |
 
-**双时间表示歧义已解决。** occurred_at 不是 UTC；created_at 不是世界时间。两者刻意允许不同，尤其未来离线 catch-up 可记录较早的世界发生位置和较晚的现实创建时间；C-003B 只存储双时间，不实现 catch-up。naive created_at 一律拒绝，aware 的非 UTC 输入统一归一化 UTC，不隐式转换 occurred_at，也不跨轴比较大小。
+**双时间表示与推进歧义已解决。** occurred_at 不是 UTC；created_at 不是世界时间。两者刻意允许不同。C-006D 离线 catch-up 只 materialize due Activation，不凭时间流逝生成 WorldEvent；未来 cognition 通过正常 Kernel 路径提交结果时，occurred_at 仍是对应世界坐标，created_at 是较晚的现实创建时间。naive created_at 一律拒绝，aware 的非 UTC 输入统一归一化 UTC，不隐式转换 occurred_at，也不跨轴比较大小。
 
 WorldTime 是逻辑坐标，不是全局事件 ID；两个 EventId 可以共享同一 WorldTime，未来分支也可以在同一坐标拥有不同历史。C-003A 不加入日历、调度或分支身份机制。
 
@@ -93,7 +93,7 @@ Source 指针不赋予 source owner 的知识读取权限。AcquireKnowledge 仍
 
 **关系事件语义歧义已解决：** delta 至少一项非零，范围校验不 clamp，缺失边的 before 为 0/0/0，初始 revision=0；应用后 resulting revision=1，反向边独立。指标仅供内部模拟，普通玩家不能获得数值展示。
 
-事件 key 固定 `request_id:ordinal`；EventId 为基于 RequestId/world/ordinal 的 UUIDv5，身份独立于 WorldTime。顶层 causation=RequestId，correlation=CorrelationId(RequestId.value)。occurred_at 来自当前 WorldClock（创建世界使用初始值），created_at 来自注入 UTC WallClock。多事件 ordinal 是命令内部身份约定，**不是跨命令 canonical replay position**；不按 WorldTime/created_at 选择唯一回放顺序。
+事件 key 固定 `request_id:ordinal`；EventId 为基于 RequestId/world/ordinal 的 UUIDv5，身份独立于 WorldTime。顶层 causation=RequestId，correlation=CorrelationId(RequestId.value)。occurred_at 来自共享 monotonic WorldTimeSource（创建世界使用初始值），created_at 来自注入 UTC WallClock。多事件 ordinal 是命令内部身份约定，**不是跨命令 canonical replay position**；不按 WorldTime/created_at 选择唯一回放顺序。
 
 只在事件、投影、回执均成功后 commit；异常全部 rollback，同一未提交请求可由调用方明确重试。成功重试包含进程/engine 重启，不产生第二组事件或额外 revision。C-003E1 已建立 canonical 顺序与投影重建，C-003E2 已建立资源级乐观并发；没有自动 semantic retry。
 

@@ -1,6 +1,6 @@
 # Durable Tickless Simulation Scheduler
 
-状态：C-006A 已建立 Stage 5 的确定性时间调度；C-006C 将到期结果接入 typed sparse activation。本文只定义 **何时工作到期**；没有 Director、Character Agent、场景结算、知识传播、关系变化、对话、Memory、LLM 调用或离线 catch-up 策略。定向、合并与 fidelity 见 [Sparse Activation](SPARSE_ACTIVATION.md) 和 [Simulation Fidelity](SIMULATION_FIDELITY.md)。
+状态：C-006A 已建立确定性时间调度，C-006C 将到期结果接入 typed sparse activation，C-006D 复用同一 queue 完成 realtime/offline reconciliation。本文只定义 **何时工作到期**；没有 Director、Character Agent、知识传播、对话、Memory 或 LLM 调用。定向/合并/fidelity 见 [Sparse Activation](SPARSE_ACTIVATION.md) 和 [Simulation Fidelity](SIMULATION_FIDELITY.md)，offline bridge 见 [Clock Reconciliation](CLOCK_RECONCILIATION.md)。
 
 ## 1. 三种时间
 
@@ -14,7 +14,7 @@
 
 `WorldClock.effective_time(at_utc)` 是无副作用的精确计算：paused 或 scale=0 返回 logical anchor；running 返回 `anchor + floor(max(0, UTC elapsed microseconds) × Decimal scale)`。不使用 float 计算 canonical WorldTime。UTC 回退不会让结果早于持久化 anchor。
 
-`EffectiveWorldTimeSource` 第一次读取或 clock revision 变化时用 aware UTC 建立进程内读数，之后以 monotonic nanoseconds 和同一 Decimal scale 推进，并保证同 revision 的普通读取不后退。显式 clock revision/anchor 变化可以建立新锚点；这不是用 runtime guard 改写历史。
+`EffectiveWorldTimeSource` 在 startup reconciliation 后显式建立 process-monotonic base；之后每次都从原 base 与总 monotonic elapsed 计算，避免逐次 floor 造成累计漂移。raw revision 首次出现时可用一次 aware UTC 建立 fallback base，但生产 startup/pause/resume/scale/checkpoint 均由集中 `WorldClockService` 显式 re-anchor。UTC 前后跳不改变存活进程的模拟速度。
 
 sleep delay 是 `world delta / scale` 的近似控制值。唤醒后必须重读 DB 中的 WorldClock 和队首，旧 delay 没有 canonical 权威。当前 `WorldClock` 已允许非负 finite scale；scale=0 沿用现有语义：逻辑时间不从现实时间推进，scheduler 等待控制信号。
 
@@ -43,7 +43,7 @@ ActionProposal             = typed 来源请求某个动作发生
 WorldEvent                 = fictional world 中已经被 Kernel 接受并提交的事实
 ```
 
-**Activation != ActionProposal != WorldEvent**。计时器在 08:00 唤醒“考虑 Billy 的早晨活动”，不等于 Billy 已去咖啡店，也不创建 WorldTruth、CharacterBelief、PlayerKnowledge、Observation 或 Relationship 变化。C-006B 的 ActionProposal 可选保存 source ActivationId 作为后续因果追踪，但 action 的存在、接受或拒绝均不会自动消费、完成或改写 Activation；消费政策仍属于后续 runtime 任务。
+**Activation != ActionProposal != WorldEvent**。计时器在 08:00 唤醒“考虑 character_a 的早晨活动”，不等于 character_a 已去 location_a，也不创建 WorldTruth、CharacterBelief、PlayerKnowledge、Observation 或 Relationship 变化。C-006B 的 ActionProposal 可选保存 source ActivationId 作为后续因果追踪，但 action 的存在、接受或拒绝均不会自动消费、完成或改写 Activation；消费政策仍属于后续 runtime 任务。
 
 一个 one-shot trigger 的 materialization 在一个 `BEGIN IMMEDIATE` transaction 中完成：读取 deterministic due batch，通过 generalized activation repository 插入/合并 Activation 与 typed `SCHEDULED_TRIGGER` cause，并把 Trigger 从 PENDING 改为 FIRED。直接 `source_trigger_id` 仍保留首个历史 linkage，normalized cause history 保留所有合并来源。commit 前失败会整体 rollback，留下 PENDING 且无 Activation/cause；commit 后全部 durable；重试不重复来源。没有容易永久卡住的 RUNNING 状态。
 
@@ -68,9 +68,9 @@ due 统一定义为 `due_at <= through_world_time`。drain 必须提供正整数
 - future clock mutation path 调用 `clock_changed(world_id)`；
 - graceful shutdown。
 
-当前尚无 Stage-5 clock mutation command；C-006A 暴露并测试了明确 hook，未来 pause/resume/scale/anchor command 在成功 commit 后必须调用它。运行时不会为了发现 revision 每 100ms 轮询 SQLite。
+C-006D 的 `WorldClockService` 统一实现 checkpoint、pause、resume、scale change：先按 monotonic elapsed re-anchor，再提交新 state/scale；成功后唤醒 scheduler。运行时不会为了发现 revision 每 100ms 轮询 SQLite。
 
-paused World 先 drain 已经 `due_at <= logical anchor` 的工作，然后等待 signal，不 busy-loop。running World 以精确 scale 推导近似 timeout；任何 timeout/signal 后都重读 clock 和 queue。Core composition 持有 runtime manager 并在关闭数据库前 `aclose()`；未 fired trigger 保持 PENDING。世界 session/scheduling action 显式激活 world task，避免把全部持久化世界误当作当前 active world；完整 closed-app progression policy 留给 C-006D。
+startup 对每个 persisted world 先按固定 target 进行 bounded catch-up；READY/PAUSED 后才激活 normal tickless task。paused World drain `due_at <= logical anchor` 后等待 signal；running World 以精确 scale 推导近似 timeout。graceful shutdown 先停止外部 simulation mutation、join scheduler transaction，再 checkpoint effective WorldTime 并关闭 DB；未 fired trigger 保持 PENDING。
 
 ## 6. SQLite 并发与 schema
 

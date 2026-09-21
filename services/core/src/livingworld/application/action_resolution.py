@@ -17,7 +17,12 @@ from livingworld.application.player_movement import (
     player_moved_payload,
     resolve_player_movement,
 )
-from livingworld.application.ports import UnitOfWork, WallClock
+from livingworld.application.ports import (
+    TemporalMutationBarrier,
+    UnitOfWork,
+    WallClock,
+    WorldTimeSource,
+)
 from livingworld.application.results import ActionResult
 from livingworld.domain.actions import (
     ActionKind,
@@ -157,15 +162,28 @@ class ActionKindRegistry:
 
 
 class ActionResolutionService:
-    def __init__(self, uow_factory, clock: WallClock, wake_signal=None, activation_planner=None):
+    def __init__(
+        self,
+        uow_factory,
+        clock: WallClock,
+        wake_signal=None,
+        activation_planner=None,
+        *,
+        world_time_source: WorldTimeSource,
+        mutation_barrier: TemporalMutationBarrier | None = None,
+    ):
         self._uow_factory = uow_factory
         self._clock = clock
+        self._world_time_source = world_time_source
+        self._mutation_barrier = mutation_barrier
         self._wake_signal = wake_signal
         self._audiences = AudienceResolver()
         self._activations = activation_planner or ActivationPlanner()
         self._registry = ActionKindRegistry({(ActionKind.MOVE_PLAYER, 1): self._resolve_move})
 
     async def execute(self, request_id: RequestId, proposal: ActionProposal) -> ActionResult:
+        if self._mutation_barrier is not None:
+            await self._mutation_barrier.assert_mutation_allowed(proposal.world_id)
         fingerprint = action_fingerprint(proposal)
         try:
             return await self._execute(request_id, proposal, fingerprint)
@@ -187,6 +205,7 @@ class ActionResolutionService:
             world = await uow.worlds.get(proposal.world_id)
             if world is None:
                 raise EntityNotFoundError("World does not exist")
+            occurred_at = self._world_time_source.read(world.clock)
             resolver = self._registry.get(proposal.kind, proposal.schema_version)
             rejected, accepted = (
                 (ActionRejectionReason.UNSUPPORTED_ACTION, None)
@@ -213,7 +232,7 @@ class ActionResolutionService:
                 event_id,
                 proposal.world_id,
                 "PlayerMoved",
-                world.clock.logical_time,
+                occurred_at,
                 payload,
                 EVENT_PAYLOAD_VERSION,
                 now,
@@ -249,7 +268,7 @@ class ActionResolutionService:
                 accepted.before,
                 accepted.after,
                 accepted.before.revision,
-                world.clock.logical_time,
+                occurred_at,
             )
             for observer in observers:
                 await uow.observations.add(
@@ -258,7 +277,7 @@ class ActionResolutionService:
                         observer,
                         event_id,
                         ObservationChannel.WITNESSED,
-                        world.clock.logical_time,
+                        occurred_at,
                         now,
                         observation_id=ObservationId(proposal.world_id, uuid4()),
                         basis=ObservationBasis.EVENT_OCCURRENCE,
@@ -269,7 +288,7 @@ class ActionResolutionService:
                 wake_targets,
                 world_id=proposal.world_id,
                 event_id=event_id,
-                due_at=world.clock.logical_time,
+                due_at=occurred_at,
                 priority=TriggerPriority.NORMAL,
                 materialized_at_utc=now,
             )

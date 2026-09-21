@@ -121,11 +121,10 @@ Developer Mode 能查看 Director、Agent、Memory、LLM 使用等决策 Trace�
 
 ## 待确认的产品边界
 
-以下问题不修改冻结规则，也不阻止 C-001 文档初始化。当前没有为这些问题选择默认产品策略。
+以下问题不修改冻结规则。P-01 的 runtime/offline/pause 时间政策已由 C-006D 冻结：RUNNING world 在进程内按 monotonic elapsed 推进，关闭期间按 persisted UTC bridge 推进；PAUSED world 不推进；Busy/Available 不暂停世界。catch-up 只 materialize due work，不编造角色/Director 结果。详细语义见 [CLOCK_RECONCILIATION.md](../architecture/CLOCK_RECONCILIATION.md)。其余问题仍没有默认产品策略。
 
 | 编号 | 待确认问题 | 关联规则 |
 | --- | --- | --- |
-| P-01 | 世界时间如何推进？玩家离线、Busy 和暂停世界之间是什么关系？ | FR-01、FR-02、FR-08 |
 | P-02 | Busy / Available 由玩家手动切换、系统推断还是两者结合？“必要主动联系”的定义、判定主体和允许形式是什么？ | FR-08、FR-09 |
 | P-03 | “同一个主动联系理由”如何判定，作用域如何跨角色、时间、Timeline 和重试计算？一次主动发送与多角色 Episode 内消息的关系是什么？ | FR-10、FR-11、FR-12 |
 | P-04 | Outreach Episode 的结束、参与者退出、玩家回复后继续互动，以及同时存在多个 Episode 的规则是什么？ | FR-10、FR-11、FR-12 |

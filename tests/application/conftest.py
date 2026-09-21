@@ -30,6 +30,11 @@ class FixedClock:
         return self.value
 
 
+class FixedWorldTimeSource:
+    def read(self, clock):
+        return clock.logical_time
+
+
 class Environment:
     def __init__(self, path):
         self.path = path
@@ -41,8 +46,13 @@ class Environment:
         self.alice = CharacterId(self.world, uuid4())
         self.bob = CharacterId(self.world, uuid4())
         self.clock = FixedClock()
+        self.world_time_source = FixedWorldTimeSource()
         self.database = Database(path)
-        self.handler = CommandHandler(self.database.unit_of_work, self.clock)
+        self.handler = CommandHandler(
+            self.database.unit_of_work,
+            self.clock,
+            world_time_source=self.world_time_source,
+        )
 
     def command(self, command_type, **values):
         return command_type(request_id=RequestId(uuid4()), world_id=self.world, **values)
@@ -77,7 +87,11 @@ class Environment:
         await self.database.close()
         self.database = Database(self.path)
         await self.database.initialize()
-        self.handler = CommandHandler(self.database.unit_of_work, self.clock)
+        self.handler = CommandHandler(
+            self.database.unit_of_work,
+            self.clock,
+            world_time_source=self.world_time_source,
+        )
 
     async def rows(self, table):
         # Table names come exclusively from test code; this is not an application port.

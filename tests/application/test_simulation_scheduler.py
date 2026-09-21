@@ -58,10 +58,15 @@ class SchedulerEnvironment:
         self.world = WorldId(uuid4())
         self.registry = marker_registry()
         self.wake = SchedulerWakeSignal()
+        self.time_source = EffectiveWorldTimeSource(self.clock, SystemMonotonicClock())
 
     async def initialize(self, *, state=ClockState.PAUSED, scale=Decimal("1")):
         await self.database.initialize()
-        handler = CommandHandler(self.database.unit_of_work, self.clock)
+        handler = CommandHandler(
+            self.database.unit_of_work,
+            self.clock,
+            world_time_source=self.time_source,
+        )
         await handler.execute(
             CreateWorld(
                 request_id=RequestId(uuid4()),
@@ -118,7 +123,11 @@ def test_deterministic_order_and_world_isolation(scheduler_environment, tmp_path
     async def run():
         env = await scheduler_environment.initialize()
         other = WorldId(uuid4())
-        handler = CommandHandler(env.database.unit_of_work, env.clock)
+        handler = CommandHandler(
+            env.database.unit_of_work,
+            env.clock,
+            world_time_source=env.time_source,
+        )
         await handler.execute(
             CreateWorld(request_id=RequestId(uuid4()), world_id=other, name="Other")
         )

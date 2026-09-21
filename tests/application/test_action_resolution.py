@@ -50,7 +50,9 @@ def test_authority_rejection_idempotency_and_semantic_conflict(environment):
         env = environment
         try:
             await env.initialize()
-            service = ActionResolutionService(env.database.unit_of_work, env.clock)
+            service = ActionResolutionService(
+                env.database.unit_of_work, env.clock, world_time_source=env.world_time_source
+            )
             request_id, action = proposal(
                 env,
                 proposer=ActionProposer(ProposerKind.SYSTEM),
@@ -80,7 +82,9 @@ def test_unknown_action_version_is_typed_rejection(environment):
         env = environment
         try:
             await env.initialize()
-            service = ActionResolutionService(env.database.unit_of_work, env.clock)
+            service = ActionResolutionService(
+                env.database.unit_of_work, env.clock, world_time_source=env.world_time_source
+            )
             request_id, action = proposal(env)
             result = await service.execute(request_id, replace(action, schema_version=99))
             assert result.status is ActionResolutionStatus.REJECTED
@@ -119,9 +123,9 @@ def test_character_runtime_and_director_cannot_act_as_player(environment, propos
                 else ActionProposer(proposer_kind)
             )
             request_id, action = proposal(env, proposer=proposer)
-            result = await ActionResolutionService(env.database.unit_of_work, env.clock).execute(
-                request_id, action
-            )
+            result = await ActionResolutionService(
+                env.database.unit_of_work, env.clock, world_time_source=env.world_time_source
+            ).execute(request_id, action)
             assert result.status is ActionResolutionStatus.REJECTED
             assert result.reason is ActionRejectionReason.UNAUTHORIZED_ACTOR
         finally:
@@ -139,9 +143,9 @@ def test_character_runtime_cannot_impersonate_another_character(environment):
                 env, proposer=ActionProposer(ProposerKind.CHARACTER_RUNTIME, env.alice)
             )
             action = replace(action, actor_id=env.bob)
-            result = await ActionResolutionService(env.database.unit_of_work, env.clock).execute(
-                request_id, action
-            )
+            result = await ActionResolutionService(
+                env.database.unit_of_work, env.clock, world_time_source=env.world_time_source
+            ).execute(request_id, action)
             assert result.status is ActionResolutionStatus.REJECTED
             assert result.reason is ActionRejectionReason.UNAUTHORIZED_ACTOR
         finally:
@@ -171,7 +175,9 @@ def test_accepted_move_commits_event_perception_presence_and_receipt_atomically(
                     expected_state_revision=None,
                 )
             )
-            service = ActionResolutionService(env.database.unit_of_work, env.clock)
+            service = ActionResolutionService(
+                env.database.unit_of_work, env.clock, world_time_source=env.world_time_source
+            )
             request_id, action = proposal(env)
             before_knowledge = len(await env.rows("knowledge_assertions"))
             result = await service.execute(request_id, action)
@@ -239,7 +245,9 @@ def test_perception_insert_failure_rolls_back_entire_action(environment, monkeyp
         env = environment
         try:
             await env.initialize()
-            service = ActionResolutionService(env.database.unit_of_work, env.clock)
+            service = ActionResolutionService(
+                env.database.unit_of_work, env.clock, world_time_source=env.world_time_source
+            )
             request_id, action = proposal(env)
             before = {
                 table: await env.rows(table)
@@ -270,7 +278,9 @@ def test_commit_failure_after_resolution_rolls_back_all_action_state(environment
         env = environment
         try:
             await env.initialize()
-            service = ActionResolutionService(env.database.unit_of_work, env.clock)
+            service = ActionResolutionService(
+                env.database.unit_of_work, env.clock, world_time_source=env.world_time_source
+            )
             request_id, action = proposal(env)
             before = {
                 table: await env.rows(table)
@@ -309,7 +319,9 @@ def test_event_perception_is_historical_and_projection_replay_does_not_recompute
                     expected_state_revision=None,
                 )
             )
-            service = ActionResolutionService(env.database.unit_of_work, env.clock)
+            service = ActionResolutionService(
+                env.database.unit_of_work, env.clock, world_time_source=env.world_time_source
+            )
             request_id, action = proposal(env)
             result = await service.execute(request_id, action)
             event_id = result.event_ids[0]
@@ -347,7 +359,9 @@ def test_principal_joining_scene_after_event_does_not_gain_historical_perception
         env = environment
         try:
             await env.initialize()
-            service = ActionResolutionService(env.database.unit_of_work, env.clock)
+            service = ActionResolutionService(
+                env.database.unit_of_work, env.clock, world_time_source=env.world_time_source
+            )
             request_id, action = proposal(env)
             event_id = (await service.execute(request_id, action)).event_ids[0]
             await env.handler.execute(
@@ -554,7 +568,9 @@ def test_conflicting_actions_have_one_acceptance_and_unique_ledger_positions(env
         env = environment
         try:
             await env.initialize()
-            service = ActionResolutionService(env.database.unit_of_work, env.clock)
+            service = ActionResolutionService(
+                env.database.unit_of_work, env.clock, world_time_source=env.world_time_source
+            )
             left = proposal(env, destination=env.cafe)
             right = proposal(env, destination=env.park)
             results = await asyncio.gather(
@@ -595,7 +611,9 @@ def test_rejected_payload_canary_is_not_persisted_or_logged(environment, caplog)
         env = environment
         try:
             await env.initialize()
-            service = ActionResolutionService(env.database.unit_of_work, env.clock)
+            service = ActionResolutionService(
+                env.database.unit_of_work, env.clock, world_time_source=env.world_time_source
+            )
             private_destination = type(env.home)(
                 env.world, UUID("decafbad-dec0-afba-ddec-afbaddecafba")
             )

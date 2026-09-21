@@ -129,6 +129,14 @@ class Database:
 
         return SqlAlchemySimulationSchedulerStore(self._sessions, registry)
 
+    def world_clock_store(self):
+        """Durable logical/UTC clock anchors; process monotonic values never persist."""
+        from livingworld.infrastructure.persistence.world_clock import (
+            SqlAlchemyWorldClockStore,
+        )
+
+        return SqlAlchemyWorldClockStore(self._sessions)
+
     def canonical_event_reader(self, world_id: WorldId) -> ports.CanonicalEventReader:
         return replay.CanonicalEventReader(self._sessions, world_id)
 

@@ -1,6 +1,6 @@
 # Command Transaction, Idempotency & Concurrency（C-003C～C-003E2）
 
-状态：Stage 2 命令事务、持久化幂等、主体知识隔离、canonical ledger、回放及资源级乐观并发已实现。C-006B 复用同一事务/receipt/CAS 约定建立 action resolution 和 Scene lifecycle。业务 HTTP API、Director、Agent、自动知识传播与 catch-up 未实现。系统 API 与桌面协议不变。综合验证见 [STAGE_2_ACCEPTANCE.md](STAGE_2_ACCEPTANCE.md) 与 [ACTION_RESOLUTION.md](ACTION_RESOLUTION.md)。
+状态：Stage 2 命令事务、持久化幂等、主体知识隔离、canonical ledger、回放及资源级乐观并发已实现。C-006B 复用同一事务/receipt/CAS 约定建立 action resolution 和 Scene lifecycle；C-006D 为外部 time-sensitive mutation 增加 catch-up barrier，并从共享 monotonic WorldTimeSource 捕获发生时间。业务 HTTP API、Director、Agent 与自动知识传播未实现。系统 API 与桌面协议不变。综合验证见 [STAGE_2_ACCEPTANCE.md](STAGE_2_ACCEPTANCE.md)、[ACTION_RESOLUTION.md](ACTION_RESOLUTION.md) 与 [CLOCK_RECONCILIATION.md](CLOCK_RECONCILIATION.md)。
 
 ## 1. 唯一生产变更入口
 
@@ -66,10 +66,10 @@ C-003D 结果新增 KnowledgeAssertionId 实体引用和可选 ObservationId，v
 - key = `request_id:ordinal`，ordinal 对命令固定，创建玩家稳定为 0、1。
 - EventId 用 RequestId UUID 作为 UUIDv5 namespace，world_id 与 ordinal 构成名称；失败重试不更换事件身份。身份不是 WorldTime，也不是回放顺序。
 - causation_id = RequestId；correlation_id = CorrelationId(RequestId.value)，关联顶层操作，不引入分布式追踪系统。
-- occurred_at 来自现有 WorldClock.logical_time；CreateWorld 使用其初始 WorldTime。
+- occurred_at 来自共享 WorldTimeSource 对当前 WorldClock 的 monotonic effective time；CreateWorld 使用其初始 WorldTime。同一 command 的全部事件/观察/投影使用一次 captured 值。
 - created_at 与回执 UTC 时间来自注入的 WallClock；实现集中在 [SystemWallClock](../../services/core/src/livingworld/infrastructure/clock.py)，拒绝 naive，aware 输入归一化 UTC。
 
-时间戳不作为唯一 canonical sequence。未实现世界时间推进、日历、catch-up 或分支归属。
+时间戳不作为唯一 canonical sequence。C-006D 已实现 clock progression 与 trigger catch-up；日历、recurrence、Timeline 分支归属和 cognition catch-up 未实现。
 
 ## 5. UnitOfWork 与原子失败
 

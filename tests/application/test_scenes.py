@@ -316,9 +316,9 @@ def test_concurrent_move_and_join_settle_without_zombie_membership(environment):
                 expected_scene_revision=Revision(),
             )
             outcomes = await asyncio.gather(
-                ActionResolutionService(env.database.unit_of_work, env.clock).execute(
-                    action_request, move
-                ),
+                ActionResolutionService(
+                    env.database.unit_of_work, env.clock, world_time_source=env.world_time_source
+                ).execute(action_request, move),
                 scene_service.execute(join),
                 return_exceptions=True,
             )

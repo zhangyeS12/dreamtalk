@@ -82,7 +82,7 @@ C-006B event-target Observation 不由 WorldEvent payload 推导：它是在原 
 | Alembic / legacy audit / runtime metadata | 全部保持原样 |
 | LocationConnection | 当前没有 canonical 创建事件，保持原样；无法恢复其引用时失败，而非复制旧地点补救 |
 
-每条清理/覆盖语句限定 world_id；重建 World A 不更改 World B 的投影、事件、回执或序列。Knowledge reader 继续在 SQL 中先筛选 world/scope/owner；内部 ledger/source 能力不授予玩家/角色，上游 source ID 不变也不形成权限。Billy/Banyue 的秘密不会因 rebuild 或 source traversal 自动暴露给 Belle 或玩家。
+每条清理/覆盖语句限定 world_id；重建 world_a 不更改 world_b 的投影、事件、回执或序列。Knowledge reader 继续在 SQL 中先筛选 world/scope/owner；内部 ledger/source 能力不授予玩家/角色，上游 source ID 不变也不形成权限。character_a/character_b 的秘密不会因 rebuild 或 source traversal 自动暴露给 character_c 或玩家。
 
 ## 5. 验证
 

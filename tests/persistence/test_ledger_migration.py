@@ -14,6 +14,7 @@ from livingworld.application.commands import (
     CreatePlayer,
     CreateWorld,
 )
+from livingworld.application.simulation_clock import EffectiveWorldTimeSource, SystemMonotonicClock
 from livingworld.domain.contracts import RequestId
 from livingworld.domain.identifiers import CharacterId, LocationId, PlayerId, WorldId
 from livingworld.domain.values import WorldTime
@@ -67,7 +68,12 @@ async def seed_0004(database, empty=False):
         )
     if empty:
         return None
-    handler = CommandHandler(lambda: _LegacyUnitOfWork(database._sessions), _Clock())
+    clock = _Clock()
+    handler = CommandHandler(
+        lambda: _LegacyUnitOfWork(database._sessions),
+        clock,
+        world_time_source=EffectiveWorldTimeSource(clock, SystemMonotonicClock()),
+    )
     a, b = WorldId(UUID("f" * 32)), WorldId(UUID("a" * 32))
     home_a, home_b = LocationId(a, UUID(int=20)), LocationId(b, UUID(int=20))
     commands = [
@@ -168,7 +174,12 @@ def test_legacy_rowid_backfill_preserves_records_and_future_append(tmp_path):
                 max_a = max(
                     row["ledger_position"] for row in after if row["world_id"] == a.value.hex
                 )
-                handler = CommandHandler(database.unit_of_work, _Clock())
+                clock = _Clock()
+                handler = CommandHandler(
+                    database.unit_of_work,
+                    clock,
+                    world_time_source=EffectiveWorldTimeSource(clock, SystemMonotonicClock()),
+                )
                 await handler.execute(
                     CreateLocation(
                         request_id=RequestId(UUID(int=100)),

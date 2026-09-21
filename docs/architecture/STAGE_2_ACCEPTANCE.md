@@ -65,8 +65,8 @@ AcquireKnowledge 保持 source → Observation → 自有派生 assertion，可�
 
 [综合集成测试](../../tests/application/test_stage_2_acceptance.py) 只以应用命令创建全部状态：
 
-1. World A：三个地点、一个 inactive/busy 玩家、Alice/Billy/Banyue/Belle 四角色、首次及再次放置、有向关系及逆向关系、Truth、两种独立 belief root、显式角色及玩家获知。
-2. Billy met Banyue 的 Truth：仅 Billy/Banyue 显式获知；Belle/Player 的绑定 reader 在重建前后都不可读，权威 reader 可读。
+1. world_a：三个地点、一个 inactive/busy 玩家、character_a/character_b/character_c/character_d 四角色、首次及再次放置、有向关系及逆向关系、Truth、两种独立 belief root、显式角色及玩家获知。
+2. character_b met character_c 的 Truth：仅 character_b/character_c 显式获知；character_d/Player 的绑定 reader 在重建前后都不可读，权威 reader 可读。
 3. door locked 的 Truth 与 Alice unlocked 的 belief：同世界共存，重建前后分别由隔离 reader 返回，所有认知元数据一致，不覆盖或调和。optional 私有 source/provenance 不授予权限。
 4. World B 重用 A 的 raw UUID，构建独立地点、玩家、角色/状态、关系、Truth、belief 和获知。所有引用仍 typed/world-scoped；B 的序列独立从 1 开始。
 5. 两个独立 session 的 Presence 竞争只有一个赢家；unrelated MovePlayer / Relationship 并发均成功；完全相同 MovePlayer 并发只一次变更。A 的竞争不改变 B。

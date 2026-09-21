@@ -70,7 +70,7 @@ Planning Window 耗尽或大量计划失效才触发 Replan（FR-15）；上述�
 
 ## 5. 下一步需要澄清的架构输入
 
-世界时间推进方式、暂停与离线推进；必要主动联系的定义；同一理由的身份与跨时间线作用域；多角色一次主动联系的消息计数；Planning Window 耗尽与大量计划失效的判定；事实冲突处理；Checkpoint 恢复与分支信息继承；知识和记忆修正；导入兼容边界；预算触顶后的行为。
+必要主动联系的定义；同一理由的身份与跨时间线作用域；多角色一次主动联系的消息计数；Planning Window 耗尽与大量计划失效的判定；事实冲突处理；Checkpoint 恢复与分支信息继承；知识和记忆修正；导入兼容边界；预算触顶后的行为。WorldClock 的 realtime monotonic、offline UTC bridge、pause 与 bounded trigger catch-up 已由 C-006D 冻结；Timeline 分支时间仍待定义。
 
 这些问题的具体决策均未在 C-001 中作出。研究清单见 [research/README.md](../research/README.md)。
 

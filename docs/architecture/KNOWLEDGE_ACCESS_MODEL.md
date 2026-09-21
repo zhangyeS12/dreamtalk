@@ -53,7 +53,7 @@ FormCharacterBelief（可信内部命令，非玩家 API）
 
 该 exact provenance 校验由独立内部 EventReferenceReader 完成，不为角色/玩家增加全局事件读取能力；EventAppender 的 append-only API 保持不变。
 
-**FormCharacterBelief 不自动创建 Observation**：内部形成不是默认 exposure channel。断言是新 immutable epistemic record，不引入 expected revision、修改既有信念或自动纠正。AcquireKnowledge 继续保持下述 source → Observation → receiver-owned assertion；它可以将 Alice 的 false belief 转述给 Billy，而不改写 WorldTruth。
+**FormCharacterBelief 不自动创建 Observation**：内部形成不是默认 exposure channel。断言是新 immutable epistemic record，不引入 expected revision、修改既有信念或自动纠正。AcquireKnowledge 继续保持下述 source → Observation → receiver-owned assertion；它可以将 character_a 的 false belief 转述给 character_b，而不改写 WorldTruth。
 
 **C-006B event perception 不自动创建 KnowledgeAssertion**：`Observation(target_id=EventId, channel=witnessed, basis=event_occurrence)` 只证明该主体在事件发生时具有访问依据。可空 basis 将 Kernel audience snapshot 与普通 Observation occurrence 区分，不改变 C-003D identity。它没有 proposition，也不授予 Truth/Belief/PlayerKnowledge；Stage 6 才能定义如何从事件感知形成认知或记忆。该 event-target Observation 是不可重算的历史授权快照，知识读取器不会因此越权遍历全局 WorldEvent。
 

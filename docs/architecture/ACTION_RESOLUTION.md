@@ -65,3 +65,9 @@ ActionProposal 可引用 source ActivationId；accepted action 将该 typed ID �
 `move_player` 只有在 proposal 显式引用 Actor 当前所属 OPEN Scene 时，才使用 `SCENE_CHARACTER_PARTICIPANTS` wake；普通移动保持 `NONE`。Scene wake 只选择发生时仍 active 的 Character members，排除 Player、历史成员和同地点非成员。perception audience 仍按 C-006B 完整计算，activation fanout 不改变 Observation history。
 
 accepted action 先解析 bounded wake targets，再在同一 UoW 中写 projection、WorldEvent、Observations、activation causes 和 receipt。Character event activation 会验证该 Character 已有同事务内的 EVENT_OCCURRENCE Observation。commit 前任何 activation/cause DB failure 会把 mutation、event、Observation、activation/cause 与 receipt 一起回滚；commit 后全部 durable。Activation 不创建知识或 Memory。详见 [Sparse Activation](SPARSE_ACTIVATION.md)。
+
+## 8. C-006D temporal ordering
+
+Action occurrence time 由共享 monotonic `WorldTimeSource` 读取，不直接使用可能较旧的 persisted logical anchor，也不按每个 action 重算 wall UTC delta。所有同一 action 产生的 projection transition、WorldEvent、Observation 和 activation 使用同一个 captured WorldTime。
+
+当 per-world runtime 为 `CATCHING_UP`，外部 ActionResolution 在打开 command transaction 前返回 typed `WORLD_CATCHING_UP`；不写 rejection receipt、WorldEvent、Observation 或 projection。catch-up 达到 fixed target 并进入 READY/PAUSED 后，同一合法 request 才可执行。详见 [Clock Reconciliation](CLOCK_RECONCILIATION.md)。

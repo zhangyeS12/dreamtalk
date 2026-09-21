@@ -28,7 +28,11 @@ async def race_commands(environment, *commands):
             # Collision resolution, if needed, gets one fresh, ungated transaction.
             return environment.database.unit_of_work()
 
-        return CommandHandler(factory, environment.clock).execute(command)
+        return CommandHandler(
+            factory,
+            environment.clock,
+            world_time_source=environment.world_time_source,
+        ).execute(command)
 
     results = await asyncio.wait_for(
         asyncio.gather(*(caller(command) for command in commands), return_exceptions=True),

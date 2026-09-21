@@ -4,6 +4,7 @@ from uuid import uuid4
 from alembic import command
 from livingworld.application.command_handler import CommandHandler
 from livingworld.application.commands import CreateLocation, CreatePlayer, CreateWorld
+from livingworld.application.simulation_clock import EffectiveWorldTimeSource, SystemMonotonicClock
 from livingworld.domain.contracts import RequestId
 from livingworld.domain.identifiers import LocationId, PlayerId, WorldId
 from livingworld.infrastructure.clock import SystemWallClock
@@ -27,7 +28,12 @@ def test_0012_upgrade_preserves_0011_state_and_adds_scene_perception_constraints
             world = WorldId(uuid4())
             location = LocationId(world, uuid4())
             player = PlayerId(world, uuid4())
-            handler = CommandHandler(database.unit_of_work, SystemWallClock())
+            clock = SystemWallClock()
+            handler = CommandHandler(
+                database.unit_of_work,
+                clock,
+                world_time_source=EffectiveWorldTimeSource(clock, SystemMonotonicClock()),
+            )
             await handler.execute(
                 CreateWorld(request_id=RequestId(uuid4()), world_id=world, name="Preserved")
             )

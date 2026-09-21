@@ -319,7 +319,9 @@ def test_event_activation_requires_observation_and_does_not_grant_knowledge(envi
         try:
             await env.initialize()
             await _place(env, env.alice)
-            action = ActionResolutionService(env.database.unit_of_work, env.clock)
+            action = ActionResolutionService(
+                env.database.unit_of_work, env.clock, world_time_source=env.world_time_source
+            )
             event_id = (await action.execute(RequestId(uuid4()), _move_proposal(env))).event_ids[0]
             before_observations = await env.rows("observations")
             before_knowledge = await env.rows("knowledge_assertions")
@@ -547,9 +549,9 @@ def test_action_event_observation_activation_and_receipt_commit_atomically(
         try:
             await env.initialize()
             scene_id = await setup(env)
-            result = await ActionResolutionService(env.database.unit_of_work, env.clock).execute(
-                RequestId(uuid4()), _move_proposal(env, scene_id=scene_id)
-            )
+            result = await ActionResolutionService(
+                env.database.unit_of_work, env.clock, world_time_source=env.world_time_source
+            ).execute(RequestId(uuid4()), _move_proposal(env, scene_id=scene_id))
             assert result.status is ActionResolutionStatus.ACCEPTED
             activations = await env.rows("simulation_activations")
             causes = await env.rows("simulation_activation_causes")
@@ -570,7 +572,11 @@ def test_action_event_observation_activation_and_receipt_commit_atomically(
         env = environment
         env.path = env.path.parent / "activation-failure"
         env.database = type(env.database)(env.path)
-        env.handler = type(env.handler)(env.database.unit_of_work, env.clock)
+        env.handler = type(env.handler)(
+            env.database.unit_of_work,
+            env.clock,
+            world_time_source=env.world_time_source,
+        )
         try:
             await env.initialize()
             scene_id = await setup(env)
@@ -591,9 +597,9 @@ def test_action_event_observation_activation_and_receipt_commit_atomically(
 
             monkeypatch.setattr(SqlAlchemyActivationRepository, "request", fail)
             with pytest.raises(RuntimeError, match="controlled_activation_failure"):
-                await ActionResolutionService(env.database.unit_of_work, env.clock).execute(
-                    RequestId(uuid4()), _move_proposal(env, scene_id=scene_id)
-                )
+                await ActionResolutionService(
+                    env.database.unit_of_work, env.clock, world_time_source=env.world_time_source
+                ).execute(RequestId(uuid4()), _move_proposal(env, scene_id=scene_id))
             for table, rows in before.items():
                 assert await env.rows(table) == rows
         finally:
@@ -643,9 +649,9 @@ def test_large_perception_history_can_aggregate_to_one_world_activation(environm
                     states,
                 )
             event_id = (
-                await ActionResolutionService(env.database.unit_of_work, env.clock).execute(
-                    RequestId(uuid4()), _move_proposal(env)
-                )
+                await ActionResolutionService(
+                    env.database.unit_of_work, env.clock, world_time_source=env.world_time_source
+                ).execute(RequestId(uuid4()), _move_proposal(env))
             ).event_ids[0]
             assert len(await env.rows("observations")) == 257
             world_request = ActivationRequest(

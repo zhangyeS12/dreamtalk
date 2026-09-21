@@ -1,6 +1,6 @@
 # LivingWorld 领域概念模型
 
-状态：Stage 0 领域语言保留；Stage 2 已建立领域模型、SQLite 映射、命令事务、知识隔离、canonical ledger、回放及资源级乐观并发；Stage 3 建立独立创作内容边界；C-006A/B 建立 scheduler、typed ActionProposal、persistent Scene 和 event-time perception；C-006C 泛化 SimulationActivation 的 target/cause/coalescing/fidelity 边界。见 [COMMAND_MODEL.md](COMMAND_MODEL.md)、[ACTION_RESOLUTION.md](ACTION_RESOLUTION.md)、[SCENES_AND_PERCEPTION.md](SCENES_AND_PERCEPTION.md)、[SPARSE_ACTIVATION.md](SPARSE_ACTIVATION.md)、[SIMULATION_FIDELITY.md](SIMULATION_FIDELITY.md)、[PERSISTENCE_MODEL.md](PERSISTENCE_MODEL.md) 和 [SIMULATION_SCHEDULER.md](SIMULATION_SCHEDULER.md)。Director、Agent、Character cognition 与业务 HTTP API 仍未实现。
+状态：Stage 0 领域语言保留；Stage 2 已建立领域模型、SQLite 映射、命令事务、知识隔离、canonical ledger、回放及资源级乐观并发；Stage 3 建立独立创作内容边界；C-006A/B 建立 scheduler、typed ActionProposal、persistent Scene 和 event-time perception；C-006C 泛化 SimulationActivation 的 target/cause/coalescing/fidelity 边界；C-006D 冻结 realtime monotonic、offline UTC bridge 与 bounded catch-up。见 [COMMAND_MODEL.md](COMMAND_MODEL.md)、[ACTION_RESOLUTION.md](ACTION_RESOLUTION.md)、[SCENES_AND_PERCEPTION.md](SCENES_AND_PERCEPTION.md)、[SPARSE_ACTIVATION.md](SPARSE_ACTIVATION.md)、[SIMULATION_FIDELITY.md](SIMULATION_FIDELITY.md)、[CLOCK_RECONCILIATION.md](CLOCK_RECONCILIATION.md)、[PERSISTENCE_MODEL.md](PERSISTENCE_MODEL.md) 和 [SIMULATION_SCHEDULER.md](SIMULATION_SCHEDULER.md)。Director、Agent、Character cognition 与业务 HTTP API 仍未实现。
 
 ## C-004A 内容与运行状态边界
 
@@ -38,9 +38,9 @@ Stage 2 已建立 canonical ledger、内部回放及资源级乐观并发；Dire
 - [`WorldTime`](../../services/core/src/livingworld/domain/values.py) 是独立不可变值对象，用 Python 整数表示相对所属世界逻辑纪元的微秒位置，拒绝浮点、布尔值、字符串和 `datetime`。坐标可位于纪元之前；不选择数据库整数范围。
 - `WorldTime` 只表示世界内的时间位置，不是 UTC，不包含世界/分支/事件身份，不隐式转换现实时间。不同分支可以在相同 `WorldTime` 拥有不同历史；事件身份仍由独立 `EventId` 表示。
 - 所有现实系统时间字段必须接收 timezone-aware `datetime` 并归一化到 UTC；naive `datetime` 一律拒绝。世界时间与现实时间字段不能互换，也不跨时间轴比较大小。
-- `WorldClock` 定义 `logical_time: WorldTime`、`observed_wall_time_utc: datetime`、精确十进制 `time_scale`、`running/paused` 状态和 `Revision`。比例只校验有限且非负，不推导推进、暂停或离线行为。
+- `WorldClock` 定义 `logical_time: WorldTime`、`observed_wall_time_utc: datetime`、精确十进制 `time_scale`、`running/paused` 状态和 `Revision`。C-006D 以 process monotonic elapsed 推进存活进程，以 UTC anchor 桥接 restart/offline，并在 pause/resume/scale/checkpoint 时 re-anchor。
 - `WorldEvent.occurred_at`、知识有效期和 `Observation.observed_at` 使用 `WorldTime`；事件创建时间、可选观察审计时间、命令回执创建/完成时间使用 UTC-aware `datetime`。
-- 本任务只定义类型和时钟快照，不实现推进、catch-up、日历、WorldDate、虚构月份、调度或 `Day 17 · 20:43` 转换。P-01 的现实/世界时间映射与离线推进政策仍需后续定义；时间表示的选择已经解决。
+- C-003A 当时只定义类型；C-006D 已解决 P-01 的现实/世界时间映射、运行/暂停与离线推进。日历、WorldDate、虚构月份、recurrence 及 `Day 17 · 20:43` presentation 仍未定义。
 
 ### 代码范围与职责
 
@@ -122,7 +122,7 @@ RequestId 是命令幂等身份，ObservationId 是观察发生身份；运行�
 
 ### Does not own
 
-不决定角色最终台词，不把现实时间自动等同于世界时间，不自行决定世界暂停或离线推进策略。
+不决定角色最终台词，不把 UTC 或 process monotonic timestamp 当成 WorldTime，不产生 WorldEvent，也不定义日历、recurrence 或分支时间政策。
 
 ### Relationships
 
@@ -131,7 +131,9 @@ RequestId 是命令幂等身份，ObservationId 是观察发生身份；运行�
 ### Important invariants
 
 - Director 负责时间调度（FR-02）。
-- 世界逻辑时间采用 WorldTime，现实观察时间采用 UTC-aware datetime；时间表示已确认。映射、推进粒度、离线推进及暂停政策仍待确认，C-003A 不实现推进。
+- 世界逻辑时间采用 WorldTime，现实观察时间采用 UTC-aware datetime；live process 只按 monotonic elapsed × exact Decimal scale 推进，restart/offline 只按 durable UTC bridge 一次计算 fixed target。
+- PAUSED 在进程内和离线期间都不推进；pause/resume/scale change 先 checkpoint 当前 monotonic effective time。wall regression 零推进且 durable UTC anchor 不回退；正向 gap 不 cap，以 bounded due work catch-up。
+- 单纯 clock passage/checkpoint 不创建 WorldEvent。catch-up 只 materialize 到期 Activation，不创作 Character/Director 结果。
 - Checkpoint 与 Timeline Branch 如何影响时钟，以及分支之间如何比较时间，待确认（FR-22）。
 
 ## 3. WorldState
@@ -877,7 +879,7 @@ typed cause kind、对应 TriggerId/EventId/SceneId/RequestId reference、activa
 
 以下内容只记录缺口，不增加或变更冻结规则。跨文档统一问题列表见 [PRODUCT_SPEC.md](../product/PRODUCT_SPEC.md)。
 
-1. World 的玩家数量与多人参与范围；WorldClock 的推进、暂停、离线与分支时间语义。
+1. World 的玩家数量与多人参与范围；WorldClock 的 realtime/offline/暂停语义已由 C-006D 解决，Timeline 分支之间的时间切换/比较仍待确认。
 2. Location 的移动与在途语义；Scene、Mission、Conversation 的边界及相互关系。
 3. Busy / Available 的控制方式；“必要主动联系”的范围；同一理由、一次发送与多角色 Episode 的对应关系。
 4. Planning Window 的尺度、耗尽判定和“大量失效”阈值；候选激活冲突与失败的处理边界。

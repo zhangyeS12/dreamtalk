@@ -33,6 +33,14 @@ class ActivationAccessDeniedError(ValueError):
     """A Character activation tried to reference an event it could not observe."""
 
 
+class WorldCatchingUpError(RuntimeError):
+    """A time-sensitive external mutation cannot overtake overdue temporal work."""
+
+
+class WorldRuntimeUnavailableError(RuntimeError):
+    """A world runtime is degraded, stopping, or otherwise unavailable for mutation."""
+
+
 class ReplayError(Exception):
     """Rebuild rejected; old projections remain usable."""
 

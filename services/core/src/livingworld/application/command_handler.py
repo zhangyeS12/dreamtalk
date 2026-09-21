@@ -29,7 +29,12 @@ from livingworld.application.player_movement import (
     player_moved_payload,
     resolve_player_movement,
 )
-from livingworld.application.ports import UnitOfWork, WallClock
+from livingworld.application.ports import (
+    TemporalMutationBarrier,
+    UnitOfWork,
+    WallClock,
+    WorldTimeSource,
+)
 from livingworld.application.results import CommandResult, EntityReference, RelationshipReference
 from livingworld.domain.commands import CommandReceipt
 from livingworld.domain.errors import ConcurrencyConflictError, DomainInvariantError
@@ -106,11 +111,22 @@ def expect_revision(
 
 
 class CommandHandler:
-    def __init__(self, uow_factory: Callable[[], UnitOfWork], clock: WallClock):
+    def __init__(
+        self,
+        uow_factory: Callable[[], UnitOfWork],
+        clock: WallClock,
+        *,
+        world_time_source: WorldTimeSource,
+        mutation_barrier: TemporalMutationBarrier | None = None,
+    ):
         self._uow_factory = uow_factory
         self._clock = clock
+        self._world_time_source = world_time_source
+        self._mutation_barrier = mutation_barrier
 
     async def execute(self, command: WorldCommand) -> CommandResult:
+        if self._mutation_barrier is not None and not isinstance(command, CreateWorld):
+            await self._mutation_barrier.assert_mutation_allowed(command.world_id)
         fingerprint = command_fingerprint(command)
         try:
             return await self._transaction(command, fingerprint)
@@ -171,7 +187,8 @@ class CommandHandler:
             world = await uow.worlds.get(command.world_id)
             if world is None:
                 raise EntityNotFoundError("World does not exist")
-            return await self._mutate(uow, command, fingerprint, now, world)
+            logical_time = self._world_time_source.read(world.clock)
+            return await self._mutate(uow, command, fingerprint, now, world, logical_time)
 
     async def _location(self, uow: UnitOfWork, world: World, identity: LocationId) -> Location:
         same_world(world.world_id, identity)
@@ -181,7 +198,13 @@ class CommandHandler:
         return location
 
     async def _mutate(
-        self, uow: UnitOfWork, command: WorldCommand, fingerprint: str, now: datetime, world: World
+        self,
+        uow: UnitOfWork,
+        command: WorldCommand,
+        fingerprint: str,
+        now: datetime,
+        world: World,
+        logical_time: WorldTime,
     ) -> CommandResult:
         observation_id = None
         match command:
@@ -267,7 +290,7 @@ class CommandHandler:
                         before,
                         after,
                         command.expected_presence_revision,
-                        world.clock.logical_time,
+                        logical_time,
                     )
 
             case CreateCharacter():
@@ -328,7 +351,7 @@ class CommandHandler:
                     await uow.characters.put_state(state, command.expected_state_revision)
                     if before is not None and before.location_id != state.location_id:
                         await uow.scenes.leave_active_for_principal(
-                            state.character_id, world.clock.logical_time
+                            state.character_id, logical_time
                         )
 
             case ChangeRelationship():
@@ -442,9 +465,7 @@ class CommandHandler:
                     command.value,
                     command.epistemic_status,
                     command.confidence,
-                    command.valid_from
-                    if command.valid_from is not None
-                    else world.clock.logical_time,
+                    command.valid_from if command.valid_from is not None else logical_time,
                     command.valid_to,
                     provenance_event_id=event_identity(command, 0),
                 )
@@ -478,7 +499,7 @@ class CommandHandler:
                     command.receiver_id,
                     source.assertion_id,
                     command.channel,
-                    world.clock.logical_time,
+                    logical_time,
                     now,
                     observation_id=observation_id,
                 )
@@ -494,7 +515,7 @@ class CommandHandler:
                     source.value,
                     command.epistemic_status,
                     command.confidence,
-                    world.clock.logical_time,
+                    logical_time,
                     provenance_event_id=event_identity(command, 1),
                     source_assertion_id=source.assertion_id,
                 )
@@ -523,7 +544,7 @@ class CommandHandler:
             command,
             fingerprint,
             now,
-            world.clock.logical_time,
+            logical_time,
             events,
             reference,
             revision,

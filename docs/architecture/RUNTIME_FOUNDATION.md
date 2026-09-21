@@ -55,7 +55,7 @@ C-005E5 将 sidecar stdin 保留为 Rust→Python 的 bounded credential control
 
 Core 的 graceful drain 上限为 5 秒，窗口关闭的 supervisor 等待为 8 秒，留出 transport drain 和进程退出余量；超时 fallback 有单独的 Windows 集成测试。
 
-C-006A composition root 还持有 `SimulationSchedulerRuntime`。每个显式 active World 最多一个可中断 asyncio task；shutdown 先 wake/join scheduler waits，再 dispose Database，不会把未到期 Trigger 标为 FIRED。schedule/cancel/未来 clock mutation 使用进程内 signal 唤醒，但 SQLite queue 仍是事实来源。详见 [SIMULATION_SCHEDULER.md](SIMULATION_SCHEDULER.md)。
+C-006D composition root 持有 `WorldSimulationRuntime`、`WorldClockService` 与 `SimulationSchedulerRuntime`。HTTP readiness 之前，它逐 world 以 persisted UTC anchor 计算并提交 fixed catch-up target，再用 bounded C-006A drain 清理 `due_at <= target` backlog；READY/PAUSED 后才建立 fresh monotonic base 并激活 tickless task。一个 world 的失败标记该 world DEGRADED，不伪造 ready temporal state。shutdown 先阻止新 simulation mutation、wake/join scheduler transaction，再 checkpoint READY/PAUSED world 的 effective time，最后 dispose Database。详见 [CLOCK_RECONCILIATION.md](CLOCK_RECONCILIATION.md) 与 [SIMULATION_SCHEDULER.md](SIMULATION_SCHEDULER.md)。
 
 `report_ui_ready` 是可信 WebView 对 compatible authenticated health 的反馈，不是业务 API。Windows debug smoke 模式在该反馈后关闭实际窗口，检查日志中的完整生命周期，并要求走 graceful 路径。
 
@@ -73,7 +73,7 @@ C-006A composition root 还持有 `SimulationSchedulerRuntime`。每个显式 ac
 
 Alembic 是唯一迁移执行器，alembic_version 是权威 cursor：0001 精确表示旧 C-002 基础，0002 增加领域表。旧库必须先验证版本、历史 checksum 与 schema 形状，才 stamp 0001 并 upgrade；任何歧义失败关闭，不自动修复或重建。旧 schema_version=1 和 migration_history 原始行作为兼容/历史证据保留，不再表示当前 schema cursor，也不驱动迁移。迁移失败事务回滚，重复启动不重放、不重复审计。
 
-普通日志只接受 timestamp、level、component、event 与可选已验证 UUID trace_id；不接受任意 payload 或异常原文。C-006A 增加专用 scheduler metadata allowlist：world id、kind、due/lag WorldTime、batch/activation count 和 state，接口不能接收 trigger payload。Core stdout 与 app-data `logs/core-<generation>.jsonl` 使用同一结构。HTTP access log 被禁用；secret/token/prompt/user conversation 默认不记录。日志轮转/保留策略尚未实现。
+普通日志只接受 timestamp、level、component、event 与可选已验证 UUID trace_id；不接受任意 payload 或异常原文。scheduler metadata allowlist 只含 world id、kind、due/lag WorldTime、batch/activation count 和 state；C-006D catch-up allowlist 只含 from/target、UTC gap、counts、typed anomaly、completion 和 monotonic duration。两种接口都不能接收 trigger payload。Core stdout 与 app-data `logs/core-<generation>.jsonl` 使用同一结构。HTTP access log 被禁用；secret/token/prompt/user conversation 默认不记录。日志轮转/保留策略尚未实现。
 
 ## 明确的扩展与测试点
 
