@@ -10,7 +10,7 @@
     "frontendDist": "../../web/dist"
   },
   "app": {
-    "windows": [{ "label": "main", "title": "LivingWorld", "width": 800, "height": 560, "visible": false }],
+    "windows": [{ "label": "main", "title": "LivingWorld", "width": 1280, "height": 860, "visible": false }],
     "security": {
       "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:*; img-src 'self' data:",
       "capabilities": ["main"]

@@ -10,6 +10,21 @@ export interface CoreHealth {
   generation: string;
   llm_status: LLMRuntimeStatus;
 }
+export interface WorldSummary { world_id: string; name: string }
+export interface InspectorSnapshot {
+  world: WorldSummary;
+  clock: { world_time: string; state: "running" | "paused"; scale: string; revision: number };
+  runtime_state: string;
+  locations: Array<{ location_id: string; name: string }>;
+  players: Array<{ player_id: string; name: string; location_id: string; activity: string; availability: string; revision: number }>;
+  characters: Array<{ character_id: string; name: string; location_id: string | null }>;
+  scenes: Array<{ scene_id: string; location_id: string; status: string; started_at: string; participants: Array<{ kind: string; principal_id: string; name: string; joined_at: string }> }>;
+  triggers: Array<{ trigger_id: string; kind: string; status: string; priority: number; due_at: string }>;
+  activations: Array<{ activation_id: string; target: string; kind: string; priority: number; due_at: string; fidelity: string | null; cause_count: number }>;
+  events: Array<{ event_id: string; type: string; occurred_at: string; ledger_position: number }>;
+  observations: Array<{ observation_id: string; principal_kind: string; principal_id: string; principal_name: string; event_id: string; channel: string; observed_at: string }>;
+  memories: Array<{ memory_id: string; owner_character_id: string; content: string; experienced_from: string; experienced_to: string; formed_at: string; salience: number | null; evidence: Array<{ observation_id: string; observed_at: string }> }>;
+}
 
 export class CoreClient {
   private readonly endpoint: URL;
@@ -48,5 +63,42 @@ export class CoreClient {
       signal, credentials: "omit",
     });
     if (!response.ok) throw new Error("core_shutdown_rejected");
+  }
+
+  private async developerRequest<T>(path: string, init?: RequestInit): Promise<T> {
+    const response = await this.fetcher(new URL(path, this.endpoint), {
+      ...init,
+      headers: { Authorization: `Bearer ${this.connection.token}`, "Content-Type": "application/json", ...init?.headers },
+      credentials: "omit", cache: "no-store",
+    });
+    if (!response.ok) throw new Error(`developer_request_failed_${response.status}`);
+    return await response.json() as T;
+  }
+
+  listWorlds(): Promise<WorldSummary[]> { return this.developerRequest("/developer/worlds"); }
+  createDemoWorld(): Promise<{ world_id: string }> {
+    return this.developerRequest("/developer/demo-world", { method: "POST" });
+  }
+  snapshot(worldId: string, ownerCharacterId?: string): Promise<InspectorSnapshot> {
+    const suffix = ownerCharacterId ? `?owner_character_id=${encodeURIComponent(ownerCharacterId)}` : "";
+    return this.developerRequest(`/developer/worlds/${worldId}/snapshot${suffix}`);
+  }
+  pauseWorld(worldId: string): Promise<{ ok: boolean }> {
+    return this.developerRequest(`/developer/worlds/${worldId}/clock/pause`, { method: "POST" });
+  }
+  resumeWorld(worldId: string): Promise<{ ok: boolean }> {
+    return this.developerRequest(`/developer/worlds/${worldId}/clock/resume`, { method: "POST" });
+  }
+  changeClockScale(worldId: string, scale: string): Promise<{ ok: boolean }> {
+    return this.developerRequest(`/developer/worlds/${worldId}/clock/scale`, { method: "POST", body: JSON.stringify({ scale }) });
+  }
+  scheduleTrigger(worldId: string, delayMicroseconds: number, targetCharacterId: string): Promise<{ trigger_id: string }> {
+    return this.developerRequest(`/developer/worlds/${worldId}/triggers`, { method: "POST", body: JSON.stringify({ delay_microseconds: delayMicroseconds, target_character_id: targetCharacterId }) });
+  }
+  movePlayer(worldId: string, playerId: string, destinationId: string): Promise<{ ok: boolean }> {
+    return this.developerRequest(`/developer/worlds/${worldId}/move-player`, { method: "POST", body: JSON.stringify({ player_id: playerId, destination_id: destinationId }) });
+  }
+  recordMemory(worldId: string, ownerCharacterId: string, observationId: string, content: string): Promise<{ memory_id: string }> {
+    return this.developerRequest(`/developer/worlds/${worldId}/memories`, { method: "POST", body: JSON.stringify({ owner_character_id: ownerCharacterId, observation_id: observationId, content }) });
   }
 }

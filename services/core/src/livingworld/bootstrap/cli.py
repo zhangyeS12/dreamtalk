@@ -12,7 +12,14 @@ from uuid import uuid4
 import uvicorn
 
 from livingworld.adapters.http.app import create_app
+from livingworld.application.command_handler import CommandHandler
+from livingworld.application.developer_inspector import (
+    INSPECTOR_TRIGGER_KIND,
+    DeveloperInspectorService,
+)
+from livingworld.application.memory import EpisodicMemoryService
 from livingworld.application.runtime import RuntimeStatus, ShutdownRequests
+from livingworld.application.scenes import SceneService
 from livingworld.application.scheduler import (
     SchedulerWakeSignal,
     SimulationScheduler,
@@ -64,6 +71,7 @@ async def run(
     parent_pid: int | None = None,
     *,
     desktop: bool = False,
+    developer_tools: bool = False,
 ) -> None:
     logger = StructuredLogger()
     config = read_bootstrap(bootstrap_path)
@@ -87,7 +95,9 @@ async def run(
     scheduler_runtime = None
     simulation_runtime = None
     try:
-        trigger_registry = TriggerKindRegistry()
+        trigger_registry = TriggerKindRegistry(
+            {(INSPECTOR_TRIGGER_KIND, 1): lambda _payload: None} if developer_tools else None
+        )
         wake_signal = SchedulerWakeSignal()
         wall_clock = SystemWallClock()
         monotonic_clock = SystemMonotonicClock()
@@ -118,6 +128,32 @@ async def run(
             diagnostics=StructuredCatchUpDiagnosticSink(logger),
         )
         await simulation_runtime.start_all()
+        developer_inspector = None
+        if developer_tools:
+            command_handler = CommandHandler(
+                database.unit_of_work,
+                wall_clock,
+                world_time_source=time_source,
+                mutation_barrier=simulation_runtime,
+                wake_signal=wake_signal,
+                world_runtime_registrar=simulation_runtime,
+            )
+            developer_inspector = DeveloperInspectorService(
+                database.developer_inspector_store(),
+                command_handler,
+                SceneService(database.unit_of_work, wall_clock),
+                EpisodicMemoryService(
+                    database.unit_of_work,
+                    wall_clock,
+                    world_time_source=time_source,
+                    mutation_barrier=simulation_runtime,
+                ),
+                scheduler,
+                clock_service,
+                simulation_runtime,
+                database.character_memory_reader,
+                database.unit_of_work,
+            )
         llm_session = await start_production_llm_session(config.llm_config_path, database, logger)
         status = RuntimeStatus(
             version("livingworld-core"), generation, llm_health=llm_session.health
@@ -129,7 +165,15 @@ async def run(
                 sys.stdin.buffer.raw, llm_session.credentials, logger
             )
             control_listener.start()
-        app = create_app(status, shutdown, session, lambda: None, logger, config.allowed_origins)
+        app = create_app(
+            status,
+            shutdown,
+            session,
+            lambda: None,
+            logger,
+            config.allowed_origins,
+            developer_inspector,
+        )
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.bind((LOOPBACK_HOST, 0))
         sock.listen(128)
@@ -208,6 +252,7 @@ def main() -> None:
     parser.add_argument("--desktop", action="store_true")
     parser.add_argument("--bootstrap-path", type=Path, required=True)
     parser.add_argument("--parent-pid", type=int)
+    parser.add_argument("--developer-tools", action="store_true")
     args = parser.parse_args()
     if args.desktop and (args.parent_pid is None or args.parent_pid <= 0):
         parser.error("desktop_parent_pid_required")
@@ -217,6 +262,7 @@ def main() -> None:
                 args.bootstrap_path,
                 args.parent_pid if args.desktop else None,
                 desktop=args.desktop,
+                developer_tools=args.developer_tools,
             )
         )
     except KeyboardInterrupt:

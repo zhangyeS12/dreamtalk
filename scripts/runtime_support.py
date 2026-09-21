@@ -57,7 +57,14 @@ def launch_core():
         encoding="utf-8",
     )
     process = subprocess.Popen(
-        [sys.executable, "-m", "livingworld.bootstrap", "--bootstrap-path", str(path)]
+        [
+            sys.executable,
+            "-m",
+            "livingworld.bootstrap",
+            "--bootstrap-path",
+            str(path),
+            "--developer-tools",
+        ]
     )
     try:
         deadline = time.monotonic() + 15

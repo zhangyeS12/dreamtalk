@@ -11,9 +11,11 @@ it("starts Connecting while discovery is pending", () => {
 });
 
 it("enters Ready only after authenticated compatible health", async () => {
-  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
-    ready: true, core_version: "0.1.0", api_protocol: API_PROTOCOL, generation: "generation", llm_status: "unconfigured",
-  }))));
+  vi.stubGlobal("fetch", vi.fn()
+    .mockResolvedValueOnce(new Response(JSON.stringify({
+      ready: true, core_version: "0.1.0", api_protocol: API_PROTOCOL, generation: "generation", llm_status: "unconfigured",
+    })))
+    .mockResolvedValue(new Response("[]")));
   render(<App discover={async () => ({ endpoint: "http://127.0.0.1:49153", token: "memory", generation: "generation" })} />);
   expect((await screen.findByText("Core Ready")).textContent).toBe("Core Ready");
 });

@@ -47,6 +47,7 @@ try:
         page.on("pageerror", lambda _error: errors.append(True))
         page.goto("http://127.0.0.1:5173/", wait_until="networkidle")
         page.get_by_role("status").filter(has_text="Core Ready").wait_for(timeout=20_000)
+        page.get_by_role("heading", name="Developer Runtime Inspector").wait_for(timeout=20_000)
         if errors:
             raise RuntimeError("browser_page_error")
         browser.close()
@@ -54,7 +55,16 @@ try:
     events = [json.loads(line)["event"] for line in output.splitlines() if line.startswith("{")]
     if process.returncode != 0 or "runtime_stopped" not in events:
         raise RuntimeError("browser_graceful_shutdown_failed")
-    print(json.dumps({"event": "browser_smoke_passed", "state": "Core Ready", "page_errors": 0}))
+    print(
+        json.dumps(
+            {
+                "event": "browser_smoke_passed",
+                "state": "Core Ready",
+                "inspector": "visible",
+                "page_errors": 0,
+            }
+        )
+    )
 finally:
     if process.poll() is None:
         try:

@@ -69,3 +69,4 @@ def test_only_system_api_and_host_boundary(runtime_client):
     assert client.get("/docs").status_code == 404
     assert client.get("/openapi.json").status_code == 404
     assert client.get("/system/live", headers={"Host": "attacker.example"}).status_code == 400
+    assert client.get("/developer/worlds").status_code == 404

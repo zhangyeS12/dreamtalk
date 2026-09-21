@@ -166,5 +166,13 @@ class Database:
 
         return SqlAlchemyCharacterMemoryReader(self._sessions, character_id)
 
+    def developer_inspector_store(self):
+        """Developer-only read projection; it has no mutation capability."""
+        from livingworld.infrastructure.persistence.developer_inspector import (
+            SqlAlchemyDeveloperInspectorStore,
+        )
+
+        return SqlAlchemyDeveloperInspectorStore(self._sessions)
+
     async def close(self) -> None:
         await self.engine.dispose()

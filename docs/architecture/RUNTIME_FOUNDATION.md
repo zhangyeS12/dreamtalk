@@ -24,7 +24,7 @@ domain 包含无框架的系统契约、RequestId、领域快照及 C-006A typed
 | `GET /system/health` | Bearer | 返回 `ready`、`core_version`、`api_protocol`、`generation` 与安全的 `llm_status` |
 | `POST /system/shutdown` | Bearer + UUID `X-Request-Id` | 接受幂等系统关闭请求；同一 generation 重复请求不重复触发关闭 |
 
-没有业务 API、公开 OpenAPI/docs 页面或数据库路径泄漏。shutdown RequestId 是基础设施抽象，不定义未来世界事件的幂等、Outreach 去重或业务 mutation cache。
+没有公开 OpenAPI/docs 页面或数据库路径泄漏。`--developer-tools` 可显式注册仅供本地开发检查使用的鉴权 `/developer/*` API；普通 Core 与 release desktop 不注册这些路由，完整边界见 [RUNTIME_INSPECTOR.md](RUNTIME_INSPECTOR.md)。shutdown RequestId 是基础设施抽象，不定义未来世界事件的幂等、Outreach 去重或业务 mutation cache。
 
 ## Desktop bootstrap v1
 
@@ -59,13 +59,13 @@ C-006D composition root 持有 `WorldSimulationRuntime`、`WorldClockService` �
 
 Q-001A 通过 application `WorldRuntimeRegistrar` seam 将运行期成功提交的 `CreateWorld` 注册到同一 `WorldSimulationRuntime`。注册在 durable command transaction 之后执行，并按 WorldId 串行、幂等；成功后完成该 world 的 reconciliation 与 scheduler activation。注册失败只把 runtime operational state 标为 DEGRADED 并记录安全诊断，不回滚、删除或谎报已提交的 World；同一 CreateWorld 精确重试可再次尝试注册而不会重放 canonical event。
 
-`report_ui_ready` 是可信 WebView 对 compatible authenticated health 的反馈，不是业务 API。Windows debug smoke 模式在该反馈后关闭实际窗口，检查日志中的完整生命周期，并要求走 graceful 路径。
+`report_ui_ready` 是可信 WebView 对 compatible authenticated health 的反馈，不是业务 API。Windows debug smoke 模式在该反馈后关闭实际窗口，检查日志中的完整生命周期，并要求走 graceful 路径。Debug desktop 会向 Core 传入 `--developer-tools`；release build 不传。
 
 桌面 build 显式启用 `custom-protocol`，从内嵌 Web 资源加载 UI；desktop dev 使用独立 Vite server。CoreClient 将浏览器原生 fetch 绑定到 globalThis，避免 native browser/WebView 的调用上下文错误。
 
 ## Browser 开发连接
 
-`dev:web` 的 Node launcher 启动同一 Core、校验 ready record，将派生 session 通过仅开发模式的 Vite virtual module 交给页面；Vite 只监听 loopback。正常 build 不嵌入 session，Tauri build 从 Rust IPC 获取连接。独立发布的 browser transport/session delivery 尚未实现；未配置的生产 Web 页面显示 Core Failed。
+`dev:web` 的 Node launcher以 `--developer-tools` 启动同一 Core、校验 ready record，将派生 session 通过仅开发模式的 Vite virtual module 交给页面；Vite 只监听 loopback。正常 build 不嵌入 session，Tauri build 从 Rust IPC 获取连接。独立发布的 browser transport/session delivery 尚未实现；未配置的生产 Web 页面显示 Core Failed。
 
 该开发通道不能暴露到 LAN 或互联网。服务器/云 transport 留待后续任务，不在本阶段加入。
 

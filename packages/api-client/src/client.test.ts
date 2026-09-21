@@ -28,4 +28,14 @@ describe("CoreClient", () => {
     await new CoreClient(connection, fetcher).shutdown(id);
     expect(fetcher.mock.calls[0][1].headers["X-Request-Id"]).toBe(id);
   });
+  it("uses authenticated developer routes and preserves typed trigger input", async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({ trigger_id: "trigger" })));
+    await new CoreClient(connection, fetcher).scheduleTrigger("world", 1_000_000, "character");
+    expect(fetcher.mock.calls[0][0].toString()).toBe(`${connection.endpoint}/developer/worlds/world/triggers`);
+    expect(fetcher.mock.calls[0][1].headers.Authorization).toBe("Bearer memory-session");
+    expect(JSON.parse(fetcher.mock.calls[0][1].body)).toEqual({
+      delay_microseconds: 1_000_000,
+      target_character_id: "character",
+    });
+  });
 });

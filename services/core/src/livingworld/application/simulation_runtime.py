@@ -242,6 +242,24 @@ class WorldSimulationRuntime:
     def report(self, world_id: WorldId) -> CatchUpReport | None:
         return self._reports.get(world_id)
 
+    async def pause(self, world_id: WorldId) -> WorldClock:
+        """Pause one ready World through the canonical clock authority."""
+        await self.assert_mutation_allowed(world_id)
+        clock = await self._clock_service.pause(world_id)
+        self._states[world_id] = WorldRuntimeState.PAUSED
+        return clock
+
+    async def resume(self, world_id: WorldId) -> WorldClock:
+        """Resume one paused World through the canonical clock authority."""
+        await self.assert_mutation_allowed(world_id)
+        clock = await self._clock_service.resume(world_id)
+        self._states[world_id] = WorldRuntimeState.READY
+        return clock
+
+    async def change_scale(self, world_id: WorldId, time_scale: Decimal) -> WorldClock:
+        await self.assert_mutation_allowed(world_id)
+        return await self._clock_service.change_scale(world_id, time_scale)
+
     async def start_all(self) -> tuple[CatchUpReport, ...]:
         # Sequential ownership is intentionally bounded. One broken world is isolated
         # and cannot falsify another world's state.

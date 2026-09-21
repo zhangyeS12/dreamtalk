@@ -24,7 +24,7 @@ await file.writeFile(JSON.stringify({
 }));
 await file.close();
 const python = resolve(root, process.platform === "win32" ? ".venv/Scripts/python.exe" : ".venv/bin/python");
-const child = spawn(python, ["-m", "livingworld.bootstrap", "--bootstrap-path", bootstrap], {
+const child = spawn(python, ["-m", "livingworld.bootstrap", "--bootstrap-path", bootstrap, "--developer-tools"], {
   cwd: root, stdio: ["ignore", "pipe", "pipe"], windowsHide: true,
 });
 child.stdout.pipe(process.stdout);

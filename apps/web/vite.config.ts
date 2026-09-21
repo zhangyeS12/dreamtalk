@@ -1,5 +1,6 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { fileURLToPath, URL } from "node:url";
 
 export default defineConfig(({ command }) => ({
   plugins: [react(), {
@@ -16,5 +17,6 @@ export default defineConfig(({ command }) => ({
     },
   }],
   clearScreen: false,
+  resolve: { alias: { "@livingworld/api-client": fileURLToPath(new URL("../../packages/api-client/src/index.ts", import.meta.url)) } },
   server: { host: "127.0.0.1", strictPort: true },
 }));

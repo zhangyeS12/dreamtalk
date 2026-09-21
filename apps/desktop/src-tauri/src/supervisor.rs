@@ -228,6 +228,8 @@ impl CoreSupervisor {
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
             .kill_on_drop(true);
+        #[cfg(debug_assertions)]
+        command.arg("--developer-tools");
         #[cfg(windows)]
         command.creation_flags(0x08000000);
         let mut child = command.spawn().map_err(|_| "core_spawn_failed")?;

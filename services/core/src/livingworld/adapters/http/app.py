@@ -9,6 +9,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, ConfigDict
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
+from livingworld.application.developer_inspector import DeveloperInspectorService
 from livingworld.application.runtime import RuntimeStatus, ShutdownRequests
 from livingworld.domain.contracts import API_PROTOCOL, LOOPBACK_HOST, RequestId
 from livingworld.infrastructure.logging import StructuredLogger
@@ -30,6 +31,7 @@ def create_app(
     initialize: Callable[[], None],
     logger: StructuredLogger,
     allowed_origins: list[str] | None = None,
+    developer_inspector: DeveloperInspectorService | None = None,
 ) -> FastAPI:
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
@@ -61,6 +63,11 @@ def create_app(
             credentials.credentials.encode("utf-8"), session_token.encode("utf-8")
         ):
             raise HTTPException(401, "unauthorized", headers={"WWW-Authenticate": "Bearer"})
+
+    if developer_inspector is not None:
+        from livingworld.adapters.http.developer import developer_router
+
+        app.include_router(developer_router(developer_inspector, authorize))
 
     @app.get("/system/live")
     async def live() -> dict[str, bool]:
