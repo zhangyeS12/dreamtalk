@@ -27,7 +27,7 @@ Command
 | CreateWorld | 创建 World 和独立双时间 WorldClock；不隐式创建其他实体 | 0: WorldCreated |
 | CreateLocation | 世界存在，目标身份未使用，同世界 | 0: LocationCreated |
 | CreatePlayer | 世界与初始地点存在且同世界；原子创建 Player 与 PlayerPresence | 0: PlayerCreated；1: PlayerPlaced |
-| MovePlayer | 玩家、Presence、目标地点存在且同世界；必填 expected_presence_revision: Revision，CAS 更新唯一位置 | 0: PlayerMoved |
+| MovePlayer | legacy compatibility command；适配为 `PLAYER_INPUT` 的 `move_player` v1 ActionProposal，由 ActionResolution 统一验证并 CAS 更新唯一位置 | 0: PlayerMoved（仅由 action pipeline 提交） |
 | CreateCharacter | 建立角色静态身份，目标身份未使用 | 0: CharacterCreated |
 | PlaceCharacter | 必填 expected_state_revision: Revision \| None；None 期待不存在，首次 revision=0；已有状态 CAS +1 | 0: CharacterPlaced |
 | ChangeRelationship | 必填 expected_relationship_revision: Revision \| None；仅改变 source→target，缺失边须显式期待不存在 | 0: RelationshipChanged |
@@ -35,7 +35,7 @@ Command
 | FormCharacterBelief | 可信内部调用；新断言仅归属一个现存同世界 Character；可无 source、可与 Truth 矛盾；无自动 Observation | 0: CharacterBeliefFormed |
 | AcquireKnowledge | 可信内部合法渠道；世界/接收方/源断言存在且同世界，派生 ID 未使用 | 0: ObservationRecorded；1: KnowledgeAcquired |
 
-C-006B 的 `ResolveAction` 不是并列的 mutation engine：typed proposal 经 allowlisted deterministic resolver 后，复用同一 WorldEvent、ledger allocator、repository CAS、ObservationAppender 和 CommandReceipt transaction。当前 `move_player` v1 复用 PlayerPresence 的 `at_location` 与 `replace_presence`。Scene create/join/leave/end 使用相同 RequestId fingerprint/receipt convention，但作为内部 runtime state 操作不伪造 player-visible WorldEvent。
+C-006B 的 `ResolveAction` 不是并列的 mutation engine：typed proposal 经 allowlisted deterministic resolver 后，复用同一 WorldEvent、ledger allocator、repository CAS、ObservationAppender 和 CommandReceipt transaction。Q-001A 起，当前 `move_player` v1 是普通 Player fictional movement 的唯一 commit path；legacy `MovePlayer` 只做输入/结果兼容适配，不再拥有 event/projection write。`CreatePlayer` 的 initial placement 仍是 setup，不被重定义为玩家行动。Scene create/join/leave/end 使用相同 RequestId fingerprint/receipt convention，但作为内部 runtime state 操作不伪造 player-visible WorldEvent。
 
 **玩家创建歧义已解决：** 成功创建的普通玩家必须有初始物理地点。命令接收 initial_location_id、activity_state、availability_state，复用 PlayerActivity/PlayerAvailability；默认 active/available。inactive 保留地点，不自动产生见证。指纹使用默认值解析后的完整语义值。
 

@@ -86,10 +86,11 @@ def test_exact_expected_revision_and_stale_retry_priority(environment, kind):
             }[kind]
             with pytest.raises(IdempotencyConflictError):
                 await env.handler.execute(replace(command, **{field: result.resulting_revision}))
+            stale_command = replace(
+                command, request_id=env.command(CreateWorld, name="unused").request_id
+            )
             with pytest.raises(ConcurrencyConflictError) as conflict:
-                await env.handler.execute(
-                    replace(command, request_id=env.command(CreateWorld, name="unused").request_id)
-                )
+                await env.handler.execute(stale_command)
             assert conflict.value.expected_revision == expected
             assert conflict.value.actual_revision == result.resulting_revision
             assert (
@@ -101,7 +102,20 @@ def test_exact_expected_revision_and_stale_retry_priority(environment, kind):
                 }[kind]
             )
             assert conflict.value.resource_identity is not None
-            assert await env.snapshot() == state
+            after = await env.snapshot()
+            if kind == "presence":
+                assert {
+                    key: value for key, value in after.items() if key != "command_receipts"
+                } == {key: value for key, value in state.items() if key != "command_receipts"}
+                assert len(after["command_receipts"]) == len(state["command_receipts"]) + 1
+                receipt = next(
+                    row
+                    for row in await env.rows("command_receipts")
+                    if row.request_id == stale_command.request_id.value.hex
+                )
+                assert receipt.status == "rejected"
+            else:
+                assert after == state
         finally:
             await env.database.close()
 
@@ -154,15 +168,24 @@ def test_two_independent_mutations_have_one_winner_and_replay(environment, kind)
             assert result.resulting_revision == expected_result
             after = await env.snapshot()
             assert len(after["world_events"]) == len(before["world_events"]) + 1
-            assert len(after["command_receipts"]) == len(before["command_receipts"]) + 1
+            expected_receipts = 2 if kind == "presence" else 1
+            assert len(after["command_receipts"]) == (
+                len(before["command_receipts"]) + expected_receipts
+            )
             assert not any(
                 row.causation_request_id == commands[loser].request_id.value.hex
                 for row in after["world_events"]
             )
-            assert not any(
-                row.request_id == commands[loser].request_id.value.hex
-                for row in after["command_receipts"]
-            )
+            losing_receipts = [
+                row
+                for row in await env.rows("command_receipts")
+                if row.request_id == commands[loser].request_id.value.hex
+            ]
+            if kind == "presence":
+                assert len(losing_receipts) == 1
+                assert losing_receipts[0].status == "rejected"
+            else:
+                assert not losing_receipts
             async with env.database.unit_of_work() as uow:
                 if kind == "presence":
                     state = await uow.players.presence(env.player)
@@ -404,7 +427,7 @@ def test_event_collision_rolls_back_then_resolves_receipt_once(environment, monk
                 old_presence = await uow.players.presence(env.player)
             result = await env.handler.execute(command)
             before = await env.snapshot()
-            original = CommandReceiptRepository.existing
+            original = CommandReceiptRepository.existing_action
             reads = []
             with monkeypatch.context() as patch:
 
@@ -414,7 +437,7 @@ def test_event_collision_rolls_back_then_resolves_receipt_once(environment, monk
                         None if len(reads) == 1 else await original(self, request_id, fingerprint)
                     )
 
-                patch.setattr(CommandReceiptRepository, "existing", miss_once)
+                patch.setattr(CommandReceiptRepository, "existing_action", miss_once)
 
                 async def stale_snapshot(self, player_id):
                     return old_presence

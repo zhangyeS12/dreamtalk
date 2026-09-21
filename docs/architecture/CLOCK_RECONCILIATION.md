@@ -72,6 +72,8 @@ per-world operational state 是 `STARTING / CATCHING_UP / READY / PAUSED / DEGRA
 
 startup 逐世界处理，catch-up task ownership 有界；一个 world 失败只把该 world 标为 DEGRADED，其他 world 仍可到 READY/PAUSED。shutdown 在 batch 间可中断；已提交工作保留，未处理 trigger 保持 PENDING，不伪造 FIRED。READY/PAUSED world graceful shutdown 在 scheduler transaction 结束后 checkpoint 当前 effective time，再关闭 persistence。
 
+运行期 `CreateWorld` 在 canonical transaction 成功提交后，经 application `WorldRuntimeRegistrar` port 加入同一 runtime。`register_world` 按 WorldId 串行且幂等，执行正常 startup reconciliation，再激活 tickless scheduler。若该后提交 lifecycle 步骤失败，World 与 `WorldCreated` event/receipt 仍保持 durable，runtime state 进入 DEGRADED；CreateWorld 结果不能被改报为回滚。精确重试不会重放 world/event，但会重新尝试尚未 READY/PAUSED 的 runtime 注册。
+
 ## 6. Crash semantics
 
 - graceful shutdown：checkpoint logical/UTC anchor，下一次启动只桥接关闭后的 UTC gap；

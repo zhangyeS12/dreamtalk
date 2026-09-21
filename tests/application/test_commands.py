@@ -127,11 +127,27 @@ def test_move_persistent_idempotency_original_result_and_internal_time(environme
             assert (
                 event.causation_request_id == event.correlation_id == command.request_id.value.hex
             )
-            assert event.idempotency_key == f"{command.request_id}:0"
+            assert event.idempotency_key == f"{command.request_id}:action:0"
             payload = json.loads(event.payload)
             assert payload["from_location_id"] == str(env.home.value)
             assert payload["to_location_id"] == str(env.cafe.value)
             assert payload["revision"] == 1
+            observations = [
+                row
+                for row in await env.rows("observations")
+                if row.target_event_id == event.event_id
+            ]
+            assert len(observations) == 1
+            assert observations[0].principal_kind == "player"
+            assert observations[0].principal_id == env.player.value.hex
+            assert observations[0].basis == "event_occurrence"
+            receipts = [
+                row
+                for row in await env.rows("command_receipts")
+                if row.request_id == command.request_id.value.hex
+            ]
+            assert len(receipts) == 1
+            assert json.loads(receipts[0].result_payload)["result_version"] == 2
             async with env.database.unit_of_work() as uow:
                 presence = await uow.players.presence(env.player)
                 assert presence.location_id == env.cafe and presence.revision == Revision(1)
@@ -329,7 +345,7 @@ def test_move_failure_rolls_back_and_same_request_retries(environment, monkeypat
                     async def fail(self, receipt, fingerprint, result):
                         raise RuntimeError("injected_after_projection")
 
-                    patch.setattr(CommandReceiptRepository, "add", fail)
+                    patch.setattr(CommandReceiptRepository, "add_action", fail)
                 with pytest.raises(RuntimeError, match="injected"):
                     await env.handler.execute(command)
             await env.restart()
@@ -475,7 +491,7 @@ def test_cross_world_rejected_without_writes(environment, kind):
 @pytest.mark.parametrize(
     "kind", ["world", "location", "player", "presence", "character", "participant"]
 )
-def test_missing_references_rejected_without_writes(environment, kind):
+def test_missing_references_are_rejected_without_canonical_mutation(environment, kind):
     async def run():
         env = environment
         try:
@@ -531,7 +547,23 @@ def test_missing_references_rejected_without_writes(environment, kind):
                 )
             with pytest.raises(EntityNotFoundError):
                 await env.handler.execute(command)
-            assert await env.snapshot() == before
+            after = await env.snapshot()
+            if kind in {"player", "presence"}:
+                # The compatibility command now uses canonical ActionResolution.
+                # Rejections are durable/idempotent, but never mutate world state.
+                assert {
+                    key: value for key, value in after.items() if key != "command_receipts"
+                } == {key: value for key, value in before.items() if key != "command_receipts"}
+                assert len(after["command_receipts"]) == len(before["command_receipts"]) + 1
+                receipt = next(
+                    row
+                    for row in await env.rows("command_receipts")
+                    if row.request_id == command.request_id.value.hex
+                )
+                assert receipt.status == "rejected"
+                assert json.loads(receipt.result_payload)["reason"] == "not_present"
+            else:
+                assert after == before
         finally:
             await env.database.close()
 

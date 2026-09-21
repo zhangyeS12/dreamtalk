@@ -266,8 +266,6 @@ class SceneService:
                     scene = next_scene
                 else:
                     next_scene = scene.close(command.ended_at, command.expected_scene_revision)
-                    for participant in await uow.scenes.active_participants(command.scene_id):
-                        participant.leave(command.ended_at)
                     await uow.scenes.replace(next_scene, command.expected_scene_revision)
                     await uow.scenes.leave_all(command.scene_id, command.ended_at)
                     scene = next_scene

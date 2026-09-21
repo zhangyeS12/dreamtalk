@@ -83,10 +83,14 @@ def test_command_wall_clock_is_injected_and_raw_store_is_read_only():
     for source in (root / "application").rglob("*.py"):
         for node in ast.walk(ast.parse(source.read_text(encoding="utf-8"))):
             if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
-                assert node.func.attr not in {"now", "utcnow", "execute", "merge"}, (
-                    source,
-                    node.lineno,
+                forbidden = node.func.attr in {"now", "utcnow", "merge"}
+                raw_execute = node.func.attr == "execute" and not (
+                    isinstance(node.func.value, ast.Attribute)
+                    and isinstance(node.func.value.value, ast.Name)
+                    and node.func.value.value.id == "self"
+                    and node.func.value.attr == "_actions"
                 )
+                assert not (forbidden or raw_execute), (source, node.lineno)
     from livingworld.infrastructure.persistence.store import PersistenceStore
 
     assert not hasattr(PersistenceStore, "add")
@@ -167,6 +171,18 @@ def test_cas_contracts_use_existing_revision_and_focused_ports():
         assert get_type_hints(method)["expected_revision"] == kind
         assert signature(method).parameters["expected_revision"].default is Parameter.empty
     assert not any("expected" in field for field in get_type_hints(FormCharacterBelief))
+
+
+def test_legacy_move_command_delegates_to_the_only_player_movement_commit_path():
+    from inspect import getsource
+
+    from livingworld.application.command_handler import CommandHandler
+
+    assert "case MovePlayer()" not in getsource(CommandHandler._mutate)
+    adapter = getsource(CommandHandler._execute_legacy_move)
+    assert "self._actions.execute" in adapter
+    assert "WorldEvent(" not in adapter
+    assert "observations.add" not in adapter
 
 
 def test_content_flow_has_no_runtime_mutation_or_knowledge_capability():

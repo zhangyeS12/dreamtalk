@@ -1,6 +1,6 @@
 # C-002：Application Runtime Foundation
 
-状态：C-002 Stage 1 运行时基础继续沿用，本文同步记录 C-003A 领域与 C-003B 持久化接线。Stage 0 的 [冻结规则与 P-01～P-19](../product/PRODUCT_SPEC.md) 保持不变。当前不实现 Director、Agent、世界模拟、业务 API 或最终 UI。
+状态：C-002 Stage 1 运行时基础继续沿用；Stage 2–6 已在其上建立 canonical state、持久化、内容、LLM 基础、确定性模拟与 clock reconciliation，C-007A 已加入显式 EpisodicMemory 形成。Stage 0 的 [冻结规则与 P-01～P-19](../product/PRODUCT_SPEC.md) 保持不变。当前没有 Director、Character Agent、Activation consumer、自动 Observation→Memory、对外业务 HTTP API 或最终产品 UI。
 
 ## 工程边界与依赖
 
@@ -56,6 +56,8 @@ C-005E5 将 sidecar stdin 保留为 Rust→Python 的 bounded credential control
 Core 的 graceful drain 上限为 5 秒，窗口关闭的 supervisor 等待为 8 秒，留出 transport drain 和进程退出余量；超时 fallback 有单独的 Windows 集成测试。
 
 C-006D composition root 持有 `WorldSimulationRuntime`、`WorldClockService` 与 `SimulationSchedulerRuntime`。HTTP readiness 之前，它逐 world 以 persisted UTC anchor 计算并提交 fixed catch-up target，再用 bounded C-006A drain 清理 `due_at <= target` backlog；READY/PAUSED 后才建立 fresh monotonic base 并激活 tickless task。一个 world 的失败标记该 world DEGRADED，不伪造 ready temporal state。shutdown 先阻止新 simulation mutation、wake/join scheduler transaction，再 checkpoint READY/PAUSED world 的 effective time，最后 dispose Database。详见 [CLOCK_RECONCILIATION.md](CLOCK_RECONCILIATION.md) 与 [SIMULATION_SCHEDULER.md](SIMULATION_SCHEDULER.md)。
+
+Q-001A 通过 application `WorldRuntimeRegistrar` seam 将运行期成功提交的 `CreateWorld` 注册到同一 `WorldSimulationRuntime`。注册在 durable command transaction 之后执行，并按 WorldId 串行、幂等；成功后完成该 world 的 reconciliation 与 scheduler activation。注册失败只把 runtime operational state 标为 DEGRADED 并记录安全诊断，不回滚、删除或谎报已提交的 World；同一 CreateWorld 精确重试可再次尝试注册而不会重放 canonical event。
 
 `report_ui_ready` 是可信 WebView 对 compatible authenticated health 的反馈，不是业务 API。Windows debug smoke 模式在该反馈后关闭实际窗口，检查日志中的完整生命周期，并要求走 graceful 路径。
 

@@ -234,6 +234,7 @@ class WorldSimulationRuntime:
         self._states: dict[WorldId, WorldRuntimeState] = {}
         self._reports: dict[WorldId, CatchUpReport] = {}
         self._closing = False
+        self._registration_lock = asyncio.Lock()
 
     def state(self, world_id: WorldId) -> WorldRuntimeState | None:
         return self._states.get(world_id)
@@ -246,12 +247,30 @@ class WorldSimulationRuntime:
         # and cannot falsify another world's state.
         reports: list[CatchUpReport] = []
         for clock in await self._clock_service.list_clocks():
-            try:
-                reports.append(await self.start_world(clock.world_id))
-            except Exception:
-                self._states[clock.world_id] = WorldRuntimeState.DEGRADED
-                self._diagnostics.failed(clock.world_id, WorldRuntimeState.DEGRADED)
+            report = await self.register_world(clock.world_id)
+            if report is not None:
+                reports.append(report)
         return tuple(reports)
+
+    async def register_world(self, world_id: WorldId) -> CatchUpReport | None:
+        """Start one committed World, representing ordinary failures as DEGRADED."""
+
+        async with self._registration_lock:
+            if self._states.get(world_id) in {
+                WorldRuntimeState.READY,
+                WorldRuntimeState.PAUSED,
+            }:
+                return self._reports.get(world_id)
+            if self._closing:
+                self._states[world_id] = WorldRuntimeState.DEGRADED
+                self._diagnostics.failed(world_id, WorldRuntimeState.DEGRADED)
+                return None
+            try:
+                return await self.start_world(world_id)
+            except Exception:
+                self._states[world_id] = WorldRuntimeState.DEGRADED
+                self._diagnostics.failed(world_id, WorldRuntimeState.DEGRADED)
+                return None
 
     async def start_world(self, world_id: WorldId) -> CatchUpReport:
         if self._closing:

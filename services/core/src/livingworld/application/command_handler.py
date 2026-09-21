@@ -5,6 +5,7 @@ from dataclasses import replace
 from datetime import datetime
 from uuid import uuid4, uuid5
 
+from livingworld.application.action_resolution import ActionResolutionService
 from livingworld.application.commands import (
     AcquireKnowledge,
     AssertWorldTruth,
@@ -24,18 +25,23 @@ from livingworld.application.errors import (
     IdempotencyConflictError,
 )
 from livingworld.application.fingerprints import command_fingerprint, decimal_input, id_input
-from livingworld.application.player_movement import (
-    apply_player_movement,
-    player_moved_payload,
-    resolve_player_movement,
-)
 from livingworld.application.ports import (
     TemporalMutationBarrier,
     UnitOfWork,
     WallClock,
+    WorldRuntimeRegistrar,
     WorldTimeSource,
 )
 from livingworld.application.results import CommandResult, EntityReference, RelationshipReference
+from livingworld.domain.actions import (
+    ActionKind,
+    ActionProposal,
+    ActionProposer,
+    ActionRejectionReason,
+    ActionResolutionStatus,
+    MovePlayerPayload,
+    ProposerKind,
+)
 from livingworld.domain.commands import CommandReceipt
 from livingworld.domain.errors import ConcurrencyConflictError, DomainInvariantError
 from livingworld.domain.events import WorldEvent
@@ -118,26 +124,102 @@ class CommandHandler:
         *,
         world_time_source: WorldTimeSource,
         mutation_barrier: TemporalMutationBarrier | None = None,
+        wake_signal=None,
+        activation_planner=None,
+        world_runtime_registrar: WorldRuntimeRegistrar | None = None,
     ):
         self._uow_factory = uow_factory
         self._clock = clock
         self._world_time_source = world_time_source
         self._mutation_barrier = mutation_barrier
+        self._world_runtime_registrar = world_runtime_registrar
+        self._actions = ActionResolutionService(
+            uow_factory,
+            clock,
+            wake_signal,
+            activation_planner,
+            world_time_source=world_time_source,
+            mutation_barrier=mutation_barrier,
+        )
 
     async def execute(self, command: WorldCommand) -> CommandResult:
+        if isinstance(command, MovePlayer):
+            return await self._execute_legacy_move(command)
         if self._mutation_barrier is not None and not isinstance(command, CreateWorld):
             await self._mutation_barrier.assert_mutation_allowed(command.world_id)
         fingerprint = command_fingerprint(command)
         try:
-            return await self._transaction(command, fingerprint)
+            result = await self._transaction(command, fingerprint)
         except (ConcurrencyConflictError, EntityAlreadyExistsError, IdempotencyConflictError):
             # The failed UoW has exited/rolled back. Resolve a possible committed duplicate
             # exactly once from a fresh transaction; NEVER execute the mutation again.
             async with self._uow_factory() as uow:
                 existing = await uow.receipts.existing(command.request_id, fingerprint)
-                if existing is not None:
-                    return replace(existing, replayed=True)
-            raise
+            if existing is None:
+                raise
+            result = replace(existing, replayed=True)
+        if isinstance(command, CreateWorld) and self._world_runtime_registrar is not None:
+            await self._world_runtime_registrar.register_world(command.world_id)
+        return result
+
+    async def _execute_legacy_move(self, command: MovePlayer) -> CommandResult:
+        """Adapt the compatibility command to the sole fictional-action commit path."""
+
+        proposal = ActionProposal(
+            command.world_id,
+            ActionKind.MOVE_PLAYER,
+            1,
+            ActionProposer(ProposerKind.PLAYER_INPUT, command.player_id),
+            command.player_id,
+            MovePlayerPayload(command.destination_id, command.expected_presence_revision),
+        )
+        try:
+            result = await self._actions.execute(command.request_id, proposal)
+        except IdempotencyConflictError as action_conflict:
+            # Databases created before Q-001A may contain the old result-v1 MovePlayer
+            # receipt. Preserve exact historical retries without executing either path.
+            try:
+                async with self._uow_factory() as uow:
+                    existing = await uow.receipts.existing(
+                        command.request_id, command_fingerprint(command)
+                    )
+            except IdempotencyConflictError:
+                raise action_conflict from None
+            if existing is not None:
+                return replace(existing, replayed=True)
+            raise action_conflict from None
+        if result.status is ActionResolutionStatus.REJECTED:
+            await self._raise_legacy_move_rejection(command, result.reason)
+        if result.resulting_revision is None:
+            raise DomainInvariantError("Accepted player movement requires a resulting revision")
+        return CommandResult(
+            command.request_id,
+            type(command).__name__,
+            command.player_id,
+            result.resulting_revision,
+            replayed=result.replayed,
+        )
+
+    async def _raise_legacy_move_rejection(
+        self, command: MovePlayer, reason: ActionRejectionReason | None
+    ) -> None:
+        if reason is ActionRejectionReason.PRECONDITION_FAILED:
+            async with self._uow_factory() as uow:
+                presence = await uow.players.presence(command.player_id)
+            raise ConcurrencyConflictError(
+                "PlayerPresence does not match expected revision",
+                resource_kind="PlayerPresence",
+                resource_identity=command.player_id,
+                expected_revision=command.expected_presence_revision,
+                actual_revision=presence.revision if presence is not None else None,
+            )
+        if reason in {
+            ActionRejectionReason.NOT_PRESENT,
+            ActionRejectionReason.INVALID_DESTINATION,
+        }:
+            raise EntityNotFoundError("Player movement references unavailable state")
+        label = reason.value if reason is not None else "unknown"
+        raise DomainInvariantError(f"Player movement rejected: {label}")
 
     async def _transaction(self, command: WorldCommand, fingerprint: str) -> CommandResult:
         async with self._uow_factory() as uow:
@@ -263,35 +345,6 @@ class CommandHandler:
 
                 async def apply() -> None:
                     await uow.players.add(player, presence)
-
-            case MovePlayer():
-                same_world(world.world_id, command.player_id, command.destination_id)
-                if await uow.players.get(command.player_id) is None:
-                    raise EntityNotFoundError("Player does not exist")
-                await self._location(uow, world, command.destination_id)
-                before = await uow.players.presence(command.player_id)
-                if before is None:
-                    raise EntityNotFoundError("PlayerPresence does not exist")
-                expect_revision(
-                    "PlayerPresence",
-                    command.player_id,
-                    before.revision,
-                    command.expected_presence_revision,
-                )
-                after = resolve_player_movement(
-                    before, command.destination_id, command.expected_presence_revision
-                )
-                events = [("PlayerMoved", player_moved_payload(before, after))]
-                reference, revision = after.player_id, after.revision
-
-                async def apply() -> None:
-                    await apply_player_movement(
-                        uow,
-                        before,
-                        after,
-                        command.expected_presence_revision,
-                        logical_time,
-                    )
 
             case CreateCharacter():
                 character = Character(world.world_id, command.character_id, command.name)

@@ -40,9 +40,9 @@ payload 中出现 ActorId 不会自动授予权限。角色运行时、System �
 
 ## 4. Production proof: move_player v1
 
-生产 proof action 与既有 MovePlayer command 共用 [player_movement.py](../../services/core/src/livingworld/application/player_movement.py) 的 `PlayerPresence.at_location` transition、canonical payload builder 和 Scene-aware CAS apply；没有第二套移动规则。输入包含 destination LocationId 与 expected Presence Revision。resolver 检查 actor/proposer 权限、Player/Presence、同世界目的地、revision，以及可选 Scene 的 OPEN/active membership/physical location 条件。
+生产 proof action 使用 [player_movement.py](../../services/core/src/livingworld/application/player_movement.py) 的 `PlayerPresence.at_location` transition、canonical payload builder 和 Scene-aware CAS apply。Q-001A 起，legacy `MovePlayer` command 只是 compatibility adapter：它构造 `PLAYER_INPUT` 的 `move_player` v1 `ActionProposal` 并调用 `ActionResolutionService`，不再独立追加 `PlayerMoved` 或更新 Presence。输入包含 destination LocationId 与 expected Presence Revision。resolver 检查 actor/proposer 权限、Player/Presence、同世界目的地、revision，以及可选 Scene 的 OPEN/active membership/physical location 条件。
 
-成功生成现有 `PlayerMoved` v1，CAS 更新唯一 PlayerPresence，并在离开 Scene.Location 时原子结束 active membership。现有 `MovePlayer` command 与 `PlaceCharacter` movement path 也调用同一个 Scene membership 退出能力，不能留下 zombie participant。
+成功生成现有 `PlayerMoved` v1，CAS 更新唯一 PlayerPresence，并在离开 Scene.Location 时原子结束 active membership。所有代表普通玩家行动的 Player movement 由这一条 pipeline 原子提交 WorldEvent、event-time Observation、bounded Activation/cause work 与 receipt。`CreatePlayer` 的初始放置属于 setup，不是玩家行动；`PlaceCharacter` 也不是 Player movement。Scene membership 退出仍由共享 movement capability 执行，不能留下 zombie participant。
 
 移动事件采用显式 occurrence context：`ACTOR_ONLY ∪ origin LOCATION_PRESENT(pre-transition) ∪ destination LOCATION_PRESENT(pre-transition)`。Actor 总是显式包含；目的地中已有的主体可见，移动主体不依赖查询后的状态获得自己动作。当前没有视线、距离、遮挡或听觉模拟。
 
@@ -51,6 +51,8 @@ payload 中出现 ActorId 不会自动授予权限。角色运行时、System �
 普通拒绝 reason 是小型稳定 taxonomy：`unauthorized_actor`、`invalid_scene`、`not_present`、`precondition_failed`、`invalid_destination`、`conflict`、`unsupported_action`、`wake_fanout_too_large`。wake fanout 在任何 canonical mutation 前 bounded resolve；超过上限时保存 typed rejection，不做随机截断。DB/CAS/serialization 故障仍是 infrastructure failure，不伪装成虚构失败。
 
 semantic fingerprint 在默认值解析后的 typed proposal 上计算，不含 RequestId 或 wall time。精确 RequestId 重试返回原 ACCEPTED/REJECTED result；不同语义冲突。accepted result 保留原 event IDs/revision，不重复事件、移动或感知。receipt 的 versioned result payload 只保存 typed status/reason/event IDs/revision，不保存原始 action payload。
+
+Compatibility adapter 将 action result 映射回 legacy `CommandResult`/exception surface。数据库若已有 Q-001A 之前的 MovePlayer result-v1 receipt，只允许按旧 fingerprint 精确重放该历史结果；它不会再次执行旧 mutation。新 movement receipt 一律使用 action result-v2，拒绝 receipt 也由同一 ActionResolution transaction 负责。
 
 CAS 使用 world + resource identity + expected revision。结算后状态变化不会被静默覆盖，也不会自动重新解析并改变虚构结果。SQLite `BEGIN IMMEDIATE` 只提供物理 writer 排序，resource CAS/唯一约束仍是正确性依据。
 

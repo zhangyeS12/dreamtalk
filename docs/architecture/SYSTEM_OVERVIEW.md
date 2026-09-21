@@ -1,6 +1,6 @@
 # 系统概览
 
-状态：本文职责划分源于 Stage 0；冻结规则来源为 [PRODUCT_SPEC.md](../product/PRODUCT_SPEC.md) 中的 FR-01 至 FR-24。已接受技术基线见 [Architecture Review 001](ARCHITECTURE_REVIEW_001.md)，已实现基础见 [Stage 2](STAGE_2_ACCEPTANCE.md)、[Stage 3](STAGE_3_ACCEPTANCE.md)。C-005A 建立 provider-neutral LLM application contracts；Director、Character Agent、Builder 和世界模拟业务尚未实现。本文不自行增加部署或产品决策。
+状态：本文职责划分源于 Stage 0；冻结规则来源为 [PRODUCT_SPEC.md](../product/PRODUCT_SPEC.md) 中的 FR-01 至 FR-24。已接受技术基线见 [Architecture Review 001](ARCHITECTURE_REVIEW_001.md)，已实现基础见 [Stage 2](STAGE_2_ACCEPTANCE.md)、[Stage 3](STAGE_3_ACCEPTANCE.md)。Stage 5/6 已实现确定性调度、行动结算、稀疏激活与双时间 reconciliation，C-007A 已实现显式 EpisodicMemory 形成。Director、Character Agent、Builder、Activation consumer、自动 Observation→Memory 和最终产品 UI 尚未实现。本文不自行增加部署或产品决策。
 
 ## 1. 系统目标与边界
 

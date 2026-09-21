@@ -565,3 +565,85 @@ def test_action_cannot_overtake_temporal_catch_up(environment):
             await env.database.close()
 
     asyncio.run(run())
+
+
+def test_runtime_created_world_is_registered_immediately_and_exact_retry_is_safe(tmp_path):
+    async def run():
+        database = Database(tmp_path)
+        await database.initialize()
+        utc_clock = FakeUtcClock(datetime(2026, 9, 21, 12, tzinfo=UTC))
+        monotonic = FakeMonotonicClock()
+        source, _scheduler, _realtime, _clocks, runtime = runtime_components(
+            database, utc_clock, monotonic
+        )
+        world_id = WorldId(uuid4())
+        command = CreateWorld(
+            request_id=RequestId(uuid4()),
+            world_id=world_id,
+            name="runtime-created",
+            initial_time=WorldTime(50),
+        )
+        handler = CommandHandler(
+            database.unit_of_work,
+            utc_clock,
+            world_time_source=source,
+            world_runtime_registrar=runtime,
+        )
+        try:
+            first, second = await asyncio.gather(handler.execute(command), handler.execute(command))
+            assert {first.replayed, second.replayed} == {False, True}
+            assert runtime.state(world_id) is WorldRuntimeState.READY
+            assert len(await database.canonical_event_reader(world_id).read()) == 1
+            assert (await database.world_clock_store().get(world_id)).revision == Revision(1)
+        finally:
+            await runtime.aclose()
+            await database.close()
+
+    asyncio.run(run())
+
+
+def test_runtime_start_failure_keeps_committed_world_and_marks_degraded(tmp_path, monkeypatch):
+    async def run():
+        database = Database(tmp_path)
+        await database.initialize()
+        utc_clock = FakeUtcClock(datetime(2026, 9, 21, 12, tzinfo=UTC))
+        monotonic = FakeMonotonicClock()
+        source, scheduler, _realtime, _clocks, runtime = runtime_components(
+            database, utc_clock, monotonic
+        )
+        world_id = WorldId(uuid4())
+        command = CreateWorld(
+            request_id=RequestId(uuid4()),
+            world_id=world_id,
+            name="degraded-runtime",
+        )
+        handler = CommandHandler(
+            database.unit_of_work,
+            utc_clock,
+            world_time_source=source,
+            world_runtime_registrar=runtime,
+        )
+        original_drain = scheduler.drain_due
+
+        async def fail_drain(*_args, **_kwargs):
+            raise RuntimeError("controlled_runtime_start_failure")
+
+        monkeypatch.setattr(scheduler, "drain_due", fail_drain)
+        try:
+            committed = await handler.execute(command)
+            assert not committed.replayed
+            assert runtime.state(world_id) is WorldRuntimeState.DEGRADED
+            async with database.unit_of_work() as uow:
+                assert await uow.worlds.get(world_id) is not None
+            assert len(await database.canonical_event_reader(world_id).read()) == 1
+
+            monkeypatch.setattr(scheduler, "drain_due", original_drain)
+            repeated = await handler.execute(command)
+            assert repeated.replayed
+            assert runtime.state(world_id) is WorldRuntimeState.READY
+            assert len(await database.canonical_event_reader(world_id).read()) == 1
+        finally:
+            await runtime.aclose()
+            await database.close()
+
+    asyncio.run(run())

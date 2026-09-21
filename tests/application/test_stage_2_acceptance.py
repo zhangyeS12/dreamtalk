@@ -463,12 +463,16 @@ def test_stage_2_command_world_history_concurrency_knowledge_and_replay(environm
                         if entry.event.causation_id == cmd.request_id
                     ]
                     assert tuple(event.event_type for event in events) == EVENTS[type(cmd)]
+                    suffix = "action:" if isinstance(cmd, MovePlayer) else ""
                     assert [event.idempotency_key for event in events] == [
-                        f"{cmd.request_id}:{ordinal}" for ordinal in range(len(events))
+                        f"{cmd.request_id}:{suffix}{ordinal}" for ordinal in range(len(events))
                     ]
             receipts = await env.rows("command_receipts")
-            assert len(receipts) == len(committed)
-            assert not any(row.request_id == losing_request.value.hex for row in receipts)
+            assert len(receipts) == len(committed) + 1
+            losing_receipt = next(
+                row for row in receipts if row.request_id == losing_request.value.hex
+            )
+            assert losing_receipt.status == "rejected"
             for cmd, result in committed:
                 receipt = next(
                     row for row in receipts if row.request_id == cmd.request_id.value.hex
@@ -496,9 +500,9 @@ def test_stage_2_command_world_history_concurrency_knowledge_and_replay(environm
             assert await verify_knowledge() == knowledge_before
             presence = next(item for item in rebuilt.presences if item.player_id == env.player)
             assert presence.location_id == env.cafe and presence.revision == Revision(3)
-            assert (
-                len(rebuilt.observations) == 3
-            )  # Only explicit AcquireKnowledge creates exposure.
+            # Replay returns the three ObservationRecorded projections. Event-occurrence
+            # observations remain durable evidence and are intentionally not recomputed.
+            assert len(rebuilt.observations) == 3
             await rebuilder.rebuild(other)
             assert await snapshot(env, PROJECTIONS) == projections
             assert await snapshot(env, EVIDENCE) == evidence
