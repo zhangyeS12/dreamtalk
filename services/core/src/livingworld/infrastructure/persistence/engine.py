@@ -158,5 +158,13 @@ class Database:
     def player_knowledge_reader(self, player_id: PlayerId) -> ports.PlayerKnowledgeReader:
         return knowledge_readers.PlayerKnowledgeReader(self._sessions, player_id)
 
+    def character_memory_reader(self, character_id: CharacterId) -> ports.CharacterMemoryReader:
+        """Bind private memory access to one verified Character principal."""
+        from livingworld.infrastructure.persistence.memory_repository import (
+            SqlAlchemyCharacterMemoryReader,
+        )
+
+        return SqlAlchemyCharacterMemoryReader(self._sessions, character_id)
+
     async def close(self) -> None:
         await self.engine.dispose()

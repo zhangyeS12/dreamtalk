@@ -17,6 +17,7 @@ from livingworld.domain.identifiers import (
     EventId,
     KnowledgeAssertionId,
     LocationId,
+    MemoryId,
     ObservationId,
     PlayerId,
     SceneId,
@@ -32,6 +33,7 @@ type ScopedId = (
     | EventId
     | KnowledgeAssertionId
     | ObservationId
+    | MemoryId
     | TriggerId
     | ActivationId
     | SceneId
@@ -92,6 +94,7 @@ def same_world(world_id: WorldId, *references: ScopedId) -> None:
                 EventId,
                 KnowledgeAssertionId,
                 ObservationId,
+                MemoryId,
                 TriggerId,
                 ActivationId,
                 SceneId,

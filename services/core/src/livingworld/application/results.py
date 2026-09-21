@@ -9,6 +9,7 @@ from livingworld.domain.identifiers import (
     EventId,
     KnowledgeAssertionId,
     LocationId,
+    MemoryId,
     ObservationId,
     PlayerId,
     PrincipalId,
@@ -54,4 +55,11 @@ class SceneResult:
     request_id: RequestId
     scene_id: SceneId
     resulting_revision: Revision
+    replayed: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class MemoryResult:
+    request_id: RequestId
+    memory_id: MemoryId
     replayed: bool = False

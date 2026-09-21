@@ -13,6 +13,10 @@ class EntityAlreadyExistsError(ValueError):
     """An explicit creation target already exists."""
 
 
+class MemoryEvidenceAccessDeniedError(ValueError):
+    """Memory evidence was missing, cross-world, or not owned by the Character."""
+
+
 class UnsupportedTriggerError(ValueError):
     """The allowlisted scheduler registry does not support a kind/version."""
 

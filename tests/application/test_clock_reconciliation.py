@@ -153,7 +153,8 @@ def test_pause_resume_scale_and_graceful_checkpoint_are_exact(tmp_path):
         monotonic = FakeMonotonicClock()
         world_id = WorldId(uuid4())
         await create_world(database, utc_clock, world_id)
-        source, _, realtime, clocks, _ = runtime_components(database, utc_clock, monotonic)
+        source = EffectiveWorldTimeSource(utc_clock, monotonic)
+        clocks = WorldClockService(database.world_clock_store(), utc_clock, source)
         try:
             await clocks.reconcile_startup(world_id)
             monotonic.advance(seconds=10)
@@ -179,7 +180,6 @@ def test_pause_resume_scale_and_graceful_checkpoint_are_exact(tmp_path):
             checkpoint = await clocks.checkpoint(world_id)
             assert checkpoint.logical_time == WorldTime(40_000_000)
         finally:
-            await realtime.aclose()
             await database.close()
 
     asyncio.run(run())
@@ -306,11 +306,15 @@ def test_large_backlog_drains_in_bounded_stable_batches(tmp_path):
         monotonic = FakeMonotonicClock()
         world_id = WorldId(uuid4())
         await create_world(database, utc_clock, world_id, state=ClockState.PAUSED)
-        _, scheduler, _, _, runtime = runtime_components(database, utc_clock, monotonic, batch=2)
+        seed_scheduler = SimulationScheduler(
+            database.simulation_scheduler_store(registry()),
+            utc_clock,
+            SchedulerWakeSignal(),
+        )
         store = database.simulation_scheduler_store(registry())
         try:
             for value in (5, 1, 3, 2, 4):
-                await scheduler.schedule_trigger(
+                await seed_scheduler.schedule_trigger(
                     ScheduleTrigger(
                         request_id=RequestId(uuid4()),
                         trigger_id=TriggerId(world_id, uuid4()),
@@ -321,6 +325,9 @@ def test_large_backlog_drains_in_bounded_stable_batches(tmp_path):
                         payload=SimulationPayload({"marker": value}),
                     )
                 )
+            _, scheduler, _, _, runtime = runtime_components(
+                database, utc_clock, monotonic, batch=2
+            )
             # Paused catch-up still drains work due at the current logical coordinate.
             async with database.engine.begin() as connection:
                 from sqlalchemy import text

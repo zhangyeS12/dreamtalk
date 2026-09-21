@@ -2,6 +2,8 @@
 
 状态：**Accepted / Frozen after C-006D**。Stage 5 建立最终产品继续沿用的 deterministic simulation substrate；没有 Director、Character cognition、Memory、conversation 或 LLM simulation。
 
+后续状态：C-007A 已在 Stage 5 冻结 substrate 之上新增独立 EpisodicMemory 形成路径；它不修改本页验收语义。见 [EPISODIC_MEMORY.md](EPISODIC_MEMORY.md)。
+
 ## C-006A — durable tickless scheduling
 
 - one durable queue per world；顺序固定为 `(due_at, priority, enqueue_position)`；
@@ -83,4 +85,4 @@ Stage 5 catch-up 可以断定 work 已到期，但不能创作虚构决策结果
 - 100 compatible causes：一个 pending activation、完整 bounded cause history；
 - no provider/API key/network：clock reconciliation 和 catch-up 不依赖 Stage 4 LLM runtime。
 
-Stage 5 到此冻结，不进入 Stage 6。
+Stage 5 到此冻结；Stage 6 后续工作不能改写上述因果与权限边界。

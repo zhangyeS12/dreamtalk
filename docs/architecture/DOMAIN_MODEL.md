@@ -1,6 +1,6 @@
 # LivingWorld 领域概念模型
 
-状态：Stage 0 领域语言保留；Stage 2 已建立领域模型、SQLite 映射、命令事务、知识隔离、canonical ledger、回放及资源级乐观并发；Stage 3 建立独立创作内容边界；C-006A/B 建立 scheduler、typed ActionProposal、persistent Scene 和 event-time perception；C-006C 泛化 SimulationActivation 的 target/cause/coalescing/fidelity 边界；C-006D 冻结 realtime monotonic、offline UTC bridge 与 bounded catch-up。见 [COMMAND_MODEL.md](COMMAND_MODEL.md)、[ACTION_RESOLUTION.md](ACTION_RESOLUTION.md)、[SCENES_AND_PERCEPTION.md](SCENES_AND_PERCEPTION.md)、[SPARSE_ACTIVATION.md](SPARSE_ACTIVATION.md)、[SIMULATION_FIDELITY.md](SIMULATION_FIDELITY.md)、[CLOCK_RECONCILIATION.md](CLOCK_RECONCILIATION.md)、[PERSISTENCE_MODEL.md](PERSISTENCE_MODEL.md) 和 [SIMULATION_SCHEDULER.md](SIMULATION_SCHEDULER.md)。Director、Agent、Character cognition 与业务 HTTP API 仍未实现。
+状态：Stage 0 领域语言保留；Stage 2 已建立领域模型、SQLite 映射、命令事务、知识隔离、canonical ledger、回放及资源级乐观并发；Stage 3 建立独立创作内容边界；Stage 5 建立 scheduler、typed ActionProposal、persistent Scene、event-time perception、sparse activation 与 clock reconciliation；C-007A 新增 Character-owned evidence-backed EpisodicMemory。见 [EPISODIC_MEMORY.md](EPISODIC_MEMORY.md)、[ACTION_RESOLUTION.md](ACTION_RESOLUTION.md)、[SCENES_AND_PERCEPTION.md](SCENES_AND_PERCEPTION.md)、[SPARSE_ACTIVATION.md](SPARSE_ACTIVATION.md)、[CLOCK_RECONCILIATION.md](CLOCK_RECONCILIATION.md) 和 [PERSISTENCE_MODEL.md](PERSISTENCE_MODEL.md)。Director、Agent、Reflection、memory retrieval 与业务 HTTP API 仍未实现。
 
 ## C-004A 内容与运行状态边界
 
@@ -48,13 +48,14 @@ Stage 2 已建立 canonical ledger、内部回放及资源级乐观并发；Dire
 
 | 模块 | 已实现模型 / 值 | 当前职责 |
 | --- | --- | --- |
-| [identifiers.py](../../services/core/src/livingworld/domain/identifiers.py) | WorldId、LocationId、PlayerId、CharacterId、SceneId、SceneParticipantId、EventId、KnowledgeAssertionId、ObservationId、CorrelationId、PrincipalId | UUID 的具体类型；地点/参与者/场景/事件/断言/观察引用携带 WorldId；PrincipalId 为 CharacterId 或 PlayerId |
+| [identifiers.py](../../services/core/src/livingworld/domain/identifiers.py) | WorldId、LocationId、PlayerId、CharacterId、SceneId、SceneParticipantId、EventId、KnowledgeAssertionId、ObservationId、MemoryId、CorrelationId、PrincipalId | UUID 的具体类型；地点/参与者/场景/事件/断言/观察/记忆引用携带 WorldId；PrincipalId 为 CharacterId 或 PlayerId |
 | [values.py](../../services/core/src/livingworld/domain/values.py) | WorldTime、Revision、不可变 JSON 值、UTC 校验 | 两条时间轴、版本检查、嵌套结构的防御性复制 |
 | [world.py](../../services/core/src/livingworld/domain/world.py) | World、WorldClock、Location、LocationConnection | 世界身份、双时间时钟快照、地点及有序拓扑连接；不定义移动耗时或通行策略 |
 | [participants.py](../../services/core/src/livingworld/domain/participants.py) | Player、PlayerPresence、Character、CharacterState | 静态定义和运行状态分离；玩家单一位置、activity 与 Busy/Available 独立 |
 | [relationships.py](../../services/core/src/livingworld/domain/relationships.py) | Relationship、RelationshipMetrics | 同世界主体的有向关系及版本；C-003C 三项内部整数指标，无普通玩家数值接口 |
 | [events.py](../../services/core/src/livingworld/domain/events.py) | WorldEvent | 独立事件身份、双时间、版本化不可变 payload 和因果/关联/幂等元数据 |
 | [knowledge.py](../../services/core/src/livingworld/domain/knowledge.py) | KnowledgeAssertion、Observation | scope/owner 约束、结构化断言、世界有效期、来源和显式观察渠道 |
+| [memory.py](../../services/core/src/livingworld/domain/memory.py) | EpisodicMemory、MemorySalience、MemoryCursor、MemoryEvidence | Character-owned 不可变主观经历、有序 Observation provenance、双时间、稳定分页值 |
 | [actions.py](../../services/core/src/livingworld/domain/actions.py) | ActionProposal、ActionProposer、MovePlayerPayload、PerceptionAudience | typed proposal/payload、proposer/actor 分离、稳定结果原因与 allowlisted audience selector |
 | [scenes.py](../../services/core/src/livingworld/domain/scenes.py) | Scene、SceneParticipant | 单地点 OPEN/CLOSED 场景、不可删除的参与历史与版本转换 |
 | [commands.py](../../services/core/src/livingworld/domain/commands.py) | CommandReceipt | 复用 [contracts.py](../../services/core/src/livingworld/domain/contracts.py) 的 RequestId，定义未来回执元数据；不执行命令或去重 |
@@ -362,11 +363,11 @@ Knowledge 与其知情主体之间的归属边界，以及判断某内容是否�
 
 ### Purpose
 
-表示角色所拥有的记忆，为经历的延续、人格表达和对话提供背景。
+表示 Character 明确保留的主观经历。C-007A 的唯一 canonical kind 是 evidence-backed EpisodicMemory。
 
 ### Owns
 
-角色记忆内容及其与角色经历、互动、知识和关系变化的关联。
+不可变 Memory 身份、bounded content、经历世界时间范围、形成世界时间、UTC audit、optional salience 与有序 Observation provenance。
 
 ### Does not own
 
@@ -374,14 +375,19 @@ Knowledge 与其知情主体之间的归属边界，以及判断某内容是否�
 
 ### Relationships
 
-归属于 Character；关联 Knowledge、WorldEvent、RelationshipEvent、Conversation、Message、Checkpoint 和 Timeline。
+只归属于 Character；由至少一个同 owner Observation 支撑。未来可关联 Knowledge、WorldEvent、Conversation、Checkpoint 和 Timeline，但 provenance 不自动建立这些语义。
 
 ### Important invariants
 
 - Character Agent 主要负责自己拥有的记忆（FR-03）。
 - 记忆使用必须保持世界事实、Character Knowledge 与 Player Knowledge 分离（FR-04、FR-05）。
+- `WorldTruth != Observation != EpisodicMemory != CharacterBelief != Reflection`；evidence 证明授权来源，不证明记忆内容为真。
+- Observation 不自动创建 Memory；Memory 不授予 Knowledge/Belief/Truth，也不创建 WorldEvent 或 Activation。
+- `RecordEpisodicMemory` 只接受同世界且 principal 恰为 owner Character 的 Observation，并在 SQL materialization 前执行 owner filtering。
+- Memory 与 ordered evidence、RequestId receipt 原子提交；同语义重试返回原 MemoryId，相同内容的新 RequestId 可以形成独立 Memory。
+- owner-bound reader 使用稳定 keyset pagination；没有 global list。projection replay 与 authored content package 均不包含 Memory。
 - Memory 决策应纳入 Developer Mode 可查看的 Trace 范围（FR-23）。
-- 记忆分类、遗忘、压缩、修正及 Checkpoint / Branch 的记忆继承边界，待确认。
+- Reflection、遗忘、压缩、修正、检索及 Checkpoint / Branch 的记忆继承边界，待确认。完整契约见 [EPISODIC_MEMORY.md](EPISODIC_MEMORY.md)。
 
 ## 13. Relationship
 
@@ -884,7 +890,7 @@ typed cause kind、对应 TriggerId/EventId/SceneId/RequestId reference、activa
 3. Busy / Available 的控制方式；“必要主动联系”的范围；同一理由、一次发送与多角色 Episode 的对应关系。
 4. Planning Window 的尺度、耗尽判定和“大量失效”阈值；候选激活冲突与失败的处理边界。
 5. Draft → Preview → Commit 的适用对象边界：运行时台词、WorldPlan、事件生成及记忆摘要等是否适用，以及如何衔接、按什么粒度审核；不能自行将原规则缩窄到 Builder。
-6. Knowledge 的获得、传闻与修正（错误 CharacterBelief 已明确允许）；Memory 的分类、遗忘和修正；Relationship 的非数值反馈（方向已确认为有向）。
+6. Knowledge 的获得、传闻与修正（错误 CharacterBelief 已明确允许）；EpisodicMemory 基础已解决，Reflection、遗忘、修正与检索仍待确认；Relationship 的非数值反馈（方向已确认为有向）。
 7. Checkpoint 的恢复范围、Timeline Branch 的隔离/合并/切换语义，以及知识、记忆、消息、候选计划和费用的归属。
 8. DirectorProfile 的风格维度；模型路由、预算超限行为与 Token / Latency / Cost 的统计口径。
 
@@ -894,4 +900,5 @@ typed cause kind、对应 TriggerId/EventId/SceneId/RequestId reference、activa
 - [Director 模型](DIRECTOR_MODEL.md)：调度、规划、主动联系与角色表达边界。
 - [事件模型](EVENT_MODEL.md)：候选、激活、实际事件与可见性。
 - [知识模型](KNOWLEDGE_MODEL.md)：事实、角色知识与玩家知识分离。
-- [记忆模型](MEMORY_MODEL.md)：记忆归属与待确认生命周期。
+- [记忆模型](MEMORY_MODEL.md)：记忆概念、已实现边界与待确认生命周期。
+- [Episodic Memory](EPISODIC_MEMORY.md)：C-007A 授权、形成、持久化、读取与隔离契约。

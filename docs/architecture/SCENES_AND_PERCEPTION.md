@@ -1,6 +1,6 @@
 # Scenes and Event-Time Perception
 
-状态：C-006B 建立 persistent Scene、typed participation history 和 event-time perception snapshot。Scene 不是对话引擎；Observation 不自动成为知识或 Memory。
+状态：C-006B 建立 persistent Scene、typed participation history 和 event-time perception snapshot；C-007A 允许 Character 通过独立显式命令把自己的 Observation 用作 EpisodicMemory evidence。Scene 不是对话引擎；Observation 仍不自动成为 Knowledge 或 Memory。
 
 ## 1. Scene and Presence
 
@@ -21,7 +21,7 @@ Knowledge   = what a principal understood or believed
 Memory      = later retained/processed experience
 ```
 
-现有 `Observation` 已能以 `target_id: EventId | KnowledgeAssertionId` 表达该边界，因此 C-006B 复用它，不新增 perception table。事件感知保存为 `Observation(channel=WITNESSED, target_id=EventId, basis=EVENT_OCCURRENCE)`；可空 basis 是最小 provenance 标记，用于区分 Kernel occurrence audience 与 Stage 2 允许独立重复 occurrence 的普通 Observation。它没有 proposition，不写 WorldTruth、CharacterBelief、PlayerKnowledge 或 Memory。Stage 6 决定感知如何成为知识/信念/记忆。
+现有 `Observation` 已能以 `target_id: EventId | KnowledgeAssertionId` 表达该边界，因此 C-006B 复用它，不新增 perception table。事件感知保存为 `Observation(channel=WITNESSED, target_id=EventId, basis=EVENT_OCCURRENCE)`；可空 basis 是最小 provenance 标记，用于区分 Kernel occurrence audience 与 Stage 2 允许独立重复 occurrence 的普通 Observation。它没有 proposition，不写 WorldTruth、CharacterBelief、PlayerKnowledge 或 Memory。C-007A 的 `RecordEpisodicMemory` 是另一个显式步骤：只有同一 Character 自有 Observation 可作为 evidence，且 Memory 仍不会反向授予知识或证明内容真实。详见 [Episodic Memory](EPISODIC_MEMORY.md)。
 
 ## 3. Typed audience selectors
 
@@ -68,4 +68,4 @@ Character `WORLD_EVENT` activation 必须已有同世界该 WorldEvent 的 `EVEN
 
 [0012_action_scenes_perception](../../services/core/src/livingworld/infrastructure/persistence/migrations/versions/0012_action_scenes_perception.py) 新增 `scenes`、`scene_participants`、active/history/status/current-location 索引，为 observations 增加可空 basis、EVENT_OCCURRENCE event/principal unique 与 principal history 索引，并扩展现有 command receipt CHECK 以保存无 WorldEvent 的 typed rejected action/Scene result。Alembic 仍是唯一迁移权威；0011 rows、events、receipts 与 legacy audit 原样保留，旧 Observation 的 basis 为 NULL。
 
-没有新的 Knowledge table、Memory table、消息、对话、Director 或 Agent 状态。
+0012 本身没有新增 Knowledge 或 Memory table。当前 Alembic head 0014 的 Memory tables 属于后续 C-007A，未改变本页的 event-time audience 规则；消息、对话、Director 与 Agent 状态仍未实现。

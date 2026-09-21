@@ -5,7 +5,7 @@ from typing import Protocol, Self
 
 from livingworld.application.ledger import CanonicalEvent
 from livingworld.application.projections import ProjectionSnapshot
-from livingworld.application.results import ActionResult, CommandResult, SceneResult
+from livingworld.application.results import ActionResult, CommandResult, MemoryResult, SceneResult
 from livingworld.domain.commands import CommandReceipt
 from livingworld.domain.contracts import RequestId
 from livingworld.domain.events import WorldEvent
@@ -15,12 +15,15 @@ from livingworld.domain.identifiers import (
     EventId,
     KnowledgeAssertionId,
     LocationId,
+    MemoryId,
+    ObservationId,
     PlayerId,
     PrincipalId,
     SceneId,
     WorldId,
 )
 from livingworld.domain.knowledge import KnowledgeAssertion, Observation
+from livingworld.domain.memory import EpisodicMemory, MemoryCursor, MemoryEvidence, MemoryPage
 from livingworld.domain.participants import Character, CharacterState, Player, PlayerPresence
 from livingworld.domain.relationships import Relationship
 from livingworld.domain.scenes import Scene, SceneParticipant
@@ -141,6 +144,26 @@ class ObservationAppender(Protocol):
     async def has_event_access(self, character_id: CharacterId, event_id: EventId) -> bool: ...
 
 
+class MemoryMutationRepository(Protocol):
+    async def authorized_observations(
+        self, owner_character_id: CharacterId, observation_ids: tuple[ObservationId, ...]
+    ) -> tuple[Observation, ...]: ...
+    async def add(self, memory: EpisodicMemory) -> None: ...
+
+
+class CharacterMemoryReader(Protocol):
+    async def get(self, memory_id: MemoryId) -> EpisodicMemory | None: ...
+    async def evidence(self, memory_id: MemoryId) -> tuple[MemoryEvidence, ...]: ...
+    async def list(
+        self,
+        *,
+        experienced_from: WorldTime | None = None,
+        experienced_to: WorldTime | None = None,
+        limit: int = 50,
+        after: MemoryCursor | None = None,
+    ) -> MemoryPage: ...
+
+
 class ActivationRepository(Protocol):
     async def request(
         self, request: ActivationRequest, fingerprint: str, materialized_at_utc: datetime
@@ -170,6 +193,12 @@ class CommandReceiptRepository(Protocol):
     async def add_scene(
         self, receipt: CommandReceipt, fingerprint: str, result: SceneResult
     ) -> None: ...
+    async def existing_memory(
+        self, request_id: RequestId, fingerprint: str
+    ) -> MemoryResult | None: ...
+    async def add_memory(
+        self, receipt: CommandReceipt, fingerprint: str, result: MemoryResult
+    ) -> None: ...
 
 
 class UnitOfWork(Protocol):
@@ -181,6 +210,7 @@ class UnitOfWork(Protocol):
     scenes: SceneRepository
     knowledge: KnowledgeMutationRepository
     observations: ObservationAppender
+    memories: MemoryMutationRepository
     activations: ActivationRepository
     events: EventAppender
     event_references: EventReferenceReader

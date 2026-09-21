@@ -1,14 +1,27 @@
 # SQLite Persistence, Canonical Ledger & Resource CAS
 
-状态：Stage 2 SQLite/Alembic、持久化幂等、主体知识隔离、canonical ledger、原子投影重建及资源级 CAS 已实现；C-006A/B 建立 scheduler、Action、Scene 与 event-time perception；C-006C 将 activation 泛化为 typed sparse target、normalized cause 与 deterministic coalescing；C-006D 在既有 WorldClock schema 上增加 crash-safe anchor adapter，无 migration。自动知识传播、语义检索与 Character/Director 智能层未实现。产品冻结规则不变，见 [COMMAND_MODEL.md](COMMAND_MODEL.md)、[SCENES_AND_PERCEPTION.md](SCENES_AND_PERCEPTION.md)、[SPARSE_ACTIVATION.md](SPARSE_ACTIVATION.md)、[CLOCK_RECONCILIATION.md](CLOCK_RECONCILIATION.md)、[KNOWLEDGE_ACCESS_MODEL.md](KNOWLEDGE_ACCESS_MODEL.md)、[REPLAY_MODEL.md](REPLAY_MODEL.md) 与 [SIMULATION_SCHEDULER.md](SIMULATION_SCHEDULER.md)。
+状态：Stage 2 SQLite/Alembic、持久化幂等、主体知识隔离、canonical ledger、原子投影重建及资源级 CAS 已实现；Stage 5 建立 scheduler、Action、Scene、event-time perception、sparse activation 与 crash-safe clock anchor；C-007A 新增 Character-owned immutable EpisodicMemory 与 normalized Observation evidence。自动知识传播、语义检索、Reflection 与 Character/Director 智能层未实现。产品冻结规则不变，见 [EPISODIC_MEMORY.md](EPISODIC_MEMORY.md)、[KNOWLEDGE_ACCESS_MODEL.md](KNOWLEDGE_ACCESS_MODEL.md)、[REPLAY_MODEL.md](REPLAY_MODEL.md) 与 [STAGE5_ACCEPTANCE.md](STAGE5_ACCEPTANCE.md)。
 
 ## C-004A / C-004C1 独立内容库
 
 **Imported Content != Runtime State；CharacterDefinition != Character；WorldContent != World；LoreEntry != WorldTruth；LoreCollection != WorldContent != Runtime World != WorldTruth。**
 
-Alembic head 现为 [0013_sparse_simulation_activation](../../services/core/src/livingworld/infrastructure/persistence/migrations/versions/0013_sparse_simulation_activation.py)，down_revision=0012_action_scenes_perception。它保留所有 C-006A rows，为 trigger/activation 回填 WORLD target 与 allowlisted kind/version，增加 queue/coalescing 字段和 normalized cause table；不改写 WorldEvent、Observation、LLM/content state。前序 0011/0012 继续保持原语义。下文各阶段旧 head 描述保留其阶段语境，不表示当前 head。
+Alembic head 现为 [0014_episodic_memory](../../services/core/src/livingworld/infrastructure/persistence/migrations/versions/0014_episodic_memory.py)，down_revision=0013_sparse_simulation_activation。它只增加 Character Memory 与 normalized Observation evidence tables，不改写 0013 runtime、WorldEvent、Observation、Knowledge、receipt、LLM/content 或 legacy audit rows。前序 0011/0012/0013 继续保持原语义。下文各阶段旧 head 描述保留其阶段语境，不表示当前 head。
 
 C-006D 不新增表或列。`SqlAlchemyWorldClockStore` 用 SQLite writer transaction 和 expected Revision 替换完整 durable anchor；logical time、non-regressing UTC anchor、scale、RUNNING/PAUSED 与下一 revision 同 commit。process monotonic timestamps 永不写入 SQLite。startup target anchor 在任何 due drain 前提交；因此 mid-catch-up restart 只继续 PENDING trigger，不重新累计离线时间。
+
+### C-007A EpisodicMemory
+
+| 表 | 身份与约束 |
+| --- | --- |
+| character_memories | PK `(world_id,memory_id)`；复合 FK 绑定同世界 Character owner；仅 episodic/plain_text/observation_evidence v1；16 KiB UTF-8、chronology 与 optional salience 0..100 CHECK |
+| episodic_memory_observation_sources | PK `(world_id,memory_id,position)`；复合 FK 指向 Memory 与 Observation；同一 Memory/Observation 唯一；保留 caller source order |
+
+写入以一个 UoW 事务提交 Memory、全部 evidence 和既有 global RequestId receipt；receipt payload 只有 result_version 与 MemoryId，不保存私有正文。evidence authorization 的 SELECT 同时限制 world、Character principal columns 与请求 IDs，未授权 Observation 不进入领域 materialization。
+
+读取通过绑定 Character 的 capability factory 创建，所有 get/list/evidence SQL 都带 owner predicate。`ix_character_memories_owner_experienced` 支持 `(experienced_to DESC, formed_at DESC, memory_id ASC)` keyset chronology；owner/formed 和 reverse Observation provenance 另有索引。没有全文、embedding、vector 或 global Memory search。
+
+0013→0014 仅建新表/索引；迁移 failure 连 cursor 一并 rollback，repeated startup 不重放。projection rebuild 的清理集合不含 Memory tables，native/authored content repository 也不引用它们。验证见 [memory migration tests](../../tests/persistence/test_memory_migration.py)。
 
 | 内容表 | 可直接校验/查询的结构 | 正文边界 |
 | --- | --- | --- |
@@ -132,10 +145,11 @@ C-006A 只增加无副作用 effective-time derivation 和 runtime monotonic gua
 | [0011_simulation_scheduler](../../services/core/src/livingworld/infrastructure/persistence/migrations/versions/0011_simulation_scheduler.py) | 在既有 0010 后新增 queue cursor、scheduled trigger、activation 与 schedule receipt；world/source、world/enqueue、RequestId uniqueness 和 due-query index 加固 deterministic/crash-safe scheduler；不修改 WorldEvent 或旧行 |
 | [0012_action_scenes_perception](../../services/core/src/livingworld/infrastructure/persistence/migrations/versions/0012_action_scenes_perception.py) | 新增 Scene 与 typed participant history、current-location indexes；partial unique 保证每主体至多一个 active Scene；Observation 增加可空 basis，只对 event_occurrence 增加 event/principal 唯一，并增加 observer history 索引；receipt CHECK 允许无 WorldEvent 的 typed rejection/Scene 结果 |
 | [0013_sparse_simulation_activation](../../services/core/src/livingworld/infrastructure/persistence/migrations/versions/0013_sparse_simulation_activation.py) | 泛化 trigger/activation target 与 kind/version，增加 due queue/coalescing/attention，建立 normalized cause history；0011 rows deterministic backfill 为 WORLD / world_orchestration v1 / scheduled-trigger cause；SQLite batch recreation 最终运行 foreign_key_check，保留历史 linkage 与 payload |
+| [0014_episodic_memory](../../services/core/src/livingworld/infrastructure/persistence/migrations/versions/0014_episodic_memory.py) | 新增 Character-owned immutable Memory 与 normalized ordered Observation evidence；复合 FK、bounded content/time/salience/version CHECK 及 owner chronology/reverse provenance indexes；不改写既有行 |
 
 启动行为：
 
-1. 空 DB：直接 Alembic upgrade head，按 revision chain 执行至当前 0013。
+1. 空 DB：直接 Alembic upgrade head，按 revision chain 执行至当前 0014。
 2. 无 Alembic cursor 的 C-002 DB：只接受精确 legacy 表/列/PK/DDL、schema_version=(1,1)、一条匹配名称与 checksum 的历史记录和合法 UTC 审计时间；验证通过后 stamp 0001，再正常 upgrade head。旧迁移不重跑，已有行原样保留。
 3. 已有 Alembic cursor：由该 revision 驱动升级；legacy 元数据只做一致性检查。不能用 schema_version 推算或选择待执行迁移。
 4. 未知版本、checksum 漂移、缺失/损坏历史、结构差异、部分领域表、cursor 冲突或未知额外 schema 对象：抛出 MigrationCompatibilityError，事务回滚并停止启动；不自动修复、drop/recreate 或 stamp head。
@@ -179,7 +193,7 @@ Repeat startup 正常调用 Alembic upgrade head，不重放 revision、不重�
 
 权限过滤必须先于 semantic retrieval / prompt assembly；C-003D 的 list/get SQL 强制 world/scope/owner 条件，见 [knowledge_readers.py](../../services/core/src/livingworld/infrastructure/persistence/knowledge_readers.py)。内部 exact-source repository 与 snapshot inspection 不分发给角色/玩家；返回 source_assertion_id 也不授予源读取权限。CommandReceipt 的 versioned JSON 结果新增可选 typed ObservationId，兼容旧结果无此 key，不需额外回执 schema 迁移。
 
-C-003C 回归见 [命令集成测试](../../tests/application/test_commands.py) 和 [0003 迁移回归](../../tests/persistence/test_command_migration.py)；C-003D 验证见 [知识访问集成测试](../../tests/application/test_knowledge_access.py) 和 [Observation 迁移回归](../../tests/persistence/test_observation_migration.py)。C-003E1 见 [ledger 测试](../../tests/application/test_ledger.py)、[0005 迁移测试](../../tests/persistence/test_ledger_migration.py) 与 [重建测试](../../tests/application/test_replay.py)。C-006B 见 [action tests](../../tests/application/test_action_resolution.py)、[scene tests](../../tests/application/test_scenes.py) 与 [0012 migration test](../../tests/persistence/test_action_scene_migration.py)。C-006C 见 [sparse activation tests](../../tests/application/test_sparse_activation.py)、[scheduler tests](../../tests/application/test_simulation_scheduler.py) 与 [0013 migration tests](../../tests/persistence/test_simulation_migration.py)。C-006D clock/catch-up/restart/barrier 见 [clock reconciliation tests](../../tests/application/test_clock_reconciliation.py)；Alembic head 仍为 0013。Timeline/Checkpoint 产品功能与智能层仍未实现；这里的 clock checkpoint 仅表示 durable time anchor，不是 FR-22 世界快照。独立 operational 预算见 [LLM_BUDGET_GUARD.md](LLM_BUDGET_GUARD.md)。
+C-003C 回归见 [命令集成测试](../../tests/application/test_commands.py) 和 [0003 迁移回归](../../tests/persistence/test_command_migration.py)；C-003D 验证见 [知识访问集成测试](../../tests/application/test_knowledge_access.py) 和 [Observation 迁移回归](../../tests/persistence/test_observation_migration.py)。C-003E1 见 [ledger 测试](../../tests/application/test_ledger.py)、[0005 迁移测试](../../tests/persistence/test_ledger_migration.py) 与 [重建测试](../../tests/application/test_replay.py)。C-006B 见 [action tests](../../tests/application/test_action_resolution.py)、[scene tests](../../tests/application/test_scenes.py) 与 [0012 migration test](../../tests/persistence/test_action_scene_migration.py)。C-006C 见 [sparse activation tests](../../tests/application/test_sparse_activation.py)、[scheduler tests](../../tests/application/test_simulation_scheduler.py) 与 [0013 migration tests](../../tests/persistence/test_simulation_migration.py)。C-006D clock/catch-up/restart/barrier 见 [clock reconciliation tests](../../tests/application/test_clock_reconciliation.py)。C-007A 见 [memory domain tests](../../tests/domain/test_memory.py)、[memory application tests](../../tests/application/test_episodic_memory.py) 与 [0014 migration tests](../../tests/persistence/test_memory_migration.py)；当前 Alembic head 为 0014。Timeline/Checkpoint 产品功能与智能层仍未实现；这里的 clock checkpoint 仅表示 durable time anchor，不是 FR-22 世界快照。独立 operational 预算见 [LLM_BUDGET_GUARD.md](LLM_BUDGET_GUARD.md)。
 
 ## 7. Canonical 分配与投影重建
 

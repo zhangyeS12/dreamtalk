@@ -1,57 +1,42 @@
 # 记忆模型
 
-状态：Stage 0 概念定义，不确定数据库字段、向量检索、摘要机制或模型实现。依据 [PRODUCT_SPEC.md](../product/PRODUCT_SPEC.md) 的 FR-03 至 FR-05、FR-22 至 FR-24。
+状态：C-007A 已实现 Character-owned、evidence-backed、immutable EpisodicMemory 基础。完整执行、授权、持久化与查询契约见 [EPISODIC_MEMORY.md](EPISODIC_MEMORY.md)。
 
-## 1. 记忆的职责
+## 1. 已实现边界
 
-本阶段明确的 Memory 对象是 Character 拥有的记忆：被保留并可在后续情境中使用的经历或信息。是否需要其他拥有者的记忆待确认。对 Character Agent 而言，自己的记忆是持续人格表达与对话的上下文之一（FR-03）。
+```text
+WorldTruth != Observation != EpisodicMemory != CharacterBelief != Reflection
+```
 
-“保留经历或信息”是概念说明，不预先决定长短期分层、遗忘策略、摘要格式、写入时机或检索算法。
+Memory 表示 Character 明确保留的主观经历，不是世界事实、知识断言、观察本身或未来 Reflection。它可以错误；其 Observation evidence 只证明来源授权与 provenance，不证明内容真实。
 
-## 2. 与相邻概念区分
+C-007A 只允许 Character owner。`EpisodicMemory` 使用 typed `MemoryId`，保存 bounded plain-text content、由 source observations 推导的世界经历区间、当前形成 `WorldTime`、UTC audit、optional explicit salience 与有序 evidence。对象不可变；没有 update/delete/forget API。
 
-| 概念 | 回答的问题 | 与 Memory 的边界 |
+## 2. 形成与授权
+
+Observation 不自动形成 Memory。内部 `RecordEpisodicMemory` 必须显式提供至少一个同世界、同 Character principal 的 ObservationId。SQL 在 materialization 前执行 world + Character owner 权限过滤；另一 Character、Player、cross-world 或 missing evidence 统一拒绝。
+
+成功事务原子写入 Memory、normalized evidence 和 RequestId receipt。它不写 WorldEvent、Observation、KnowledgeAssertion、CharacterBelief 或 Activation。相同请求重试返回原 MemoryId；相同来源和文本的新请求可以形成独立 Memory。
+
+## 3. 使用与隐私
+
+读取端口永久绑定 Character，只提供 owner-scoped get/evidence/list。稳定 keyset 分页按经历结束、形成时间和 MemoryId 排序；没有全局 Memory 列表。provenance 查询只返回来源 ID、观察世界时间与 source order，不越权展开其他主体私有数据。
+
+未来 Character Agent 可消费自己的已授权 Memory，但 C-007A 不实现 Agent 或 prompt assembly。Director 不能借 Memory 替 Character Agent 编写最终台词。面向玩家的表达仍须通过知识与可见性边界。
+
+## 4. 回放、内容与生命周期
+
+Memory 不属于 WorldEvent projection，projection rebuild 不重新生成或删除它。它也不是 authored content，不能进入 Character Card、Lorebook 或 `.lwcontent`。
+
+Checkpoint / Timeline Branch 继承、Reflection、consolidation、forgetting、correction、semantic retrieval、embedding、RAG、automatic ingestion 和 LLM summarization 仍待后续任务。Developer Mode 将来展示 Memory trace 时必须继续隔离私有内容。
+
+## 5. 与相邻概念
+
+| 概念 | 回答的问题 | 边界 |
 | --- | --- | --- |
-| WorldTruth | 世界中什么是真的？ | 主观回忆不自动成为客观事实 |
-| WorldEvent | 什么已经真实发生？ | 世界事件不自动成为所有参与者的记忆 |
-| Knowledge / KnowledgeOwnership | 谁知道什么？ | 记忆保留方式与知识归属相关，但不是同一个概念 |
-| Conversation / Message | 发生了哪段交流、表达了什么？ | 对话记录不自动等于角色全部记忆，也不意味着所有消息必须逐条转成记忆 |
-| CharacterState | 角色当前处于什么状态？ | 当前状态与对过去的记忆不应混同 |
-| Relationship / RelationshipEvent | 关系如何存在与变化？ | 对关系的回忆不替代后台关系语义；普通玩家不能看到关系数值 |
-| LLM 决策 Trace | 系统如何作出一次决定？ | 调试记录不自动成为角色记忆或玩家知识 |
-
-## 3. 归属与使用边界
-
-- Character Agent 主要负责自己拥有的记忆；不能把其他角色的私有记忆或该角色自身未经历、未获知的后台信息直接当作自己的经历。角色可以记得自己亲历而玩家不知道的事件，是否向玩家呈现须另外遵守知识边界。
-- Director 负责世界调度，不能借由安排某段“记忆”直接替 Character Agent 写好最终对玩家台词。
-- 尚未激活的 CandidateEvent 不是已发生的经历。对未来计划的认知与“记得这件事已经发生”必须区分。
-- 记忆与知识之间的转换需要明确依据；不能仅因某内容被存入系统，就视为全部角色和玩家已知。
-- 面向玩家表达记忆相关内容时，仍须遵守知识边界及未知后台事件的展示限制。
-
-上述职责不规定存储位置、可调用接口或是否需要独立的记忆管理组件。
-
-## 4. 概念过程与待定机制
-
-1. 产生经历或获得信息：来源可能是亲历的世界事件或对话，具体支持情境待确认。
-2. 确认归属与可知范围：一件事发生，不代表每个角色都知道。
-3. 保留与后续使用：Character Agent 结合自己的记忆与人格进行表达。
-4. 如有修正、摘要、遗忘或恢复需求，另行定义这些操作与世界事实、知识、时间线的一致性。
-
-这不是已冻结的写入流水线，也不表示每一步都需要 LLM 调用。若后续记忆机制使用 LLM，其使用同样属于 Token、Latency、Cost 记录、预算和模型路由的设计范围（FR-24）。
-
-自动生成内容必须经过 Draft → Preview → Commit（FR-19）；该流程如何适用于运行时记忆摘要等产物，见产品问题 P-16，本文不自行规定豁免或审核粒度。
-
-## 5. Checkpoint、Timeline 与可观察性
-
-产品支持 Checkpoint 与 Timeline Branch（FR-22），但记忆是否完整恢复、哪些内容继承到分支、恢复后如何处理旧记忆均未冻结。记忆模型必须显式保留这一待确认边界，不能默认全局共享或跨分支继承。
-
-Developer Mode 能查看 Memory 等决策 Trace（FR-23）。Trace 具体包含什么、如何说明记忆来源和使用依据、如何隔离普通玩家不可见信息，均需后续定义。
-
-## 6. 待确认事项
-
-- Memory 的拥有者范围：除 Character 外是否还需要独立的 Player 或 World 记忆概念。
-- 记忆写入、合并、摘要、遗忘与纠错的产品含义及触发条件。
-- 错误回忆、传闻、人格解释与真实事实之间的表达方式。
-- 记忆变化是否、何时影响 Knowledge，以及已知事实是否可以被“遗忘”。
-- Checkpoint 恢复与 Timeline Branch 的继承、隔离和冲突规则。
-- Trace 保留范围、可见范围，以及预算耗尽时记忆相关工作的行为。
+| WorldTruth | 世界中什么是真的？ | Memory 不授予或改写 Truth |
+| WorldEvent | 什么已经真实发生？ | Event 不自动成为任何主体的 Memory |
+| Observation | 谁在何时对某目标有访问？ | 是 evidence；不自动形成 Memory |
+| CharacterBelief | Character 相信什么命题？ | Memory 不自动形成、纠正或调和 Belief |
+| Conversation / Message | 表达了什么？ | C-007A 不自动摄取对话 |
+| Reflection | 从经历推导了什么解释？ | 尚未实现，不能伪装成 EpisodicMemory |

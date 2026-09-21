@@ -22,6 +22,7 @@ from livingworld.infrastructure.persistence.migration import (
     ACTION_TABLES,
     HEAD_REVISION,
     LEDGER_REVISION,
+    MEMORY_TABLES,
     SIMULATION_TABLES,
     _alembic_config,
 )
@@ -267,7 +268,7 @@ def test_0005_takeover_preserves_every_runtime_and_audit_row(tmp_path, populate,
         tables = tuple(
             table
             for table in Base.metadata.tables
-            if table not in SIMULATION_TABLES | ACTION_TABLES
+            if table not in SIMULATION_TABLES | ACTION_TABLES | MEMORY_TABLES
         ) + ("schema_version", "migration_history")
         try:
             async with database.engine.begin() as connection:

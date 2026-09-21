@@ -483,6 +483,118 @@ class ObservationRecord(Base):
     )
 
 
+class CharacterMemoryRecord(Base):
+    __tablename__ = "character_memories"
+    world_id: Mapped[UUID] = mapped_column(
+        UUIDStorage(), ForeignKey("worlds.world_id"), primary_key=True
+    )
+    memory_id: Mapped[UUID] = mapped_column(UUIDStorage(), primary_key=True)
+    owner_character_id: Mapped[UUID] = mapped_column(UUIDStorage(), nullable=False)
+    kind: Mapped[str] = mapped_column(String(24), nullable=False)
+    kind_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    content_format: Mapped[str] = mapped_column(String(24), nullable=False)
+    content_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    experienced_from: Mapped[WorldTime] = mapped_column(WorldTimeStorage(), nullable=False)
+    experienced_to: Mapped[WorldTime] = mapped_column(WorldTimeStorage(), nullable=False)
+    formed_at: Mapped[WorldTime] = mapped_column(WorldTimeStorage(), nullable=False)
+    created_at_utc: Mapped[datetime] = mapped_column(UTCTimestampStorage(), nullable=False)
+    salience: Mapped[int | None] = mapped_column(Integer)
+    provenance_kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    provenance_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    sources: Mapped[list[EpisodicMemoryObservationSourceRecord]] = relationship(
+        back_populates="memory",
+        order_by="EpisodicMemoryObservationSourceRecord.position",
+    )
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["world_id", "owner_character_id"],
+            ["characters.world_id", "characters.character_id"],
+        ),
+        CheckConstraint("kind = 'episodic'", name="ck_character_memory_kind"),
+        CheckConstraint(
+            "typeof(kind_version) = 'integer' AND kind_version = 1",
+            name="ck_character_memory_kind_version",
+        ),
+        CheckConstraint(
+            "length(trim(content)) > 0 AND length(CAST(content AS BLOB)) <= 16384",
+            name="ck_character_memory_content",
+        ),
+        CheckConstraint(
+            "content_format = 'plain_text' AND content_version = 1",
+            name="ck_character_memory_content_format",
+        ),
+        CheckConstraint(
+            "experienced_to >= experienced_from AND formed_at >= experienced_to",
+            name="ck_character_memory_chronology",
+        ),
+        CheckConstraint(
+            "salience IS NULL OR (typeof(salience) = 'integer' AND salience BETWEEN 0 AND 100)",
+            name="ck_character_memory_salience",
+        ),
+        CheckConstraint(
+            "provenance_kind = 'observation_evidence' AND provenance_version = 1",
+            name="ck_character_memory_provenance",
+        ),
+        Index(
+            "ix_character_memories_world_owner",
+            "world_id",
+            "owner_character_id",
+            "memory_id",
+        ),
+        Index(
+            "ix_character_memories_owner_experienced",
+            "world_id",
+            "owner_character_id",
+            "experienced_to",
+            "formed_at",
+            "memory_id",
+        ),
+        Index(
+            "ix_character_memories_owner_formed",
+            "world_id",
+            "owner_character_id",
+            "formed_at",
+            "memory_id",
+        ),
+    )
+
+
+class EpisodicMemoryObservationSourceRecord(Base):
+    __tablename__ = "episodic_memory_observation_sources"
+    world_id: Mapped[UUID] = mapped_column(UUIDStorage(), primary_key=True)
+    memory_id: Mapped[UUID] = mapped_column(UUIDStorage(), primary_key=True)
+    position: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    observation_id: Mapped[UUID] = mapped_column(UUIDStorage(), nullable=False)
+    memory: Mapped[CharacterMemoryRecord] = relationship(back_populates="sources")
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["world_id", "memory_id"],
+            ["character_memories.world_id", "character_memories.memory_id"],
+        ),
+        ForeignKeyConstraint(
+            ["world_id", "observation_id"],
+            ["observations.world_id", "observations.observation_id"],
+        ),
+        UniqueConstraint(
+            "world_id",
+            "memory_id",
+            "observation_id",
+            name="uq_episodic_memory_observation_source",
+        ),
+        CheckConstraint(
+            "typeof(position) = 'integer' AND position >= 0",
+            name="ck_episodic_memory_source_position",
+        ),
+        Index(
+            "ix_episodic_memory_source_observation",
+            "world_id",
+            "observation_id",
+            "memory_id",
+        ),
+    )
+
+
 class CommandReceiptRecord(Base):
     __tablename__ = "command_receipts"
     world_id: Mapped[UUID] = mapped_column(

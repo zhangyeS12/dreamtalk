@@ -15,6 +15,7 @@ from livingworld.application.fingerprints import canonical_json, id_input
 from livingworld.application.results import (
     ActionResult,
     CommandResult,
+    MemoryResult,
     RelationshipReference,
     SceneResult,
 )
@@ -28,6 +29,7 @@ from livingworld.domain.identifiers import (
     EventId,
     KnowledgeAssertionId,
     LocationId,
+    MemoryId,
     ObservationId,
     PlayerId,
     PrincipalId,
@@ -46,6 +48,9 @@ from livingworld.infrastructure.persistence.errors import (
     PersistenceDataError,
 )
 from livingworld.infrastructure.persistence.mapping import to_domain, to_record
+from livingworld.infrastructure.persistence.memory_repository import (
+    SqlAlchemyMemoryMutationRepository,
+)
 from livingworld.infrastructure.persistence.models import (
     CharacterRecord,
     CharacterStateRecord,
@@ -719,6 +724,38 @@ class CommandReceiptRepository:
             IdempotencyConflictError("CommandReceipt identity already committed"),
         )
 
+    async def existing_memory(self, request_id: RequestId, fingerprint: str) -> MemoryResult | None:
+        record = await self._typed_record(request_id, fingerprint)
+        if record is None:
+            return None
+        try:
+            value = json.loads(record.result_payload)
+            if value["result_version"] != 4:
+                raise ValueError("Unknown memory result version")
+            return MemoryResult(
+                request_id,
+                MemoryId(WorldId(record.world_id), UUID(value["memory_id"])),
+            )
+        except (ValueError, KeyError, TypeError):
+            raise PersistenceDataError("invalid_memory_result") from None
+
+    async def add_memory(
+        self, receipt: CommandReceipt, fingerprint: str, result: MemoryResult
+    ) -> None:
+        record = to_record(receipt)
+        record.command_fingerprint = fingerprint
+        record.result_payload = canonical_json(
+            {
+                "result_version": 4,
+                "memory_id": str(result.memory_id.value),
+            }
+        )
+        await _add_unique(
+            self._session,
+            record,
+            IdempotencyConflictError("CommandReceipt identity already committed"),
+        )
+
 
 class SqlAlchemyUnitOfWork:
     def __init__(self, sessions: async_sessionmaker):
@@ -742,6 +779,7 @@ class SqlAlchemyUnitOfWork:
         self.scenes = SceneRepository(self._session)
         self.knowledge = KnowledgeMutationRepository(self._session)
         self.observations = ObservationAppender(self._session)
+        self.memories = SqlAlchemyMemoryMutationRepository(self._session)
         self.activations = SqlAlchemyActivationRepository(self._session)
         self.events = EventAppender(self._session)
         self.event_references = EventReferenceReader(self._session)

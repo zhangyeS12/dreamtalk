@@ -1,6 +1,6 @@
 # C-003D：Knowledge Access Isolation
 
-状态：已实现 Python 内部端口、SQL 权限隔离与显式获知事务，C-003E2 增加独立主观信念形成入口。没有业务 HTTP API、Memory、RAG、Director、Agent 或自动推理。
+状态：已实现 Python 内部端口、SQL 权限隔离与显式获知事务，C-003E2 增加独立主观信念形成入口；C-007A 在独立 owner-bound Memory 能力中复用同一 permission-first 原则。没有业务 HTTP API、RAG、Director、Agent 或自动推理。
 
 ## 1. 能力绑定与信任边界
 
@@ -19,6 +19,12 @@
 [Database](../../services/core/src/livingworld/infrastructure/persistence/engine.py) 的 factory 属于可信 composition：未来根据已验证身份绑定 reader 后，只把对应端口交给上下文消费者。当前不实现登录、传输鉴权或 Python 插件沙箱；端口隔离不宣称恶意任意 Python 代码不可访问进程内 Database。内部 exact-source mutation repository 与 read-only snapshot inspection 属权威基础设施能力，不分发给 principal。没有 list_all_knowledge 或全局读取后 Python 过滤路径。
 
 未来 Director/world 层仅因拥有 TruthReader 不会获得私有信念；未来 Agent 只用绑定角色已授权结果。扩展授权要求独立未来决策，本任务不实现。
+
+### C-007A Memory evidence capability
+
+`CharacterMemoryReader` 与知识 reader 一样在 factory 时绑定 Character；调用方不能传入另一个 owner。`RecordEpisodicMemory` 的内部 mutation repository 先在 SQL 中限定 world 与 Character principal，再 materialize 请求 evidence。ObservationId 不构成 bearer capability：知道另一个 Character 或 Player 的 ID 不能读取或用它形成 Memory。
+
+Memory evidence 仅证明来源访问与 provenance。它不展开 source target payload、不授予 source assertion owner 的私有 store，也不产生 KnowledgeAssertion。完整契约见 [EPISODIC_MEMORY.md](EPISODIC_MEMORY.md)。
 
 ## 2. 真相写入
 
@@ -55,7 +61,7 @@ FormCharacterBelief（可信内部命令，非玩家 API）
 
 **FormCharacterBelief 不自动创建 Observation**：内部形成不是默认 exposure channel。断言是新 immutable epistemic record，不引入 expected revision、修改既有信念或自动纠正。AcquireKnowledge 继续保持下述 source → Observation → receiver-owned assertion；它可以将 character_a 的 false belief 转述给 character_b，而不改写 WorldTruth。
 
-**C-006B event perception 不自动创建 KnowledgeAssertion**：`Observation(target_id=EventId, channel=witnessed, basis=event_occurrence)` 只证明该主体在事件发生时具有访问依据。可空 basis 将 Kernel audience snapshot 与普通 Observation occurrence 区分，不改变 C-003D identity。它没有 proposition，也不授予 Truth/Belief/PlayerKnowledge；Stage 6 才能定义如何从事件感知形成认知或记忆。该 event-target Observation 是不可重算的历史授权快照，知识读取器不会因此越权遍历全局 WorldEvent。
+**C-006B event perception 不自动创建 KnowledgeAssertion**：`Observation(target_id=EventId, channel=witnessed, basis=event_occurrence)` 只证明该主体在事件发生时具有访问依据。可空 basis 将 Kernel audience snapshot 与普通 Observation occurrence 区分，不改变 C-003D identity。它没有 proposition，也不授予 Truth/Belief/PlayerKnowledge。C-007A 仅增加显式 owner-authorized EpisodicMemory 形成步骤，没有自动 Observation→Memory 或 Observation→Belief。该 event-target Observation 是不可重算的历史授权快照，知识读取器不会因此越权遍历全局 WorldEvent。
 
 Stage 2 验收以 AssertWorldTruth `door=locked` + FormCharacterBelief `Alice: door=unlocked` 创建两条 canonical state，隔离读者在重建前后仍分别返回 locked/unlocked。历史 stale Truth 可成为未来过时认知的一种来源，但不是本验收的 canonical 主观根机制。
 
@@ -98,3 +104,5 @@ principal authorization
 [知识集成测试](../../tests/application/test_knowledge_access.py) 保留秘密、私有 canary、SQL WHERE/绑定参数、拒绝 ID 无领域 materialization、角色转述、玩家知识、跨世界与回滚回归。旧隔离/映射测试的私有与矛盾 fixture 不作为 Stage 2 最终验收创建路径。
 
 [信念形成测试](../../tests/application/test_belief_formation.py) 覆盖无源/无 Truth 根、矛盾命题、false belief 转述、optional 私有 source/provenance、完整 metadata 回放、无 Observation、重启幂等与故障回滚。[Stage 2 验收](STAGE_2_ACCEPTANCE.md) 只用受支持命令创建秘密及矛盾信念，证明 replay 前后 owner/world 隔离。[Observation 迁移测试](../../tests/persistence/test_observation_migration.py) 验证旧语义与确定性；[映射测试](../../tests/persistence/test_mapping.py) 验证同坐标不同 occurrence 与 typed ID round-trip。
+
+[Memory application tests](../../tests/application/test_episodic_memory.py) 证明 same-owner evidence、另一 Character/Player/cross-world rejection、SQL owner predicate、无 global list、私有 payload 不进入 receipt/log、stable pagination、replay/content isolation 与事务回滚。

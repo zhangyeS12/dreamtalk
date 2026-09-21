@@ -46,7 +46,7 @@ C-006B 明确使用 `target_id=EventId`、`channel=witnessed`、`basis=event_occ
 
 详见 [PERSISTENCE_MODEL.md](PERSISTENCE_MODEL.md)。KnowledgeAssertionRecord 以 CHECK 强制上述 scope/owner 组合，复合外键保证 owner、来源事件和来源断言存在于同一 world；valid_from/to 保存整数 WorldTime，拒绝倒序。confidence 使用精确 Decimal 文本，value 以 JSON 保存并在返回领域时冻结；不同主体可保留相互冲突的认知。
 
-ObservationRecord 使用具体 principal/target 类型分支及同世界 FK，channel 限制为已定义枚举，observed_at 保存 WorldTime，可选 created_at 保留 aware UTC 语义。0004 改为 (world_id, observation_id) 主键，保留旧语义字段、所有行和 FK/CHECK，取消坐标唯一性。0012 增加可空 basis，只对 `event_occurrence` event-target rows 增加每 event/principal 唯一，并增加主体历史索引；basis=None 及 assertion-target occurrence 仍可独立存在。单独保存 Observation 不授予知识；AcquireKnowledge 原子建立接收方自有断言。数据库 ownership CHECK 与 SQL 读取授权共同保持边界。
+ObservationRecord 使用具体 principal/target 类型分支及同世界 FK，channel 限制为已定义枚举，observed_at 保存 WorldTime，可选 created_at 保留 aware UTC 语义。0004 改为 (world_id, observation_id) 主键，保留旧语义字段、所有行和 FK/CHECK，取消坐标唯一性。0012 增加可空 basis，只对 `event_occurrence` event-target rows 增加每 event/principal 唯一，并增加主体历史索引；basis=None 及 assertion-target occurrence 仍可独立存在。单独保存 Observation 不授予知识；AcquireKnowledge 原子建立接收方自有断言。C-007A 可将同 Character Observation 作为 EpisodicMemory evidence，但仍需显式 `RecordEpisodicMemory`，不会自动形成记忆。数据库 ownership CHECK 与 SQL 读取授权共同保持边界。
 
 ### C-003D 显式获知与读取
 
@@ -93,7 +93,7 @@ AcquireKnowledge 不变：既有源 → 显式渠道 Observation → 接收方�
 ## 4. 与其他模型的关系
 
 - **事件**：[EVENT_MODEL.md](EVENT_MODEL.md) 决定候选何时变成真实发生的事件；知识模型处理谁知道，不负责把候选变成事实。
-- **记忆**：[MEMORY_MODEL.md](MEMORY_MODEL.md) 处理拥有者如何保留与理解经历。知识与记忆相关，但并非每条知识都已确定要对应一条独立记忆。
+- **记忆**：[EPISODIC_MEMORY.md](EPISODIC_MEMORY.md) 处理 Character 如何从自己已授权的 Observation 显式形成不可变主观经历。Memory 不授予 Knowledge/Belief/Truth；CharacterBelief 也不自动生成 Memory。
 - **Director / Agent**：Director 的世界调度上下文与 Character Agent 的对话上下文具有不同职责；本文不规定其进程、接口或存储隔离方式。
 - **Builder / 导入**：角色或作品的外部研究来源不自动等于运行世界中的事实，更不自动等于每个角色或玩家已知。自动生成内容仍须 Draft → Preview → Commit；提交时的初始知识归属与导入映射待确认。
 - **Checkpoint / Timeline**：知识所属的时间线和恢复范围需要明确；不能在尚未确认继承规则时，假设另一条分支的知识已在当前分支成立。

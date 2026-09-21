@@ -24,6 +24,10 @@ class InvalidPresenceError(DomainInvariantError):
     """A player's physical presence is missing or invalid."""
 
 
+class UnsupportedMemoryKindError(DomainInvariantError):
+    """The memory kind/version is reserved but unsupported by this runtime."""
+
+
 class ConcurrencyConflictError(DomainInvariantError):
     """An update was based on a different revision."""
 

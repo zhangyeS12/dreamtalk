@@ -80,6 +80,15 @@ class ObservationId:
 
 
 @dataclass(frozen=True, slots=True)
+class MemoryId:
+    world_id: WorldId
+    value: UUID
+
+    def __post_init__(self) -> None:
+        _scoped(self.world_id, self.value)
+
+
+@dataclass(frozen=True, slots=True)
 class SceneId:
     world_id: WorldId
     value: UUID

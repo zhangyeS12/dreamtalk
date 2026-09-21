@@ -24,6 +24,7 @@ from livingworld.domain.identifiers import (
     EventId,
     KnowledgeAssertionId,
     LocationId,
+    MemoryId,
     ObservationId,
     PlayerId,
     SceneId,
@@ -40,6 +41,7 @@ def id_input(
     | CharacterId
     | KnowledgeAssertionId
     | ObservationId
+    | MemoryId
     | EventId
     | TriggerId
     | ActivationId
