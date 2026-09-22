@@ -11,6 +11,20 @@ export interface CoreHealth {
   llm_status: LLMRuntimeStatus;
 }
 export interface WorldSummary { world_id: string; name: string }
+export interface WorldSettings extends WorldSummary {
+  world_time: string;
+  clock_state: "running" | "paused";
+  time_scale: string;
+  runtime_state: string;
+}
+export interface SelectablePlayer { player_id: string; name: string }
+export interface KnownWorldEvent {
+  event_id: string;
+  title: string;
+  occurred_at: string;
+  observed_at: string;
+  ledger_position: number;
+}
 export interface InspectorSnapshot {
   world: WorldSummary;
   clock: { world_time: string; state: "running" | "paused"; scale: string; revision: number };
@@ -73,6 +87,49 @@ export class CoreClient {
     });
     if (!response.ok) throw new Error(`developer_request_failed_${response.status}`);
     return await response.json() as T;
+  }
+
+  private async productRequest<T>(path: string, init?: RequestInit): Promise<T> {
+    const response = await this.fetcher(new URL(`/api/v${API_PROTOCOL}${path}`, this.endpoint), {
+      ...init,
+      headers: { Authorization: `Bearer ${this.connection.token}`, ...init?.headers },
+      credentials: "omit", cache: "no-store",
+    });
+    if (!response.ok) throw new Error(`product_request_failed_${response.status}`);
+    return await response.json() as T;
+  }
+
+  listProductWorlds(): Promise<WorldSettings[]> { return this.productRequest("/worlds"); }
+  createWorld(name: string, requestId: string): Promise<{ world_id: string }> {
+    return this.productRequest("/worlds", {
+      method: "POST", headers: { "Content-Type": "application/json", "X-Request-Id": requestId },
+      body: JSON.stringify({ name }),
+    });
+  }
+  pauseProductWorld(worldId: string): Promise<{ ok: boolean }> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/clock/pause`, { method: "POST" });
+  }
+  resumeProductWorld(worldId: string): Promise<{ ok: boolean }> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/clock/resume`, { method: "POST" });
+  }
+  scaleProductWorld(worldId: string, scale: string): Promise<{ ok: boolean }> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/clock/scale`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scale }),
+    });
+  }
+  listPlayers(worldId: string): Promise<SelectablePlayer[]> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/players`);
+  }
+  selectedPlayer(worldId: string): Promise<{ player_id: string | null }> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/me/player`);
+  }
+  bindPlayer(worldId: string, playerId: string): Promise<{ player_id: string }> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/me/player`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ player_id: playerId }),
+    });
+  }
+  knownEvents(worldId: string): Promise<KnownWorldEvent[]> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/known-events`);
   }
 
   listWorlds(): Promise<WorldSummary[]> { return this.developerRequest("/developer/worlds"); }

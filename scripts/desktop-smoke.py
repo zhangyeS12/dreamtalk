@@ -3,6 +3,7 @@
 import json
 import os
 import subprocess
+import tempfile
 from pathlib import Path
 
 if os.name != "nt":
@@ -11,23 +12,28 @@ root = Path(__file__).resolve().parents[1]
 binary = root / "apps/desktop/src-tauri/target/debug/livingworld-desktop.exe"
 environment = os.environ.copy()
 environment["LW_DESKTOP_SMOKE"] = "1"
-try:
-    result = subprocess.run(
-        [str(binary)],
-        env=environment,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        timeout=45,
-    )
-except subprocess.TimeoutExpired as error:
-    output = error.stdout or b""
-    if isinstance(output, bytes):
-        output = output.decode("utf-8", errors="replace")
-    observed = [json.loads(line)["event"] for line in output.splitlines() if line.startswith("{")]
-    print(json.dumps({"event": "desktop_smoke_timeout", "observed_events": observed}))
-    raise SystemExit(1) from None
+with tempfile.TemporaryDirectory(prefix="livingworld-desktop-smoke-") as app_data:
+    environment["LW_DESKTOP_SMOKE_APP_DATA"] = app_data
+    environment["WEBVIEW2_USER_DATA_FOLDER"] = str(Path(app_data) / "webview")
+    try:
+        result = subprocess.run(
+            [str(binary)],
+            env=environment,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=45,
+        )
+    except subprocess.TimeoutExpired as error:
+        output = error.stdout or b""
+        if isinstance(output, bytes):
+            output = output.decode("utf-8", errors="replace")
+        observed = [
+            json.loads(line)["event"] for line in output.splitlines() if line.startswith("{")
+        ]
+        print(json.dumps({"event": "desktop_smoke_timeout", "observed_events": observed}))
+        raise SystemExit(1) from None
 events = [json.loads(line)["event"] for line in result.stdout.splitlines() if line.startswith("{")]
 required = [
     "supervisor_starting",

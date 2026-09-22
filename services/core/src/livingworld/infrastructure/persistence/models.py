@@ -98,6 +98,19 @@ class PlayerRecord(Base):
     revision: Mapped[int] = mapped_column(Integer, nullable=False)
 
 
+class LocalPlayerBindingRecord(Base):
+    """One selected Player per World in this local OS user's data directory."""
+
+    __tablename__ = "local_player_bindings"
+    world_id: Mapped[UUID] = mapped_column(
+        UUIDStorage(), ForeignKey("worlds.world_id"), primary_key=True
+    )
+    player_id: Mapped[UUID] = mapped_column(UUIDStorage(), nullable=False)
+    __table_args__ = (
+        ForeignKeyConstraint(["world_id", "player_id"], ["players.world_id", "players.player_id"]),
+    )
+
+
 class PlayerPresenceRecord(Base):
     __tablename__ = "player_presences"
     world_id: Mapped[UUID] = mapped_column(

@@ -158,7 +158,9 @@ impl CoreSupervisor {
         self.state = SupervisorState::Starting;
         event("supervisor_starting");
         let result = self.spawn_and_discover(config).await;
-        if result.is_err() {
+        if let Err(reason) = result {
+            // Every reason here is a fixed internal code, never an OS error or secret.
+            event(reason);
             let _ = self.stop(Duration::ZERO).await;
             self.state = SupervisorState::Failed;
             event("supervisor_failed");

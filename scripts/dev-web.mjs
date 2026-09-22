@@ -23,7 +23,7 @@ await file.writeFile(JSON.stringify({
   allowed_origins: ["http://127.0.0.1:5173"],
 }));
 await file.close();
-const python = resolve(root, process.platform === "win32" ? ".venv/Scripts/python.exe" : ".venv/bin/python");
+const python = process.env.LW_PYTHON || resolve(root, process.platform === "win32" ? ".venv/Scripts/python.exe" : ".venv/bin/python");
 const child = spawn(python, ["-m", "livingworld.bootstrap", "--bootstrap-path", bootstrap, "--developer-tools"], {
   cwd: root, stdio: ["ignore", "pipe", "pipe"], windowsHide: true,
 });

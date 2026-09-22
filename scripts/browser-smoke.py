@@ -47,6 +47,16 @@ try:
         page.on("pageerror", lambda _error: errors.append(True))
         page.goto("http://127.0.0.1:5173/", wait_until="networkidle")
         page.get_by_role("status").filter(has_text="核心已就绪").wait_for(timeout=20_000)
+        page.get_by_role("navigation", name="主导航").wait_for(timeout=20_000)
+        if screenshot_path := os.environ.get("LW_BROWSER_SCREENSHOT"):
+            page.screenshot(path=screenshot_path, full_page=True)
+        if mobile_screenshot_path := os.environ.get("LW_BROWSER_MOBILE_SCREENSHOT"):
+            page.set_viewport_size({"width": 390, "height": 844})
+            page.screenshot(path=mobile_screenshot_path, full_page=True)
+        page.locator(".conversation-row.pinned").wait_for()
+        page.locator(".conversation-row.pinned").click()
+        page.get_by_role("region", name="世界事件时间线").wait_for()
+        page.goto("http://127.0.0.1:5173/?developer=1", wait_until="networkidle")
         page.get_by_role("heading", name="开发者运行时检查器").wait_for(timeout=20_000)
         if errors:
             raise RuntimeError("browser_page_error")
@@ -60,6 +70,7 @@ try:
             {
                 "event": "browser_smoke_passed",
                 "state": "核心已就绪",
+                "product": "visible",
                 "inspector": "visible",
                 "page_errors": 0,
             }

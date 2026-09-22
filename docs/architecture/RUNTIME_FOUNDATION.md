@@ -63,6 +63,8 @@ Q-001A 通过 application `WorldRuntimeRegistrar` seam 将运行期成功提交�
 
 桌面 build 显式启用 `custom-protocol`，从内嵌 Web 资源加载 UI；desktop dev 使用独立 Vite server。CoreClient 将浏览器原生 fetch 绑定到 globalThis，避免 native browser/WebView 的调用上下文错误。
 
+Desktop smoke 使用独立临时 Core app-data 和 WebView2 profile，避免触及实际用户数据。`LW_DESKTOP_SMOKE_APP_DATA` 仅在 debug build 且 `LW_DESKTOP_SMOKE=1` 时生效，正式启动仍使用 Tauri app-data；目录仍受 bootstrap 校验约束。受限沙箱可能阻断原生 WebView 子进程，不能将这种 smoke 失败误判为 Core 或前端逻辑失败；应在获授权的正常 Windows 进程环境验证。Supervisor 启动失败记录固定安全错误码，不记录 OS 错误详情或凭据。
+
 ## Browser 开发连接
 
 `dev:web` 的 Node launcher以 `--developer-tools` 启动同一 Core、校验 ready record，将派生 session 通过仅开发模式的 Vite virtual module 交给页面；Vite 只监听 loopback。正常 build 不嵌入 session，Tauri build 从 Rust IPC 获取连接。独立发布的 browser transport/session delivery 尚未实现；未配置的生产 Web 页面显示“核心连接失败”。

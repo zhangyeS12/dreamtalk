@@ -38,4 +38,16 @@ describe("CoreClient", () => {
       target_character_id: "character",
     });
   });
+  it("uses versioned authenticated product routes and stable creation identity", async () => {
+    const fetcher = vi.fn().mockImplementation(async () => new Response(JSON.stringify({ world_id: "world" })));
+    const client = new CoreClient(connection, fetcher);
+    const requestId = "0f6d14aa-1363-4451-a1bf-9ed40a9cbb95";
+    await client.createWorld("我的世界", requestId);
+    expect(fetcher.mock.calls[0][0].toString()).toBe(`${connection.endpoint}/api/v${API_PROTOCOL}/worlds`);
+    expect(fetcher.mock.calls[0][1].headers.Authorization).toBe("Bearer memory-session");
+    expect(fetcher.mock.calls[0][1].headers["X-Request-Id"]).toBe(requestId);
+    expect(JSON.parse(fetcher.mock.calls[0][1].body)).toEqual({ name: "我的世界" });
+    await client.listProductWorlds();
+    expect(fetcher.mock.calls[1][0].toString()).toBe(`${connection.endpoint}/api/v${API_PROTOCOL}/worlds`);
+  });
 });

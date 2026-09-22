@@ -889,7 +889,7 @@ typed cause kind、对应 TriggerId/EventId/SceneId/RequestId reference、activa
 2. Location 的移动与在途语义；Scene、Mission、Conversation 的边界及相互关系。
 3. Busy / Available 的控制方式；“必要主动联系”的范围；同一理由、一次发送与多角色 Episode 的对应关系。
 4. Planning Window 的尺度、耗尽判定和“大量失效”阈值；候选激活冲突与失败的处理边界。
-5. Draft → Preview → Commit 的适用对象边界：运行时台词、WorldPlan、事件生成及记忆摘要等是否适用，以及如何衔接、按什么粒度审核；不能自行将原规则缩窄到 Builder。
+5. Draft → Preview → Commit 的适用对象边界已部分确定：Character Agent 的运行时聊天台词经系统校验后直接发送，无需逐条人工预览；自动生成的持久创作内容仍须预览确认。WorldPlan、事件生成及记忆摘要的具体适用边界、流程衔接和审核粒度仍待确认。
 6. Knowledge 的获得、传闻与修正（错误 CharacterBelief 已明确允许）；EpisodicMemory 基础已解决，Reflection、遗忘、修正与检索仍待确认；Relationship 的非数值反馈（方向已确认为有向）。
 7. Checkpoint 的恢复范围、Timeline Branch 的隔离/合并/切换语义，以及知识、记忆、消息、候选计划和费用的归属。
 8. DirectorProfile 的风格维度；模型路由、预算超限行为与 Token / Latency / Cost 的统计口径。

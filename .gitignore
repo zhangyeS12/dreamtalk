@@ -17,6 +17,7 @@ Desktop.ini
 # Stage 1 开发环境、缓存和构建产物
 .venv/
 .cache/
+.uv-cache/
 __pycache__/
 *.py[cod]
 .pytest_cache/

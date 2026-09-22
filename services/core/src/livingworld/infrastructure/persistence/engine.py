@@ -174,5 +174,20 @@ class Database:
 
         return SqlAlchemyDeveloperInspectorStore(self._sessions)
 
+    def world_directory(self):
+        """Read-only catalog for the ordinary local-user surface."""
+        from livingworld.infrastructure.persistence.world_directory import (
+            SqlAlchemyWorldDirectory,
+        )
+
+        return SqlAlchemyWorldDirectory(self._sessions)
+
+    def player_event_feed_store(self):
+        from livingworld.infrastructure.persistence.player_event_feed import (
+            SqlAlchemyPlayerEventFeedStore,
+        )
+
+        return SqlAlchemyPlayerEventFeedStore(self._sessions)
+
     async def close(self) -> None:
         await self.engine.dispose()

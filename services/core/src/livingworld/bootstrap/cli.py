@@ -18,6 +18,7 @@ from livingworld.application.developer_inspector import (
     DeveloperInspectorService,
 )
 from livingworld.application.memory import EpisodicMemoryService
+from livingworld.application.player_event_feed import PlayerEventFeedService
 from livingworld.application.runtime import RuntimeStatus, ShutdownRequests
 from livingworld.application.scenes import SceneService
 from livingworld.application.scheduler import (
@@ -34,6 +35,7 @@ from livingworld.application.simulation_runtime import (
     WorldClockService,
     WorldSimulationRuntime,
 )
+from livingworld.application.world_settings import WorldSettingsService
 from livingworld.bootstrap.llm_control import HostControlListener
 from livingworld.bootstrap.llm_runtime import start_production_llm_session
 from livingworld.bootstrap.reader import derive_session, read_bootstrap
@@ -128,16 +130,23 @@ async def run(
             diagnostics=StructuredCatchUpDiagnosticSink(logger),
         )
         await simulation_runtime.start_all()
+        command_handler = CommandHandler(
+            database.unit_of_work,
+            wall_clock,
+            world_time_source=time_source,
+            mutation_barrier=simulation_runtime,
+            wake_signal=wake_signal,
+            world_runtime_registrar=simulation_runtime,
+        )
+        world_settings = WorldSettingsService(
+            database.world_directory(),
+            command_handler,
+            clock_service,
+            simulation_runtime,
+        )
+        player_event_feed = PlayerEventFeedService(database.player_event_feed_store())
         developer_inspector = None
         if developer_tools:
-            command_handler = CommandHandler(
-                database.unit_of_work,
-                wall_clock,
-                world_time_source=time_source,
-                mutation_barrier=simulation_runtime,
-                wake_signal=wake_signal,
-                world_runtime_registrar=simulation_runtime,
-            )
             developer_inspector = DeveloperInspectorService(
                 database.developer_inspector_store(),
                 command_handler,
@@ -173,6 +182,8 @@ async def run(
             logger,
             config.allowed_origins,
             developer_inspector,
+            world_settings,
+            player_event_feed,
         )
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.bind((LOOPBACK_HOST, 0))

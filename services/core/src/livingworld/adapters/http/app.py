@@ -10,7 +10,9 @@ from pydantic import BaseModel, ConfigDict
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from livingworld.application.developer_inspector import DeveloperInspectorService
+from livingworld.application.player_event_feed import PlayerEventFeedService
 from livingworld.application.runtime import RuntimeStatus, ShutdownRequests
+from livingworld.application.world_settings import WorldSettingsService
 from livingworld.domain.contracts import API_PROTOCOL, LOOPBACK_HOST, RequestId
 from livingworld.infrastructure.logging import StructuredLogger
 
@@ -32,6 +34,8 @@ def create_app(
     logger: StructuredLogger,
     allowed_origins: list[str] | None = None,
     developer_inspector: DeveloperInspectorService | None = None,
+    world_settings: WorldSettingsService | None = None,
+    player_event_feed: PlayerEventFeedService | None = None,
 ) -> FastAPI:
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
@@ -68,6 +72,16 @@ def create_app(
         from livingworld.adapters.http.developer import developer_router
 
         app.include_router(developer_router(developer_inspector, authorize))
+
+    if world_settings is not None:
+        from livingworld.adapters.http.worlds import world_router
+
+        app.include_router(world_router(world_settings, authorize))
+
+    if player_event_feed is not None:
+        from livingworld.adapters.http.player_events import player_events_router
+
+        app.include_router(player_events_router(player_event_feed, authorize))
 
     @app.get("/system/live")
     async def live() -> dict[str, bool]:

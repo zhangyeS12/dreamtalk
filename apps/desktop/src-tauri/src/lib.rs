@@ -142,13 +142,19 @@ pub fn run() {
             credential_status
         ])
         .setup(|app| {
+            let mut app_data = app.path().app_data_dir()?;
+            if cfg!(debug_assertions) && std::env::var("LW_DESKTOP_SMOKE").as_deref() == Ok("1") {
+                if let Some(isolated) = std::env::var_os("LW_DESKTOP_SMOKE_APP_DATA") {
+                    app_data = isolated.into();
+                }
+            }
             let config = LaunchConfig {
                 project_root: std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
                     .join("../../..")
                     .canonicalize()?,
-                app_data: app.path().app_data_dir()?,
+                app_data: app_data.clone(),
                 startup_timeout: Duration::from_secs(12),
-                llm_config_path: app.path().app_data_dir()?.join("config").join("llm.json"),
+                llm_config_path: app_data.join("config").join("llm.json"),
             };
             let supervisor = app.state::<SharedSupervisor>().inner().clone();
             tauri::async_runtime::spawn(async move {

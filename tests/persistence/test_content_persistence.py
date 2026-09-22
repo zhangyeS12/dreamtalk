@@ -268,7 +268,8 @@ def test_0005_takeover_preserves_every_runtime_and_audit_row(tmp_path, populate,
         tables = tuple(
             table
             for table in Base.metadata.tables
-            if table not in SIMULATION_TABLES | ACTION_TABLES | MEMORY_TABLES
+            if table
+            not in SIMULATION_TABLES | ACTION_TABLES | MEMORY_TABLES | {"local_player_bindings"}
         ) + ("schema_version", "migration_history")
         try:
             async with database.engine.begin() as connection:
