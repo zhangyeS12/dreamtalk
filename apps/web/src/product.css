@@ -137,4 +137,3 @@
   .app-alert, .app-notice { margin: 0 16px 16px; }
 }
 @media (prefers-reduced-motion: reduce) { .product-shell * { scroll-behavior: auto !important; transition-duration: 0ms !important; animation-duration: 0ms !important; } }
-
