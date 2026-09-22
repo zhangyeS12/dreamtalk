@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { CoreClient, type KnownWorldEvent, type SelectablePlayer, type WorldSettings } from "@livingworld/api-client";
+import { ProfileEditor } from "./ProfileEditor";
 import "./product.css";
 
 type Tab = "chats" | "contacts" | "settings" | "me";
@@ -34,6 +35,8 @@ function displayTime(raw: string): string {
 
 export function ProductApp({ client }: { client: CoreClient }) {
   const [tab, setTab] = useState<Tab>("chats");
+  const [meVisited, setMeVisited] = useState(false);
+  const [worldProfileDirty, setWorldProfileDirty] = useState(false);
   const [worlds, setWorlds] = useState<WorldSettings[]>([]);
   const [worldId, setWorldId] = useState("");
   const [newWorldName, setNewWorldName] = useState("");
@@ -58,6 +61,7 @@ export function ProductApp({ client }: { client: CoreClient }) {
     return () => window.clearInterval(timer);
   }, [refresh]);
   const world = useMemo(() => worlds.find(item => item.world_id === worldId), [worlds, worldId]);
+  useEffect(() => { if (tab === "me") setMeVisited(true); }, [tab]);
   useEffect(() => { if (world) setScale(world.time_scale); }, [world?.world_id, world?.time_scale]);
   const loadIdentity = useCallback(async (id: string) => {
     return await Promise.all([client.listPlayers(id), client.selectedPlayer(id)] as const);
@@ -94,6 +98,7 @@ export function ProductApp({ client }: { client: CoreClient }) {
     event.preventDefault();
     const name = newWorldName.trim();
     if (!name || busy) return;
+    if (worldProfileDirty && !window.confirm("当前世界的身份尚未保存，是否放弃修改并创建新世界？")) return;
     await act(async () => {
       const result = await client.createWorld(name, crypto.randomUUID());
       await refresh(); setWorldId(result.world_id); setNewWorldName("");
@@ -125,7 +130,7 @@ export function ProductApp({ client }: { client: CoreClient }) {
 
       {tab === "settings" && <div className="settings-page">
         <section className="settings-section"><div className="section-heading"><h2>世界</h2><p>每个世界有独立的角色、聊天和身份。</p></div>
-          {worlds.length ? <label className="field"><span>当前世界</span><select value={worldId} disabled={busy} onChange={event => { setWorldId(event.target.value); setEventsOpen(false); setNotice(""); }}>
+          {worlds.length ? <label className="field"><span>当前世界</span><select value={worldId} disabled={busy} onChange={event => { if (worldProfileDirty && !window.confirm("当前世界的身份尚未保存，是否放弃修改并切换世界？")) return; setWorldId(event.target.value); setEventsOpen(false); setNotice(""); }}>
             {worlds.map(item => <option key={item.world_id} value={item.world_id}>{item.name}</option>)}
           </select></label> : <p className="inline-hint">还没有世界。创建后才能导入角色卡和世界书。</p>}
           <form className="create-world" onSubmit={event => void createWorld(event)}><label className="field"><span>创建新世界</span><input value={newWorldName} onChange={event => setNewWorldName(event.target.value)} maxLength={120} placeholder="给世界起个名字" /></label><button type="submit" className="primary-button" disabled={busy || !newWorldName.trim()}>创建世界</button></form>
@@ -137,10 +142,10 @@ export function ProductApp({ client }: { client: CoreClient }) {
         <section className="settings-section"><div className="section-heading"><h2>导入内容</h2><p>角色卡和世界书会先预览，确认后才加入当前世界。</p></div><p className="inline-hint">导入前请先选择世界。</p></section>
       </div>}
 
-      {tab === "me" && <div className="settings-page"><section className="settings-section"><div className="section-heading"><h2>我在当前世界</h2><p>每个世界选择一个自己的玩家身份；世界事件按此身份的已知范围显示。</p></div>
+      {(tab === "me" || meVisited) && <div className="settings-page" hidden={tab !== "me"}><ProfileEditor client={client} /><section className="settings-section"><div className="section-heading"><h2>我在当前世界</h2><p>每个世界选择一个自己的玩家身份；世界事件按此身份的已知范围显示。</p></div>
         {!world ? <p className="inline-hint">先在设置中创建世界。</p> : players.length === 0 ? <p className="inline-hint">当前世界还没有可绑定的玩家身份。世界建立初始地点和玩家后可在此选择。</p> : <div className="identity-row"><label className="field"><span>玩家身份</span><select value={playerChoice} onChange={event => setPlayerChoice(event.target.value)}>{players.map(item => <option value={item.player_id} key={item.player_id}>{item.name}</option>)}</select></label><button type="button" className="secondary-button" disabled={busy || !playerChoice || playerChoice === selectedPlayer} onClick={() => void act(async () => { await client.bindPlayer(world.world_id, playerChoice); const [available, selected] = await loadIdentity(world.world_id); setPlayers(available); setSelectedPlayer(selected.player_id); setPlayerChoice(selected.player_id ?? available[0]?.player_id ?? ""); }, "当前世界的玩家身份已更新。")}>设为我的身份</button></div>}
         {selectedPlayer ? <p className="inline-hint">已绑定：{players.find(item => item.player_id === selectedPlayer)?.name ?? "当前玩家"}</p> : null}
-      </section><section className="settings-section"><div className="section-heading"><h2>个人描述</h2><p>通用描述适用于所有世界；当前世界的专属身份在冲突时优先。</p></div><p className="inline-hint">个人描述尚未启用保存功能。</p></section></div>}
+      </section>{world && <ProfileEditor key={world.world_id} client={client} worldId={world.world_id} onDirtyChange={setWorldProfileDirty} />}</div>}
     </main>
     <nav className="bottom-nav" aria-label="主导航">{tabs.map(item => <button key={item.id} type="button" className={tab === item.id ? "nav-item active" : "nav-item"} aria-current={tab === item.id ? "page" : undefined} onClick={() => setTab(item.id)}><TabIcon name={item.id} /><span>{item.label}</span></button>)}</nav>
   </div>;

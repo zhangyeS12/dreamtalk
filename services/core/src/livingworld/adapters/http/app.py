@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from livingworld.application.developer_inspector import DeveloperInspectorService
+from livingworld.application.local_profile import LocalProfileStore
 from livingworld.application.player_event_feed import PlayerEventFeedService
 from livingworld.application.runtime import RuntimeStatus, ShutdownRequests
 from livingworld.application.world_settings import WorldSettingsService
@@ -36,6 +37,7 @@ def create_app(
     developer_inspector: DeveloperInspectorService | None = None,
     world_settings: WorldSettingsService | None = None,
     player_event_feed: PlayerEventFeedService | None = None,
+    local_profiles: LocalProfileStore | None = None,
 ) -> FastAPI:
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
@@ -82,6 +84,11 @@ def create_app(
         from livingworld.adapters.http.player_events import player_events_router
 
         app.include_router(player_events_router(player_event_feed, authorize))
+
+    if local_profiles is not None:
+        from livingworld.adapters.http.profiles import profile_router
+
+        app.include_router(profile_router(local_profiles, authorize))
 
     @app.get("/system/live")
     async def live() -> dict[str, bool]:

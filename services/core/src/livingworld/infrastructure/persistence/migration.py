@@ -29,7 +29,9 @@ SIMULATION_REVISION = "0011_simulation_scheduler"
 ACTION_REVISION = "0012_action_scenes_perception"
 SPARSE_REVISION = "0013_sparse_simulation_activation"
 MEMORY_REVISION = "0014_episodic_memory"
-HEAD_REVISION = "0015_local_player_binding"
+BINDING_REVISION = "0015_local_player_binding"
+HEAD_REVISION = "0016_local_profiles"
+LOCAL_PROFILE_TABLES = {"local_user_profile", "local_world_profiles"}
 BUDGET_TABLES = {"llm_budgets", "llm_budget_reservations"}
 SIMULATION_TABLES = {
     "simulation_queue_cursors",
@@ -196,6 +198,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         ACTION_REVISION,
         SPARSE_REVISION,
         MEMORY_REVISION,
+        BINDING_REVISION,
         HEAD_REVISION,
     }:
         _fail("alembic_revision_unsupported")
@@ -216,6 +219,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
             ACTION_REVISION,
             SPARSE_REVISION,
             MEMORY_REVISION,
+            BINDING_REVISION,
             HEAD_REVISION,
         }:
             expected -= {"world_ledger_cursors"}
@@ -229,6 +233,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         ACTION_REVISION,
         SPARSE_REVISION,
         MEMORY_REVISION,
+        BINDING_REVISION,
         HEAD_REVISION,
     }:
         expected |= CONTENT_TABLES
@@ -240,6 +245,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
             ACTION_REVISION,
             SPARSE_REVISION,
             MEMORY_REVISION,
+            BINDING_REVISION,
             HEAD_REVISION,
         }:
             expected -= PACKAGE_TABLES
@@ -252,6 +258,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         ACTION_REVISION,
         SPARSE_REVISION,
         MEMORY_REVISION,
+        BINDING_REVISION,
         HEAD_REVISION,
     }:
         expected |= set(AccountingBase.metadata.tables)
@@ -262,17 +269,26 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         ACTION_REVISION,
         SPARSE_REVISION,
         MEMORY_REVISION,
+        BINDING_REVISION,
         HEAD_REVISION,
     }:
         expected -= SIMULATION_TABLES
-    elif revision not in {SPARSE_REVISION, MEMORY_REVISION, HEAD_REVISION}:
+    elif revision not in {SPARSE_REVISION, MEMORY_REVISION, BINDING_REVISION, HEAD_REVISION}:
         expected -= SPARSE_TABLES
-    if revision not in {ACTION_REVISION, SPARSE_REVISION, MEMORY_REVISION, HEAD_REVISION}:
+    if revision not in {
+        ACTION_REVISION,
+        SPARSE_REVISION,
+        MEMORY_REVISION,
+        BINDING_REVISION,
+        HEAD_REVISION,
+    }:
         expected -= ACTION_TABLES
-    if revision not in {MEMORY_REVISION, HEAD_REVISION}:
+    if revision not in {MEMORY_REVISION, BINDING_REVISION, HEAD_REVISION}:
         expected -= MEMORY_TABLES
-    if revision != HEAD_REVISION:
+    if revision not in {BINDING_REVISION, HEAD_REVISION}:
         expected -= {"local_player_bindings"}
+    if revision != HEAD_REVISION:
+        expected -= LOCAL_PROFILE_TABLES
     if tables != expected:
         _fail("alembic_schema_state_mismatch")
     _validate_auxiliary_objects(connection, domain_present)
@@ -288,6 +304,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         ACTION_REVISION,
         SPARSE_REVISION,
         MEMORY_REVISION,
+        BINDING_REVISION,
         HEAD_REVISION,
     }:
         _validate_domain_shape(connection, revision, ContentBase.metadata)
@@ -299,6 +316,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         ACTION_REVISION,
         SPARSE_REVISION,
         MEMORY_REVISION,
+        BINDING_REVISION,
         HEAD_REVISION,
     }:
         _validate_domain_shape(connection, revision, AccountingBase.metadata)
@@ -344,24 +362,40 @@ def _validate_domain_shape(
                 ACTION_REVISION,
                 SPARSE_REVISION,
                 MEMORY_REVISION,
+                BINDING_REVISION,
                 HEAD_REVISION,
             }
             and table.name in SIMULATION_TABLES
         ):
             continue
         if (
-            revision not in {SPARSE_REVISION, MEMORY_REVISION, HEAD_REVISION}
+            revision not in {SPARSE_REVISION, MEMORY_REVISION, BINDING_REVISION, HEAD_REVISION}
             and table.name in SPARSE_TABLES
         ):
             continue
         if (
-            revision not in {ACTION_REVISION, SPARSE_REVISION, MEMORY_REVISION, HEAD_REVISION}
+            revision
+            not in {
+                ACTION_REVISION,
+                SPARSE_REVISION,
+                MEMORY_REVISION,
+                BINDING_REVISION,
+                HEAD_REVISION,
+            }
             and table.name in ACTION_TABLES
         ):
             continue
-        if revision not in {MEMORY_REVISION, HEAD_REVISION} and table.name in MEMORY_TABLES:
+        if (
+            revision not in {MEMORY_REVISION, BINDING_REVISION, HEAD_REVISION}
+            and table.name in MEMORY_TABLES
+        ):
             continue
-        if revision != HEAD_REVISION and table.name == "local_player_bindings":
+        if revision != HEAD_REVISION and table.name in LOCAL_PROFILE_TABLES:
+            continue
+        if (
+            revision not in {BINDING_REVISION, HEAD_REVISION}
+            and table.name == "local_player_bindings"
+        ):
             continue
         if revision == ACCOUNTING_REVISION and table.name in BUDGET_TABLES:
             continue
@@ -375,6 +409,7 @@ def _validate_domain_shape(
                 ACTION_REVISION,
                 SPARSE_REVISION,
                 MEMORY_REVISION,
+                BINDING_REVISION,
                 HEAD_REVISION,
             }
             and table.name in PACKAGE_TABLES
@@ -395,6 +430,7 @@ def _validate_domain_shape(
                 ACTION_REVISION,
                 SPARSE_REVISION,
                 MEMORY_REVISION,
+                BINDING_REVISION,
                 HEAD_REVISION,
             }
             and table.name == "world_ledger_cursors"
@@ -410,7 +446,8 @@ def _validate_domain_shape(
                 column.type.compile(dialect=connection.dialect).upper(),
                 False
                 if (
-                    revision not in {SPARSE_REVISION, MEMORY_REVISION, HEAD_REVISION}
+                    revision
+                    not in {SPARSE_REVISION, MEMORY_REVISION, BINDING_REVISION, HEAD_REVISION}
                     and table.name == "simulation_activations"
                     and column.name == "source_trigger_id"
                 )
@@ -424,12 +461,19 @@ def _validate_domain_shape(
                 and column.name == "observation_id"
             )
             and not (
-                revision not in {ACTION_REVISION, SPARSE_REVISION, MEMORY_REVISION, HEAD_REVISION}
+                revision
+                not in {
+                    ACTION_REVISION,
+                    SPARSE_REVISION,
+                    MEMORY_REVISION,
+                    BINDING_REVISION,
+                    HEAD_REVISION,
+                }
                 and table.name == "observations"
                 and column.name == "basis"
             )
             and not (
-                revision not in {SPARSE_REVISION, MEMORY_REVISION, HEAD_REVISION}
+                revision not in {SPARSE_REVISION, MEMORY_REVISION, BINDING_REVISION, HEAD_REVISION}
                 and table.name == "simulation_scheduled_triggers"
                 and column.name
                 in {
@@ -443,7 +487,7 @@ def _validate_domain_shape(
                 }
             )
             and not (
-                revision not in {SPARSE_REVISION, MEMORY_REVISION, HEAD_REVISION}
+                revision not in {SPARSE_REVISION, MEMORY_REVISION, BINDING_REVISION, HEAD_REVISION}
                 and table.name == "simulation_activations"
                 and column.name
                 in {
@@ -471,6 +515,7 @@ def _validate_domain_shape(
                     ACTION_REVISION,
                     SPARSE_REVISION,
                     MEMORY_REVISION,
+                    BINDING_REVISION,
                     HEAD_REVISION,
                 }
                 and table.name == "world_events"
@@ -505,7 +550,7 @@ def _validate_domain_shape(
             )
             for foreign_key in table.foreign_key_constraints
             if not (
-                revision not in {SPARSE_REVISION, MEMORY_REVISION, HEAD_REVISION}
+                revision not in {SPARSE_REVISION, MEMORY_REVISION, BINDING_REVISION, HEAD_REVISION}
                 and table.name in {"simulation_scheduled_triggers", "simulation_activations"}
                 and foreign_key.referred_table.name == "characters"
             )
@@ -527,7 +572,7 @@ def _validate_domain_shape(
             if isinstance(constraint, CheckConstraint)
             and not (baseline and constraint.name in added_checks)
             and not (
-                revision not in {SPARSE_REVISION, MEMORY_REVISION, HEAD_REVISION}
+                revision not in {SPARSE_REVISION, MEMORY_REVISION, BINDING_REVISION, HEAD_REVISION}
                 and constraint.name
                 in {
                     "ck_simulation_trigger_activation_target",
@@ -553,6 +598,7 @@ def _validate_domain_shape(
                     ACTION_REVISION,
                     SPARSE_REVISION,
                     MEMORY_REVISION,
+                    BINDING_REVISION,
                     HEAD_REVISION,
                 }
                 and constraint.name == "ck_world_event_ledger_position"
@@ -560,7 +606,14 @@ def _validate_domain_shape(
         }
         if (
             table.name == "command_receipts"
-            and revision not in {ACTION_REVISION, SPARSE_REVISION, MEMORY_REVISION, HEAD_REVISION}
+            and revision
+            not in {
+                ACTION_REVISION,
+                SPARSE_REVISION,
+                MEMORY_REVISION,
+                BINDING_REVISION,
+                HEAD_REVISION,
+            }
             and not baseline
         ):
             expected_checks.discard(
@@ -596,7 +649,7 @@ def _validate_domain_shape(
             for constraint in table.constraints
             if isinstance(constraint, UniqueConstraint)
             and not (
-                revision not in {SPARSE_REVISION, MEMORY_REVISION, HEAD_REVISION}
+                revision not in {SPARSE_REVISION, MEMORY_REVISION, BINDING_REVISION, HEAD_REVISION}
                 and constraint.name == "uq_simulation_activation_enqueue_position"
             )
         }
@@ -628,12 +681,20 @@ def _validate_domain_shape(
                     ACTION_REVISION,
                     SPARSE_REVISION,
                     MEMORY_REVISION,
+                    BINDING_REVISION,
                     HEAD_REVISION,
                 }
                 and index.name == "uq_world_event_ledger_position"
             )
             and not (
-                revision not in {ACTION_REVISION, SPARSE_REVISION, MEMORY_REVISION, HEAD_REVISION}
+                revision
+                not in {
+                    ACTION_REVISION,
+                    SPARSE_REVISION,
+                    MEMORY_REVISION,
+                    BINDING_REVISION,
+                    HEAD_REVISION,
+                }
                 and index.name
                 in {
                     "ix_character_state_location",
@@ -643,7 +704,7 @@ def _validate_domain_shape(
                 }
             )
             and not (
-                revision not in {SPARSE_REVISION, MEMORY_REVISION, HEAD_REVISION}
+                revision not in {SPARSE_REVISION, MEMORY_REVISION, BINDING_REVISION, HEAD_REVISION}
                 and index.name
                 in {
                     "ix_simulation_activation_due",

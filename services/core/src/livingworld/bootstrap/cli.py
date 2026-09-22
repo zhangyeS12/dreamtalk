@@ -184,6 +184,7 @@ async def run(
             developer_inspector,
             world_settings,
             player_event_feed,
+            database.local_profile_store(),
         )
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.bind((LOOPBACK_HOST, 0))

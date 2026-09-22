@@ -18,6 +18,10 @@ export interface WorldSettings extends WorldSummary {
   runtime_state: string;
 }
 export interface SelectablePlayer { player_id: string; name: string }
+export interface LocalProfile { name: string; description: string; revision: number }
+export class CoreRequestError extends Error {
+  constructor(public readonly status: number) { super(`product_request_failed_${status}`); }
+}
 export interface KnownWorldEvent {
   event_id: string;
   title: string;
@@ -95,7 +99,7 @@ export class CoreClient {
       headers: { Authorization: `Bearer ${this.connection.token}`, ...init?.headers },
       credentials: "omit", cache: "no-store",
     });
-    if (!response.ok) throw new Error(`product_request_failed_${response.status}`);
+    if (!response.ok) throw new CoreRequestError(response.status);
     return await response.json() as T;
   }
 
@@ -130,6 +134,16 @@ export class CoreClient {
   }
   knownEvents(worldId: string): Promise<KnownWorldEvent[]> {
     return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/known-events`);
+  }
+
+  profile(worldId?: string): Promise<LocalProfile> {
+    return this.productRequest(`${worldId ? `/worlds/${encodeURIComponent(worldId)}` : ""}/me/profile`);
+  }
+  saveProfile(profile: LocalProfile, worldId?: string): Promise<LocalProfile> {
+    return this.productRequest(`${worldId ? `/worlds/${encodeURIComponent(worldId)}` : ""}/me/profile`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: profile.name, description: profile.description, expected_revision: profile.revision }),
+    });
   }
 
   listWorlds(): Promise<WorldSummary[]> { return this.developerRequest("/developer/worlds"); }

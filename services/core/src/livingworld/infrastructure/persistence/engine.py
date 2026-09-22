@@ -189,5 +189,10 @@ class Database:
 
         return SqlAlchemyPlayerEventFeedStore(self._sessions)
 
+    def local_profile_store(self):
+        from livingworld.infrastructure.persistence.local_profile import SqlAlchemyLocalProfileStore
+
+        return SqlAlchemyLocalProfileStore(self._sessions)
+
     async def close(self) -> None:
         await self.engine.dispose()

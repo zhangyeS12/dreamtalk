@@ -111,6 +111,29 @@ class LocalPlayerBindingRecord(Base):
     )
 
 
+class LocalUserProfileRecord(Base):
+    __tablename__ = "local_user_profile"
+    singleton: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    __table_args__ = (
+        CheckConstraint("singleton = 1", name="ck_local_user_profile_singleton"),
+        CheckConstraint("revision > 0", name="ck_local_user_profile_revision"),
+    )
+
+
+class LocalWorldProfileRecord(Base):
+    __tablename__ = "local_world_profiles"
+    world_id: Mapped[UUID] = mapped_column(
+        UUIDStorage(), ForeignKey("worlds.world_id"), primary_key=True
+    )
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    __table_args__ = (CheckConstraint("revision > 0", name="ck_local_world_profile_revision"),)
+
+
 class PlayerPresenceRecord(Base):
     __tablename__ = "player_presences"
     world_id: Mapped[UUID] = mapped_column(

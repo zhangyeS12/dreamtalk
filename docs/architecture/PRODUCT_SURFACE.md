@@ -19,3 +19,11 @@
 ## 世界内容版本
 
 用户已确认：同一份角色卡或世界书进入不同世界后，各世界保留自己确认过的版本。后续修改必须在目标世界再次预览确认才生效，不能传播到其他世界。世界专属内容副本仍是创作素材；引用与确认本身不授予 WorldTruth、CharacterBelief 或 PlayerKnowledge。
+
+## 个人资料
+
+“我”提供独立保存的通用称呼/描述与每世界专属称呼/描述。Alembic 0016 的 `local_user_profile`、`local_world_profiles` 保存本地用户配置，使用编辑 revision 防止多窗口静默覆盖。世界资料必须引用已存在的 World。资料不是 Player 的 canonical 身份、WorldTruth、Knowledge 或 Memory，不修改世界账本，也不自动传播给角色。
+
+世界专属称呼为空时可沿用通用称呼；两层描述保留原文。用户已确认，后续对话组装时冲突以世界专属身份为准；本阶段未实现语义冲突检测、自动合并或 prompt assembly。通用资料不会被世界专属保存覆盖，切换世界只切换专属资料。
+
+经过会话鉴权的 `GET/POST /api/v1/me/profile` 与 `GET/POST /api/v1/worlds/{world_id}/me/profile` 提供读取/保存。POST 必须携带读取时的 `expected_revision`，过期编辑返回 409；首次不存在的资料视为 revision 0。名称限 120 字符、描述限 8000 字符。日志不记录资料内容。前端保存失败保留输入，切换世界或重新读取前提示未保存的专属修改。
