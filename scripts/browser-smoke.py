@@ -47,17 +47,25 @@ try:
             time.sleep(0.1)
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(channel=args.channel, headless=True)
-        page = browser.new_page()
+        page = browser.new_page(viewport={"width": 1440, "height": 900})
         errors = []
         page.on("pageerror", lambda _error: errors.append(True))
         page.goto("http://127.0.0.1:5173/", wait_until="networkidle")
         page.get_by_role("status").filter(has_text="核心已就绪").wait_for(timeout=20_000)
         page.get_by_role("navigation", name="主导航").wait_for(timeout=20_000)
+        for width in (1024, 1440, 1920):
+            page.set_viewport_size({"width": width, "height": 900})
+            assert page.locator(".chat-workspace").bounding_box()["width"] > width * 0.9
+            assert page.locator(".conversation-list").is_visible()
+            assert page.locator(".conversation-detail").is_visible()
+            assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+        page.set_viewport_size({"width": 1440, "height": 900})
         if screenshot_path := os.environ.get("LW_BROWSER_SCREENSHOT"):
             page.screenshot(path=screenshot_path, full_page=True)
         if mobile_screenshot_path := os.environ.get("LW_BROWSER_MOBILE_SCREENSHOT"):
             page.set_viewport_size({"width": 390, "height": 844})
             page.screenshot(path=mobile_screenshot_path, full_page=True)
+        page.set_viewport_size({"width": 1440, "height": 900})
         page.locator(".conversation-row.pinned").wait_for()
         page.locator(".conversation-row.pinned").click()
         page.get_by_role("region", name="世界事件时间线").wait_for()
@@ -77,6 +85,9 @@ try:
         if profile_screenshot := os.environ.get("LW_PROFILE_SCREENSHOT"):
             page.set_viewport_size({"width": 390, "height": 844})
             page.screenshot(path=profile_screenshot, full_page=True)
+        if desktop_profile := os.environ.get("LW_DESKTOP_PROFILE_SCREENSHOT"):
+            page.set_viewport_size({"width": 1440, "height": 900})
+            page.screenshot(path=desktop_profile, full_page=True)
         page.reload(wait_until="networkidle")
         page.get_by_role("button", name="我", exact=True).click()
         expect(page.get_by_label("关于我", exact=True)).to_have_value("喜欢阅读")
