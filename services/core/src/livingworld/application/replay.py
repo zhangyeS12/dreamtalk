@@ -90,6 +90,7 @@ class _EventFold:
             ("PlayerCreated", 1): self._player_created,
             ("PlayerPlaced", 1): self._player_placed,
             ("PlayerMoved", 1): self._player_moved,
+            ("PlayerAvailabilityChanged", 1): self._player_availability_changed,
             ("CharacterCreated", 1): self._character_created,
             ("CharacterPlaced", 1): self._character_placed,
             ("RelationshipChanged", 1): self._relationship_changed,
@@ -230,6 +231,20 @@ class _EventFold:
             after.activity is PlayerActivity(value["activity"])
             and after.availability is PlayerAvailability(value["availability"]),
             "Player movement state mismatch",
+        )
+        _check(after.revision.value == _integer(value["revision"]), "Player revision mismatch")
+        self.presences[identity] = after
+
+    def _player_availability_changed(self, event):
+        value = event.payload
+        identity = self._id(PlayerId, value["player_id"])
+        before = self.presences[identity]
+        _check(
+            before.availability.value == value["before_availability"],
+            "Player availability origin mismatch",
+        )
+        after = before.with_availability(
+            PlayerAvailability(value["availability"]), expected_revision=before.revision
         )
         _check(after.revision.value == _integer(value["revision"]), "Player revision mismatch")
         self.presences[identity] = after

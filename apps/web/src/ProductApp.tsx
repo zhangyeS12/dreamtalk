@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
-import { CoreClient, type KnownWorldEvent, type SelectablePlayer, type WorldSettings } from "@livingworld/api-client";
+import { CoreClient, type KnownWorldEvent, type PlayerAvailability, type SelectablePlayer, type SelectedPlayerState, type WorldSettings } from "@livingworld/api-client";
 import { WorldImports, WorldContacts } from "./WorldContent";
 import { ProfileEditor } from "./ProfileEditor";
 import "./product.css";
@@ -48,6 +48,7 @@ export function ProductApp({ client }: { client: CoreClient }) {
   const [eventsOpen, setEventsOpen] = useState(false);
   const [players, setPlayers] = useState<SelectablePlayer[]>([]);
   const [selectedPlayer, setSelectedPlayer] = useState<string | null>(null);
+  const [selectedPlayerState, setSelectedPlayerState] = useState<SelectedPlayerState | null>(null);
   const [playerChoice, setPlayerChoice] = useState("");
   const [knownEvents, setKnownEvents] = useState<{ worldId: string; playerId: string; items: KnownWorldEvent[] } | null>(null);
 
@@ -69,10 +70,11 @@ export function ProductApp({ client }: { client: CoreClient }) {
   }, [client]);
   useEffect(() => {
     let active = true;
-    setPlayers([]); setSelectedPlayer(null); setPlayerChoice(""); setKnownEvents(null); setEventsOpen(false);
+    setPlayers([]); setSelectedPlayer(null); setSelectedPlayerState(null); setPlayerChoice(""); setKnownEvents(null); setEventsOpen(false);
     if (worldId) void loadIdentity(worldId).then(([available, selected]) => {
       if (!active) return;
       setPlayers(available); setSelectedPlayer(selected.player_id);
+      setSelectedPlayerState(selected);
       setPlayerChoice(selected.player_id ?? available[0]?.player_id ?? "");
     }).catch(() => { if (active) setError("无法读取当前世界的玩家身份。"); });
     return () => { active = false; };
@@ -146,13 +148,23 @@ export function ProductApp({ client }: { client: CoreClient }) {
           <div className="setting-row"><span><strong>时间状态</strong><small>{world.clock_state === "running" ? "运行中" : "已暂停"}{world.runtime_state === "degraded" ? " · 运行异常" : ""}</small></span><button type="button" className="secondary-button" disabled={busy || world.runtime_state === "degraded"} onClick={() => void act(() => world.clock_state === "running" ? client.pauseProductWorld(world.world_id) : client.resumeProductWorld(world.world_id), world.clock_state === "running" ? "世界已暂停。" : "世界已恢复。")}>{world.clock_state === "running" ? "暂停" : "恢复"}</button></div>
           <div className="setting-row"><label className="field"><span>时间倍率</span><input type="number" min="0.01" max="1000" step="0.01" inputMode="decimal" value={scale} onChange={event => setScale(event.target.value)} /></label><button type="button" className="secondary-button" disabled={busy || !scale || Number(scale) <= 0 || Number(scale) > 1000} onClick={() => void act(() => client.scaleProductWorld(world.world_id, scale), "时间倍率已更新。")}>应用</button></div>
         </section>}
+        {world && selectedPlayer && selectedPlayerState?.availability && selectedPlayerState.presence_revision !== null && <section className="settings-section"><div className="section-heading"><h2>交流状态</h2><p>选择角色是否可以主动联系你；忙碌状态不会暂停世界运行。</p></div>
+          <div className="setting-row"><span><strong>{selectedPlayerState.availability === "available" ? "可用" : "忙碌"}</strong><small>仅适用于当前世界绑定的玩家身份</small></span><button type="button" className="secondary-button" disabled={busy} onClick={() => {
+            const next: PlayerAvailability = selectedPlayerState.availability === "available" ? "busy" : "available";
+            void act(async () => {
+              await client.setPlayerAvailability(world.world_id, next, selectedPlayerState.presence_revision!, crypto.randomUUID());
+              const state = await client.selectedPlayer(world.world_id);
+              setSelectedPlayerState(state);
+            }, next === "available" ? "当前状态已设为可用。" : "当前状态已设为忙碌。");
+          }}>{selectedPlayerState.availability === "available" ? "设为忙碌" : "设为可用"}</button></div>
+        </section>}
         {world ? <WorldImports key={world.world_id} client={client} worldId={world.world_id} /> : <section className="settings-section"><h2>导入内容</h2><p className="inline-hint">创建世界后即可导入。</p></section>}
       </div>}
 
       {(tab === "me" || meVisited) && <div className="settings-page profile-page" hidden={tab !== "me"}><ProfileEditor client={client} /><section className="settings-section"><div className="section-heading"><h2>我在当前世界</h2><p>每个世界选择一个自己的玩家身份；世界事件按此身份的已知范围显示。</p></div>
         {!world ? <p className="inline-hint">先在设置中创建世界。</p> : <>
-          {players.length > 0 ? <div className="identity-row"><label className="field"><span>玩家身份</span><select value={playerChoice} onChange={event => setPlayerChoice(event.target.value)}>{players.map(item => <option value={item.player_id} key={item.player_id}>{item.name}</option>)}</select></label><button type="button" className="secondary-button" disabled={busy || !playerChoice || playerChoice === selectedPlayer} onClick={() => void act(async () => { await client.bindPlayer(world.world_id, playerChoice); const [available, selected] = await loadIdentity(world.world_id); setPlayers(available); setSelectedPlayer(selected.player_id); setPlayerChoice(selected.player_id ?? available[0]?.player_id ?? ""); }, "当前世界的玩家身份已更新。")}>设为我的身份</button></div> : null}
-          {!selectedPlayer ? <div className="identity-start"><p className="inline-hint">进入世界后，你会从“家”开始。聊天消息可以跨地点发送，不会改变你的物理位置。</p><button type="button" className="primary-button" disabled={busy} onClick={() => void act(async () => { await client.startAtHome(world.world_id); const [available, selected] = await loadIdentity(world.world_id); setPlayers(available); setSelectedPlayer(selected.player_id); setPlayerChoice(selected.player_id ?? available[0]?.player_id ?? ""); }, "已进入世界，当前位置：家。")}>{players.length > 0 ? "继续从家进入" : "进入世界"}</button></div> : null}
+          {players.length > 0 ? <div className="identity-row"><label className="field"><span>玩家身份</span><select value={playerChoice} onChange={event => setPlayerChoice(event.target.value)}>{players.map(item => <option value={item.player_id} key={item.player_id}>{item.name}</option>)}</select></label><button type="button" className="secondary-button" disabled={busy || !playerChoice || playerChoice === selectedPlayer} onClick={() => void act(async () => { await client.bindPlayer(world.world_id, playerChoice); const [available, selected] = await loadIdentity(world.world_id); setPlayers(available); setSelectedPlayer(selected.player_id); setSelectedPlayerState(selected); setPlayerChoice(selected.player_id ?? available[0]?.player_id ?? ""); }, "当前世界的玩家身份已更新。")}>设为我的身份</button></div> : null}
+          {!selectedPlayer ? <div className="identity-start"><p className="inline-hint">进入世界后，你会从“家”开始。聊天消息可以跨地点发送，不会改变你的物理位置。</p><button type="button" className="primary-button" disabled={busy} onClick={() => void act(async () => { await client.startAtHome(world.world_id); const [available, selected] = await loadIdentity(world.world_id); setPlayers(available); setSelectedPlayer(selected.player_id); setSelectedPlayerState(selected); setPlayerChoice(selected.player_id ?? available[0]?.player_id ?? ""); }, "已进入世界，当前位置：家。")}>{players.length > 0 ? "继续从家进入" : "进入世界"}</button></div> : null}
         </>}
         {selectedPlayer ? <p className="inline-hint">已绑定：{players.find(item => item.player_id === selectedPlayer)?.name ?? "当前玩家"}</p> : null}
       </section>{world && <ProfileEditor key={world.world_id} client={client} worldId={world.world_id} onDirtyChange={setWorldProfileDirty} />}</div>}

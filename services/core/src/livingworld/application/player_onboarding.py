@@ -5,10 +5,13 @@ from __future__ import annotations
 from uuid import uuid5
 
 from livingworld.application.command_handler import CommandHandler
-from livingworld.application.commands import CreateLocation, CreatePlayer
+from livingworld.application.commands import CreateLocation, CreatePlayer, SetPlayerAvailability
+from livingworld.application.errors import EntityNotFoundError
 from livingworld.application.player_event_feed import PlayerEventFeedService
 from livingworld.domain.contracts import RequestId
 from livingworld.domain.identifiers import LocationId, PlayerId, WorldId
+from livingworld.domain.participants import PlayerAvailability
+from livingworld.domain.values import Revision
 
 
 class LocalPlayerOnboardingService:
@@ -48,3 +51,24 @@ class LocalPlayerOnboardingService:
             return selected
         await self._players.bind_player(player)
         return player
+
+    async def set_availability(
+        self,
+        world_id: WorldId,
+        availability: PlayerAvailability,
+        expected_revision: Revision,
+        request_id: RequestId,
+    ) -> Revision:
+        selected = await self._players.selected_player(world_id)
+        if selected is None:
+            raise EntityNotFoundError("No local Player is bound to this World")
+        result = await self._execute_command(
+            SetPlayerAvailability(
+                request_id=request_id,
+                world_id=world_id,
+                player_id=selected,
+                availability_state=availability,
+                expected_presence_revision=expected_revision,
+            )
+        )
+        return result.resulting_revision

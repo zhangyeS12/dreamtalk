@@ -235,7 +235,7 @@ RequestId 是命令幂等身份，ObservationId 是观察发生身份；运行�
 - C-003C 用户确认：成功创建普通 Player 必须同时创建有初始地点的 PlayerPresence；世界/地点存在且同世界，整个命令原子提交。复用 activity/availability 枚举，默认 active/available；玩家创建歧义已解决，静态定义与状态仍分离。
 - 具有 Busy / Available 状态；Busy 时 Director 不得发起非必要主动联系，Available 时可以安排一个角色或一组角色主动联系（FR-08、FR-09、FR-10）。
 - 普通玩家不能查看关系数值，也不能直接看到其不知道的后台事件（FR-05、FR-07）。
-- 状态由谁设置、状态切换何时生效，以及“必要联系”的边界，待确认。
+- 玩家通过设置手动切换 Busy / Available；切换按 PlayerPresence revision 更新。Busy 限制非必要主动联系，“必要联系”的边界仍待确认。
 
 ## 7. Character
 
@@ -608,7 +608,9 @@ Knowledge 与其知情主体之间的归属边界，以及判断某内容是否�
 - Character Agent 主要负责与玩家对话，Director 不能直接替 Character Agent 编写最终对玩家台词（FR-02、FR-03）。
 - 对话不得直接展示玩家不知道的后台事件（FR-05）。
 - 参与远程或多人对话不能使玩家同时处于多个物理地点（FR-06）。
-- 对话渠道、群体成员变化、Busy 对既有对话的影响及阅读何时形成 Player Knowledge，待确认。
+- 私聊包含当前世界绑定 Player 与一名 Character；群聊包含 Player 与玩家选定的多个 Character，并共享有序 transcript。
+- 导入联系人首次打开聊天时才创建或复用运行时 Character；卡片替换不得重置该 Character 或其历史。
+- 一条玩家消息开始一个有界群聊轮次；轮次外不自动进行角色互聊。具体群成员编辑生命周期及阅读何时形成 Player Knowledge 仍待确认。
 
 ## 22. Message
 
@@ -633,7 +635,9 @@ Knowledge 与其知情主体之间的归属边界，以及判断某内容是否�
 - Director 不得直接替 Character Agent 编写最终对玩家台词（FR-02、FR-03）。
 - 发给玩家的消息必须遵守后台未知事件不能直接展示的规则（FR-05）。
 - 同一个主动联系理由最多主动发送一次；玩家未回复不能持续催促（FR-11）。
-- 消息送达、阅读、重复发送和多角色表达如何构成“一次主动发送”，待确认。
+- 玩家发言、Character 发言按 Conversation 保留顺序；一次群聊轮次的所有角色发言共享一个硬 Token 上限。
+- Conversation 与 Message 是持久交互记录，不是 WorldEvent；聊天内容不自动形成 WorldTruth、Knowledge 或 Memory。
+- 一次主动联系与多角色表达的精确计数、消息送达/阅读如何形成 Player Knowledge，仍待确认。
 
 ## 23. Checkpoint
 
@@ -902,3 +906,4 @@ typed cause kind、对应 TriggerId/EventId/SceneId/RequestId reference、activa
 - [知识模型](KNOWLEDGE_MODEL.md)：事实、角色知识与玩家知识分离。
 - [记忆模型](MEMORY_MODEL.md)：记忆概念、已实现边界与待确认生命周期。
 - [Episodic Memory](EPISODIC_MEMORY.md)：C-007A 授权、形成、持久化、读取与隔离契约。
+- [聊天模型](CHAT_MODEL.md)：已确认的角色扮演聊天、会话和群聊轮次边界。

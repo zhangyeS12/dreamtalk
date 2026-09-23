@@ -6,13 +6,21 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from livingworld.domain.identifiers import EventId, PlayerId, WorldId
-from livingworld.domain.values import WorldTime
+from livingworld.domain.participants import PlayerAvailability
+from livingworld.domain.values import Revision, WorldTime
 
 
 @dataclass(frozen=True, slots=True)
 class SelectablePlayer:
     player_id: PlayerId
     name: str
+
+
+@dataclass(frozen=True, slots=True)
+class LocalPlayerPresence:
+    player_id: PlayerId
+    availability: PlayerAvailability
+    revision: Revision
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,6 +35,7 @@ class KnownWorldEvent:
 class PlayerEventFeedStore(Protocol):
     async def list_players(self, world_id: WorldId) -> tuple[SelectablePlayer, ...]: ...
     async def selected_player(self, world_id: WorldId) -> PlayerId | None: ...
+    async def selected_presence(self, world_id: WorldId) -> LocalPlayerPresence | None: ...
     async def bind_player(self, player_id: PlayerId) -> None: ...
     async def known_events(self, world_id: WorldId, limit: int) -> tuple[KnownWorldEvent, ...]: ...
 
@@ -40,6 +49,9 @@ class PlayerEventFeedService:
 
     async def selected_player(self, world_id: WorldId) -> PlayerId | None:
         return await self._store.selected_player(world_id)
+
+    async def selected_presence(self, world_id: WorldId) -> LocalPlayerPresence | None:
+        return await self._store.selected_presence(world_id)
 
     async def bind_player(self, player_id: PlayerId) -> None:
         await self._store.bind_player(player_id)

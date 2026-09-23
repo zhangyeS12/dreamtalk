@@ -47,7 +47,7 @@ SQLite writer 物理串行是允许的：命令 UoW 首次读前通过集中 beg
 
 每世界正整数 ledger_position 唯一、不可变、严格递增，允许间隙；新世界 WorldCreated 从 1 开始，多事件固定 ordinal 顺序获得位置。WorldTime、created_at 与 EventId 都不是 canonical 顺序。append-only UPDATE/DELETE/REPLACE 保护保持；allocator 与命令同一事务。
 
-既有 mutable v1 payload 已重新核验：此前 fold 提供 previous revision，现有前态/edge_existed 与 resulting revision 足够验证递增。没有历史 payload 改写或补偿当前投影。新增 CharacterBeliefFormed v1 后共 12 类受支持 v1 事件。
+既有 mutable v1 payload 已重新核验：此前 fold 提供 previous revision，现有前态/edge_existed 与 resulting revision 足够验证递增。没有历史 payload 改写或补偿当前投影。新增 CharacterBeliefFormed v1 后共 12 类受支持 v1 事件；后续 PlayerAvailabilityChanged v1 增至 13 类。
 
 ProjectionRebuilder 仅从目标世界按 position 升序的事件进行纯 fold，恢复 World/WorldClock、Locations、Player/Presence、Characters/State、Relationships、KnowledgeAssertions 和 Observations。ID、逻辑时间、UTC、owner/source/provenance/metadata 全部来自事件，不采样 clock 或生成新 ID。事件、receipt、cursor、legacy audit 和 Alembic cursor 原样保留。失败完整回滚；World A 重建不影响 B。
 

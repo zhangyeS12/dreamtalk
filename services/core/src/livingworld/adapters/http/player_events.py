@@ -3,19 +3,28 @@
 from collections.abc import Callable
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, ConfigDict
+from fastapi import APIRouter, Depends, Header, HTTPException
+from pydantic import BaseModel, ConfigDict, Field
 
 from livingworld.application.errors import EntityNotFoundError
 from livingworld.application.player_event_feed import PlayerEventFeedService
 from livingworld.application.player_onboarding import LocalPlayerOnboardingService
-from livingworld.domain.contracts import API_PROTOCOL
+from livingworld.domain.contracts import API_PROTOCOL, RequestId
+from livingworld.domain.errors import ConcurrencyConflictError, DomainInvariantError
 from livingworld.domain.identifiers import PlayerId, WorldId
+from livingworld.domain.participants import PlayerAvailability
+from livingworld.domain.values import Revision
 
 
 class BindPlayerRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     player_id: UUID
+
+
+class AvailabilityRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    availability: PlayerAvailability
+    expected_presence_revision: int = Field(ge=0, strict=True)
 
 
 _EVENT_TITLES = {"PlayerMoved": "有人移动了位置"}
@@ -37,9 +46,17 @@ def player_events_router(
         ]
 
     @router.get("/worlds/{world_id}/me/player")
-    async def selected_player(world_id: UUID) -> dict[str, str | None]:
-        player = await service.selected_player(WorldId(world_id))
-        return {"player_id": str(player.value) if player is not None else None}
+    async def selected_player(world_id: UUID) -> dict[str, str | int | None]:
+        identity = WorldId(world_id)
+        presence = await service.selected_presence(identity)
+        player = (
+            presence.player_id if presence is not None else await service.selected_player(identity)
+        )
+        return {
+            "player_id": str(player.value) if player is not None else None,
+            "availability": presence.availability.value if presence is not None else None,
+            "presence_revision": presence.revision.value if presence is not None else None,
+        }
 
     @router.post("/worlds/{world_id}/me/player")
     async def bind_player(world_id: UUID, body: BindPlayerRequest) -> dict[str, str]:
@@ -59,6 +76,31 @@ def player_events_router(
             except EntityNotFoundError:
                 raise HTTPException(404, "world_not_found") from None
             return {"player_id": str(player.value)}
+
+        @router.post("/worlds/{world_id}/me/availability")
+        async def set_availability(
+            world_id: UUID,
+            body: AvailabilityRequest,
+            x_request_id: str | None = Header(default=None),
+        ) -> dict[str, int | str]:
+            try:
+                request_id = RequestId.parse(x_request_id or "")
+            except ValueError:
+                raise HTTPException(400, "valid_request_id_required") from None
+            try:
+                revision = await onboarding.set_availability(
+                    WorldId(world_id),
+                    body.availability,
+                    Revision(body.expected_presence_revision),
+                    request_id,
+                )
+            except EntityNotFoundError:
+                raise HTTPException(404, "local_player_not_found") from None
+            except ConcurrencyConflictError:
+                raise HTTPException(409, "player_presence_changed") from None
+            except DomainInvariantError:
+                raise HTTPException(422, "availability_already_set") from None
+            return {"availability": body.availability.value, "presence_revision": revision.value}
 
     @router.get("/worlds/{world_id}/known-events")
     async def known_events(world_id: UUID) -> list[dict[str, str | int]]:

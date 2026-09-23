@@ -14,6 +14,7 @@ from livingworld.application.commands import (
     CreateWorld,
     MovePlayer,
     PlaceCharacter,
+    SetPlayerAvailability,
 )
 from livingworld.application.errors import (
     EntityAlreadyExistsError,
@@ -23,7 +24,11 @@ from livingworld.application.errors import (
 from livingworld.application.fingerprints import command_fingerprint
 from livingworld.application.results import RelationshipReference
 from livingworld.domain.contracts import RequestId
-from livingworld.domain.errors import CrossWorldReferenceError, DomainInvariantError
+from livingworld.domain.errors import (
+    ConcurrencyConflictError,
+    CrossWorldReferenceError,
+    DomainInvariantError,
+)
 from livingworld.domain.identifiers import CharacterId, LocationId, PlayerId, WorldId
 from livingworld.domain.participants import PlayerActivity, PlayerAvailability
 from livingworld.domain.relationships import RelationshipMetrics
@@ -97,6 +102,54 @@ def test_create_player_two_events_presence_and_resolved_defaults(environment):
             assert command_fingerprint(command) == command_fingerprint(explicit)
             assert await env.handler.execute(explicit) == replace(result, replayed=True)
             assert await env.snapshot() == state
+        finally:
+            await env.database.close()
+
+    asyncio.run(run())
+
+
+def test_player_availability_change_is_idempotent_and_replayable(environment):
+    from livingworld.application.replay import ProjectionRebuilder
+
+    async def run():
+        env = environment
+        try:
+            await env.initialize()
+            command = env.command(
+                SetPlayerAvailability,
+                player_id=env.player,
+                availability_state=PlayerAvailability.AVAILABLE,
+                expected_presence_revision=Revision(),
+            )
+            result = await env.handler.execute(command)
+            assert result.resulting_revision == Revision(1)
+            assert await env.handler.execute(command) == replace(result, replayed=True)
+            async with env.database.unit_of_work() as uow:
+                presence = await uow.players.presence(env.player)
+                assert presence.location_id == env.home
+                assert presence.activity == PlayerActivity.INACTIVE
+                assert presence.availability == PlayerAvailability.AVAILABLE
+                assert presence.revision == Revision(1)
+            events = [
+                row
+                for row in await env.rows("world_events")
+                if row.event_type == "PlayerAvailabilityChanged"
+            ]
+            assert len(events) == 1
+            assert json.loads(events[0].payload) == {
+                "player_id": str(env.player.value),
+                "before_availability": "busy",
+                "availability": "available",
+                "revision": 1,
+            }
+            expected = await env.snapshot()
+            await ProjectionRebuilder(env.database.projection_rebuild_unit_of_work).rebuild(
+                env.world
+            )
+            assert await env.snapshot() == expected
+            stale = replace(command, request_id=RequestId(uuid4()))
+            with pytest.raises(ConcurrencyConflictError):
+                await env.handler.execute(stale)
         finally:
             await env.database.close()
 

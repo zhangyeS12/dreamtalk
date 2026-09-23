@@ -1,6 +1,6 @@
 # Canonical Ledger & Projection Replay（C-003E1 / C-003E2）
 
-状态：内部 canonical reader、纯 versioned fold、世界内原子重建已实现；C-003E2 新增 CharacterBeliefFormed v1 回放与并发赢家重建验收；C-006B 明确 event-time perception 是原样保留的历史授权记录。不增加业务 API、自动启动修复、世界推进、Timeline/Checkpoint 或智能层。
+状态：内部 canonical reader、纯 versioned fold、世界内原子重建已实现；C-003E2 新增 CharacterBeliefFormed v1 回放与并发赢家重建验收；PlayerAvailabilityChanged v1 恢复 Busy / Available revision 更新；C-006B 明确 event-time perception 是原样保留的历史授权记录。不增加启动时自动修复、Timeline/Checkpoint 或智能层。
 
 ## 1. 顺序与身份
 
@@ -17,7 +17,7 @@ position 是每世界严格递增的 canonical 历史顺序，允许间隙；Wor
 
 ## 2. 实现前 payload 审计与显式分发
 
-当前 [command_handler.py](../../services/core/src/livingworld/application/command_handler.py) 发出的 11 类 v1 payload 已在编写重建 handler 前逐项审计，均包含恢复当前 Stage 2 状态所需语义。未补写历史 payload，未用当前投影填补事件内容。
+当前 [command_handler.py](../../services/core/src/livingworld/application/command_handler.py) 发出的 13 类 v1 payload 已逐项审计，均包含恢复当前状态所需语义。未补写历史 payload，未用当前投影填补事件内容。
 
 | `(event_type, payload_version)` | 从事件恢复 / 校验 |
 | --- | --- |
@@ -26,6 +26,7 @@ position 是每世界严格递增的 canonical 历史顺序，允许间隙；Wor
 | PlayerCreated, 1 | 玩家 ID/name/revision，唯一身份、初始 revision=0 |
 | PlayerPlaced, 1 | 初始物理地点、activity/availability、presence revision；必须有该世界玩家/地点 |
 | PlayerMoved, 1 | player ID、from/to、activity/availability、resulting revision；原地点与前态一致、地点存在、按已有 domain 行为递增 |
+| PlayerAvailabilityChanged, 1 | player ID、before/after availability、resulting revision；要求前态匹配，地点/activity 保持不变 |
 | CharacterCreated, 1 | 角色 ID/name/revision，唯一身份、初始 revision=0 |
 | CharacterPlaced, 1 | 角色 ID、可空 before location、新地点、state revision；首次放置 0，后续按前态递增 |
 | RelationshipChanged, 1 | typed source/target 与角色 ID、edge_existed、before/delta/after 三项 metrics、resulting revision；验证方向、前态、非零 delta、范围及完整 after |

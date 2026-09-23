@@ -61,6 +61,13 @@ class Command:
                 require_type(self.player_id, PlayerId, "player_id")
                 require_type(self.destination_id, LocationId, "destination_id")
                 same_world(self.world_id, self.player_id, self.destination_id)
+            case SetPlayerAvailability():
+                require_type(
+                    self.expected_presence_revision, Revision, "expected_presence_revision"
+                )
+                require_type(self.player_id, PlayerId, "player_id")
+                require_type(self.availability_state, PlayerAvailability, "availability_state")
+                same_world(self.world_id, self.player_id)
             case CreateCharacter():
                 require_type(self.character_id, CharacterId, "character_id")
                 same_world(self.world_id, self.character_id)
@@ -162,6 +169,13 @@ class MovePlayer(Command):
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class SetPlayerAvailability(Command):
+    player_id: PlayerId
+    availability_state: PlayerAvailability
+    expected_presence_revision: Revision
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class CreateCharacter(Command):
     character_id: CharacterId
     name: str
@@ -232,6 +246,7 @@ type WorldCommand = (
     | CreateLocation
     | CreatePlayer
     | MovePlayer
+    | SetPlayerAvailability
     | CreateCharacter
     | PlaceCharacter
     | ChangeRelationship

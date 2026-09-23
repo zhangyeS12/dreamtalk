@@ -28,6 +28,7 @@ Command
 | CreateLocation | 世界存在，目标身份未使用，同世界 | 0: LocationCreated |
 | CreatePlayer | 世界与初始地点存在且同世界；原子创建 Player 与 PlayerPresence | 0: PlayerCreated；1: PlayerPlaced |
 | MovePlayer | legacy compatibility command；适配为 `PLAYER_INPUT` 的 `move_player` v1 ActionProposal，由 ActionResolution 统一验证并 CAS 更新唯一位置 | 0: PlayerMoved（仅由 action pipeline 提交） |
+| SetPlayerAvailability | 更新当前世界玩家的 Busy / Available；需要 expected_presence_revision，保留地点/activity，revision CAS | 0: PlayerAvailabilityChanged |
 | CreateCharacter | 建立角色静态身份，目标身份未使用 | 0: CharacterCreated |
 | PlaceCharacter | 必填 expected_state_revision: Revision \| None；None 期待不存在，首次 revision=0；已有状态 CAS +1 | 0: CharacterPlaced |
 | ChangeRelationship | 必填 expected_relationship_revision: Revision \| None；仅改变 source→target，缺失边须显式期待不存在 | 0: RelationshipChanged |

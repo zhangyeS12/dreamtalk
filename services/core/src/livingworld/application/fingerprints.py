@@ -16,6 +16,7 @@ from livingworld.application.commands import (
     FormCharacterBelief,
     MovePlayer,
     PlaceCharacter,
+    SetPlayerAvailability,
     WorldCommand,
 )
 from livingworld.domain.identifiers import (
@@ -87,6 +88,12 @@ def semantic_input(command: WorldCommand) -> dict:
             details = {
                 "player_id": id_input(command.player_id),
                 "destination_id": id_input(command.destination_id),
+                "expected_presence_revision": command.expected_presence_revision.value,
+            }
+        case SetPlayerAvailability():
+            details = {
+                "player_id": id_input(command.player_id),
+                "availability_state": command.availability_state.value,
                 "expected_presence_revision": command.expected_presence_revision.value,
             }
         case CreateCharacter():

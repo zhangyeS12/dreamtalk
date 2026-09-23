@@ -17,6 +17,7 @@ from livingworld.application.commands import (
     FormCharacterBelief,
     MovePlayer,
     PlaceCharacter,
+    SetPlayerAvailability,
     WorldCommand,
 )
 from livingworld.application.errors import (
@@ -345,6 +346,39 @@ class CommandHandler:
 
                 async def apply() -> None:
                     await uow.players.add(player, presence)
+
+            case SetPlayerAvailability():
+                player = await uow.players.get(command.player_id)
+                before = await uow.players.presence(command.player_id)
+                if player is None or before is None:
+                    raise EntityNotFoundError("Player does not exist")
+                expect_revision(
+                    "PlayerPresence",
+                    command.player_id,
+                    before.revision,
+                    command.expected_presence_revision,
+                )
+                if before.availability is command.availability_state:
+                    raise DomainInvariantError("Player availability is already set")
+                after = before.with_availability(
+                    command.availability_state,
+                    expected_revision=command.expected_presence_revision,
+                )
+                events = [
+                    (
+                        "PlayerAvailabilityChanged",
+                        {
+                            "player_id": str(after.player_id.value),
+                            "before_availability": before.availability.value,
+                            "availability": after.availability.value,
+                            "revision": after.revision.value,
+                        },
+                    )
+                ]
+                reference, revision = after.player_id, after.revision
+
+                async def apply() -> None:
+                    await uow.players.replace_presence(after, command.expected_presence_revision)
 
             case CreateCharacter():
                 character = Character(world.world_id, command.character_id, command.name)

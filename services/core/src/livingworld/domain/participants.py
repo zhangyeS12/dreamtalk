@@ -55,6 +55,14 @@ class PlayerPresence:
     ) -> "PlayerPresence":
         return replace(self, activity=activity, revision=self.revision.advance(expected_revision))
 
+    def with_availability(
+        self, availability: PlayerAvailability, *, expected_revision: Revision
+    ) -> "PlayerPresence":
+        require_type(availability, PlayerAvailability, "availability")
+        return replace(
+            self, availability=availability, revision=self.revision.advance(expected_revision)
+        )
+
     def at_location(
         self, location_id: LocationId, *, expected_revision: Revision
     ) -> "PlayerPresence":

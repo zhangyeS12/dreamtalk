@@ -111,3 +111,23 @@ it("offers home-entry recovery when player creation completed before binding", a
   fireEvent.click(await screen.findByRole("button", { name: "继续从家进入" }));
   await waitFor(() => expect(client.startAtHome).toHaveBeenCalledWith("world-a"));
 });
+
+it("changes only the bound player's busy/available state from Settings", async () => {
+  const selectedPlayer = vi.fn()
+    .mockResolvedValueOnce({ player_id: "player-a", availability: "busy", presence_revision: 0 })
+    .mockResolvedValueOnce({ player_id: "player-a", availability: "available", presence_revision: 1 });
+  const setPlayerAvailability = vi.fn().mockResolvedValue({ availability: "available", presence_revision: 1 });
+  const client = {
+    worldContent: vi.fn().mockResolvedValue([]), listProductWorlds: vi.fn().mockResolvedValue([worldA]),
+    listPlayers: vi.fn().mockResolvedValue([{ player_id: "player-a", name: "我" }]), selectedPlayer,
+    setPlayerAvailability,
+  } as unknown as CoreClient;
+  render(<ProductApp client={client} />);
+  await waitFor(() => expect(selectedPlayer).toHaveBeenCalledWith("world-a"));
+  fireEvent.click(screen.getByRole("button", { name: "设置" }));
+  const toggle = await screen.findByRole("button", { name: "设为可用" });
+  fireEvent.click(toggle);
+  await waitFor(() => expect(setPlayerAvailability).toHaveBeenCalledOnce());
+  expect(setPlayerAvailability.mock.calls[0]?.slice(0, 3)).toEqual(["world-a", "available", 0]);
+  expect(await screen.findByText("可用", { selector: "strong" })).toBeTruthy();
+});

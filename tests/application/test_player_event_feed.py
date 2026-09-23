@@ -5,6 +5,7 @@ import pytest
 from livingworld.application.commands import CreateLocation, CreatePlayer, MovePlayer
 from livingworld.application.player_event_feed import PlayerEventFeedService
 from livingworld.domain.identifiers import LocationId, PlayerId
+from livingworld.domain.participants import PlayerAvailability
 from livingworld.domain.values import Revision
 
 
@@ -42,6 +43,10 @@ def test_event_feed_is_bound_to_one_player_and_never_reads_unobserved_events(env
                 await service.bind_player(PlayerId(env.world, uuid4()))
             await service.bind_player(env.player)
             assert await service.selected_player(env.world) == env.player
+            status = await service.selected_presence(env.world)
+            assert status.player_id == env.player
+            assert status.availability is PlayerAvailability.BUSY
+            assert status.revision == Revision()
             assert await service.known_events(env.world) == ()
 
             own_move = env.command(

@@ -1,11 +1,15 @@
 import asyncio
+from uuid import uuid4, uuid5
 
 import pytest
 from livingworld.application.commands import CreateWorld
 from livingworld.application.errors import EntityNotFoundError
 from livingworld.application.player_event_feed import PlayerEventFeedService
 from livingworld.application.player_onboarding import LocalPlayerOnboardingService
-from livingworld.domain.identifiers import WorldId
+from livingworld.domain.contracts import RequestId
+from livingworld.domain.identifiers import LocationId, WorldId
+from livingworld.domain.participants import PlayerAvailability
+from livingworld.domain.values import Revision
 from livingworld.infrastructure.persistence.models import (
     LocationRecord,
     PlayerPresenceRecord,
@@ -65,6 +69,46 @@ def test_unknown_world_does_not_create_home_or_player(environment):
                 await service.start_at_home(WorldId(env.world.value))
             assert await env.rows("locations") == []
             assert await env.rows("players") == []
+        finally:
+            await env.database.close()
+
+    asyncio.run(run())
+
+
+def test_bound_player_can_change_availability_without_changing_location(environment):
+    async def run():
+        env = environment
+        await env.initialize(seed=False)
+        await env.handler.execute(env.command(CreateWorld, name="新世界"))
+        players = PlayerEventFeedService(env.database.player_event_feed_store())
+        onboarding = LocalPlayerOnboardingService(env.handler, players)
+        try:
+            player = await onboarding.start_at_home(env.world)
+            revision = await onboarding.set_availability(
+                env.world,
+                PlayerAvailability.BUSY,
+                Revision(),
+                RequestId(uuid4()),
+            )
+            assert revision == Revision(1)
+            status = await players.selected_presence(env.world)
+            assert status.player_id == player
+            assert status.availability is PlayerAvailability.BUSY
+            assert status.revision == Revision(1)
+            assert await players.known_events(env.world) == ()
+            async with env.database.unit_of_work() as uow:
+                presence = await uow.players.presence(player)
+                expected_home = LocationId(
+                    env.world, uuid5(env.world.value, "livingworld:local-home:v1")
+                )
+                assert presence.location_id == expected_home
+                assert presence.activity.value == "active"
+            availability_events = [
+                row
+                for row in await env.rows("world_events")
+                if row.event_type == "PlayerAvailabilityChanged"
+            ]
+            assert len(availability_events) == 1
         finally:
             await env.database.close()
 

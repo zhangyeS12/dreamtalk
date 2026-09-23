@@ -3,11 +3,18 @@
 from sqlalchemy import and_, func, select
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
-from livingworld.application.player_event_feed import KnownWorldEvent, SelectablePlayer
+from livingworld.application.player_event_feed import (
+    KnownWorldEvent,
+    LocalPlayerPresence,
+    SelectablePlayer,
+)
 from livingworld.domain.identifiers import EventId, PlayerId, WorldId
+from livingworld.domain.participants import PlayerAvailability
+from livingworld.domain.values import Revision
 from livingworld.infrastructure.persistence.models import (
     LocalPlayerBindingRecord,
     ObservationRecord,
+    PlayerPresenceRecord,
     PlayerRecord,
     WorldEventRecord,
 )
@@ -38,6 +45,27 @@ class SqlAlchemyPlayerEventFeedStore:
                 )
             )
             return PlayerId(world_id, value) if value is not None else None
+
+    async def selected_presence(self, world_id: WorldId) -> LocalPlayerPresence | None:
+        async with self._sessions() as session:
+            row = (
+                await session.execute(
+                    select(PlayerPresenceRecord)
+                    .join(
+                        LocalPlayerBindingRecord,
+                        (LocalPlayerBindingRecord.world_id == PlayerPresenceRecord.world_id)
+                        & (LocalPlayerBindingRecord.player_id == PlayerPresenceRecord.player_id),
+                    )
+                    .where(LocalPlayerBindingRecord.world_id == world_id.value)
+                )
+            ).scalar_one_or_none()
+            if row is None:
+                return None
+            return LocalPlayerPresence(
+                PlayerId(world_id, row.player_id),
+                PlayerAvailability(row.availability),
+                Revision(row.revision),
+            )
 
     async def bind_player(self, player_id: PlayerId) -> None:
         async with self._sessions() as session, session.begin():

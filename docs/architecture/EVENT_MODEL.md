@@ -85,11 +85,14 @@ Source 指针不赋予 source owner 的知识读取权限。AcquireKnowledge 仍
 | PlayerCreated | 玩家身份、名称、静态定义初始 revision |
 | PlayerPlaced | 玩家身份、初始地点、activity、availability、Presence 初始 revision |
 | PlayerMoved | 玩家身份、from/to 地点、保留的 activity/availability、Presence resulting revision |
+| PlayerAvailabilityChanged | 玩家身份、切换前后 availability、Presence resulting revision；不修改地点或 activity |
 | CharacterCreated | 角色身份、名称、静态定义初始 revision |
 | CharacterPlaced | 角色身份、可空原地点、新地点、状态 resulting revision |
 | RelationshipChanged | 有类型与世界作用域的 source/target；角色双方额外 source_character_id/target_character_id；edge_existed、before/delta/after 三项指标与 resulting revision |
 
 **玩家创建事件歧义已解决：** CreatePlayer 固定产生 ordinal 0 PlayerCreated、ordinal 1 PlayerPlaced，同一事务中创建 Player/PlayerPresence 和单一回执。不能提交无初始物理位置的正常玩家。
+
+玩家通过设置切换 Busy / Available。状态更新使用 PlayerPresence revision CAS，提交 `PlayerAvailabilityChanged` 以支持确定性重放。它不会自动产生 Observation 或进入普通玩家世界事件流；切换后的状态由设置页读取。
 
 **关系事件语义歧义已解决：** delta 至少一项非零，范围校验不 clamp，缺失边的 before 为 0/0/0，初始 revision=0；应用后 resulting revision=1，反向边独立。指标仅供内部模拟，普通玩家不能获得数值展示。
 
@@ -107,7 +110,7 @@ accepted action 在同一个 UoW 中按固定 event ordinal 分配 canonical led
 
 ## C-003E1 Canonical Ledger Position
 
-C-003E2 再次审计 PlayerMoved、CharacterPlaced、RelationshipChanged：此前 fold 提供 previous revision，现有 resulting revision 与前态字段足以验证转换，保留 v1 不改写历史。新增信念事件后目录共 12 类 v1。并发 loser 不进入 ledger，winner 重建结果等于已提交状态；完整验收见 [STAGE_2_ACCEPTANCE.md](STAGE_2_ACCEPTANCE.md)。CAS 或 INSERT 冲突时，事件、分配游标、投影和成功 receipt 同事务完整回滚，不发“attempted but conflicted” canonical event。
+C-003E2 再次审计 PlayerMoved、CharacterPlaced、RelationshipChanged：此前 fold 提供 previous revision，现有 resulting revision 与前态字段足以验证转换，保留 v1 不改写历史。随后加入信念和 PlayerAvailabilityChanged 后，当前目录共 13 类 v1。并发 loser 不进入 ledger，winner 重建结果等于已提交状态；完整验收见 [STAGE_2_ACCEPTANCE.md](STAGE_2_ACCEPTANCE.md)。CAS 或 INSERT 冲突时，事件、分配游标、投影和成功 receipt 同事务完整回滚，不发“attempted but conflicted” canonical event。
 
 `ledger_position != WorldTime != created_at != event_id`。
 
@@ -119,7 +122,7 @@ C-003E2 再次审计 PlayerMoved、CharacterPlaced、RelationshipChanged：此�
 - 旧历史经核验普通 SQLite rowid 与追加路径后，每世界 `_rowid_ ASC` 一次性回填 1..N。**legacy migration order != future canonical replay semantics**；未知旧顺序明确失败，无 timestamp/UUID fallback。
 - 原 UPDATE/DELETE/REPLACE 保护覆盖位置；重建从不修改事件或解除触发器，也不产生回执。
 
-12 类已发出的 v1 payload 均已在实现前逐项核验，可以从 ledger 恢复已有 Stage 2 状态，不依赖当前投影。知识命令产生的 assertion-target Observation 身份、owner/source/provenance、值与时间直接来自 payload，ObservationId 保留，不重新生成。C-006B event-target Observation 不是从事件 payload 重建的投影，而是原子提交并原样保留的发生时授权记录。按 `(event_type, payload_version)` 显式分发，未知类型/版本、非法 payload、顺序或约束失败会完整回滚。审计目录和重建边界见 [REPLAY_MODEL.md](REPLAY_MODEL.md)，迁移与原子分配见 [PERSISTENCE_MODEL.md](PERSISTENCE_MODEL.md)。
+13 类已发出的 v1 payload 均已在实现前逐项核验，可以从 ledger 恢复已有 Stage 2 状态，不依赖当前投影。知识命令产生的 assertion-target Observation 身份、owner/source/provenance、值与时间直接来自 payload，ObservationId 保留，不重新生成。C-006B event-target Observation 不是从事件 payload 重建的投影，而是原子提交并原样保留的发生时授权记录。按 `(event_type, payload_version)` 显式分发，未知类型/版本、非法 payload、顺序或约束失败会完整回滚。审计目录和重建边界见 [REPLAY_MODEL.md](REPLAY_MODEL.md)，迁移与原子分配见 [PERSISTENCE_MODEL.md](PERSISTENCE_MODEL.md)。
 
 ## 2. 候选的语义生命周期
 

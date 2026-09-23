@@ -51,6 +51,12 @@ Planning Window 耗尽或大量计划失效才触发 Replan（FR-15）；上述�
 - **生成内容边界**：Draft、Preview 与 Commit 必须区分。候选事件的“激活”和生成内容的“Commit”不是同一个概念。
 - **部分已定适用范围**：Character Agent 的运行时聊天台词经系统校验后直接发送，无需逐条人工预览；自动生成的持久创作内容仍须 Draft → Preview → Commit。World Plan、事件生成与记忆摘要的具体边界及流程衔接待确认（产品问题 P-16）。
 
+## 角色扮演聊天边界
+
+聊天是主要交互体验。Conversation 与 Message 记录交互历史，不等于 WorldEvent、WorldTruth 或 Knowledge。聊天页的世界事件入口只展示当前本地 Player 已获知的事件，并用于提供话题。导入的角色卡只是当前世界的联系人；首次打开其聊天时才创建或复用对应的运行时 Character。跨地点私聊和群聊不改变玩家位置。详细交互与轮次规则见 [CHAT_MODEL.md](CHAT_MODEL.md)。
+
+群聊由独立的 Chat Turn Scheduler 逐个选择发言角色；它不取代 Director 的批量世界规划职责，也不提交世界事实或编写角色最终台词。一个玩家消息启动一轮有总 Token 硬上限的群聊；上限包含输入、输出、选人和所有物理重试/路由回退。每次模型物理调用前若无法可信预留输入用量及输出额度，则不得启动调用。
+
 ## 4. 文档导航与变更纪律
 
 | 文档 | 用途 |

@@ -18,6 +18,12 @@ export interface WorldSettings extends WorldSummary {
   runtime_state: string;
 }
 export interface SelectablePlayer { player_id: string; name: string }
+export type PlayerAvailability = "busy" | "available";
+export interface SelectedPlayerState {
+  player_id: string | null;
+  availability: PlayerAvailability | null;
+  presence_revision: number | null;
+}
 export interface LocalProfile { name: string; description: string; revision: number }
 export class CoreRequestError extends Error {
   constructor(public readonly status: number) { super(`product_request_failed_${status}`); }
@@ -150,8 +156,14 @@ export class CoreClient {
   listPlayers(worldId: string): Promise<SelectablePlayer[]> {
     return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/players`);
   }
-  selectedPlayer(worldId: string): Promise<{ player_id: string | null }> {
+  selectedPlayer(worldId: string): Promise<SelectedPlayerState> {
     return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/me/player`);
+  }
+  setPlayerAvailability(worldId: string, availability: PlayerAvailability, expectedRevision: number, requestId: string): Promise<{ availability: PlayerAvailability; presence_revision: number }> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/me/availability`, {
+      method: "POST", headers: { "Content-Type": "application/json", "X-Request-Id": requestId },
+      body: JSON.stringify({ availability, expected_presence_revision: expectedRevision }),
+    });
   }
   bindPlayer(worldId: string, playerId: string): Promise<{ player_id: string }> {
     return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/me/player`, {
