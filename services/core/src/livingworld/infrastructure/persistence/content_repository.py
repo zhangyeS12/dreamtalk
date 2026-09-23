@@ -166,90 +166,87 @@ class SqlAlchemyContentRepository:
         draft: ContentDraft,
         expected_revisions: Mapping[ContentId, ContentRevision | None],
     ) -> None:
-        require_type(draft, ContentDraft, "draft")
-        if not isinstance(expected_revisions, Mapping) or set(expected_revisions) != {
-            content.content_id for content in draft.contents
-        }:
-            raise DomainInvariantError(
-                "Expected content revisions must cover exactly the draft IDs"
-            )
-        expected = dict(expected_revisions)
-        for revision in expected.values():
-            if revision is not None:
-                require_type(revision, ContentRevision, "expected content revision")
         try:
             async with self._sessions() as session, session.begin():
                 await session.connection(execution_options={"livingworld_write_intent": True})
-                await _save_dependencies(session, draft)
-                # The collection FK must exist before any owned entries are inserted.
-                roots = sorted(
-                    draft.contents, key=lambda root: not isinstance(root, LoreCollection)
-                )
-                for content in roots:
-                    model = _record_type(content.content_id)
-                    precondition = expected[content.content_id]
-                    record = await session.get(model, content.content_id.value)
-                    values = {
-                        "title": _title(content),
-                        "content_version": content.content_version,
-                        "revision": content.revision.value,
-                        "semantic_hash": semantic_hash(content),
-                        "canonical_json": serialize_content(content),
-                    }
-                    if isinstance(content, LoreEntry):
-                        values["collection_id"] = (
-                            content.collection_id.value
-                            if content.collection_id is not None
-                            else None
-                        )
-                        if record is None and content.collection_id is None:
-                            raise DomainInvariantError("New LoreEntry requires one LoreCollection")
-                        if record is not None and record.collection_id != values["collection_id"]:
-                            raise ContentConflictError("LoreEntry ownership cannot be reassigned")
-                    if precondition is None:
-                        if record is not None or content.revision != ContentRevision():
-                            raise ContentConflictError(
-                                "New content requires absent identity/revision zero"
-                            )
-                        session.add(model(content_id=content.content_id.value, **values))
-                    else:
-                        if record is None or record.revision != precondition.value:
-                            raise ContentConflictError("Stale content revision")
-                        _loaded(record, content.content_id)
-                        if record.semantic_hash == values["semantic_hash"]:
-                            # An unchanged dependency is retained, never silently overwritten.
-                            if record.canonical_json != values["canonical_json"]:
-                                raise PersistenceDataError("stored_content_hash_collision")
-                            continue
-                        if content.revision.value != precondition.value + 1:
-                            raise ContentConflictError(
-                                "Content edit must advance exactly one revision"
-                            )
-                        result = await session.execute(
-                            update(model)
-                            .where(
-                                model.content_id == content.content_id.value,
-                                model.revision == precondition.value,
-                            )
-                            .values(**values)
-                        )
-                        if result.rowcount != 1:
-                            raise ContentConflictError("Content revision compare-and-swap failed")
-                await session.flush()
-                for collection in roots:
-                    if isinstance(collection, LoreCollection):
-                        persisted = set(
-                            (
-                                await session.scalars(
-                                    select(LoreEntryRecord.content_id).where(
-                                        LoreEntryRecord.collection_id == collection.content_id.value
-                                    )
-                                )
-                            ).all()
-                        )
-                        if persisted != {identity.value for identity in collection.lore_entry_ids}:
-                            raise ContentConflictError(
-                                "Persisted LoreCollection ownership mismatch"
-                            )
+                await save_content_draft(session, draft, expected_revisions)
         except IntegrityError:
             raise ContentConflictError("Content persistence constraint conflict") from None
+
+
+async def save_content_draft(
+    session: AsyncSession,
+    draft: ContentDraft,
+    expected_revisions: Mapping[ContentId, ContentRevision | None],
+) -> None:
+    """Validate and save inside the caller's transaction; never commit independently."""
+    require_type(draft, ContentDraft, "draft")
+    if not isinstance(expected_revisions, Mapping) or set(expected_revisions) != {
+        content.content_id for content in draft.contents
+    }:
+        raise DomainInvariantError("Expected content revisions must cover exactly the draft IDs")
+    expected = dict(expected_revisions)
+    for revision in expected.values():
+        if revision is not None:
+            require_type(revision, ContentRevision, "expected content revision")
+    await _save_dependencies(session, draft)
+    # The collection FK must exist before any owned entries are inserted.
+    roots = sorted(draft.contents, key=lambda root: not isinstance(root, LoreCollection))
+    for content in roots:
+        model = _record_type(content.content_id)
+        precondition = expected[content.content_id]
+        record = await session.get(model, content.content_id.value)
+        values = {
+            "title": _title(content),
+            "content_version": content.content_version,
+            "revision": content.revision.value,
+            "semantic_hash": semantic_hash(content),
+            "canonical_json": serialize_content(content),
+        }
+        if isinstance(content, LoreEntry):
+            values["collection_id"] = (
+                content.collection_id.value if content.collection_id is not None else None
+            )
+            if record is None and content.collection_id is None:
+                raise DomainInvariantError("New LoreEntry requires one LoreCollection")
+            if record is not None and record.collection_id != values["collection_id"]:
+                raise ContentConflictError("LoreEntry ownership cannot be reassigned")
+        if precondition is None:
+            if record is not None or content.revision != ContentRevision():
+                raise ContentConflictError("New content requires absent identity/revision zero")
+            session.add(model(content_id=content.content_id.value, **values))
+        else:
+            if record is None or record.revision != precondition.value:
+                raise ContentConflictError("Stale content revision")
+            _loaded(record, content.content_id)
+            if record.semantic_hash == values["semantic_hash"]:
+                # An unchanged dependency is retained, never silently overwritten.
+                if record.canonical_json != values["canonical_json"]:
+                    raise PersistenceDataError("stored_content_hash_collision")
+                continue
+            if content.revision.value != precondition.value + 1:
+                raise ContentConflictError("Content edit must advance exactly one revision")
+            result = await session.execute(
+                update(model)
+                .where(
+                    model.content_id == content.content_id.value,
+                    model.revision == precondition.value,
+                )
+                .values(**values)
+            )
+            if result.rowcount != 1:
+                raise ContentConflictError("Content revision compare-and-swap failed")
+    await session.flush()
+    for collection in roots:
+        if isinstance(collection, LoreCollection):
+            persisted = set(
+                (
+                    await session.scalars(
+                        select(LoreEntryRecord.content_id).where(
+                            LoreEntryRecord.collection_id == collection.content_id.value
+                        )
+                    )
+                ).all()
+            )
+            if persisted != {identity.value for identity in collection.lore_entry_ids}:
+                raise ContentConflictError("Persisted LoreCollection ownership mismatch")

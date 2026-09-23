@@ -189,6 +189,22 @@ class Database:
 
         return SqlAlchemyPlayerEventFeedStore(self._sessions)
 
+    def world_content_service(self):
+        from livingworld.application.world_content import WorldContentService
+        from livingworld.infrastructure.clock import SystemWallClock
+        from livingworld.infrastructure.imports.character_cards import CharacterCardImporter
+        from livingworld.infrastructure.imports.lorebooks import LorebookImporter
+        from livingworld.infrastructure.persistence.world_content import SqlAlchemyWorldContentStore
+
+        lorebook = LorebookImporter()
+        return WorldContentService(
+            SqlAlchemyWorldContentStore(self._sessions),
+            CharacterCardImporter(),
+            lorebook,
+            lorebook.normalize_embedded,
+            SystemWallClock(),
+        )
+
     def local_profile_store(self):
         from livingworld.infrastructure.persistence.local_profile import SqlAlchemyLocalProfileStore
 

@@ -983,3 +983,24 @@ KnowledgeAssertionRecord.__table__.append_constraint(
 ObservationRecord.__table__.append_constraint(
     CheckConstraint("typeof(observed_at) = 'integer'", name="ck_observation_world_time_type")
 )
+
+
+class WorldContentImportRecord(Base):
+    __tablename__ = "world_content_imports"
+    import_id: Mapped[UUID] = mapped_column(UUIDStorage(), primary_key=True)
+    replaces_import_id: Mapped[UUID | None] = mapped_column(
+        UUIDStorage(), ForeignKey("world_content_imports.import_id"), nullable=True
+    )
+    world_id: Mapped[UUID] = mapped_column(
+        UUIDStorage(), ForeignKey("worlds.world_id"), nullable=False
+    )
+    reviewed_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    snapshot_json: Mapped[str] = mapped_column(Text, nullable=False)
+    accepted_at: Mapped[datetime] = mapped_column(UTCTimestampStorage(), nullable=False)
+    __table_args__ = (
+        CheckConstraint("kind IN ('character', 'lorebook')", name="ck_world_content_import_kind"),
+        CheckConstraint("length(reviewed_hash) = 64", name="ck_world_content_import_hash"),
+        Index("ix_world_content_import_world", "world_id"),
+        Index("uq_world_content_replaces", "replaces_import_id", unique=True),
+    )

@@ -20,6 +20,10 @@
 
 用户已确认：同一份角色卡或世界书进入不同世界后，各世界保留自己确认过的版本。后续修改必须在目标世界再次预览确认才生效，不能传播到其他世界。世界专属内容副本仍是创作素材；引用与确认本身不授予 WorldTruth、CharacterBelief 或 PlayerKnowledge。
 
+设置中的 PNG/JSON 角色卡、JSON 世界书导入经过文件解析、预览、用户确认，再在一笔数据库事务中保存 canonical authored content、原始来源数据和当前世界的 accepted snapshot。Alembic 0017 的 `world_content_imports` 仅记录本地世界内容归属与确认版本；此表不是运行时 Character、Truth 或聊天会话。确认后的通讯录只读取当前世界的角色卡快照，切换世界后重新查询。世界书可在设置的“当前世界已导入”中查看。预览仅在当前 Core 会话中保留 15 分钟；同一确认请求可在重启后安全重试。
+
+公共 authored content 后续修改不会悄悄覆盖世界已确认的快照。更新某个世界里的条目时，用户在该世界的设置中选择现有条目、上传新文件、预览并确认；保存新快照后该世界列表显示新版本，旧快照保留作确认记录。相同旧版本只能被一个新版本替换，过期的并发更新返回冲突；其他世界的已确认版本不变。
+
 ## 个人资料
 
 “我”提供独立保存的通用称呼/描述与每世界专属称呼/描述。Alembic 0016 的 `local_user_profile`、`local_world_profiles` 保存本地用户配置，使用编辑 revision 防止多窗口静默覆盖。世界资料必须引用已存在的 World。资料不是 Player 的 canonical 身份、WorldTruth、Knowledge 或 Memory，不修改世界账本，也不自动传播给角色。

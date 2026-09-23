@@ -13,6 +13,7 @@ from livingworld.application.developer_inspector import DeveloperInspectorServic
 from livingworld.application.local_profile import LocalProfileStore
 from livingworld.application.player_event_feed import PlayerEventFeedService
 from livingworld.application.runtime import RuntimeStatus, ShutdownRequests
+from livingworld.application.world_content import WorldContentService
 from livingworld.application.world_settings import WorldSettingsService
 from livingworld.domain.contracts import API_PROTOCOL, LOOPBACK_HOST, RequestId
 from livingworld.infrastructure.logging import StructuredLogger
@@ -38,6 +39,7 @@ def create_app(
     world_settings: WorldSettingsService | None = None,
     player_event_feed: PlayerEventFeedService | None = None,
     local_profiles: LocalProfileStore | None = None,
+    world_content: WorldContentService | None = None,
 ) -> FastAPI:
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
@@ -89,6 +91,11 @@ def create_app(
         from livingworld.adapters.http.profiles import profile_router
 
         app.include_router(profile_router(local_profiles, authorize))
+
+    if world_content is not None:
+        from livingworld.adapters.http.world_content import world_content_router
+
+        app.include_router(world_content_router(world_content, authorize))
 
     @app.get("/system/live")
     async def live() -> dict[str, bool]:

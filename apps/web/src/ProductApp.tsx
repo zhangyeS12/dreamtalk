@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { CoreClient, type KnownWorldEvent, type SelectablePlayer, type WorldSettings } from "@livingworld/api-client";
+import { WorldImports, WorldContacts } from "./WorldContent";
 import { ProfileEditor } from "./ProfileEditor";
 import "./product.css";
 
@@ -132,9 +133,9 @@ export function ProductApp({ client }: { client: CoreClient }) {
         </div>
       </div>}
 
-      {tab === "contacts" && <div className="page-section"><div className="empty-state"><h2>{world ? "当前世界还没有角色" : "先创建一个世界"}</h2><p>{world ? "导入角色卡并将角色加入当前世界后，会显示在这里。" : "在设置中创建世界，然后导入角色卡。"}</p><button type="button" className="text-action" onClick={() => setTab("settings")}>前往设置</button></div></div>}
+      {tab === "contacts" && (world ? <WorldContacts key={world.world_id} client={client} worldId={world.world_id} onSettings={() => setTab("settings")} /> : <div className="page-section"><div className="empty-state"><h2>先创建一个世界</h2><p>在设置中创建世界，然后导入角色卡。</p><button className="text-action" onClick={() => setTab("settings")}>前往设置</button></div></div>)}
 
-      {tab === "settings" && <div className="settings-page">
+      {<div className="settings-page" hidden={tab !== "settings"}>
         <section className="settings-section"><div className="section-heading"><h2>世界</h2><p>每个世界有独立的角色、聊天和身份。</p></div>
           {worlds.length ? <label className="field"><span>当前世界</span><select value={worldId} disabled={busy} onChange={event => { if (worldProfileDirty && !window.confirm("当前世界的身份尚未保存，是否放弃修改并切换世界？")) return; setWorldId(event.target.value); setEventsOpen(false); setNotice(""); }}>
             {worlds.map(item => <option key={item.world_id} value={item.world_id}>{item.name}</option>)}
@@ -145,7 +146,7 @@ export function ProductApp({ client }: { client: CoreClient }) {
           <div className="setting-row"><span><strong>时间状态</strong><small>{world.clock_state === "running" ? "运行中" : "已暂停"}{world.runtime_state === "degraded" ? " · 运行异常" : ""}</small></span><button type="button" className="secondary-button" disabled={busy || world.runtime_state === "degraded"} onClick={() => void act(() => world.clock_state === "running" ? client.pauseProductWorld(world.world_id) : client.resumeProductWorld(world.world_id), world.clock_state === "running" ? "世界已暂停。" : "世界已恢复。")}>{world.clock_state === "running" ? "暂停" : "恢复"}</button></div>
           <div className="setting-row"><label className="field"><span>时间倍率</span><input type="number" min="0.01" max="1000" step="0.01" inputMode="decimal" value={scale} onChange={event => setScale(event.target.value)} /></label><button type="button" className="secondary-button" disabled={busy || !scale || Number(scale) <= 0 || Number(scale) > 1000} onClick={() => void act(() => client.scaleProductWorld(world.world_id, scale), "时间倍率已更新。")}>应用</button></div>
         </section>}
-        <section className="settings-section"><div className="section-heading"><h2>导入内容</h2><p>角色卡和世界书会先预览，确认后才加入当前世界。</p></div><p className="inline-hint">导入前请先选择世界。</p></section>
+        {world ? <WorldImports key={world.world_id} client={client} worldId={world.world_id} /> : <section className="settings-section"><h2>导入内容</h2><p className="inline-hint">创建世界后即可导入。</p></section>}
       </div>}
 
       {(tab === "me" || meVisited) && <div className="settings-page profile-page" hidden={tab !== "me"}><ProfileEditor client={client} /><section className="settings-section"><div className="section-heading"><h2>我在当前世界</h2><p>每个世界选择一个自己的玩家身份；世界事件按此身份的已知范围显示。</p></div>

@@ -137,3 +137,20 @@
   .app-alert, .app-notice { margin: 0 16px 16px; }
 }
 @media (prefers-reduced-motion: reduce) { .product-shell * { scroll-behavior: auto !important; transition-duration: 0ms !important; animation-duration: 0ms !important; } }
+
+.import-section { grid-column: 1 / -1; }
+.import-file { margin: 20px 0; }
+.import-preview { border-top: 1px solid var(--line); padding-top: 24px; }
+.content-details { padding: 24px; max-width: 900px; overflow-wrap: anywhere; }
+.content-details h2 { font-size: 1.2rem; }
+.content-details h3 { font-size: .92rem; margin: 20px 0 8px; }
+.content-details p { white-space: pre-wrap; line-height: 1.75; color: var(--muted); }
+.import-preview .content-details { padding: 0; max-height: 420px; overflow-y: auto; margin-bottom: 24px; }
+.compatibility-notice { font-size: .9rem; line-height: 1.6; }
+.content-details summary { cursor: pointer; padding: 12px 0; }
+.accepted-content { border-top: 1px solid var(--line); margin-top: 28px; padding-top: 22px; }
+.accepted-item { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--line); }
+.accepted-item details { min-width: 0; flex: 1; }
+.accepted-item summary { cursor: pointer; padding: 16px 0; }
+.accepted-item .content-details { padding: 0 0 20px; }
+.content-details pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; color: var(--muted); }

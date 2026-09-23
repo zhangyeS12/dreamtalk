@@ -44,6 +44,14 @@ export interface InspectorSnapshot {
   memories: Array<{ memory_id: string; owner_character_id: string; content: string; experienced_from: string; experienced_to: string; formed_at: string; salience: number | null; evidence: Array<{ observation_id: string; observed_at: string }> }>;
 }
 
+export interface WorldContentItem {
+  import_id: string; replaces_import_id: string | null; kind: "character" | "lorebook"; reviewed_hash: string;
+  characters: Array<{ id: string; name: string; description: string; personality: string; background: string; scenario: string; speech_guidance: string; creator_notes: string; tags: string[]; example_dialogue: string[]; authored_instructions: Record<string, unknown> }>;
+  lorebooks: Array<{ id: string; name: string; description: string }>;
+  entries: Array<{ id: string; title: string; keywords: string[]; content: string }>;
+  warnings?: Array<{ code: string; path: string }>;
+}
+
 export class CoreClient {
   private readonly endpoint: URL;
   constructor(private readonly connection: CoreConnection, private readonly fetcher = globalThis.fetch.bind(globalThis)) {
@@ -101,6 +109,24 @@ export class CoreClient {
     });
     if (!response.ok) throw new CoreRequestError(response.status);
     return await response.json() as T;
+  }
+
+  worldContent(worldId: string): Promise<WorldContentItem[]> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/content`);
+  }
+  previewWorldContent(worldId: string, kind: "character" | "lorebook", file: File, replacesImportId?: string): Promise<WorldContentItem> {
+    const replacement = replacesImportId ? `&replaces_import_id=${encodeURIComponent(replacesImportId)}` : "";
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/content/preview?kind=${kind}${replacement}`, {
+      method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: file,
+    });
+  }
+  commitWorldContent(worldId: string, preview: WorldContentItem): Promise<WorldContentItem> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/content/${preview.import_id}/commit`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ reviewed_hash: preview.reviewed_hash }),
+    });
+  }
+  discardWorldContent(worldId: string, importId: string): Promise<{ discarded: boolean }> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/content/${importId}/discard`, { method: "POST" });
   }
 
   listProductWorlds(): Promise<WorldSettings[]> { return this.productRequest("/worlds"); }

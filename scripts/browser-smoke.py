@@ -73,6 +73,35 @@ try:
         page.get_by_placeholder("给世界起个名字").fill("world_profile_smoke")
         page.get_by_role("button", name="创建世界", exact=True).click()
         page.get_by_text("世界已创建。", exact=True).wait_for()
+        page.get_by_label("选择文件", exact=True).set_input_files(
+            root / "tests/fixtures/character_cards/v2.json"
+        )
+        page.get_by_role("heading", name="导入预览", exact=True).wait_for(timeout=10_000)
+        page.get_by_role("button", name="确认加入当前世界", exact=True).click()
+        page.get_by_text("已加入当前世界，可在通讯录查看角色。", exact=True).wait_for()
+        page.get_by_role("button", name="通讯录", exact=True).click()
+        page.locator(".contacts-workspace .conversation-row").click()
+        page.get_by_role("heading", name="角色资料", exact=True).wait_for()
+        if contacts_screenshot := os.environ.get("LW_CONTACTS_SCREENSHOT"):
+            page.screenshot(path=contacts_screenshot, full_page=True)
+        page.get_by_role("button", name="设置", exact=True).click()
+        page.get_by_role("button", name="更新", exact=True).click()
+        page.get_by_label("选择文件", exact=True).set_input_files(
+            root / "tests/fixtures/character_cards/v3.json"
+        )
+        page.get_by_role("heading", name="导入预览", exact=True).wait_for(timeout=10_000)
+        page.get_by_role("button", name="确认更新当前世界", exact=True).click()
+        page.get_by_text("当前世界的内容已更新。", exact=True).wait_for()
+        page.get_by_role("button", name="通讯录", exact=True).click()
+        expect(page.locator(".contacts-workspace .conversation-row")).to_have_count(1)
+        page.get_by_role("button", name="设置", exact=True).click()
+        page.get_by_role("combobox", name="内容类型").select_option("lorebook")
+        page.get_by_label("选择文件", exact=True).set_input_files(
+            root / "tests/fixtures/lorebooks/world_info.json"
+        )
+        page.get_by_role("heading", name="导入预览", exact=True).wait_for(timeout=10_000)
+        page.get_by_role("button", name="确认加入当前世界", exact=True).click()
+        page.get_by_text("世界书已加入当前世界。", exact=True).wait_for()
         page.get_by_role("button", name="我", exact=True).click()
         page.get_by_label("我的称呼", exact=True).fill("player_a")
         page.get_by_label("关于我", exact=True).fill("喜欢阅读")
@@ -101,6 +130,8 @@ try:
         page.get_by_role("button", name="我", exact=True).click()
         expect(page.get_by_label("关于我", exact=True)).to_have_value("喜欢阅读")
         expect(page.get_by_label("我在这个世界的身份", exact=True)).to_have_value("")
+        page.get_by_role("button", name="通讯录", exact=True).click()
+        page.get_by_role("heading", name="当前世界还没有角色", exact=True).wait_for()
         # Inspector polls every 500 ms, so network-idle is not a readiness condition.
         page.goto("http://127.0.0.1:5173/?developer=1", wait_until="domcontentloaded")
         page.get_by_role("heading", name="开发者运行时检查器").wait_for(timeout=20_000)

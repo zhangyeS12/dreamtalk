@@ -9,19 +9,20 @@ const worldA: WorldSettings = { world_id: "world-a", name: "世界甲", world_ti
 const worldB: WorldSettings = { world_id: "world-b", name: "世界乙", world_time: "60000000", clock_state: "paused", time_scale: "2", runtime_state: "paused" };
 
 it("renders four bottom tabs and keeps the known-event entry pinned", async () => {
-  const client = { listProductWorlds: vi.fn().mockResolvedValue([worldA]), listPlayers: vi.fn().mockResolvedValue([]), selectedPlayer: vi.fn().mockResolvedValue({ player_id: null }) } as unknown as CoreClient;
+  const client = { worldContent: vi.fn().mockResolvedValue([]),
+    listProductWorlds: vi.fn().mockResolvedValue([worldA]), listPlayers: vi.fn().mockResolvedValue([]), selectedPlayer: vi.fn().mockResolvedValue({ player_id: null }) } as unknown as CoreClient;
   render(<ProductApp client={client} />);
   expect((await screen.findAllByText("世界甲")).length).toBeGreaterThan(0);
   expect(screen.getByRole("navigation", { name: "主导航" }).querySelectorAll("button")).toHaveLength(4);
   expect(screen.getByRole("button", { name: "世界事件只显示你已获知的事件置顶" })).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "通讯录" }));
-  expect(screen.getByText("当前世界还没有角色")).toBeTruthy();
+  expect(await screen.findByText("当前世界还没有角色")).toBeTruthy();
 });
 
 it("creates and switches worlds using the product client", async () => {
   const listProductWorlds = vi.fn().mockResolvedValueOnce([worldA]).mockResolvedValue([worldA, worldB]);
   const createWorld = vi.fn().mockResolvedValue({ world_id: "world-b" });
-  const client = { listProductWorlds, createWorld, pauseProductWorld: vi.fn(), listPlayers: vi.fn().mockResolvedValue([]), selectedPlayer: vi.fn().mockResolvedValue({ player_id: null }) } as unknown as CoreClient;
+  const client = { worldContent: vi.fn().mockResolvedValue([]), listProductWorlds, createWorld, pauseProductWorld: vi.fn(), listPlayers: vi.fn().mockResolvedValue([]), selectedPlayer: vi.fn().mockResolvedValue({ player_id: null }) } as unknown as CoreClient;
   render(<ProductApp client={client} />);
   fireEvent.click(screen.getByRole("button", { name: "设置" }));
   expect(await screen.findByRole("combobox", { name: "当前世界" })).toBeTruthy();
@@ -39,7 +40,7 @@ it("shows the player-scoped world-event thread in chronological order", async ()
     { event_id: "event-1", title: "有人移动了位置", occurred_at: "60000000", observed_at: "60000000", ledger_position: 4 },
     { event_id: "event-2", title: "你获知了一件世界事件", occurred_at: "120000000", observed_at: "180000000", ledger_position: 7 },
   ]);
-  const client = { listProductWorlds: vi.fn().mockResolvedValue([worldA]), listPlayers: vi.fn().mockResolvedValue([{ player_id: playerId, name: "我" }]), selectedPlayer: vi.fn().mockResolvedValue({ player_id: playerId }), knownEvents } as unknown as CoreClient;
+  const client = { worldContent: vi.fn().mockResolvedValue([]), listProductWorlds: vi.fn().mockResolvedValue([worldA]), listPlayers: vi.fn().mockResolvedValue([{ player_id: playerId, name: "我" }]), selectedPlayer: vi.fn().mockResolvedValue({ player_id: playerId }), knownEvents } as unknown as CoreClient;
   render(<ProductApp client={client} />);
   await screen.findAllByText("世界甲");
   await waitFor(() => expect(client.selectedPlayer).toHaveBeenCalledWith("world-a"));
@@ -59,6 +60,7 @@ it("does not display a late event response after switching worlds", async () => 
   const oldRequest = new Promise<Parameters<typeof completeOldRequest>[0]>(resolve => { completeOldRequest = resolve; });
   const knownEvents = vi.fn((id: string) => id === "world-a" ? oldRequest : Promise.resolve([]));
   const client = {
+    worldContent: vi.fn().mockResolvedValue([]),
     listProductWorlds: vi.fn().mockResolvedValue([worldA, worldB]),
     listPlayers: vi.fn((id: string) => Promise.resolve([{ player_id: `${id}-player`, name: "我" }])),
     selectedPlayer: vi.fn((id: string) => Promise.resolve({ player_id: `${id}-player` })),
