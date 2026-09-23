@@ -20,6 +20,7 @@ from livingworld.infrastructure.persistence.errors import (
 )
 from livingworld.infrastructure.persistence.migration import (
     ACTION_TABLES,
+    CHAT_TABLES,
     HEAD_REVISION,
     LEDGER_REVISION,
     MEMORY_TABLES,
@@ -271,6 +272,7 @@ def test_0005_takeover_preserves_every_runtime_and_audit_row(tmp_path, populate,
             if table
             not in SIMULATION_TABLES
             | ACTION_TABLES
+            | CHAT_TABLES
             | MEMORY_TABLES
             | {
                 "local_player_bindings",

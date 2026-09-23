@@ -27,6 +27,21 @@ snapshot or identity. A confirmed update supplies the current authored persona
 for later generation while preserving the existing runtime Character and
 conversation history.
 
+The current implementation can open and list durable direct-conversation
+identities for the selected local Player. Opening a current accepted character
+contact follows its replacement lineage back to the first accepted import, then
+uses stable world-scoped IDs for one runtime Character and one direct
+Conversation per Player/contact pair. The existing `CreateCharacter` command
+owns the canonical `CharacterCreated` event; opening a Conversation does not
+itself emit a WorldEvent, move either participant, or create an Observation.
+Replacing an accepted card preserves that runtime identity. An unselected
+Player, cross-world import, or stale import cannot open a conversation.
+
+The schema has a separate participant relation so group conversations can share
+the same durable identity boundary later. The current direct-conversation API
+does not yet send messages or invoke a model; the ordinary UI must not present
+it as a working chat until message persistence and generation are connected.
+
 ## Direct and group conversations
 
 - A direct conversation has one Player and one Character.

@@ -9,6 +9,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, ConfigDict
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
+from livingworld.application.chat_conversations import ChatConversationService
 from livingworld.application.developer_inspector import DeveloperInspectorService
 from livingworld.application.local_profile import LocalProfileStore
 from livingworld.application.player_event_feed import PlayerEventFeedService
@@ -42,6 +43,7 @@ def create_app(
     local_profiles: LocalProfileStore | None = None,
     world_content: WorldContentService | None = None,
     player_onboarding: LocalPlayerOnboardingService | None = None,
+    chat_conversations: ChatConversationService | None = None,
 ) -> FastAPI:
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
@@ -98,6 +100,11 @@ def create_app(
         from livingworld.adapters.http.world_content import world_content_router
 
         app.include_router(world_content_router(world_content, authorize))
+
+    if chat_conversations is not None:
+        from livingworld.adapters.http.chat_conversations import chat_conversation_router
+
+        app.include_router(chat_conversation_router(chat_conversations, authorize))
 
     @app.get("/system/live")
     async def live() -> dict[str, bool]:

@@ -12,6 +12,7 @@ from uuid import uuid4
 import uvicorn
 
 from livingworld.adapters.http.app import create_app
+from livingworld.application.chat_conversations import ChatConversationService
 from livingworld.application.command_handler import CommandHandler
 from livingworld.application.developer_inspector import (
     INSPECTOR_TRIGGER_KIND,
@@ -146,6 +147,10 @@ async def run(
             simulation_runtime,
         )
         player_event_feed = PlayerEventFeedService(database.player_event_feed_store())
+        world_content = database.world_content_service()
+        chat_conversations = ChatConversationService(
+            database.chat_conversation_store(), world_content, player_event_feed, command_handler
+        )
         developer_inspector = None
         if developer_tools:
             developer_inspector = DeveloperInspectorService(
@@ -186,8 +191,9 @@ async def run(
             world_settings,
             player_event_feed,
             database.local_profile_store(),
-            database.world_content_service(),
+            world_content,
             LocalPlayerOnboardingService(command_handler, player_event_feed),
+            chat_conversations,
         )
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.bind((LOOPBACK_HOST, 0))

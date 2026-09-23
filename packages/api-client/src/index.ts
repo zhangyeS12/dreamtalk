@@ -58,6 +58,15 @@ export interface WorldContentItem {
   warnings?: Array<{ code: string; path: string }>;
 }
 
+export interface ChatConversation {
+  conversation_id: string;
+  player_id: string;
+  character_id: string;
+  root_import_id: string;
+  character_name: string;
+  kind: "direct";
+}
+
 export class CoreClient {
   private readonly endpoint: URL;
   constructor(private readonly connection: CoreConnection, private readonly fetcher = globalThis.fetch.bind(globalThis)) {
@@ -119,6 +128,12 @@ export class CoreClient {
 
   worldContent(worldId: string): Promise<WorldContentItem[]> {
     return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/content`);
+  }
+  conversations(worldId: string): Promise<ChatConversation[]> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations`);
+  }
+  openDirectConversation(worldId: string, importId: string): Promise<ChatConversation> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/direct/${encodeURIComponent(importId)}`, { method: "POST" });
   }
   previewWorldContent(worldId: string, kind: "character" | "lorebook", file: File, replacesImportId?: string): Promise<WorldContentItem> {
     const replacement = replacesImportId ? `&replaces_import_id=${encodeURIComponent(replacesImportId)}` : "";

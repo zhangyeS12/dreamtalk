@@ -6,7 +6,7 @@
 
 **Imported Content != Runtime State；CharacterDefinition != Character；WorldContent != World；LoreEntry != WorldTruth；LoreCollection != WorldContent != Runtime World != WorldTruth。**
 
-Alembic head 现为 [0014_episodic_memory](../../services/core/src/livingworld/infrastructure/persistence/migrations/versions/0014_episodic_memory.py)，down_revision=0013_sparse_simulation_activation。它只增加 Character Memory 与 normalized Observation evidence tables，不改写 0013 runtime、WorldEvent、Observation、Knowledge、receipt、LLM/content 或 legacy audit rows。前序 0011/0012/0013 继续保持原语义。下文各阶段旧 head 描述保留其阶段语境，不表示当前 head。
+Alembic head 现为 [0018_chat_conversations](../../services/core/src/livingworld/infrastructure/persistence/migrations/versions/0018_chat_conversations.py)，down_revision=0017_world_content_imports。它只增加独立的会话与参与者身份表，不改写 WorldEvent、Knowledge、Observation、Memory、已确认内容或旧审计行。下文各阶段旧 head 描述保留其阶段语境，不表示当前 head。
 
 C-006D 不新增表或列。`SqlAlchemyWorldClockStore` 用 SQLite writer transaction 和 expected Revision 替换完整 durable anchor；logical time、non-regressing UTC anchor、scale、RUNNING/PAUSED 与下一 revision 同 commit。process monotonic timestamps 永不写入 SQLite。startup target anchor 在任何 due drain 前提交；因此 mid-catch-up restart 只继续 PENDING trigger，不重新累计离线时间。
 
@@ -146,10 +146,14 @@ C-006A 只增加无副作用 effective-time derivation 和 runtime monotonic gua
 | [0012_action_scenes_perception](../../services/core/src/livingworld/infrastructure/persistence/migrations/versions/0012_action_scenes_perception.py) | 新增 Scene 与 typed participant history、current-location indexes；partial unique 保证每主体至多一个 active Scene；Observation 增加可空 basis，只对 event_occurrence 增加 event/principal 唯一，并增加 observer history 索引；receipt CHECK 允许无 WorldEvent 的 typed rejection/Scene 结果 |
 | [0013_sparse_simulation_activation](../../services/core/src/livingworld/infrastructure/persistence/migrations/versions/0013_sparse_simulation_activation.py) | 泛化 trigger/activation target 与 kind/version，增加 due queue/coalescing/attention，建立 normalized cause history；0011 rows deterministic backfill 为 WORLD / world_orchestration v1 / scheduled-trigger cause；SQLite batch recreation 最终运行 foreign_key_check，保留历史 linkage 与 payload |
 | [0014_episodic_memory](../../services/core/src/livingworld/infrastructure/persistence/migrations/versions/0014_episodic_memory.py) | 新增 Character-owned immutable Memory 与 normalized ordered Observation evidence；复合 FK、bounded content/time/salience/version CHECK 及 owner chronology/reverse provenance indexes；不改写既有行 |
+| [0015_local_player_binding](../../services/core/src/livingworld/infrastructure/persistence/migrations/versions/0015_local_player_binding.py) | 每世界一个本地玩家身份绑定 |
+| [0016_local_profiles](../../services/core/src/livingworld/infrastructure/persistence/migrations/versions/0016_local_profiles.py) | 通用与世界专属玩家资料 |
+| [0017_world_content_imports](../../services/core/src/livingworld/infrastructure/persistence/migrations/versions/0017_world_content_imports.py) | 按世界保存已确认角色卡和世界书快照及替换链 |
+| [0018_chat_conversations](../../services/core/src/livingworld/infrastructure/persistence/migrations/versions/0018_chat_conversations.py) | 新增 world/player-scoped Conversation 与 Character participant；同一玩家/来源卡替换链仅一个 direct 会话；未存消息或调用模型 |
 
 启动行为：
 
-1. 空 DB：直接 Alembic upgrade head，按 revision chain 执行至当前 0014。
+1. 空 DB：直接 Alembic upgrade head，按 revision chain 执行至当前 0018。
 2. 无 Alembic cursor 的 C-002 DB：只接受精确 legacy 表/列/PK/DDL、schema_version=(1,1)、一条匹配名称与 checksum 的历史记录和合法 UTC 审计时间；验证通过后 stamp 0001，再正常 upgrade head。旧迁移不重跑，已有行原样保留。
 3. 已有 Alembic cursor：由该 revision 驱动升级；legacy 元数据只做一致性检查。不能用 schema_version 推算或选择待执行迁移。
 4. 未知版本、checksum 漂移、缺失/损坏历史、结构差异、部分领域表、cursor 冲突或未知额外 schema 对象：抛出 MigrationCompatibilityError，事务回滚并停止启动；不自动修复、drop/recreate 或 stamp head。

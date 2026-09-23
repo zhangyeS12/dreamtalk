@@ -1004,3 +1004,56 @@ class WorldContentImportRecord(Base):
         Index("ix_world_content_import_world", "world_id"),
         Index("uq_world_content_replaces", "replaces_import_id", unique=True),
     )
+
+
+class ChatConversationRecord(Base):
+    """A local Player's durable communication space, independent of WorldEvents."""
+
+    __tablename__ = "chat_conversations"
+    world_id: Mapped[UUID] = mapped_column(UUIDStorage(), primary_key=True)
+    conversation_id: Mapped[UUID] = mapped_column(UUIDStorage(), primary_key=True)
+    player_id: Mapped[UUID] = mapped_column(UUIDStorage(), nullable=False)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    direct_root_import_id: Mapped[UUID | None] = mapped_column(
+        UUIDStorage(), ForeignKey("world_content_imports.import_id"), nullable=True
+    )
+    created_at_utc: Mapped[datetime] = mapped_column(UTCTimestampStorage(), nullable=False)
+    __table_args__ = (
+        ForeignKeyConstraint(["world_id", "player_id"], ["players.world_id", "players.player_id"]),
+        CheckConstraint(
+            "(kind = 'direct' AND direct_root_import_id IS NOT NULL) OR "
+            "(kind = 'group' AND direct_root_import_id IS NULL)",
+            name="ck_chat_conversation_kind",
+        ),
+        Index("ix_chat_conversation_player", "world_id", "player_id", "created_at_utc"),
+        Index(
+            "uq_chat_direct_player_contact",
+            "world_id",
+            "player_id",
+            "direct_root_import_id",
+            unique=True,
+            sqlite_where=text("kind = 'direct'"),
+        ),
+    )
+
+
+class ChatParticipantRecord(Base):
+    __tablename__ = "chat_participants"
+    world_id: Mapped[UUID] = mapped_column(UUIDStorage(), primary_key=True)
+    conversation_id: Mapped[UUID] = mapped_column(UUIDStorage(), primary_key=True)
+    character_id: Mapped[UUID] = mapped_column(UUIDStorage(), primary_key=True)
+    root_import_id: Mapped[UUID] = mapped_column(
+        UUIDStorage(), ForeignKey("world_content_imports.import_id"), nullable=False
+    )
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["world_id", "conversation_id"],
+            ["chat_conversations.world_id", "chat_conversations.conversation_id"],
+        ),
+        ForeignKeyConstraint(
+            ["world_id", "character_id"], ["characters.world_id", "characters.character_id"]
+        ),
+        UniqueConstraint(
+            "world_id", "conversation_id", "root_import_id", name="uq_chat_participant_contact"
+        ),
+    )

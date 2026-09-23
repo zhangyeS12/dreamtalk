@@ -205,6 +205,13 @@ class Database:
             SystemWallClock(),
         )
 
+    def chat_conversation_store(self):
+        from livingworld.infrastructure.persistence.chat_conversations import (
+            SqlAlchemyChatConversationStore,
+        )
+
+        return SqlAlchemyChatConversationStore(self._sessions)
+
     def local_profile_store(self):
         from livingworld.infrastructure.persistence.local_profile import SqlAlchemyLocalProfileStore
 
