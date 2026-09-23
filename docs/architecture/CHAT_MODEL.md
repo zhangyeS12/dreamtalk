@@ -73,6 +73,14 @@ remaining budget reaches zero.
 The configured ceiling limits LLM token use; it does not estimate price. The
 existing LLM usage ledger remains authoritative for factual usage and cost.
 
+`ChatTurnTokenBudget` now implements this sequential reservation/settlement
+arithmetic as an application-level value boundary. It does not estimate prompt
+tokens or dispatch a provider. Until a trusted model-specific input upper bound
+is available at every physical attempt and the guard is connected to the
+execution pipeline, roleplay generation must not claim to enforce the ceiling.
+Unknown/incomplete usage conservatively consumes its reservation and closes the
+turn; reported usage above the trusted reservation is an integrity failure.
+
 ## Information and content boundaries
 
 - Prompt assembly uses the active world's accepted CharacterDefinition, the
