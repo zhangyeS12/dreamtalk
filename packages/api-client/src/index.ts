@@ -158,6 +158,9 @@ export class CoreClient {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ player_id: playerId }),
     });
   }
+  startAtHome(worldId: string): Promise<{ player_id: string }> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/me/start`, { method: "POST" });
+  }
   knownEvents(worldId: string): Promise<KnownWorldEvent[]> {
     return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/known-events`);
   }

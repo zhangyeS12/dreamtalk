@@ -14,7 +14,7 @@ it("renders four bottom tabs and keeps the known-event entry pinned", async () =
   render(<ProductApp client={client} />);
   expect((await screen.findAllByText("世界甲")).length).toBeGreaterThan(0);
   expect(screen.getByRole("navigation", { name: "主导航" }).querySelectorAll("button")).toHaveLength(4);
-  expect(screen.getByRole("button", { name: "世界事件只显示你已获知的事件置顶" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "世界事件看看你知道的新鲜事，找个聊天话题置顶" })).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "通讯录" }));
   expect(await screen.findByText("当前世界还没有角色")).toBeTruthy();
 });
@@ -44,7 +44,7 @@ it("shows the player-scoped world-event thread in chronological order", async ()
   render(<ProductApp client={client} />);
   await screen.findAllByText("世界甲");
   await waitFor(() => expect(client.selectedPlayer).toHaveBeenCalledWith("world-a"));
-  fireEvent.click(screen.getByRole("button", { name: "世界事件只显示你已获知的事件置顶" }));
+  fireEvent.click(screen.getByRole("button", { name: "世界事件看看你知道的新鲜事，找个聊天话题置顶" }));
   const timeline = await screen.findByRole("region", { name: "世界事件时间线" });
   await waitFor(() => expect(knownEvents).toHaveBeenCalledWith("world-a"));
   await screen.findByText("有人移动了位置");
@@ -52,7 +52,7 @@ it("shows the player-scoped world-event thread in chronological order", async ()
   expect(timeline.querySelectorAll("li")[0]?.textContent).toContain("第 1 天 · 00:01");
   expect(timeline.querySelectorAll("li")[1]?.textContent).toContain("获知于 第 1 天 · 00:03");
   fireEvent.click(screen.getByRole("button", { name: "返回聊天" }));
-  expect(screen.getByRole("button", { name: "世界事件只显示你已获知的事件置顶" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "世界事件看看你知道的新鲜事，找个聊天话题置顶" })).toBeTruthy();
 });
 
 it("does not display a late event response after switching worlds", async () => {
@@ -68,15 +68,46 @@ it("does not display a late event response after switching worlds", async () => 
   } as unknown as CoreClient;
   render(<ProductApp client={client} />);
   await waitFor(() => expect(client.selectedPlayer).toHaveBeenCalledWith("world-a"));
-  fireEvent.click(screen.getByRole("button", { name: "世界事件只显示你已获知的事件置顶" }));
+  fireEvent.click(screen.getByRole("button", { name: "世界事件看看你知道的新鲜事，找个聊天话题置顶" }));
   await waitFor(() => expect(knownEvents).toHaveBeenCalledWith("world-a"));
   fireEvent.click(screen.getByRole("button", { name: "设置" }));
   fireEvent.change(screen.getByRole("combobox", { name: "当前世界" }), { target: { value: "world-b" } });
   await waitFor(() => expect(client.selectedPlayer).toHaveBeenCalledWith("world-b"));
   fireEvent.click(screen.getByRole("button", { name: "聊天" }));
-  fireEvent.click(screen.getByRole("button", { name: "世界事件只显示你已获知的事件置顶" }));
+  fireEvent.click(screen.getByRole("button", { name: "世界事件看看你知道的新鲜事，找个聊天话题置顶" }));
   await waitFor(() => expect(knownEvents).toHaveBeenCalledWith("world-b"));
   await act(async () => { completeOldRequest([{ event_id: "old", title: "旧世界私有事件", occurred_at: "0", observed_at: "0", ledger_position: 1 }]); });
   expect(screen.queryByText("旧世界私有事件")).toBeNull();
-  expect(screen.getByText("你目前还没有获知世界事件。")).toBeTruthy();
+  expect(screen.getByText("你目前还没有获知世界事件。以后在这里找聊天话题。")).toBeTruthy();
+});
+
+it("enters a new world at home through the product client", async () => {
+  const player = { player_id: "player-home", name: "我" };
+  const listPlayers = vi.fn().mockResolvedValueOnce([]).mockResolvedValue([player]);
+  const selectedPlayer = vi.fn().mockResolvedValueOnce({ player_id: null }).mockResolvedValue({ player_id: player.player_id });
+  const startAtHome = vi.fn().mockResolvedValue({ player_id: player.player_id });
+  const client = { worldContent: vi.fn().mockResolvedValue([]), listProductWorlds: vi.fn().mockResolvedValue([worldA]), listPlayers, selectedPlayer, startAtHome,
+    profile: vi.fn().mockResolvedValue({ name: "", description: "", revision: 0 }),
+  } as unknown as CoreClient;
+  render(<ProductApp client={client} />);
+  fireEvent.click(screen.getByRole("button", { name: "我" }));
+  const enter = await screen.findByRole("button", { name: "进入世界" });
+  expect(screen.getByText(/你会从“家”开始/)).toBeTruthy();
+  fireEvent.click(enter);
+  await waitFor(() => expect(startAtHome).toHaveBeenCalledWith("world-a"));
+  expect(await screen.findByText("已绑定：我")).toBeTruthy();
+});
+
+it("offers home-entry recovery when player creation completed before binding", async () => {
+  const player = { player_id: "player-home", name: "我" };
+  const client = {
+    worldContent: vi.fn().mockResolvedValue([]), listProductWorlds: vi.fn().mockResolvedValue([worldA]),
+    listPlayers: vi.fn().mockResolvedValue([player]), selectedPlayer: vi.fn().mockResolvedValue({ player_id: null }),
+    startAtHome: vi.fn().mockResolvedValue({ player_id: player.player_id }),
+    profile: vi.fn().mockResolvedValue({ name: "", description: "", revision: 0 }),
+  } as unknown as CoreClient;
+  render(<ProductApp client={client} />);
+  fireEvent.click(screen.getByRole("button", { name: "我" }));
+  fireEvent.click(await screen.findByRole("button", { name: "继续从家进入" }));
+  await waitFor(() => expect(client.startAtHome).toHaveBeenCalledWith("world-a"));
 });

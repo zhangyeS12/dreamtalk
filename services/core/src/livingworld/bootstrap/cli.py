@@ -19,6 +19,7 @@ from livingworld.application.developer_inspector import (
 )
 from livingworld.application.memory import EpisodicMemoryService
 from livingworld.application.player_event_feed import PlayerEventFeedService
+from livingworld.application.player_onboarding import LocalPlayerOnboardingService
 from livingworld.application.runtime import RuntimeStatus, ShutdownRequests
 from livingworld.application.scenes import SceneService
 from livingworld.application.scheduler import (
@@ -186,6 +187,7 @@ async def run(
             player_event_feed,
             database.local_profile_store(),
             database.world_content_service(),
+            LocalPlayerOnboardingService(command_handler, player_event_feed),
         )
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.bind((LOOPBACK_HOST, 0))

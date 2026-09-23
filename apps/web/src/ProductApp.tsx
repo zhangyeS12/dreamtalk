@@ -119,7 +119,7 @@ export function ProductApp({ client }: { client: CoreClient }) {
         <aside className="conversation-list" aria-label="会话列表">
         <button className={`conversation-row pinned ${eventsOpen ? "selected" : ""}`} aria-pressed={eventsOpen} type="button" onClick={() => setEventsOpen(true)}>
           <span className="avatar event-avatar" aria-hidden="true">事</span>
-          <span className="row-copy"><strong>世界事件</strong><small>只显示你已获知的事件</small></span>
+          <span className="row-copy"><strong>世界事件</strong><small>看看你知道的新鲜事，找个聊天话题</small></span>
           <span className="pin-label">置顶</span>
         </button>
         <div className="empty-state"><h2>还没有会话</h2><p>在通讯录中选择角色，即可开始聊天。</p><button type="button" className="text-action" onClick={() => setTab("contacts")}>前往通讯录</button></div>
@@ -128,7 +128,7 @@ export function ProductApp({ client }: { client: CoreClient }) {
         <div className="conversation-detail">
           {eventsOpen ? <section className="event-thread" aria-label="世界事件时间线">
         <div className="thread-heading"><button type="button" className="text-action" onClick={() => setEventsOpen(false)}>返回聊天</button><h2>世界事件</h2><span>最近 100 条</span></div>
-        {!world ? <p className="thread-hint">先创建世界，才能查看事件。</p> : !selectedPlayer ? <div className="thread-empty"><p>先在“我”中选择当前世界的玩家身份，才能查看你获知的事件。</p><button type="button" className="text-action" onClick={() => { setEventsOpen(false); setTab("me"); }}>前往我的身份</button></div> : visibleEvents.length === 0 ? <p className="thread-hint">你目前还没有获知世界事件。</p> : <ol className="event-list">{visibleEvents.map(item => <li key={item.event_id} className="event-item"><time>{displayTime(item.occurred_at)}</time><strong>{item.title}</strong>{item.observed_at !== item.occurred_at ? <small>获知于 {displayTime(item.observed_at)}</small> : null}</li>)}</ol>}
+        {!world ? <p className="thread-hint">先创建世界，才能查看事件。</p> : !selectedPlayer ? <div className="thread-empty"><p>先进入当前世界，才能查看你获知的事件。</p><button type="button" className="text-action" onClick={() => { setEventsOpen(false); setTab("me"); }}>前往我的身份</button></div> : visibleEvents.length === 0 ? <p className="thread-hint">你目前还没有获知世界事件。以后在这里找聊天话题。</p> : <ol className="event-list">{visibleEvents.map(item => <li key={item.event_id} className="event-item"><time>{displayTime(item.occurred_at)}</time><strong>{item.title}</strong>{item.observed_at !== item.occurred_at ? <small>获知于 {displayTime(item.observed_at)}</small> : null}</li>)}</ol>}
       </section> : <div className="conversation-placeholder"><h2>与世界保持联系</h2><p>从左侧选择会话，或查看你已获知的世界事件。</p></div>}
         </div>
       </div>}
@@ -150,7 +150,10 @@ export function ProductApp({ client }: { client: CoreClient }) {
       </div>}
 
       {(tab === "me" || meVisited) && <div className="settings-page profile-page" hidden={tab !== "me"}><ProfileEditor client={client} /><section className="settings-section"><div className="section-heading"><h2>我在当前世界</h2><p>每个世界选择一个自己的玩家身份；世界事件按此身份的已知范围显示。</p></div>
-        {!world ? <p className="inline-hint">先在设置中创建世界。</p> : players.length === 0 ? <p className="inline-hint">当前世界还没有可绑定的玩家身份。世界建立初始地点和玩家后可在此选择。</p> : <div className="identity-row"><label className="field"><span>玩家身份</span><select value={playerChoice} onChange={event => setPlayerChoice(event.target.value)}>{players.map(item => <option value={item.player_id} key={item.player_id}>{item.name}</option>)}</select></label><button type="button" className="secondary-button" disabled={busy || !playerChoice || playerChoice === selectedPlayer} onClick={() => void act(async () => { await client.bindPlayer(world.world_id, playerChoice); const [available, selected] = await loadIdentity(world.world_id); setPlayers(available); setSelectedPlayer(selected.player_id); setPlayerChoice(selected.player_id ?? available[0]?.player_id ?? ""); }, "当前世界的玩家身份已更新。")}>设为我的身份</button></div>}
+        {!world ? <p className="inline-hint">先在设置中创建世界。</p> : <>
+          {players.length > 0 ? <div className="identity-row"><label className="field"><span>玩家身份</span><select value={playerChoice} onChange={event => setPlayerChoice(event.target.value)}>{players.map(item => <option value={item.player_id} key={item.player_id}>{item.name}</option>)}</select></label><button type="button" className="secondary-button" disabled={busy || !playerChoice || playerChoice === selectedPlayer} onClick={() => void act(async () => { await client.bindPlayer(world.world_id, playerChoice); const [available, selected] = await loadIdentity(world.world_id); setPlayers(available); setSelectedPlayer(selected.player_id); setPlayerChoice(selected.player_id ?? available[0]?.player_id ?? ""); }, "当前世界的玩家身份已更新。")}>设为我的身份</button></div> : null}
+          {!selectedPlayer ? <div className="identity-start"><p className="inline-hint">进入世界后，你会从“家”开始。聊天消息可以跨地点发送，不会改变你的物理位置。</p><button type="button" className="primary-button" disabled={busy} onClick={() => void act(async () => { await client.startAtHome(world.world_id); const [available, selected] = await loadIdentity(world.world_id); setPlayers(available); setSelectedPlayer(selected.player_id); setPlayerChoice(selected.player_id ?? available[0]?.player_id ?? ""); }, "已进入世界，当前位置：家。")}>{players.length > 0 ? "继续从家进入" : "进入世界"}</button></div> : null}
+        </>}
         {selectedPlayer ? <p className="inline-hint">已绑定：{players.find(item => item.player_id === selectedPlayer)?.name ?? "当前玩家"}</p> : null}
       </section>{world && <ProfileEditor key={world.world_id} client={client} worldId={world.world_id} onDirtyChange={setWorldProfileDirty} />}</div>}
     </main>

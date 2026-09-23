@@ -77,3 +77,29 @@ def test_known_event_http_requires_auth_and_returns_only_safe_display_fields():
             == 200
         )
         assert feed.calls == [feed.player]
+
+
+def test_start_at_home_requires_auth_and_returns_bound_player():
+    world = WorldId(uuid4())
+    feed = FakeFeed(world)
+
+    class FakeOnboarding:
+        async def start_at_home(self, world_id):
+            assert world_id == world
+            return feed.player
+
+    app = create_app(
+        RuntimeStatus("test", "generation"),
+        ShutdownRequests(),
+        "session-secret",
+        lambda: None,
+        StructuredLogger(io.StringIO()),
+        player_event_feed=PlayerEventFeedService(feed),
+        player_onboarding=FakeOnboarding(),
+    )
+    path = f"/api/v{API_PROTOCOL}/worlds/{world.value}/me/start"
+    with TestClient(app, base_url="http://127.0.0.1") as client:
+        assert client.post(path).status_code == 401
+        response = client.post(path, headers={"Authorization": "Bearer session-secret"})
+        assert response.status_code == 200
+        assert response.json() == {"player_id": str(feed.player.value)}

@@ -6,7 +6,9 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict
 
+from livingworld.application.errors import EntityNotFoundError
 from livingworld.application.player_event_feed import PlayerEventFeedService
+from livingworld.application.player_onboarding import LocalPlayerOnboardingService
 from livingworld.domain.contracts import API_PROTOCOL
 from livingworld.domain.identifiers import PlayerId, WorldId
 
@@ -20,7 +22,9 @@ _EVENT_TITLES = {"PlayerMoved": "有人移动了位置"}
 
 
 def player_events_router(
-    service: PlayerEventFeedService, authorize: Callable[..., None]
+    service: PlayerEventFeedService,
+    authorize: Callable[..., None],
+    onboarding: LocalPlayerOnboardingService | None = None,
 ) -> APIRouter:
     router = APIRouter(prefix=f"/api/v{API_PROTOCOL}", dependencies=[Depends(authorize)])
 
@@ -45,6 +49,16 @@ def player_events_router(
         except ValueError:
             raise HTTPException(404, "player_not_found_in_world") from None
         return {"player_id": str(player.value)}
+
+    if onboarding is not None:
+
+        @router.post("/worlds/{world_id}/me/start")
+        async def start_at_home(world_id: UUID) -> dict[str, str]:
+            try:
+                player = await onboarding.start_at_home(WorldId(world_id))
+            except EntityNotFoundError:
+                raise HTTPException(404, "world_not_found") from None
+            return {"player_id": str(player.value)}
 
     @router.get("/worlds/{world_id}/known-events")
     async def known_events(world_id: UUID) -> list[dict[str, str | int]]:
