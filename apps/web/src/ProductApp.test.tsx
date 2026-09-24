@@ -147,7 +147,7 @@ it("opens a contact lazily and shows only the selected world's real conversation
     listProductWorlds: vi.fn().mockResolvedValue([worldA, worldB]),
     listPlayers: vi.fn((worldId: string) => Promise.resolve([{ player_id: worldId === "world-a" ? "player-a" : "player-b", name: "我" }])),
     selectedPlayer: vi.fn((worldId: string) => Promise.resolve({ player_id: worldId === "world-a" ? "player-a" : "player-b" })),
-    conversations, openDirectConversation,
+    conversations, openDirectConversation, conversationMessages: vi.fn().mockResolvedValue([]),
   } as unknown as CoreClient;
   render(<ProductApp client={client} />);
   fireEvent.click(screen.getByRole("button", { name: "通讯录" }));

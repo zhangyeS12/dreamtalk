@@ -49,7 +49,11 @@ An authenticated transcript read endpoint now returns stored messages in their
 Conversation order for the currently selected local Player only. Missing Player
 selection and cross-world/foreign Conversations fail closed. This read path does
 not create a Message, Observation, KnowledgeAssertion, or WorldEvent. It is not
-a player-send endpoint and cannot dispatch a Character reply.
+a player-send endpoint and cannot dispatch a Character reply. The Chat tab reads
+this endpoint when a Conversation is opened and renders the durable ordered
+transcript. Switching worlds or Conversations discards a late response from the
+previous selection. The UI continues to state that sending is unavailable until
+a validated reply path and its token guard are connected.
 
 ## Direct and group conversations
 

@@ -66,6 +66,16 @@ export interface ChatConversation {
   character_name: string;
   kind: "direct";
 }
+export interface ChatMessage {
+  message_id: string;
+  turn_id: string;
+  conversation_id: string;
+  position: number;
+  sender_kind: "player" | "character";
+  sender_id: string;
+  text: string;
+  created_at_utc: string;
+}
 
 export class CoreClient {
   private readonly endpoint: URL;
@@ -131,6 +141,9 @@ export class CoreClient {
   }
   conversations(worldId: string): Promise<ChatConversation[]> {
     return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations`);
+  }
+  conversationMessages(worldId: string, conversationId: string): Promise<ChatMessage[]> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/${encodeURIComponent(conversationId)}/messages`);
   }
   openDirectConversation(worldId: string, importId: string): Promise<ChatConversation> {
     return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/direct/${encodeURIComponent(importId)}`, { method: "POST" });

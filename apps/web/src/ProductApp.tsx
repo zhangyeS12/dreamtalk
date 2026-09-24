@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { CoreClient, type ChatConversation, type KnownWorldEvent, type PlayerAvailability, type SelectablePlayer, type SelectedPlayerState, type WorldSettings } from "@livingworld/api-client";
+import { ChatTranscript } from "./ChatTranscript";
 import { WorldImports, WorldContacts } from "./WorldContent";
 import { ProfileEditor } from "./ProfileEditor";
 import "./product.css";
@@ -171,7 +172,7 @@ export function ProductApp({ client }: { client: CoreClient }) {
           {eventsOpen ? <section className="event-thread" aria-label="世界事件时间线">
         <div className="thread-heading"><button type="button" className="text-action" onClick={() => setEventsOpen(false)}>返回聊天</button><h2>世界事件</h2><span>最近 100 条</span></div>
         {!world ? <p className="thread-hint">先创建世界，才能查看事件。</p> : !selectedPlayer ? <div className="thread-empty"><p>先进入当前世界，才能查看你获知的事件。</p><button type="button" className="text-action" onClick={() => { setEventsOpen(false); setTab("me"); }}>前往我的身份</button></div> : visibleEvents.length === 0 ? <p className="thread-hint">你目前还没有获知世界事件。以后在这里找聊天话题。</p> : <ol className="event-list">{visibleEvents.map(item => <li key={item.event_id} className="event-item"><time>{displayTime(item.occurred_at)}</time><strong>{item.title}</strong>{item.observed_at !== item.occurred_at ? <small>获知于 {displayTime(item.observed_at)}</small> : null}</li>)}</ol>}
-      </section> : selectedConversation ? <section className="chat-thread" aria-label={`${selectedConversation.character_name}的会话`}><div className="thread-heading"><button type="button" className="text-action" onClick={() => setSelectedConversationId(null)}>返回聊天</button><h2>{selectedConversation.character_name}</h2><span>私聊</span></div><div className="conversation-placeholder"><h2>还没有消息</h2><p>会话已经保存。消息发送功能尚未开放。</p></div></section> : <div className="conversation-placeholder"><h2>与世界保持联系</h2><p>从左侧选择会话，或查看你已获知的世界事件。</p></div>}
+      </section> : selectedConversation && selectedPlayer ? <ChatTranscript key={`${worldId}:${selectedPlayer}:${selectedConversation.conversation_id}`} client={client} worldId={worldId} playerId={selectedPlayer} conversation={selectedConversation} onBack={() => setSelectedConversationId(null)} /> : <div className="conversation-placeholder"><h2>与世界保持联系</h2><p>从左侧选择会话，或查看你已获知的世界事件。</p></div>}
         </div>
       </div>}
 
