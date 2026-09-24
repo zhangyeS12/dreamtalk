@@ -45,6 +45,12 @@ is connected. The ordinary UI can open a contact and show the resulting durable
 conversation in the Chat tab, but marks message sending unavailable rather than
 presenting it as working chat.
 
+An authenticated transcript read endpoint now returns stored messages in their
+Conversation order for the currently selected local Player only. Missing Player
+selection and cross-world/foreign Conversations fail closed. This read path does
+not create a Message, Observation, KnowledgeAssertion, or WorldEvent. It is not
+a player-send endpoint and cannot dispatch a Character reply.
+
 ## Direct and group conversations
 
 - A direct conversation has one Player and one Character.
