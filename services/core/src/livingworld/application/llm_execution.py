@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 from time import monotonic
+from uuid import UUID, uuid4
 
 from livingworld.application.llm import (
     DispatchState,
@@ -37,9 +38,16 @@ from livingworld.application.llm_accounting import (
     factual_usage,
 )
 from livingworld.application.llm_budget import (
+    BoundGuarantee,
     BudgetAdmissionError,
     BudgetedAttemptAccountingSink,
     BudgetIntegrityError,
+    PreflightUsageBounder,
+)
+from livingworld.application.llm_chat_turn_budget import (
+    ChatTurnTokenBudget,
+    TurnTokenBoundViolation,
+    TurnTokenBudgetError,
 )
 
 
@@ -224,10 +232,18 @@ class _InvocationExecution:
     defer_terminal: bool = False
     ordinal: int = 0
     integrity_healthy: bool = True
+    turn_integrity_healthy: bool = True
     last_start: AttemptStart | None = None
+    turn_budget: ChatTurnTokenBudget | None = None
+    active_turn_attempt_id: UUID | None = None
 
     def __post_init__(self):
-        if not isinstance(self.invocation_id, InvocationId) or not math.isfinite(self.deadline):
+        if (
+            not isinstance(self.invocation_id, InvocationId)
+            or not math.isfinite(self.deadline)
+            or self.turn_budget is not None
+            and not isinstance(self.turn_budget, ChatTurnTokenBudget)
+        ):
             raise LLMContractError("invalid_invocation_execution")
 
 
@@ -252,6 +268,7 @@ class ExecutingModelGateway:
         wall_clock: Callable[[], datetime] | None = None,
         accounting_diagnostics: Callable[[AccountingDiagnostic], None] | None = None,
         budget_guard: BudgetedAttemptAccountingSink | None = None,
+        token_bounder: PreflightUsageBounder | None = None,
     ):
         self._gateway = gateway
         self._policy = policy if policy is not None else RetryPolicy()
@@ -268,6 +285,46 @@ class ExecutingModelGateway:
         self._accounting, self._wall_clock = accounting, wall_clock
         self._accounting_diagnostics = accounting_diagnostics
         self._budget_guard = budget_guard
+        if token_bounder is not None and not callable(getattr(token_bounder, "bound", None)):
+            raise LLMContractError("invalid_token_bounder")
+        self._token_bounder = token_bounder
+
+    def _reserve_turn_tokens(self, request, execution):
+        if execution.turn_budget is None:
+            return
+        bound = self._token_bounder.bound(request) if self._token_bounder else None
+        if bound is None or bound.guarantee is not BoundGuarantee.HARD_UPPER_BOUND:
+            raise TurnTokenBudgetError("turn_input_bound_unavailable")
+        attempt_id = uuid4()
+        execution.turn_budget.reserve(
+            attempt_id,
+            input_upper_bound=bound.input_tokens,
+            max_output_tokens=bound.output_tokens,
+        )
+        execution.active_turn_attempt_id = attempt_id
+
+    def _release_turn_tokens(self, execution):
+        attempt_id = execution.active_turn_attempt_id
+        if attempt_id is not None:
+            execution.turn_budget.release_undispatched(attempt_id)
+            execution.active_turn_attempt_id = None
+
+    def _settle_turn_tokens(self, execution, usage):
+        attempt_id = execution.active_turn_attempt_id
+        if attempt_id is None:
+            return True
+        execution.active_turn_attempt_id = None
+        try:
+            execution.turn_budget.settle(attempt_id, usage)
+        except TurnTokenBoundViolation:
+            execution.turn_integrity_healthy = False
+            return False
+        return True
+
+    @staticmethod
+    def _turn_exhausted(execution):
+        budget = execution.turn_budget
+        return budget is not None and (budget.closed or budget.remaining == 0)
 
     def _accounting_report(self, start, event="accounting_persistence_incomplete"):
         # A diagnostics consumer must be non-raising. Its failure may not replace
@@ -282,6 +339,14 @@ class ExecutingModelGateway:
     async def _begin_attempt(self, request, ordinal, execution):
         if self._clock() >= execution.deadline:
             raise ExecutionDeadlineError()
+        self._reserve_turn_tokens(request, execution)
+        try:
+            return await self._begin_accounted_attempt(request, ordinal, execution)
+        except BaseException:
+            self._release_turn_tokens(execution)
+            raise
+
+    async def _begin_accounted_attempt(self, request, ordinal, execution):
         if self._accounting is None:
             execution.ordinal = ordinal
             return None
@@ -323,11 +388,12 @@ class ExecutingModelGateway:
         stream_started=False,
         execution,
     ):
+        completed = result if result is not None else failure.attempt if failure else None
+        self._settle_turn_tokens(execution, completed.usage if completed is not None else None)
         if start is None:
             return True
         failed = False
         try:
-            completed = result if result is not None else failure.attempt if failure else None
             if completed is not None:
                 usage = completed.usage if completed.usage is not None else usage
                 reported = completed.model_used if result is not None else completed.model
@@ -398,12 +464,20 @@ class ExecutingModelGateway:
         """Routing owns the single logical terminal observation."""
         await self._complete_invocation(execution.last_start, outcome, execution, force=True)
 
-    def _execution(self, request, execution):
+    def _execution(self, request, execution, turn_budget):
         if execution is None:
             execution = _InvocationExecution(
-                request.invocation_id, self._clock() + self._policy.max_elapsed_seconds
+                request.invocation_id,
+                self._clock() + self._policy.max_elapsed_seconds,
+                turn_budget=turn_budget,
             )
-        if execution.invocation_id != request.invocation_id or not execution.integrity_healthy:
+        if (
+            execution.invocation_id != request.invocation_id
+            or not execution.integrity_healthy
+            or not execution.turn_integrity_healthy
+            or turn_budget is not None
+            and turn_budget is not execution.turn_budget
+        ):
             raise LLMContractError("invalid_invocation_execution")
         return execution
 
@@ -462,9 +536,13 @@ class ExecutingModelGateway:
         return True
 
     async def generate(
-        self, request: LLMRequest, *, _execution: _InvocationExecution | None = None
+        self,
+        request: LLMRequest,
+        *,
+        turn_budget: ChatTurnTokenBudget | None = None,
+        _execution: _InvocationExecution | None = None,
     ) -> LLMResponse:
-        execution = self._execution(request, _execution)
+        execution = self._execution(request, _execution, turn_budget)
         for candidate_attempt in range(1, self._policy.max_attempts + 1):
             ordinal = execution.ordinal + 1
             attempt = await self._begin_attempt(request, ordinal, execution)
@@ -501,6 +579,9 @@ class ExecutingModelGateway:
                 return result
             if not await self._finish_attempt(attempt, tick, failure=failure, execution=execution):
                 raise LLMError(failure)
+            if not execution.turn_integrity_healthy or self._turn_exhausted(execution):
+                await self._complete_invocation(attempt, AttemptOutcome.FAILED, execution)
+                raise LLMError(failure)
             decision = self._decision(request, ordinal, candidate_attempt, execution, failure)
             if not decision.retry or not await self._wait(
                 request,
@@ -516,9 +597,13 @@ class ExecutingModelGateway:
         raise AssertionError("retry_loop_unreachable")
 
     async def stream(
-        self, request: LLMRequest, *, _execution: _InvocationExecution | None = None
+        self,
+        request: LLMRequest,
+        *,
+        turn_budget: ChatTurnTokenBudget | None = None,
+        _execution: _InvocationExecution | None = None,
     ) -> AsyncIterator[LLMStreamEvent]:
-        execution = self._execution(request, _execution)
+        execution = self._execution(request, _execution, turn_budget)
         stream_started = False
         for candidate_attempt in range(1, self._policy.max_attempts + 1):
             ordinal = execution.ordinal + 1
@@ -609,6 +694,10 @@ class ExecutingModelGateway:
                 stream_started=stream_started,
                 execution=execution,
             ):
+                yield StreamFailed(failure)
+                return
+            if not execution.turn_integrity_healthy or self._turn_exhausted(execution):
+                await self._complete_invocation(attempt, AttemptOutcome.FAILED, execution)
                 yield StreamFailed(failure)
                 return
             decision = self._decision(

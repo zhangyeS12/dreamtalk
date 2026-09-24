@@ -93,13 +93,20 @@ remaining budget reaches zero.
 The configured ceiling limits LLM token use; it does not estimate price. The
 existing LLM usage ledger remains authoritative for factual usage and cost.
 
-`ChatTurnTokenBudget` now implements this sequential reservation/settlement
-arithmetic as an application-level value boundary. It does not estimate prompt
-tokens or dispatch a provider. Until a trusted model-specific input upper bound
-is available at every physical attempt and the guard is connected to the
-execution pipeline, roleplay generation must not claim to enforce the ceiling.
-Unknown/incomplete usage conservatively consumes its reservation and closes the
-turn; reported usage above the trusted reservation is an integrity failure.
+`ChatTurnTokenBudget` implements sequential reservation/settlement arithmetic.
+The LLM execution/routing gateway now accepts the same turn budget across
+invocations. Before each physical attempt it uses the selected candidate's
+explicit trusted `ModelUsageLimits` to reserve the maximum billable input and
+allowed output; a missing or estimate-only bound rejects before accounting
+START or provider dispatch. Accounting START failure releases an undispatched
+reservation. Terminal factual usage settles once, including for streams; an
+interrupted/unknown attempt consumes its reservation and closes the turn.
+Reported usage above the trusted bound closes the turn as an integrity failure
+without rewriting the factual provider outcome. This is deliberately
+conservative: a model whose full configured bound exceeds the remaining turn
+budget cannot be called even for a short prompt. Chat generation remains
+unavailable until a Character reply orchestrator actually passes its durable
+turn budget into this gateway; the current pending-message API does not do so.
 
 ## Information and content boundaries
 

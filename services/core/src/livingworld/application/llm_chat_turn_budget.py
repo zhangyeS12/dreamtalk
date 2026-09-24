@@ -42,6 +42,7 @@ class ChatTurnTokenBudget:
         self._spent = 0
         self._active: TokenReservation | None = None
         self._closed = False
+        self._bound_violated = False
         self._seen: set[UUID] = set()
 
     @property
@@ -51,6 +52,10 @@ class ChatTurnTokenBudget:
     @property
     def closed(self) -> bool:
         return self._closed
+
+    @property
+    def bound_violated(self) -> bool:
+        return self._bound_violated
 
     def reserve(
         self,
@@ -103,6 +108,7 @@ class ChatTurnTokenBudget:
         if factual > reservation.total:
             self._spent = self._limit
             self._closed = True
+            self._bound_violated = True
             raise TurnTokenBoundViolation("turn_token_bound_violated")
         self._spent += factual
         return self.remaining

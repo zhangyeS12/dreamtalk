@@ -28,6 +28,7 @@ from livingworld.application.llm import (
 )
 from livingworld.application.llm_accounting import AttemptOutcome
 from livingworld.application.llm_budget import BudgetAdmissionError, BudgetReason
+from livingworld.application.llm_chat_turn_budget import ChatTurnTokenBudget
 from livingworld.application.llm_execution import (
     ExecutingModelGateway,
     ExecutionDeadlineError,
@@ -454,6 +455,7 @@ class RoutedModelGateway:
         )
         self._options = dict(execution_options)
         self._options["observer"] = retry_observer
+        self._options.setdefault("token_bounder", registry.usage_bounder())
         # Validate execution composition once, without dispatching or owning a client.
         self._control = ExecutingModelGateway(self, **self._options)
         self._policy = self._control._policy
@@ -487,11 +489,12 @@ class RoutedModelGateway:
         except Exception:
             pass  # Diagnostics cannot trigger provider switching or alter outcomes.
 
-    def _prepare(self, request, selection, requirements):
+    def _prepare(self, request, selection, requirements, turn_budget):
         execution = _InvocationExecution(
             request.invocation_id,
             self._clock() + self._policy.max_elapsed_seconds,
             defer_terminal=True,
+            turn_budget=turn_budget,
         )
         plan = self.plan(request, selection=selection, requirements=requirements)
         self._report(plan, RoutingEvent.PLANNED)
@@ -503,6 +506,12 @@ class RoutedModelGateway:
         return (
             not started
             and execution.integrity_healthy
+            and execution.turn_integrity_healthy
+            and (
+                execution.turn_budget is None
+                or not execution.turn_budget.closed
+                and execution.turn_budget.remaining > 0
+            )
             and self._clock() < execution.deadline
             and index + 1 < len(plan.candidates)
             and reason is not None
@@ -540,10 +549,11 @@ class RoutedModelGateway:
         *,
         selection: ModelSelection | None = None,
         requirements: RouteRequirements | None = None,
+        turn_budget: ChatTurnTokenBudget | None = None,
     ) -> LLMResponse:
         if request.streaming:
             raise LLMContractError("generate_requires_nonstreaming_request")
-        plan, execution = self._prepare(request, selection, requirements)
+        plan, execution = self._prepare(request, selection, requirements, turn_budget)
         hops = 0
         try:
             for index, candidate in enumerate(plan.candidates):
@@ -608,10 +618,11 @@ class RoutedModelGateway:
         *,
         selection: ModelSelection | None = None,
         requirements: RouteRequirements | None = None,
+        turn_budget: ChatTurnTokenBudget | None = None,
     ) -> AsyncIterator[LLMStreamEvent]:
         if not request.streaming:
             raise LLMContractError("stream_requires_streaming_request")
-        plan, execution = self._prepare(request, selection, requirements)
+        plan, execution = self._prepare(request, selection, requirements, turn_budget)
         hops, started, terminal = 0, False, False
         try:
             for index, candidate in enumerate(plan.candidates):
