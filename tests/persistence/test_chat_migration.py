@@ -10,6 +10,7 @@ from livingworld.domain.identifiers import WorldId
 from livingworld.infrastructure.clock import SystemWallClock
 from livingworld.infrastructure.persistence import Database
 from livingworld.infrastructure.persistence.migration import (
+    CHAT_CONVERSATION_REVISION,
     HEAD_REVISION,
     WORLD_CONTENT_REVISION,
     _alembic_config,
@@ -39,6 +40,38 @@ def test_existing_world_content_database_upgrades_without_recreating_world(tmp_p
             await db.initialize()
             async with db._sessions() as session:
                 assert (await session.get(WorldRecord, world.value)).name == "保留的世界"
+                assert (
+                    await session.scalar(text("SELECT version_num FROM alembic_version"))
+                    == HEAD_REVISION
+                )
+            await db.initialize()
+        finally:
+            await db.close()
+
+    asyncio.run(run())
+
+
+def test_existing_chat_identity_database_upgrades_without_replaying_conversations(tmp_path):
+    async def run():
+        db = Database(tmp_path)
+        world = WorldId(uuid4())
+        try:
+            async with db.engine.begin() as connection:
+                await connection.run_sync(
+                    lambda sync: command.upgrade(_alembic_config(sync), CHAT_CONVERSATION_REVISION)
+                )
+            clock = SystemWallClock()
+            handler = CommandHandler(
+                db.unit_of_work,
+                clock,
+                world_time_source=EffectiveWorldTimeSource(clock, SystemMonotonicClock()),
+            )
+            await handler.execute(
+                CreateWorld(request_id=RequestId(uuid4()), world_id=world, name="保留的会话世界")
+            )
+            await db.initialize()
+            async with db._sessions() as session:
+                assert (await session.get(WorldRecord, world.value)).name == "保留的会话世界"
                 assert (
                     await session.scalar(text("SELECT version_num FROM alembic_version"))
                     == HEAD_REVISION

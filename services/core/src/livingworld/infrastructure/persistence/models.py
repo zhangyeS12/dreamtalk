@@ -18,6 +18,9 @@ from sqlalchemy import (
     UniqueConstraint,
     text,
 )
+from sqlalchemy import (
+    text as sql_text,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 from livingworld.domain.values import WorldTime
@@ -1055,5 +1058,77 @@ class ChatParticipantRecord(Base):
         ),
         UniqueConstraint(
             "world_id", "conversation_id", "root_import_id", name="uq_chat_participant_contact"
+        ),
+    )
+
+
+class ChatTurnRecord(Base):
+    """The player-send receipt and a non-dispatched turn are one durable record."""
+
+    __tablename__ = "chat_turns"
+    world_id: Mapped[UUID] = mapped_column(UUIDStorage(), primary_key=True)
+    turn_id: Mapped[UUID] = mapped_column(UUIDStorage(), primary_key=True)
+    conversation_id: Mapped[UUID] = mapped_column(UUIDStorage(), nullable=False)
+    request_id: Mapped[UUID] = mapped_column(UUIDStorage(), nullable=False)
+    fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    token_ceiling: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    status: Mapped[str] = mapped_column(String(24), nullable=False)
+    created_at_utc: Mapped[datetime] = mapped_column(UTCTimestampStorage(), nullable=False)
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["world_id", "conversation_id"],
+            ["chat_conversations.world_id", "chat_conversations.conversation_id"],
+        ),
+        Index("uq_chat_turn_request", "request_id", unique=True),
+        CheckConstraint("length(fingerprint) = 64", name="ck_chat_turn_fingerprint"),
+        CheckConstraint("token_ceiling > 0", name="ck_chat_turn_token_ceiling"),
+        CheckConstraint("status = 'pending'", name="ck_chat_turn_status"),
+    )
+
+
+class ChatMessageRecord(Base):
+    """Ordered transcript record; it does not confer knowledge or world truth."""
+
+    __tablename__ = "chat_messages"
+    world_id: Mapped[UUID] = mapped_column(UUIDStorage(), primary_key=True)
+    message_id: Mapped[UUID] = mapped_column(UUIDStorage(), primary_key=True)
+    conversation_id: Mapped[UUID] = mapped_column(UUIDStorage(), nullable=False)
+    turn_id: Mapped[UUID] = mapped_column(UUIDStorage(), nullable=False)
+    position: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    sender_player_id: Mapped[UUID | None] = mapped_column(UUIDStorage(), nullable=True)
+    sender_character_id: Mapped[UUID | None] = mapped_column(UUIDStorage(), nullable=True)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at_utc: Mapped[datetime] = mapped_column(UTCTimestampStorage(), nullable=False)
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["world_id", "conversation_id"],
+            ["chat_conversations.world_id", "chat_conversations.conversation_id"],
+        ),
+        ForeignKeyConstraint(
+            ["world_id", "turn_id"], ["chat_turns.world_id", "chat_turns.turn_id"]
+        ),
+        ForeignKeyConstraint(
+            ["world_id", "sender_player_id"], ["players.world_id", "players.player_id"]
+        ),
+        ForeignKeyConstraint(
+            ["world_id", "sender_character_id"],
+            ["characters.world_id", "characters.character_id"],
+        ),
+        UniqueConstraint(
+            "world_id", "conversation_id", "position", name="uq_chat_message_position"
+        ),
+        Index(
+            "uq_chat_turn_player_message",
+            "world_id",
+            "turn_id",
+            unique=True,
+            sqlite_where=sql_text("sender_player_id IS NOT NULL"),
+        ),
+        CheckConstraint("position > 0", name="ck_chat_message_position"),
+        CheckConstraint("length(trim(text)) > 0", name="ck_chat_message_text"),
+        CheckConstraint(
+            "(sender_player_id IS NOT NULL AND sender_character_id IS NULL) OR "
+            "(sender_player_id IS NULL AND sender_character_id IS NOT NULL)",
+            name="ck_chat_message_sender",
         ),
     )

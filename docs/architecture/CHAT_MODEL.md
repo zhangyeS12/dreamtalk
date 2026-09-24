@@ -39,8 +39,9 @@ Player, cross-world import, or stale import cannot open a conversation.
 
 The schema has a separate participant relation so group conversations can share
 the same durable identity boundary later. The current direct-conversation API
-does not yet send messages or invoke a model; the ordinary UI must not present
-it as a working chat until message persistence and generation are connected.
+opens/lists identities only. An internal application service can now persist a
+player message and its pending turn, but no public send API or model dispatcher
+is connected; the ordinary UI must not present this as a working chat yet.
 
 ## Direct and group conversations
 
@@ -103,3 +104,13 @@ the canonical WorldEvent ledger. A durable player-send receipt prevents an HTTP
 retry from appending the same user message or repeating a completed turn. A turn
 whose provider outcome is uncertain is not silently regenerated; unresolved
 usage remains subject to the normal LLM accounting integrity rules.
+
+`ChatTurnId` and `MessageId` identify committed records independently of
+`RequestId`. The request identity plus a fingerprint of the resolved Player,
+Conversation, text, and turn token ceiling protects the atomic player send.
+Retrying the same request returns the original turn/message identities and
+position; reusing it for different semantics fails. New requests append in
+per-Conversation order. The initial durable status is `pending` and does not
+itself trigger provider generation. The current schema stores player messages;
+the sender columns reserve an explicit Character identity for a later validated
+reply path. No automatic replay of pending/uncertain model work exists.

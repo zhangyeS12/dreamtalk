@@ -637,6 +637,7 @@ Knowledge 与其知情主体之间的归属边界，以及判断某内容是否�
 - 同一个主动联系理由最多主动发送一次；玩家未回复不能持续催促（FR-11）。
 - 玩家发言、Character 发言按 Conversation 保留顺序；一次群聊轮次的所有角色发言共享一个硬 Token 上限。
 - Conversation 与 Message 是持久交互记录，不是 WorldEvent；聊天内容不自动形成 WorldTruth、Knowledge 或 Memory。
+- ChatTurnId 与 MessageId 是独立记录身份；RequestId 只用于玩家发送请求的幂等性。同一请求重试返回原消息，语义不同则拒绝；不同请求即使正文相同也可形成不同消息。消息在所属 Conversation 内有持久顺序。
 - 一次主动联系与多角色表达的精确计数、消息送达/阅读如何形成 Player Knowledge，仍待确认。
 
 ## 23. Checkpoint

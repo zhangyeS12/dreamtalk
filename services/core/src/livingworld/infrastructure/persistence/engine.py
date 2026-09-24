@@ -212,6 +212,11 @@ class Database:
 
         return SqlAlchemyChatConversationStore(self._sessions)
 
+    def chat_message_store(self):
+        from livingworld.infrastructure.persistence.chat_messages import SqlAlchemyChatMessageStore
+
+        return SqlAlchemyChatMessageStore(self._sessions)
+
     def local_profile_store(self):
         from livingworld.infrastructure.persistence.local_profile import SqlAlchemyLocalProfileStore
 
