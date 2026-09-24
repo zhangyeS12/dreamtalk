@@ -76,6 +76,12 @@ export interface ChatMessage {
   text: string;
   created_at_utc: string;
 }
+export interface PendingPlayerSend {
+  turn_id: string;
+  token_ceiling: number;
+  status: "pending";
+  message: ChatMessage;
+}
 
 export class CoreClient {
   private readonly endpoint: URL;
@@ -144,6 +150,12 @@ export class CoreClient {
   }
   conversationMessages(worldId: string, conversationId: string): Promise<ChatMessage[]> {
     return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/${encodeURIComponent(conversationId)}/messages`);
+  }
+  sendPlayerMessage(worldId: string, conversationId: string, text: string, tokenCeiling: number, requestId: string): Promise<PendingPlayerSend> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/${encodeURIComponent(conversationId)}/messages`, {
+      method: "POST", headers: { "Content-Type": "application/json", "X-Request-Id": requestId },
+      body: JSON.stringify({ text, token_ceiling: tokenCeiling }),
+    });
   }
   openDirectConversation(worldId: string, importId: string): Promise<ChatConversation> {
     return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/direct/${encodeURIComponent(importId)}`, { method: "POST" });

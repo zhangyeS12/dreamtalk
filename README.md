@@ -12,7 +12,7 @@ LivingWorld 是持久化、事件驱动的多角色 AI 世界，不是普通聊�
 
 Q-001B 提供仅开发环境启用的 [开发者运行时检查器](docs/architecture/RUNTIME_INSPECTOR.md)，用于通过真实 API/application 路径观察时钟、位置、Scene、trigger、activation、WorldEvent、Observation 与 owner-scoped EpisodicMemory。它不是最终产品 UI，也没有加入 Activation consumer 或自动 Observation→Memory。
 
-普通用户入口已建立“聊天 / 通讯录 / 设置 / 我”四标签基础，支持创建与切换世界、暂停/恢复及时间倍率设置、在每个世界绑定 Player；未绑定的新世界可通过 canonical 命令从“家”创建本地玩家并进入。支持通用与世界专属个人资料保存，以及置顶的玩家已知“世界事件”时间线。事件查询先按绑定 Player 的 Observation 授权，再读取安全展示信息。设置支持导入、预览确认和独立更新当前世界的角色卡与世界书；通讯录只显示当前世界已确认的角色资料。角色扮演聊天及持久 Conversation/Message 尚未接入；当前页面不代表最终产品已完成。详见 [产品界面与知情边界](docs/architecture/PRODUCT_SURFACE.md)。开发者检查器通过 URL 查询参数 `?developer=1` 进入。
+普通用户入口已建立“聊天 / 通讯录 / 设置 / 我”四标签基础，支持创建与切换世界、暂停/恢复及时间倍率设置、在每个世界绑定 Player；未绑定的新世界可通过 canonical 命令从“家”创建本地玩家并进入。支持通用与世界专属个人资料保存，以及置顶的玩家已知“世界事件”时间线。事件查询先按绑定 Player 的 Observation 授权，再读取安全展示信息。设置支持导入、预览确认和独立更新当前世界的角色卡与世界书；通讯录只显示当前世界已确认的角色资料。首次打开角色会建立世界隔离的持久私聊会话；聊天页可读取该 Player 有权查看的消息记录。内部服务和受认证 API 可幂等保存玩家消息与待处理回合，但角色回复、整轮 Token 保护和页面发送入口尚未接入。详见 [产品界面与知情边界](docs/architecture/PRODUCT_SURFACE.md) 与 [聊天模型](docs/architecture/CHAT_MODEL.md)。开发者检查器通过 URL 查询参数 `?developer=1` 进入。
 
 Stage 5 — World Kernel & Simulation Runtime 已完成并冻结。C-006D 的 clock reconciliation、C-006C sparse activation/coalescing 与 C-006B deterministic Action/Scene/event-time perception 继续作为 Stage 6 substrate。详见 [Stage 5 验收](docs/architecture/STAGE5_ACCEPTANCE.md)、[Clock Reconciliation](docs/architecture/CLOCK_RECONCILIATION.md)、[Sparse Activation](docs/architecture/SPARSE_ACTIVATION.md)、[Action Resolution](docs/architecture/ACTION_RESOLUTION.md) 和 [Scenes and Perception](docs/architecture/SCENES_AND_PERCEPTION.md)。
 
@@ -22,7 +22,7 @@ Stage 3 已完成 canonical authored-content、Character Card/Lorebook 离线导
 
 `.lwcontent` = authored content package；`.lworld` 保留给未来 runtime-world/state package。content package != backup != running world；hash integrity != publisher authentication；filesystem blobs + SQLite 不被宣称为一个 ACID transaction。导入/导出不创建 Runtime World/Character，不断言 Truth 或授予 Belief/PlayerKnowledge。作者文本/regex/activation metadata 保持不可信数据，不执行。
 
-运行内容实例化、automatic Lore→Truth/Belief、prompt assembly、Reflection、memory consolidation/forgetting/semantic retrieval/RAG、Director、Character Agent、AI Builder、activation consumption、checkpoint/branch、`.lworld`、cloud sync、marketplace 和 final UI 尚未实现。Stage 5 catch-up 只 materialize 到期 work，不编造离线叙事或角色决定；fidelity 只表示 operational context，不是剧情重要性、WorldTruth 或 LLM 策略。Scene 只是互动上下文，Observation 只记录历史访问；形成 EpisodicMemory 必须走 C-007A 的显式 owner-authorized command。外部 PNG/APNG writer、CHARX、任意图复制、签名与 orphan blob GC 仍 deferred。Stage 2 的资源级 CAS、幂等、ledger/rebuild 和知识隔离继续沿用，见 [Stage 2 验收](docs/architecture/STAGE_2_ACCEPTANCE.md)。provider tools、LLM settings UI、conversation persistence 和真实付费 API 验证尚未实现。
+运行内容实例化、automatic Lore→Truth/Belief、prompt assembly、Reflection、memory consolidation/forgetting/semantic retrieval/RAG、Director、Character Agent、AI Builder、activation consumption、checkpoint/branch、`.lworld`、cloud sync、marketplace 和 final UI 尚未实现。Stage 5 catch-up 只 materialize 到期 work，不编造离线叙事或角色决定；fidelity 只表示 operational context，不是剧情重要性、WorldTruth 或 LLM 策略。Scene 只是互动上下文，Observation 只记录历史访问；形成 EpisodicMemory 必须走 C-007A 的显式 owner-authorized command。外部 PNG/APNG writer、CHARX、任意图复制、签名与 orphan blob GC 仍 deferred。Stage 2 的资源级 CAS、幂等、ledger/rebuild 和知识隔离继续沿用，见 [Stage 2 验收](docs/architecture/STAGE_2_ACCEPTANCE.md)。provider tools、LLM settings UI 和真实付费 API 验证尚未实现。
 
 C-002 运行时基础继续沿用：共享 React UI、Tauri v2 Windows 开发壳、Python Core 启停协议、系统 API、SQLite 迁移元数据、结构化日志和 CI。连接阶段显示“正在连接核心 / 核心已就绪 / 核心连接失败”；就绪后默认进入普通用户四标签页面。
 

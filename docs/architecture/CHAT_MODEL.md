@@ -39,11 +39,12 @@ Player, cross-world import, or stale import cannot open a conversation.
 
 The schema has a separate participant relation so group conversations can share
 the same durable identity boundary later. The current direct-conversation API
-opens/lists identities only. An internal application service can now persist a
-player message and its pending turn, but no public send API or model dispatcher
-is connected. The ordinary UI can open a contact and show the resulting durable
-conversation in the Chat tab, but marks message sending unavailable rather than
-presenting it as working chat.
+opens/lists identities only. An authenticated POST endpoint now persists a Player
+message and its pending turn through the application service, returning the same
+result for a repeated request ID. It returns `202 pending`; it does not dispatch
+a model or promise a Character reply. The ordinary UI can open a contact and
+show the resulting durable conversation in the Chat tab, but marks message
+sending unavailable until the reply pipeline is connected.
 
 An authenticated transcript read endpoint now returns stored messages in their
 Conversation order for the currently selected local Player only. Missing Player
@@ -54,6 +55,12 @@ this endpoint when a Conversation is opened and renders the durable ordered
 transcript. Switching worlds or Conversations discards a late response from the
 previous selection. The UI continues to state that sending is unavailable until
 a validated reply path and its token guard are connected.
+
+The POST endpoint requires bearer authorization and `X-Request-Id`. It rejects
+an unselected Player, a foreign/world-mismatched Conversation, blank or oversized
+text, invalid token ceiling, and a request ID reused for different semantics.
+It creates no WorldEvent, Observation, or KnowledgeAssertion. A pending turn is
+not retried or completed by process startup.
 
 ## Direct and group conversations
 

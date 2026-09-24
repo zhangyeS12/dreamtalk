@@ -232,6 +232,61 @@ def test_chat_transcript_http_is_authenticated_and_bound_to_selected_world_playe
             timestamp = datetime.fromisoformat(response.json()[0]["created_at_utc"])
             assert timestamp.utcoffset() == timedelta(0)
             assert client.get(path, headers={"Authorization": "Bearer wrong"}).status_code == 401
+            body = {"text": "新消息", "token_ceiling": 50_000}
+            request_id = str(uuid4())
+            send_headers = {**headers, "X-Request-Id": request_id}
+            assert client.post(path, json=body, headers=headers).status_code == 400
+            assert (
+                client.post(path, json=body, headers={"X-Request-Id": request_id}).status_code
+                == 401
+            )
+            assert (
+                client.post(
+                    path,
+                    json=body,
+                    headers={"Authorization": "Bearer wrong", "X-Request-Id": request_id},
+                ).status_code
+                == 401
+            )
+            sent_response = client.post(path, json=body, headers=send_headers)
+            assert sent_response.status_code == 202
+            pending = sent_response.json()
+            assert pending["status"] == "pending"
+            assert pending["token_ceiling"] == 50_000
+            assert pending["message"]["text"] == "新消息"
+            assert pending["message"]["sender_kind"] == "player"
+            assert pending["message"]["position"] == 2
+            assert client.post(path, json=body, headers=send_headers).json() == pending
+            assert (
+                client.post(path, json={**body, "text": "改写"}, headers=send_headers).status_code
+                == 409
+            )
+            assert (
+                client.post(
+                    path, json={**body, "token_ceiling": 60_000}, headers=send_headers
+                ).status_code
+                == 409
+            )
+            assert (
+                client.post(
+                    path,
+                    json={**body, "text": "   "},
+                    headers={**headers, "X-Request-Id": str(uuid4())},
+                ).status_code
+                == 422
+            )
+            assert (
+                client.post(
+                    path,
+                    json={**body, "token_ceiling": True},
+                    headers={**headers, "X-Request-Id": str(uuid4())},
+                ).status_code
+                == 422
+            )
+            assert [item["text"] for item in client.get(path, headers=headers).json()] == [
+                "仅当前玩家可见",
+                "新消息",
+            ]
             other_world_path = (
                 f"/api/v1/worlds/{worlds[1].value}/conversations/"
                 f"{conversation.conversation_id.value}/messages"
@@ -239,6 +294,12 @@ def test_chat_transcript_http_is_authenticated_and_bound_to_selected_world_playe
             assert client.get(other_world_path, headers=headers).status_code == 409
             asyncio.run(LocalPlayerOnboardingService(handler, players).start_at_home(worlds[1]))
             assert client.get(other_world_path, headers=headers).status_code == 404
+            assert (
+                client.post(
+                    other_world_path, json=body, headers={**headers, "X-Request-Id": str(uuid4())}
+                ).status_code
+                == 404
+            )
             assert "仅当前玩家可见" not in client.get(other_world_path, headers=headers).text
     finally:
         asyncio.run(db.close())

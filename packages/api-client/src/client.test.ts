@@ -56,4 +56,14 @@ describe("CoreClient", () => {
     expect(fetcher.mock.calls[0][0].toString()).toBe(`${connection.endpoint}/api/v${API_PROTOCOL}/worlds/world/conversations/conversation/messages`);
     expect(fetcher.mock.calls[0][1].headers.Authorization).toBe("Bearer memory-session");
   });
+  it("sends a player message with a stable request identity and resolved token ceiling", async () => {
+    const pending = { status: "pending", turn_id: "turn", token_ceiling: 50_000, message: {} };
+    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify(pending), { status: 202 }));
+    const id = "0f6d14aa-1363-4451-a1bf-9ed40a9cbb95";
+    expect(await new CoreClient(connection, fetcher).sendPlayerMessage("world", "chat", "你好", 50_000, id)).toEqual(pending);
+    expect(fetcher.mock.calls[0][0].toString()).toBe(`${connection.endpoint}/api/v${API_PROTOCOL}/worlds/world/conversations/chat/messages`);
+    expect(fetcher.mock.calls[0][1].method).toBe("POST");
+    expect(fetcher.mock.calls[0][1].headers["X-Request-Id"]).toBe(id);
+    expect(JSON.parse(fetcher.mock.calls[0][1].body)).toEqual({ text: "你好", token_ceiling: 50_000 });
+  });
 });
