@@ -84,6 +84,17 @@ try:
         page.get_by_role("heading", name="角色资料", exact=True).wait_for()
         if contacts_screenshot := os.environ.get("LW_CONTACTS_SCREENSHOT"):
             page.screenshot(path=contacts_screenshot, full_page=True)
+        page.get_by_role("button", name="先进入世界，再打开会话").click()
+        page.get_by_role("button", name="进入世界", exact=True).click()
+        page.get_by_text("已绑定：我", exact=True).wait_for()
+        page.get_by_role("button", name="通讯录", exact=True).click()
+        page.locator(".contacts-workspace .conversation-row").click()
+        page.get_by_role("button", name="打开会话", exact=True).click()
+        page.get_by_role("region", name="Fixture Alice的会话").wait_for()
+        page.get_by_text("消息发送功能尚未开放。", exact=False).wait_for()
+        expect(page.locator(".conversation-list .conversation-row.pinned")).to_have_count(1)
+        if chat_screenshot := os.environ.get("LW_CHAT_SCREENSHOT"):
+            page.screenshot(path=chat_screenshot, full_page=True)
         page.get_by_role("button", name="设置", exact=True).click()
         page.get_by_role("button", name="更新", exact=True).click()
         page.get_by_label("选择文件", exact=True).set_input_files(

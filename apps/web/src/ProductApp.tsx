@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
-import { CoreClient, type KnownWorldEvent, type PlayerAvailability, type SelectablePlayer, type SelectedPlayerState, type WorldSettings } from "@livingworld/api-client";
+import { CoreClient, type ChatConversation, type KnownWorldEvent, type PlayerAvailability, type SelectablePlayer, type SelectedPlayerState, type WorldSettings } from "@livingworld/api-client";
 import { WorldImports, WorldContacts } from "./WorldContent";
 import { ProfileEditor } from "./ProfileEditor";
 import "./product.css";
@@ -51,6 +51,9 @@ export function ProductApp({ client }: { client: CoreClient }) {
   const [selectedPlayerState, setSelectedPlayerState] = useState<SelectedPlayerState | null>(null);
   const [playerChoice, setPlayerChoice] = useState("");
   const [knownEvents, setKnownEvents] = useState<{ worldId: string; playerId: string; items: KnownWorldEvent[] } | null>(null);
+  const [conversationDirectory, setConversationDirectory] = useState<{ worldId: string; playerId: string; items: ChatConversation[] } | null>(null);
+  const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
+  const [conversationsLoading, setConversationsLoading] = useState(false);
 
   const refresh = useCallback(async () => {
     const items = await client.listProductWorlds();
@@ -70,7 +73,7 @@ export function ProductApp({ client }: { client: CoreClient }) {
   }, [client]);
   useEffect(() => {
     let active = true;
-    setPlayers([]); setSelectedPlayer(null); setSelectedPlayerState(null); setPlayerChoice(""); setKnownEvents(null); setEventsOpen(false);
+    setPlayers([]); setSelectedPlayer(null); setSelectedPlayerState(null); setPlayerChoice(""); setKnownEvents(null); setEventsOpen(false); setConversationDirectory(null); setSelectedConversationId(null);
     if (worldId) void loadIdentity(worldId).then(([available, selected]) => {
       if (!active) return;
       setPlayers(available); setSelectedPlayer(selected.player_id);
@@ -79,6 +82,22 @@ export function ProductApp({ client }: { client: CoreClient }) {
     }).catch(() => { if (active) setError("无法读取当前世界的玩家身份。"); });
     return () => { active = false; };
   }, [worldId, loadIdentity]);
+  useEffect(() => {
+    let active = true;
+    if (!worldId || !selectedPlayer || tab !== "chats") return;
+    setConversationsLoading(true);
+    void client.conversations(worldId).then(items => {
+      if (active) setConversationDirectory(current => {
+        const justOpened = current?.worldId === worldId && current.playerId === selectedPlayer ? current.items : [];
+        return { worldId, playerId: selectedPlayer, items: [
+          ...items,
+          ...justOpened.filter(local => !items.some(remote => remote.conversation_id === local.conversation_id)),
+        ] };
+      });
+    }).catch(() => { if (active) setError("无法读取当前世界的会话。"); })
+      .finally(() => { if (active) setConversationsLoading(false); });
+    return () => { active = false; };
+  }, [client, worldId, selectedPlayer, tab]);
   useEffect(() => {
     let active = true;
     setKnownEvents(null);
@@ -104,12 +123,33 @@ export function ProductApp({ client }: { client: CoreClient }) {
     if (worldProfileDirty && !window.confirm("当前世界的身份尚未保存，是否放弃修改并创建新世界？")) return;
     await act(async () => {
       const result = await client.createWorld(name, crypto.randomUUID());
-      await refresh(); setWorldId(result.world_id); setNewWorldName("");
+      await refresh(); setSelectedPlayer(null); setConversationDirectory(null); setSelectedConversationId(null); setWorldId(result.world_id); setNewWorldName("");
     }, "世界已创建。");
+  };
+  const openChat = async (importId: string) => {
+    if (!world || !selectedPlayer || busy) return;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      const conversation = await client.openDirectConversation(world.world_id, importId);
+      setConversationDirectory(current => ({
+        worldId: world.world_id,
+        playerId: selectedPlayer,
+        items: [
+          ...(current?.worldId === world.world_id && current.playerId === selectedPlayer ? current.items : []).filter(item => item.conversation_id !== conversation.conversation_id),
+          conversation,
+        ],
+      }));
+      setSelectedConversationId(conversation.conversation_id);
+      setEventsOpen(false);
+      setTab("chats");
+    } catch { setError("会话未能打开，请稍后重试。"); }
+    finally { setBusy(false); }
   };
 
   const title = tabs.find(item => item.id === tab)?.label ?? "聊天";
   const visibleEvents = knownEvents?.worldId === worldId && knownEvents.playerId === selectedPlayer ? knownEvents.items : [];
+  const conversations = conversationDirectory?.worldId === worldId && conversationDirectory.playerId === selectedPlayer ? conversationDirectory.items : [];
+  const selectedConversation = conversations.find(item => item.conversation_id === selectedConversationId);
   return <div className="product-shell">
     <header className="app-header"><span className="app-brand">LivingWorld</span><span role="status" className="sr-only">核心已就绪</span><span className="world-context">{world?.name ?? "尚未创建世界"}</span></header>
     <main className="app-content" id="main-content">
@@ -117,29 +157,29 @@ export function ProductApp({ client }: { client: CoreClient }) {
       {error ? <p className="app-alert" role="alert">{error}</p> : null}
       {notice ? <p className="app-notice" role="status">{notice}</p> : null}
 
-      {tab === "chats" && <div className={`chat-workspace ${eventsOpen ? "thread-open" : ""}`}>
+      {tab === "chats" && <div className={`chat-workspace ${eventsOpen || selectedConversation ? "thread-open" : ""}`}>
         <aside className="conversation-list" aria-label="会话列表">
         <button className={`conversation-row pinned ${eventsOpen ? "selected" : ""}`} aria-pressed={eventsOpen} type="button" onClick={() => setEventsOpen(true)}>
           <span className="avatar event-avatar" aria-hidden="true">事</span>
-          <span className="row-copy"><strong>世界事件</strong><small>看看你知道的新鲜事，找个聊天话题</small></span>
+          <span className="row-copy"><strong>世界事件</strong><small>你已获知的事件</small></span>
           <span className="pin-label">置顶</span>
         </button>
-        <div className="empty-state"><h2>还没有会话</h2><p>在通讯录中选择角色，即可开始聊天。</p><button type="button" className="text-action" onClick={() => setTab("contacts")}>前往通讯录</button></div>
+        {conversationsLoading ? <p className="thread-hint">正在读取会话…</p> : conversations.length === 0 ? <div className="empty-state"><h2>还没有会话</h2><p>在通讯录中选择角色，打开与他的会话。</p><button type="button" className="text-action" onClick={() => setTab("contacts")}>前往通讯录</button></div> : conversations.map(item => <button key={item.conversation_id} type="button" className={`conversation-row ${!eventsOpen && selectedConversationId === item.conversation_id ? "selected" : ""}`} aria-pressed={!eventsOpen && selectedConversationId === item.conversation_id} onClick={() => { setSelectedConversationId(item.conversation_id); setEventsOpen(false); }}><span className="avatar event-avatar" aria-hidden="true">{Array.from(item.character_name)[0]}</span><span className="row-copy"><strong>{item.character_name}</strong><small>私聊</small></span></button>)}
 
         </aside>
         <div className="conversation-detail">
           {eventsOpen ? <section className="event-thread" aria-label="世界事件时间线">
         <div className="thread-heading"><button type="button" className="text-action" onClick={() => setEventsOpen(false)}>返回聊天</button><h2>世界事件</h2><span>最近 100 条</span></div>
         {!world ? <p className="thread-hint">先创建世界，才能查看事件。</p> : !selectedPlayer ? <div className="thread-empty"><p>先进入当前世界，才能查看你获知的事件。</p><button type="button" className="text-action" onClick={() => { setEventsOpen(false); setTab("me"); }}>前往我的身份</button></div> : visibleEvents.length === 0 ? <p className="thread-hint">你目前还没有获知世界事件。以后在这里找聊天话题。</p> : <ol className="event-list">{visibleEvents.map(item => <li key={item.event_id} className="event-item"><time>{displayTime(item.occurred_at)}</time><strong>{item.title}</strong>{item.observed_at !== item.occurred_at ? <small>获知于 {displayTime(item.observed_at)}</small> : null}</li>)}</ol>}
-      </section> : <div className="conversation-placeholder"><h2>与世界保持联系</h2><p>从左侧选择会话，或查看你已获知的世界事件。</p></div>}
+      </section> : selectedConversation ? <section className="chat-thread" aria-label={`${selectedConversation.character_name}的会话`}><div className="thread-heading"><button type="button" className="text-action" onClick={() => setSelectedConversationId(null)}>返回聊天</button><h2>{selectedConversation.character_name}</h2><span>私聊</span></div><div className="conversation-placeholder"><h2>还没有消息</h2><p>会话已经保存。消息发送功能尚未开放。</p></div></section> : <div className="conversation-placeholder"><h2>与世界保持联系</h2><p>从左侧选择会话，或查看你已获知的世界事件。</p></div>}
         </div>
       </div>}
 
-      {tab === "contacts" && (world ? <WorldContacts key={world.world_id} client={client} worldId={world.world_id} onSettings={() => setTab("settings")} /> : <div className="page-section"><div className="empty-state"><h2>先创建一个世界</h2><p>在设置中创建世界，然后导入角色卡。</p><button className="text-action" onClick={() => setTab("settings")}>前往设置</button></div></div>)}
+      {tab === "contacts" && (world ? <WorldContacts key={world.world_id} client={client} worldId={world.world_id} onSettings={() => setTab("settings")} onIdentity={() => setTab("me")} onOpenChat={openChat} canOpenChat={!!selectedPlayer} openingChat={busy} /> : <div className="page-section"><div className="empty-state"><h2>先创建一个世界</h2><p>在设置中创建世界，然后导入角色卡。</p><button className="text-action" onClick={() => setTab("settings")}>前往设置</button></div></div>)}
 
       {<div className="settings-page" hidden={tab !== "settings"}>
         <section className="settings-section"><div className="section-heading"><h2>世界</h2><p>每个世界有独立的角色、聊天和身份。</p></div>
-          {worlds.length ? <label className="field"><span>当前世界</span><select value={worldId} disabled={busy} onChange={event => { if (worldProfileDirty && !window.confirm("当前世界的身份尚未保存，是否放弃修改并切换世界？")) return; setWorldId(event.target.value); setEventsOpen(false); setNotice(""); }}>
+          {worlds.length ? <label className="field"><span>当前世界</span><select value={worldId} disabled={busy} onChange={event => { if (worldProfileDirty && !window.confirm("当前世界的身份尚未保存，是否放弃修改并切换世界？")) return; setSelectedPlayer(null); setConversationDirectory(null); setSelectedConversationId(null); setWorldId(event.target.value); setEventsOpen(false); setNotice(""); }}>
             {worlds.map(item => <option key={item.world_id} value={item.world_id}>{item.name}</option>)}
           </select></label> : <p className="inline-hint">还没有世界。创建后才能导入角色卡和世界书。</p>}
           <form className="create-world" onSubmit={event => void createWorld(event)}><label className="field"><span>创建新世界</span><input value={newWorldName} onChange={event => setNewWorldName(event.target.value)} maxLength={120} placeholder="给世界起个名字" /></label><button type="submit" className="primary-button" disabled={busy || !newWorldName.trim()}>创建世界</button></form>

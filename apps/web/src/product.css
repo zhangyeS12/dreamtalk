@@ -143,6 +143,8 @@
 .import-file { margin: 20px 0; }
 .import-preview { border-top: 1px solid var(--line); padding-top: 24px; }
 .content-details { padding: 24px; max-width: 900px; overflow-wrap: anywhere; }
+.contact-chat-action { padding: 20px 24px 0; }
+.chat-thread { min-height: 100%; }
 .content-details h2 { font-size: 1.2rem; }
 .content-details h3 { font-size: .92rem; margin: 20px 0 8px; }
 .content-details p { white-space: pre-wrap; line-height: 1.75; color: var(--muted); }

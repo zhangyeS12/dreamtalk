@@ -81,7 +81,15 @@ export function WorldImports({ client, worldId }: { client: CoreClient; worldId:
   </section>;
 }
 
-export function WorldContacts({ client, worldId, onSettings }: { client: CoreClient; worldId: string; onSettings: () => void }) {
+export function WorldContacts({ client, worldId, onSettings, onIdentity, onOpenChat, canOpenChat, openingChat }: {
+  client: CoreClient;
+  worldId: string;
+  onSettings: () => void;
+  onIdentity: () => void;
+  onOpenChat: (importId: string) => Promise<void>;
+  canOpenChat: boolean;
+  openingChat: boolean;
+}) {
   const [items, setItems] = useState<WorldContentItem[]>([]);
   const [selected, setSelected] = useState<WorldContentItem | null>(null);
   const [loading, setLoading] = useState(true);
@@ -94,5 +102,5 @@ export function WorldContacts({ client, worldId, onSettings }: { client: CoreCli
   const characters = items.filter(item => item.characters.length > 0);
   return <div className={`chat-workspace contacts-workspace ${selected ? "thread-open" : ""}`}><aside className="conversation-list" aria-label="当前世界角色">
     {loading ? <p className="thread-hint">正在读取角色…</p> : failed ? <p className="app-alert" role="alert">无法读取通讯录，请重新进入此页面。</p> : characters.length === 0 ? <div className="empty-state"><h2>当前世界还没有角色</h2><p>在设置中导入角色卡，确认后显示在这里。</p><button className="text-action" onClick={onSettings}>前往设置</button></div> : characters.map(item => <button key={item.import_id} className={`conversation-row ${selected?.import_id === item.import_id ? "selected" : ""}`} onClick={() => setSelected(item)}><span className="avatar event-avatar" aria-hidden="true">{Array.from(item.characters[0].name)[0]}</span><span className="row-copy"><strong>{item.characters[0].name}</strong><small>查看角色资料</small></span></button>)}
-  </aside><div className="conversation-detail">{selected ? <><div className="thread-heading"><button className="text-action" onClick={() => setSelected(null)}>返回通讯录</button><h2>角色资料</h2></div><ContentDetails item={selected} /></> : <div className="conversation-placeholder"><h2>当前世界的角色</h2><p>选择左侧角色，查看已确认的资料。</p></div>}</div></div>;
+  </aside><div className="conversation-detail">{selected ? <><div className="thread-heading"><button className="text-action" onClick={() => setSelected(null)}>返回通讯录</button><h2>角色资料</h2></div><div className="contact-chat-action">{canOpenChat ? <button type="button" className="primary-button" disabled={openingChat} onClick={() => void onOpenChat(selected.import_id)}>{openingChat ? "正在打开…" : "打开会话"}</button> : <button type="button" className="text-action" onClick={onIdentity}>先进入世界，再打开会话</button>}</div><ContentDetails item={selected} /></> : <div className="conversation-placeholder"><h2>当前世界的角色</h2><p>选择左侧角色，查看已确认的资料。</p></div>}</div></div>;
 }

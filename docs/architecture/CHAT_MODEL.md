@@ -41,7 +41,9 @@ The schema has a separate participant relation so group conversations can share
 the same durable identity boundary later. The current direct-conversation API
 opens/lists identities only. An internal application service can now persist a
 player message and its pending turn, but no public send API or model dispatcher
-is connected; the ordinary UI must not present this as a working chat yet.
+is connected. The ordinary UI can open a contact and show the resulting durable
+conversation in the Chat tab, but marks message sending unavailable rather than
+presenting it as working chat.
 
 ## Direct and group conversations
 
