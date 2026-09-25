@@ -1,0 +1,209 @@
+"""Group membership is durable, world-scoped, and cannot yet send a turn."""
+
+import asyncio
+from uuid import uuid4
+
+import pytest
+from card_fixtures import card_document, json_bytes
+from livingworld.application.chat_conversations import ChatConversationService
+from livingworld.application.chat_messages import ChatMessageService
+from livingworld.application.command_handler import CommandHandler
+from livingworld.application.commands import CreateWorld
+from livingworld.application.errors import (
+    ChatTurnUnavailableError,
+    EntityNotFoundError,
+    IdempotencyConflictError,
+)
+from livingworld.application.player_event_feed import PlayerEventFeedService
+from livingworld.application.player_onboarding import LocalPlayerOnboardingService
+from livingworld.application.simulation_clock import EffectiveWorldTimeSource, SystemMonotonicClock
+from livingworld.domain.contracts import RequestId
+from livingworld.domain.identifiers import WorldId
+from livingworld.infrastructure.clock import SystemWallClock
+from livingworld.infrastructure.persistence import Database
+from livingworld.infrastructure.persistence.models import (
+    CharacterRecord,
+    ChatConversationRecord,
+    ChatParticipantRecord,
+    ChatTurnRecord,
+    WorldEventRecord,
+)
+from sqlalchemy import func, select
+
+
+def test_group_creation_is_durable_idempotent_and_world_scoped(tmp_path):
+    async def run():
+        db = Database(tmp_path)
+        await db.initialize()
+        clock = SystemWallClock()
+        handler = CommandHandler(
+            db.unit_of_work,
+            clock,
+            world_time_source=EffectiveWorldTimeSource(clock, SystemMonotonicClock()),
+        )
+        players = PlayerEventFeedService(db.player_event_feed_store())
+        imports = db.world_content_service()
+        chats = ChatConversationService(db.chat_conversation_store(), imports, players, handler)
+        messages = ChatMessageService(db.chat_message_store(), players)
+        world, other_world = WorldId(uuid4()), WorldId(uuid4())
+        try:
+            for item in (world, other_world):
+                await handler.execute(
+                    CreateWorld(request_id=RequestId(uuid4()), world_id=item, name="世界")
+                )
+            cards = []
+            for name in ("角色甲", "角色乙"):
+                document = card_document()
+                document["data"]["name"] = name
+                staged = await imports.prepare(world, "character", json_bytes(document))
+                cards.append(
+                    await imports.commit(world, staged.item.import_id, staged.item.reviewed_hash)
+                )
+            request = RequestId(uuid4())
+            with pytest.raises(EntityNotFoundError, match="selected_player_required"):
+                await chats.create_group(world, request, tuple(card.import_id for card in cards))
+            await LocalPlayerOnboardingService(handler, players).start_at_home(world)
+            await LocalPlayerOnboardingService(handler, players).start_at_home(other_world)
+            with pytest.raises(EntityNotFoundError, match="contact_not_found"):
+                await chats.create_group(
+                    other_world, RequestId(uuid4()), tuple(card.import_id for card in cards)
+                )
+            group = await chats.create_group(
+                world, request, tuple(card.import_id for card in cards)
+            )
+            assert len(group.participants) == 2
+            assert {item.character_name for item in group.participants} == {"角色甲", "角色乙"}
+            assert (
+                await chats.create_group(
+                    world, request, tuple(reversed([card.import_id for card in cards]))
+                )
+                == group
+            )
+            assert await chats.list_groups_for_world(world) == (group,)
+            assert await chats.list_groups_for_world(other_world) == ()
+            assert await chats.list_for_world(world) == ()
+            third_document = card_document()
+            third_document["data"]["name"] = "角色丙"
+            staged_third = await imports.prepare(world, "character", json_bytes(third_document))
+            third = await imports.commit(
+                world, staged_third.item.import_id, staged_third.item.reviewed_hash
+            )
+            with pytest.raises(IdempotencyConflictError, match="group_request_conflict"):
+                await chats.create_group(world, request, (cards[0].import_id, third.import_id))
+            with pytest.raises(ValueError, match="group_members_invalid"):
+                await chats.create_group(world, RequestId(uuid4()), (cards[0].import_id,) * 2)
+            with pytest.raises(ChatTurnUnavailableError, match="group_turn_unavailable"):
+                await messages.send_player(
+                    RequestId(uuid4()), group.conversation_id, "还不能发群聊", 1000
+                )
+            async with db._sessions() as session:
+                assert (
+                    await session.scalar(select(func.count()).select_from(ChatConversationRecord))
+                    == 1
+                )
+                assert (
+                    await session.scalar(select(func.count()).select_from(ChatParticipantRecord))
+                    == 2
+                )
+                assert await session.scalar(select(func.count()).select_from(CharacterRecord)) == 2
+                assert await session.scalar(select(func.count()).select_from(ChatTurnRecord)) == 0
+                assert (
+                    await session.scalar(
+                        select(func.count())
+                        .select_from(WorldEventRecord)
+                        .where(WorldEventRecord.event_type == "CharacterCreated")
+                    )
+                    == 2
+                )
+        finally:
+            await db.close()
+        reopened = Database(tmp_path)
+        await reopened.initialize()
+        try:
+            restored = ChatConversationService(
+                reopened.chat_conversation_store(),
+                reopened.world_content_service(),
+                PlayerEventFeedService(reopened.player_event_feed_store()),
+                CommandHandler(
+                    reopened.unit_of_work,
+                    clock,
+                    world_time_source=EffectiveWorldTimeSource(clock, SystemMonotonicClock()),
+                ),
+            )
+            assert await restored.list_groups_for_world(world) == (group,)
+        finally:
+            await reopened.close()
+
+    asyncio.run(run())
+
+
+def test_group_api_requires_auth_and_rejects_undispatched_messages(tmp_path):
+    import io
+
+    from fastapi.testclient import TestClient
+    from livingworld.adapters.http.app import create_app
+    from livingworld.application.runtime import RuntimeStatus, ShutdownRequests
+    from livingworld.infrastructure.logging import StructuredLogger
+
+    db = Database(tmp_path)
+    world = WorldId(uuid4())
+    clock = SystemWallClock()
+    handler = CommandHandler(
+        db.unit_of_work,
+        clock,
+        world_time_source=EffectiveWorldTimeSource(clock, SystemMonotonicClock()),
+    )
+    players = PlayerEventFeedService(db.player_event_feed_store())
+    imports = db.world_content_service()
+
+    async def setup():
+        await db.initialize()
+        await handler.execute(
+            CreateWorld(request_id=RequestId(uuid4()), world_id=world, name="世界")
+        )
+        await LocalPlayerOnboardingService(handler, players).start_at_home(world)
+        ids = []
+        for name in ("角色甲", "角色乙"):
+            document = card_document()
+            document["data"]["name"] = name
+            staged = await imports.prepare(world, "character", json_bytes(document))
+            committed = await imports.commit(
+                world, staged.item.import_id, staged.item.reviewed_hash
+            )
+            ids.append(str(committed.import_id))
+        return ids
+
+    ids = asyncio.run(setup())
+    app = create_app(
+        RuntimeStatus("test", "generation"),
+        ShutdownRequests(),
+        "secret",
+        lambda: None,
+        StructuredLogger(io.StringIO()),
+        chat_conversations=ChatConversationService(
+            db.chat_conversation_store(), imports, players, handler
+        ),
+        chat_messages=ChatMessageService(db.chat_message_store(), players),
+    )
+    path = f"/api/v1/worlds/{world.value}/conversations"
+    with TestClient(app, base_url="http://127.0.0.1") as client:
+        assert client.post(path + "/groups", json={"import_ids": ids}).status_code == 401
+        headers = {"Authorization": "Bearer secret", "X-Request-Id": str(uuid4())}
+        first = client.post(path + "/groups", json={"import_ids": ids}, headers=headers)
+        assert first.status_code == 200
+        assert first.json()["kind"] == "group"
+        assert len(first.json()["participants"]) == 2
+        assert (
+            client.post(path + "/groups", json={"import_ids": ids}, headers=headers).json()
+            == first.json()
+        )
+        assert client.get(path, headers=headers).json() == []
+        assert client.get(path + "/groups", headers=headers).json() == [first.json()]
+        sent = client.post(
+            path + f"/{first.json()['conversation_id']}/messages",
+            json={"text": "你好", "token_ceiling": 1000},
+            headers={**headers, "X-Request-Id": str(uuid4())},
+        )
+        assert sent.status_code == 409
+        assert sent.json()["detail"] == "group_turn_unavailable"
+    asyncio.run(db.close())

@@ -8,7 +8,7 @@ from uuid import UUID, uuid5
 
 from livingworld.application.command_handler import CommandHandler
 from livingworld.application.commands import CreateCharacter
-from livingworld.application.errors import EntityNotFoundError
+from livingworld.application.errors import EntityNotFoundError, IdempotencyConflictError
 from livingworld.application.player_event_feed import PlayerEventFeedService
 from livingworld.application.world_content import AcceptedWorldContent, WorldContentService
 from livingworld.domain.content.models import CharacterDefinition
@@ -25,6 +25,20 @@ class ChatConversation:
     character_name: str
 
 
+@dataclass(frozen=True, slots=True)
+class GroupChatParticipant:
+    character_id: CharacterId
+    root_import_id: UUID
+    character_name: str
+
+
+@dataclass(frozen=True, slots=True)
+class GroupChatConversation:
+    conversation_id: ConversationId
+    player_id: PlayerId
+    participants: tuple[GroupChatParticipant, ...]
+
+
 class ChatConversationStore(Protocol):
     async def open_direct(
         self,
@@ -35,6 +49,21 @@ class ChatConversationStore(Protocol):
     ) -> ChatConversation: ...
 
     async def list_for_player(self, player_id: PlayerId) -> tuple[ChatConversation, ...]: ...
+
+    async def find_group(
+        self, conversation_id: ConversationId, player_id: PlayerId
+    ) -> GroupChatConversation | None: ...
+
+    async def open_group(
+        self,
+        conversation_id: ConversationId,
+        player_id: PlayerId,
+        participants: tuple[GroupChatParticipant, ...],
+    ) -> GroupChatConversation: ...
+
+    async def list_groups_for_player(
+        self, player_id: PlayerId
+    ) -> tuple[GroupChatConversation, ...]: ...
 
 
 def _character(item: AcceptedWorldContent) -> CharacterDefinition:
@@ -56,6 +85,20 @@ class ChatConversationService:
         self._imports = imports.store
         self._players = players
         self._execute_command = commands.execute
+
+    async def _ensure_character(self, world_id: WorldId, root: AcceptedWorldContent) -> CharacterId:
+        character_id = CharacterId(world_id, uuid5(root.import_id, "livingworld:chat-character:v1"))
+        await self._execute_command(
+            CreateCharacter(
+                request_id=RequestId(
+                    uuid5(root.import_id, "livingworld:chat-character-command:v1")
+                ),
+                world_id=world_id,
+                character_id=character_id,
+                name=_character(root).display_name,
+            )
+        )
+        return character_id
 
     async def _root(self, item: AcceptedWorldContent) -> AcceptedWorldContent:
         seen: set[UUID] = set()
@@ -87,25 +130,84 @@ class ChatConversationService:
             raise EntityNotFoundError("contact_not_found")
         current_character = _character(item)
         root = await self._root(item)
-        root_character = _character(root)
-        character_id = CharacterId(world_id, uuid5(root.import_id, "livingworld:chat-character:v1"))
+        character_id = await self._ensure_character(world_id, root)
         conversation_id = ConversationId(
             world_id, uuid5(player.value, f"livingworld:direct-chat:v1:{root.import_id}")
-        )
-        await self._execute_command(
-            CreateCharacter(
-                request_id=RequestId(
-                    uuid5(root.import_id, "livingworld:chat-character-command:v1")
-                ),
-                world_id=world_id,
-                character_id=character_id,
-                name=root_character.display_name,
-            )
         )
         conversation = await self._store.open_direct(
             conversation_id, player, character_id, root.import_id
         )
         return replace(conversation, character_name=current_character.display_name)
+
+    async def _current_names(self, world_id: WorldId) -> dict[UUID, str]:
+        names: dict[UUID, str] = {}
+        for item in await self._imports.list_imports(world_id):
+            if item.kind == "character":
+                names[(await self._root(item)).import_id] = _character(item).display_name
+        return names
+
+    @staticmethod
+    def _named_group(group: GroupChatConversation, names: dict[UUID, str]) -> GroupChatConversation:
+        if any(item.root_import_id not in names for item in group.participants):
+            raise EntityNotFoundError("contact_not_found")
+        return replace(
+            group,
+            participants=tuple(
+                replace(item, character_name=names[item.root_import_id])
+                for item in group.participants
+            ),
+        )
+
+    async def create_group(
+        self, world_id: WorldId, request_id: RequestId, import_ids: tuple[UUID, ...]
+    ) -> GroupChatConversation:
+        if len(import_ids) < 2 or len(set(import_ids)) != len(import_ids):
+            raise ValueError("group_members_invalid")
+        player = await self._players.selected_player(world_id)
+        if player is None:
+            raise EntityNotFoundError("selected_player_required")
+        conversation_id = ConversationId(
+            world_id, uuid5(request_id.value, "livingworld:group-chat:v1")
+        )
+        selected: dict[UUID, tuple[AcceptedWorldContent, AcceptedWorldContent]] = {}
+        for import_id in import_ids:
+            item = await self._imports.find(import_id)
+            if item is None or item.world_id != world_id or item.kind != "character":
+                raise EntityNotFoundError("contact_not_found")
+            root = await self._root(item)
+            if root.import_id in selected:
+                raise ValueError("group_members_invalid")
+            selected[root.import_id] = (item, root)
+        roots = tuple(sorted(selected, key=str))
+        existing = await self._store.find_group(conversation_id, player)
+        if existing is not None:
+            if tuple(item.root_import_id for item in existing.participants) != roots:
+                raise IdempotencyConflictError("group_request_conflict")
+            return self._named_group(existing, await self._current_names(world_id))
+        for item, _ in selected.values():
+            if not await self._imports.is_current(item.import_id):
+                raise EntityNotFoundError("contact_not_found")
+        participants = []
+        for root_id in roots:
+            participants.append(
+                GroupChatParticipant(
+                    await self._ensure_character(world_id, selected[root_id][1]),
+                    root_id,
+                    _character(selected[root_id][0]).display_name,
+                )
+            )
+        group = await self._store.open_group(conversation_id, player, tuple(participants))
+        return self._named_group(group, await self._current_names(world_id))
+
+    async def list_groups_for_world(self, world_id: WorldId) -> tuple[GroupChatConversation, ...]:
+        player = await self._players.selected_player(world_id)
+        if player is None:
+            return ()
+        names = await self._current_names(world_id)
+        return tuple(
+            self._named_group(group, names)
+            for group in await self._store.list_groups_for_player(player)
+        )
 
     async def list_for_world(self, world_id: WorldId) -> tuple[ChatConversation, ...]:
         player = await self._players.selected_player(world_id)
@@ -114,10 +216,7 @@ class ChatConversationService:
         conversations = await self._store.list_for_player(player)
         if not conversations:
             return ()
-        current_names: dict[UUID, str] = {}
-        for item in await self._imports.list_imports(world_id):
-            if item.kind == "character":
-                current_names[(await self._root(item)).import_id] = _character(item).display_name
+        current_names = await self._current_names(world_id)
         return tuple(
             replace(conversation, character_name=current_names[conversation.root_import_id])
             for conversation in conversations

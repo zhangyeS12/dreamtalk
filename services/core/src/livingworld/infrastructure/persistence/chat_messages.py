@@ -108,7 +108,9 @@ class SqlAlchemyChatMessageStore:
                     existing.token_ceiling,
                     existing.status,
                 )
-            await self._conversation(session, conversation_id, player_id)
+            conversation = await self._conversation(session, conversation_id, player_id)
+            if conversation.kind != "direct":
+                raise ChatTurnUnavailableError("group_turn_unavailable")
             position = (
                 await session.scalar(
                     select(func.max(ChatMessageRecord.position)).where(

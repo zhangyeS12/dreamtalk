@@ -38,8 +38,21 @@ Replacing an accepted card preserves that runtime identity. An unselected
 Player, cross-world import, or stale import cannot open a conversation.
 
 The schema has a separate participant relation so group conversations can share
-the same durable identity boundary later. The current direct-conversation API
-opens/lists identities only. An authenticated POST endpoint now persists a Player
+the same durable identity boundary. An authenticated group-create endpoint now
+accepts two or more distinct current Character Card imports from the selected
+Player's world. It resolves replacement roots, reuses the same lazy runtime
+Character creation path as direct chat, and atomically stores one group
+Conversation and its participants. The request ID identifies a retried create;
+it cannot be reused for a different participant set. A separate owner-scoped
+group-list endpoint reads these records. The existing direct-list endpoint and
+ordinary UI still show direct conversations only. Group message sends are
+explicitly rejected until the independent speaker scheduler and shared-turn
+budget are connected; this avoids storing a group turn that cannot be safely
+completed. Creating a group does not move anyone, create an Observation, or
+invent a WorldEvent beyond the existing canonical CharacterCreated events for
+newly opened contacts.
+
+The current direct-conversation API opens/lists identities only. An authenticated POST endpoint now persists a Player
 message and its pending turn through the application service, returning the same
 result for a repeated request ID. It returns `202 pending`; it does not dispatch
 a model or promise a Character reply. The ordinary UI opens a contact and

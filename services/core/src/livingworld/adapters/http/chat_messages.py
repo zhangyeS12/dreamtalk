@@ -110,6 +110,8 @@ def chat_message_router(
             raise HTTPException(404, "conversation_not_found") from None
         except IdempotencyConflictError:
             raise HTTPException(409, "chat_request_conflict") from None
+        except ChatTurnUnavailableError:
+            raise HTTPException(409, "group_turn_unavailable") from None
         except ValueError:
             raise HTTPException(422, "chat_message_invalid") from None
         return {
