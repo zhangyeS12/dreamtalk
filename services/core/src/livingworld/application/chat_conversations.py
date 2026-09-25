@@ -123,3 +123,22 @@ class ChatConversationService:
             for conversation in conversations
             if conversation.root_import_id in current_names
         )
+
+    async def current_direct_character(
+        self, conversation_id: ConversationId
+    ) -> CharacterDefinition:
+        """Resolve the current accepted persona for this Player's existing direct chat."""
+
+        conversations = await self.list_for_world(conversation_id.world_id)
+        conversation = next(
+            (item for item in conversations if item.conversation_id == conversation_id), None
+        )
+        if conversation is None:
+            raise EntityNotFoundError("conversation_not_found")
+        for item in await self._imports.list_imports(conversation_id.world_id):
+            if (
+                item.kind == "character"
+                and (await self._root(item)).import_id == conversation.root_import_id
+            ):
+                return _character(item)
+        raise EntityNotFoundError("contact_not_found")

@@ -123,6 +123,16 @@ turn budget into this gateway; the current pending-message API does not do so.
   because they exist. Any later event context must pass the relevant owner's
   knowledge boundary.
 
+The internal direct-chat context builder resolves the current accepted card
+from the Conversation's world-scoped replacement lineage, then reads only the
+selected Player's transcript up to the current sent message and that Player's
+general/current-world profile. It uses a fixed system instruction and serializes
+card/profile fields as lower-trust user data. Card-authored system prompts,
+creator notes, raw import metadata, WorldTruth, hidden events, other worlds,
+Knowledge and Memory are not added. The current-world profile is explicitly
+given precedence over the general description. This builder prepares input only;
+it does not dispatch a model or authorize any new knowledge.
+
 ## Persistence boundary
 
 Conversation and Message are durable interaction records. They are not entries in
