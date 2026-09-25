@@ -517,7 +517,12 @@ def test_direct_reply_persists_once_without_creating_world_facts(tmp_path):
             )
             service = DirectChatReplyService(
                 messages,
-                DirectChatContextBuilder(conversations, messages, db.local_profile_store()),
+                DirectChatContextBuilder(
+                    conversations,
+                    messages,
+                    db.local_profile_store(),
+                    db.character_memory_reader,
+                ),
                 gateway,
                 registry.usage_bounder(),
                 model,

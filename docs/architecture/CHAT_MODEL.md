@@ -159,12 +159,17 @@ remains separate work.
 The internal direct-chat context builder resolves the current accepted card
 from the Conversation's world-scoped replacement lineage, then reads only the
 selected Player's transcript up to the current sent message and that Player's
-general/current-world profile. It uses a fixed system instruction and serializes
-card/profile fields as lower-trust user data. Card-authored system prompts,
-creator notes, raw import metadata, WorldTruth, hidden events, other worlds,
-Knowledge and Memory are not added. The current-world profile is explicitly
-given precedence over the general description. This builder prepares input only;
-it does not dispatch a model or authorize any new knowledge.
+general/current-world profile. It also requests recent EpisodicMemory through
+a reader bound to that Conversation's Character identity. At most 12 recent
+memories are considered and at most 8 KiB of their UTF-8 content enters the
+prompt; a larger individual memory is skipped. The builder verifies each returned
+memory's owner again before assembly. Memory content and card/profile fields are
+serialized as lower-trust user data under a fixed system instruction. Card-authored
+system prompts, creator notes, raw import metadata, WorldTruth, hidden events,
+other worlds, and other Characters' private memories are not added. Knowledge
+assertions are not yet retrieved. The current-world profile is explicitly given
+precedence over the general description. This builder prepares input only; it
+does not dispatch a model or authorize any new knowledge.
 
 ## Persistence boundary
 

@@ -180,7 +180,10 @@ async def run(
             llm_session,
             chat_messages,
             DirectChatContextBuilder(
-                chat_conversations, chat_messages, database.local_profile_store()
+                chat_conversations,
+                chat_messages,
+                database.local_profile_store(),
+                database.character_memory_reader,
             ),
         )
         status = RuntimeStatus(
