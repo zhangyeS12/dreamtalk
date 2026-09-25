@@ -91,7 +91,7 @@ try:
         page.locator(".contacts-workspace .conversation-row").click()
         page.get_by_role("button", name="打开会话", exact=True).click()
         page.get_by_role("region", name="Fixture Alice的会话").wait_for()
-        page.get_by_text("尚未配置可用的单一聊天模型", exact=False).wait_for()
+        page.get_by_text("尚未配置可用的聊天模型或路由", exact=False).wait_for()
         expect(page.locator(".conversation-list .conversation-row.pinned")).to_have_count(1)
         if chat_screenshot := os.environ.get("LW_CHAT_SCREENSHOT"):
             page.screenshot(path=chat_screenshot, full_page=True)

@@ -90,7 +90,7 @@ export function ChatTranscript({ client, worldId, playerId, conversation, tokenC
           })}</ol>}
     <form className="chat-composer" onSubmit={event => void send(event)}>
       {feedback ? <p role="status" className="chat-feedback">{feedback}</p> : null}
-      {!available ? <p className="chat-feedback">尚未配置可用的单一聊天模型与可信 Token 上限，暂时无法发送。</p> : null}
+      {!available ? <p className="chat-feedback">尚未配置可用的聊天模型或路由及可信 Token 上限，暂时无法发送。</p> : null}
       <label htmlFor="direct-chat-draft" className="sr-only">发送给{conversation.character_name}的消息</label>
       <textarea id="direct-chat-draft" value={draft} onChange={event => setDraft(event.target.value)} disabled={!available || sending || !!pendingSend} maxLength={65536} placeholder="输入消息…" rows={3} />
       <div className="chat-composer-actions"><small>本轮输入与输出共用 {tokenCeiling.toLocaleString("zh-CN")} Token 上限</small><button type="submit" className="primary-button" disabled={!available || sending || (!draft.trim() && !pendingSend)}>{sending ? "正在处理…" : pendingSend ? "重试保存" : "发送"}</button></div>

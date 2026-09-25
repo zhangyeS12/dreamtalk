@@ -27,7 +27,7 @@ from livingworld.application.llm_budget import (
 )
 from livingworld.application.llm_chat_turn_budget import ChatTurnTokenBudget, TurnTokenBudgetError
 from livingworld.application.llm_execution import ExecutionDeadlineError
-from livingworld.application.llm_routing import RoutingError
+from livingworld.application.llm_routing import ModelSelection, RoutingError
 
 
 class ChatReplyValidationError(ValueError):
@@ -51,12 +51,13 @@ class ChatReplyIntegrityError(RuntimeError):
 
 
 class DirectChatGateway(Protocol):
-    def plan(self, request: LLMRequest): ...
+    def plan(self, request: LLMRequest, *, selection: ModelSelection | None = None): ...
 
     async def generate(
         self,
         request: LLMRequest,
         *,
+        selection: ModelSelection | None = None,
         turn_budget: ChatTurnTokenBudget,
     ) -> LLMResponse: ...
 
@@ -71,6 +72,7 @@ class DirectChatReplyService:
         model: ModelRef,
         max_output_tokens: int,
         available: Callable[[], bool] | None = None,
+        selection: ModelSelection | None = None,
     ) -> None:
         if (
             not isinstance(model, ModelRef)
@@ -86,6 +88,7 @@ class DirectChatReplyService:
         self._model = model
         self._max_output_tokens = max_output_tokens
         self._available = available or (lambda: True)
+        self._selection = selection
 
     @property
     def available(self) -> bool:
@@ -104,32 +107,42 @@ class DirectChatReplyService:
             messages=context.messages,
             max_output_tokens=min(sent.token_ceiling, self._max_output_tokens),
         )
-        bound = self._token_bounder.bound(request)
-        if bound is None or bound.guarantee is not BoundGuarantee.HARD_UPPER_BOUND:
+        try:
+            plan = self._gateway.plan(request, selection=self._selection)
+        except RoutingError:
+            raise ChatReplyUnavailableError("chat_model_unavailable") from None
+        bounds = tuple(
+            self._token_bounder.bound(replace(request, model=model)) for model in plan.candidates
+        )
+        if not bounds or any(
+            bound is None or bound.guarantee is not BoundGuarantee.HARD_UPPER_BOUND
+            for bound in bounds
+        ):
             raise ChatReplyBudgetError("turn_input_bound_unavailable")
-        remaining_for_output = sent.token_ceiling - bound.input_tokens
+        remaining_for_output = sent.token_ceiling - max(bound.input_tokens for bound in bounds)
         if remaining_for_output < 1:
             raise ChatReplyBudgetError("turn_token_limit_exceeded")
         if request.max_output_tokens > remaining_for_output:
             request = replace(request, max_output_tokens=remaining_for_output)
-            bound = self._token_bounder.bound(request)
-        if (
+            bounds = tuple(
+                self._token_bounder.bound(replace(request, model=model))
+                for model in plan.candidates
+            )
+        if any(
             bound is None
             or bound.guarantee is not BoundGuarantee.HARD_UPPER_BOUND
             or bound.input_tokens + bound.output_tokens > sent.token_ceiling
+            for bound in bounds
         ):
             raise ChatReplyBudgetError("turn_token_limit_exceeded")
-        # Reject missing route/capability before consuming the one-time claim.
-        try:
-            self._gateway.plan(request)
-        except RoutingError:
-            raise ChatReplyUnavailableError("chat_model_unavailable") from None
         claim = await self._messages.claim_direct(sent.message.conversation_id, sent.turn_id)
         if claim.player_message != sent.message or claim.token_ceiling != sent.token_ceiling:
             raise ChatReplyValidationError("chat_send_changed")
         budget = ChatTurnTokenBudget(claim.token_ceiling)
         try:
-            response = await self._gateway.generate(request, turn_budget=budget)
+            response = await self._gateway.generate(
+                request, selection=self._selection, turn_budget=budget
+            )
         except (BudgetAdmissionError, TurnTokenBudgetError):
             raise ChatReplyBudgetError("chat_admission_denied") from None
         except (BudgetIntegrityError, AccountingInfrastructureError):

@@ -158,7 +158,7 @@ it("opens a contact lazily and shows only the selected world's real conversation
   fireEvent.click(await screen.findByRole("button", { name: "打开会话" }));
   await waitFor(() => expect(openDirectConversation).toHaveBeenCalledWith("world-a", "card-a"));
   expect(await screen.findByRole("region", { name: "角色甲的会话" })).toBeTruthy();
-  expect(await screen.findByText(/尚未配置可用的单一聊天模型/)).toBeTruthy();
+  expect(await screen.findByText(/尚未配置可用的聊天模型或路由/)).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "设置" }));
   fireEvent.change(screen.getByRole("combobox", { name: "当前世界" }), { target: { value: "world-b" } });
   fireEvent.click(screen.getByRole("button", { name: "聊天" }));

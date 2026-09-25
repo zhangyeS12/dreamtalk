@@ -4,6 +4,7 @@ import asyncio
 import io
 from dataclasses import replace
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -32,6 +33,7 @@ from livingworld.application.llm import (
     FinishReason,
     InvocationId,
     LLMMessage,
+    LLMPurpose,
     LLMResponse,
     LLMUsage,
     MessageRole,
@@ -47,8 +49,14 @@ from livingworld.application.llm_chat_turn_budget import (
 from livingworld.application.llm_registry import ModelRegistry, RegisteredModel, RegisteredProvider
 from livingworld.application.llm_routing import (
     ConfiguredGateways,
+    FallbackReason,
+    ProfileSelection,
+    PurposePolicy,
     RoutedModelGateway,
+    RoutePolicy,
+    RoutePolicyId,
     RoutingConfiguration,
+    RoutingProfile,
 )
 from livingworld.application.player_event_feed import PlayerEventFeedService
 from livingworld.application.player_onboarding import LocalPlayerOnboardingService
@@ -144,12 +152,13 @@ class _Gateway:
     def plan(self, request, *, selection=None):
         self.calls.append("plan")
         assert request.purpose.value == "character_dialogue"
-        assert request.max_output_tokens == self.expected_output
         if self.fail_plan:
             raise ValueError("route_unavailable")
+        return SimpleNamespace(candidates=(request.model,))
 
     async def generate(self, request, *, selection=None, turn_budget):
         self.calls.append("generate")
+        assert request.max_output_tokens == self.expected_output
         assert turn_budget.remaining == self.expected_ceiling
         if self.bound_violation:
             attempt_id = uuid4()
@@ -244,7 +253,7 @@ def test_unaffordable_turn_rejects_before_claim_or_provider():
         calls = []
         with pytest.raises(ChatReplyBudgetError, match="turn_token_limit_exceeded"):
             await _service(sent, character, _Gateway(calls), calls).reply(sent)
-        assert calls == []
+        assert calls == ["plan"]
 
     asyncio.run(run())
 
@@ -264,7 +273,7 @@ def test_missing_trusted_input_bound_rejects_before_claim_or_provider():
         )
         with pytest.raises(ChatReplyBudgetError, match="turn_input_bound_unavailable"):
             await service.reply(sent)
-        assert calls == []
+        assert calls == ["plan"]
 
     asyncio.run(run())
 
@@ -334,6 +343,116 @@ def test_direct_reply_runs_through_real_routing_and_physical_token_guard():
         reply = await _service(sent, character, gateway, calls).reply(sent)
         assert reply.text == "经模型网关的角色回复"
         assert calls == ["claim", "provider", "complete"]
+
+    asyncio.run(run())
+
+
+def test_configured_chat_route_falls_back_with_one_shared_turn_budget():
+    async def run():
+        sent, character = _sent()
+        calls = []
+        primary = ModelRef(ProviderId("primary"), "model-a")
+        backup = ModelRef(ProviderId("backup"), "model-b")
+
+        class CountingFake(FakeModelGateway):
+            async def generate(self, request):
+                calls.append("provider")
+                return await super().generate(request)
+
+        registry = ModelRegistry(
+            (
+                RegisteredProvider(primary.provider_id, AdapterKind.OPENAI_COMPATIBLE),
+                RegisteredProvider(backup.provider_id, AdapterKind.OPENAI_COMPATIBLE),
+            ),
+            tuple(
+                RegisteredModel(
+                    model=model,
+                    enabled=True,
+                    capabilities=ModelCapabilities(text_generation=True),
+                    limits=ModelUsageLimits(input_bound, 1024),
+                )
+                for model, input_bound in ((primary, 100), (backup, 200))
+            ),
+        )
+        policy = RoutePolicy(
+            RoutePolicyId("chat-balanced"),
+            (primary, backup),
+            frozenset({FallbackReason.CANDIDATE_UNAVAILABLE}),
+        )
+        gateway = RoutedModelGateway(
+            registry,
+            RoutingConfiguration(
+                (PurposePolicy(RoutingProfile.BALANCED, policy, LLMPurpose("character_dialogue")),)
+            ),
+            ConfiguredGateways(
+                {backup: CountingFake(chunks=("备用角色回复",), usage=LLMUsage(10, 10, 20))},
+                credential_available=lambda model: model == backup,
+            ),
+        )
+        service = DirectChatReplyService(
+            _Messages(sent, character, calls),
+            _Context(),
+            gateway,
+            registry.usage_bounder(),
+            primary,
+            1024,
+            selection=ProfileSelection(RoutingProfile.BALANCED),
+        )
+        assert (await service.reply(sent)).text == "备用角色回复"
+        assert calls == ["claim", "provider", "complete"]
+
+    asyncio.run(run())
+
+
+def test_route_with_unbounded_fallback_cannot_claim_a_chat_turn():
+    async def run():
+        sent, character = _sent()
+        calls = []
+        primary = ModelRef(ProviderId("primary"), "bounded")
+        backup = ModelRef(ProviderId("backup"), "unbounded")
+        registry = ModelRegistry(
+            (
+                RegisteredProvider(primary.provider_id, AdapterKind.OPENAI_COMPATIBLE),
+                RegisteredProvider(backup.provider_id, AdapterKind.OPENAI_COMPATIBLE),
+            ),
+            tuple(
+                RegisteredModel(
+                    model=model,
+                    enabled=True,
+                    capabilities=ModelCapabilities(text_generation=True),
+                    limits=limits,
+                )
+                for model, limits in (
+                    (primary, ModelUsageLimits(100, 1024)),
+                    (backup, None),
+                )
+            ),
+        )
+        policy = RoutePolicy(RoutePolicyId("chat"), (primary, backup))
+        gateway = RoutedModelGateway(
+            registry,
+            RoutingConfiguration(
+                (PurposePolicy(RoutingProfile.BALANCED, policy, LLMPurpose("character_dialogue")),)
+            ),
+            ConfiguredGateways(
+                {
+                    primary: FakeModelGateway(chunks=("a",)),
+                    backup: FakeModelGateway(chunks=("b",)),
+                }
+            ),
+        )
+        service = DirectChatReplyService(
+            _Messages(sent, character, calls),
+            _Context(),
+            gateway,
+            registry.usage_bounder(),
+            primary,
+            1024,
+            selection=ProfileSelection(RoutingProfile.BALANCED),
+        )
+        with pytest.raises(ChatReplyBudgetError, match="turn_input_bound_unavailable"):
+            await service.reply(sent)
+        assert calls == []
 
     asyncio.run(run())
 

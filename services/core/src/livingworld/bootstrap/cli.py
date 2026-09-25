@@ -15,7 +15,6 @@ from livingworld.adapters.http.app import create_app
 from livingworld.application.chat_context import DirectChatContextBuilder
 from livingworld.application.chat_conversations import ChatConversationService
 from livingworld.application.chat_messages import ChatMessageService
-from livingworld.application.chat_reply import DirectChatReplyService
 from livingworld.application.command_handler import CommandHandler
 from livingworld.application.developer_inspector import (
     INSPECTOR_TRIGGER_KIND,
@@ -42,7 +41,10 @@ from livingworld.application.simulation_runtime import (
 )
 from livingworld.application.world_settings import WorldSettingsService
 from livingworld.bootstrap.llm_control import HostControlListener
-from livingworld.bootstrap.llm_runtime import start_production_llm_session
+from livingworld.bootstrap.llm_runtime import (
+    configure_direct_chat_reply,
+    start_production_llm_session,
+)
 from livingworld.bootstrap.reader import derive_session, read_bootstrap
 from livingworld.domain.contracts import API_PROTOCOL, LOOPBACK_HOST
 from livingworld.infrastructure.clock import SystemWallClock
@@ -174,30 +176,13 @@ async def run(
                 database.unit_of_work,
             )
         llm_session = await start_production_llm_session(config.llm_config_path, database, logger)
-        chat_reply = None
-        if llm_session.runtime is not None:
-            eligible = tuple(
-                entry
-                for entry in llm_session.runtime.registry.models
-                if entry.enabled and entry.capabilities.text_generation and entry.limits is not None
-            )
-            # No implicit provider preference when several models are configured.
-            if len(eligible) == 1:
-                entry = eligible[0]
-                secret_ref = llm_session.runtime.configuration.providers[
-                    entry.model.provider_id
-                ].config.secret_ref
-                chat_reply = DirectChatReplyService(
-                    chat_messages,
-                    DirectChatContextBuilder(
-                        chat_conversations, chat_messages, database.local_profile_store()
-                    ),
-                    llm_session.runtime.gateway,
-                    llm_session.runtime.registry.usage_bounder(),
-                    entry.model,
-                    entry.limits.max_output_tokens,
-                    available=lambda: llm_session.credentials.contains(secret_ref),
-                )
+        chat_reply = configure_direct_chat_reply(
+            llm_session,
+            chat_messages,
+            DirectChatContextBuilder(
+                chat_conversations, chat_messages, database.local_profile_store()
+            ),
+        )
         status = RuntimeStatus(
             version("livingworld-core"), generation, llm_health=llm_session.health
         )

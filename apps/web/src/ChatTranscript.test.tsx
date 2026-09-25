@@ -23,7 +23,7 @@ it("shows committed messages in transcript order without turning them into world
   const list = screen.getByRole("list");
   expect(list.querySelectorAll("li")[0]?.textContent).toContain("你好");
   expect(list.querySelectorAll("li")[1]?.textContent).toContain("欢迎回来");
-  expect(screen.getByText(/尚未配置可用的单一聊天模型/)).toBeTruthy();
+  expect(screen.getByText(/尚未配置可用的聊天模型或路由/)).toBeTruthy();
 });
 
 it("does not reveal a late transcript from the previous world", async () => {

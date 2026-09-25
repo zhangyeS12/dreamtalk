@@ -7,10 +7,18 @@ from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
-from livingworld.application.llm import InvocationId
+from livingworld.application.chat_context import DirectChatContextBuilder
+from livingworld.application.chat_messages import ChatMessageService
+from livingworld.application.chat_reply import DirectChatReplyService
+from livingworld.application.llm import InvocationId, LLMPurpose
 from livingworld.application.llm_config import LLMRuntimeHealth, SecretRef
 from livingworld.application.llm_registry import ModelRegistry
-from livingworld.application.llm_routing import ConfiguredGateways, RoutedModelGateway
+from livingworld.application.llm_routing import (
+    ConfiguredGateways,
+    ProfileSelection,
+    RoutedModelGateway,
+    RoutingProfile,
+)
 from livingworld.infrastructure.llm.anthropic_messages import AnthropicMessagesGateway
 from livingworld.infrastructure.llm.credentials import SessionCredentialProvider
 from livingworld.infrastructure.llm.gemini_interactions import GeminiInteractionsGateway
@@ -72,6 +80,58 @@ class ProductionLLMSession:
     async def aclose(self) -> None:
         if self.runtime is not None:
             await self.runtime.aclose()
+
+
+def configure_direct_chat_reply(
+    session: ProductionLLMSession,
+    messages: ChatMessageService,
+    context: DirectChatContextBuilder,
+) -> DirectChatReplyService | None:
+    """Use the explicit BALANCED route, or the sole eligible configured model."""
+
+    runtime = session.runtime
+    if runtime is None:
+        return None
+    policy = runtime.configuration.routing.policy(
+        LLMPurpose("character_dialogue"), RoutingProfile.BALANCED
+    )
+    selection = ProfileSelection(RoutingProfile.BALANCED) if policy else None
+    # Multiple enabled models need an explicit route; config order is not policy.
+    candidates = (
+        policy.candidates
+        if policy is not None
+        else tuple(
+            entry.model
+            for entry in runtime.registry.models
+            if entry.enabled and entry.capabilities.text_generation
+        )
+    )
+    entries = tuple(runtime.registry.lookup(model) for model in candidates)
+    if (
+        not entries
+        or policy is None
+        and len(entries) != 1
+        or any(
+            entry is None
+            or not entry.enabled
+            or not entry.capabilities.text_generation
+            or entry.limits is None
+            for entry in entries
+        )
+    ):
+        return None
+    primary = entries[0]
+    secret_ref = runtime.configuration.providers[primary.model.provider_id].config.secret_ref
+    return DirectChatReplyService(
+        messages,
+        context,
+        runtime.gateway,
+        runtime.registry.usage_bounder(),
+        primary.model,
+        min(entry.limits.max_output_tokens for entry in entries),
+        available=lambda: session.credentials.contains(secret_ref),
+        selection=selection,
+    )
 
 
 def _factory(model, configured, provider, credentials, logger):

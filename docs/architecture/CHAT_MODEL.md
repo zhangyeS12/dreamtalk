@@ -53,9 +53,11 @@ not create a Message, Observation, KnowledgeAssertion, or WorldEvent. The Chat t
 this endpoint when a Conversation is opened and renders the durable ordered
 transcript. Switching worlds or Conversations discards a late response from the
 previous selection. The Chat tab sends through the authenticated player-send
-endpoint and asks for a direct reply only when a single text-capable production
-model has a trusted billable-token bound and a session credential. No model is
-chosen implicitly when several are configured. The per-turn token ceiling is
+endpoint and asks for a direct reply only when one text-capable production model
+or an explicit `character_dialogue` BALANCED route has trusted billable-token
+bounds and a session credential. No model is chosen implicitly when several are
+configured. Every candidate in that route must have a trusted bound; preflight
+uses the largest candidate input bound before claiming the turn. The per-turn token ceiling is
 saved locally in the UI and persisted with each player send; later setting changes
 cannot alter an existing turn. An unavailable model disables sending.
 
@@ -122,7 +124,9 @@ routed gateway. It checks the trusted input bound, reduces the requested output
 cap to fit the turn, and checks route availability before claiming. It accepts only
 a nonblank bounded reply with a complete stop or explicit refusal. Truncated,
 wrong-invocation and over-bound responses cannot enter the transcript. This
-service is not yet composed into the production HTTP/UI send flow.
+service is composed into the production direct-chat HTTP/UI flow when one suitable
+model or an explicit suitable BALANCED chat route is configured. Group scheduling
+remains separate work.
 
 ## Information and content boundaries
 
