@@ -66,6 +66,12 @@ export interface ChatConversation {
   character_name: string;
   kind: "direct";
 }
+export interface GroupChatConversation {
+  conversation_id: string;
+  player_id: string;
+  kind: "group";
+  participants: Array<{ character_id: string; root_import_id: string; character_name: string }>;
+}
 export interface ChatMessage {
   message_id: string;
   turn_id: string;
@@ -154,6 +160,15 @@ export class CoreClient {
   }
   conversations(worldId: string): Promise<ChatConversation[]> {
     return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations`);
+  }
+  groupConversations(worldId: string): Promise<GroupChatConversation[]> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/groups`);
+  }
+  createGroupConversation(worldId: string, importIds: string[], requestId: string): Promise<GroupChatConversation> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/groups`, {
+      method: "POST", headers: { "Content-Type": "application/json", "X-Request-Id": requestId },
+      body: JSON.stringify({ import_ids: importIds }),
+    });
   }
   conversationMessages(worldId: string, conversationId: string): Promise<ChatMessage[]> {
     return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/${encodeURIComponent(conversationId)}/messages`);

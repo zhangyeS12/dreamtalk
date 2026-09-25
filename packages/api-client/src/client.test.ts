@@ -56,6 +56,19 @@ describe("CoreClient", () => {
     expect(fetcher.mock.calls[0][0].toString()).toBe(`${connection.endpoint}/api/v${API_PROTOCOL}/worlds/world/conversations/conversation/messages`);
     expect(fetcher.mock.calls[0][1].headers.Authorization).toBe("Bearer memory-session");
   });
+  it("creates and lists group membership without using the direct-chat route", async () => {
+    const group = { conversation_id: "group", player_id: "player", kind: "group", participants: [] };
+    const fetcher = vi.fn().mockImplementation(async () => new Response(JSON.stringify(group)));
+    const client = new CoreClient(connection, fetcher);
+    const id = "0f6d14aa-1363-4451-a1bf-9ed40a9cbb95";
+    expect(await client.createGroupConversation("world", ["card-a", "card-b"], id)).toEqual(group);
+    expect(fetcher.mock.calls[0][0].toString()).toBe(`${connection.endpoint}/api/v${API_PROTOCOL}/worlds/world/conversations/groups`);
+    expect(fetcher.mock.calls[0][1].headers["X-Request-Id"]).toBe(id);
+    expect(JSON.parse(fetcher.mock.calls[0][1].body)).toEqual({ import_ids: ["card-a", "card-b"] });
+    await client.groupConversations("world");
+    expect(fetcher.mock.calls[1][0].toString()).toBe(`${connection.endpoint}/api/v${API_PROTOCOL}/worlds/world/conversations/groups`);
+    expect(fetcher.mock.calls[1][1].headers.Authorization).toBe("Bearer memory-session");
+  });
   it("sends a player message with a stable request identity and resolved token ceiling", async () => {
     const pending = { status: "pending", turn_id: "turn", token_ceiling: 50_000, message: {} };
     const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify(pending), { status: 202 }));
