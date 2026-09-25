@@ -1093,6 +1093,7 @@ class ChatTurnDispatchRecord(Base):
     world_id: Mapped[UUID] = mapped_column(UUIDStorage(), primary_key=True)
     turn_id: Mapped[UUID] = mapped_column(UUIDStorage(), primary_key=True)
     claimed_at_utc: Mapped[datetime] = mapped_column(UTCTimestampStorage(), nullable=False)
+    completed_at_utc: Mapped[datetime | None] = mapped_column(UTCTimestampStorage(), nullable=True)
     __table_args__ = (
         ForeignKeyConstraint(
             ["world_id", "turn_id"], ["chat_turns.world_id", "chat_turns.turn_id"]

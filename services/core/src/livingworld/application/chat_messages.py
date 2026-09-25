@@ -49,6 +49,13 @@ class DirectTurnView:
 
 
 @dataclass(frozen=True, slots=True)
+class GroupTurnView:
+    sent: PlayerSend
+    state: str
+    replies: tuple[ChatMessage, ...] = field(repr=False)
+
+
+@dataclass(frozen=True, slots=True)
 class ClaimedDirectTurn:
     """A durable, one-time claim; an interrupted claim is never auto-replayed."""
 
@@ -101,6 +108,10 @@ class ChatMessageStore(Protocol):
         self, conversation_id: ConversationId, turn_id: ChatTurnId, player_id: PlayerId
     ) -> DirectTurnView: ...
 
+    async def group_turn(
+        self, conversation_id: ConversationId, turn_id: ChatTurnId, player_id: PlayerId
+    ) -> GroupTurnView: ...
+
     async def claim_direct(
         self, conversation_id: ConversationId, turn_id: ChatTurnId, player_id: PlayerId
     ) -> ClaimedDirectTurn: ...
@@ -114,6 +125,8 @@ class ChatMessageStore(Protocol):
     async def complete_group_reply(
         self, claim: ClaimedGroupTurn, character_id: CharacterId, ordinal: int, text: str
     ) -> ChatMessage: ...
+
+    async def finish_group(self, claim: ClaimedGroupTurn) -> GroupTurnView: ...
 
 
 class ChatMessageService:
@@ -193,6 +206,13 @@ class ChatMessageService:
             conversation_id, turn_id, await self._player(conversation_id)
         )
 
+    async def group_turn(
+        self, conversation_id: ConversationId, turn_id: ChatTurnId
+    ) -> GroupTurnView:
+        return await self._store.group_turn(
+            conversation_id, turn_id, await self._player(conversation_id)
+        )
+
     async def claim_direct(
         self, conversation_id: ConversationId, turn_id: ChatTurnId
     ) -> ClaimedDirectTurn:
@@ -218,6 +238,9 @@ class ChatMessageService:
         if type(ordinal) is not int or ordinal < 0:
             raise ValueError("chat_reply_ordinal_invalid")
         return await self._store.complete_group_reply(claim, character_id, ordinal, text)
+
+    async def finish_group(self, claim: ClaimedGroupTurn) -> GroupTurnView:
+        return await self._store.finish_group(claim)
 
     @staticmethod
     def _validate_reply(text: str) -> None:

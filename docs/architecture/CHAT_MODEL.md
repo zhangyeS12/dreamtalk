@@ -60,7 +60,12 @@ allows one durable dispatch claim. Under that claim, Character replies are
 appended in zero-based reply order. A repeated append at the same ordinal must
 match the committed Character and text; gaps and conflicting retries fail. The
 claim fixes the eligible participant set, and a restart cannot acquire it
-again. These records are Conversation messages, not WorldEvents or Observations.
+again. A terminal completion timestamp on the dispatch distinguishes a
+finished group turn from a claimed but uncertain one; it can be set only after
+at least one durable reply, and no new reply can follow completion. The 0021
+additive migration preserves existing 0020 dispatch rows with an unset
+completion timestamp. These records are Conversation messages, not WorldEvents
+or Observations.
 This is an internal persistence boundary only: the public send endpoint still
 rejects group turns, since speaker selection, governed generation and the
 shared Token ceiling are not yet composed. An interrupted claimed group turn

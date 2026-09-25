@@ -280,6 +280,9 @@ def test_internal_group_turn_claim_and_multi_reply_are_durable_and_idempotent(tm
             request = RequestId(uuid4())
             sent = await messages.send_group_player(request, group.conversation_id, "大家好", 5000)
             assert (
+                await messages.group_turn(group.conversation_id, sent.turn_id)
+            ).state == "pending"
+            assert (
                 await messages.send_group_player(request, group.conversation_id, "大家好", 5000)
                 == sent
             )
@@ -308,6 +311,9 @@ def test_internal_group_turn_claim_and_multi_reply_are_durable_and_idempotent(tm
                 .text
             )["character"]["name"] in {"角色甲新版", "角色乙"}
             claim = await messages.claim_group(group.conversation_id, sent.turn_id)
+            assert (
+                await messages.group_turn(group.conversation_id, sent.turn_id)
+            ).state == "claimed"
             assert set(claim.character_ids) == {
                 participant.character_id for participant in group.participants
             }
@@ -416,6 +422,12 @@ def test_internal_group_turn_claim_and_multi_reply_are_durable_and_idempotent(tm
                     claim, CharacterId(world, uuid4()), 1, "不在群里的角色"
                 )
             second = await messages.complete_group_reply(claim, second_character, 1, "收到")
+            finished = await messages.finish_group(claim)
+            assert finished.state == "completed"
+            assert finished.replies == (first, second)
+            assert await messages.finish_group(claim) == finished
+            with pytest.raises(ChatTurnUnavailableError, match="group_turn_completed"):
+                await messages.complete_group_reply(claim, first_character, 2, "多余回复")
             assert [
                 item.message_id for item in await messages.list_messages(group.conversation_id)
             ] == [
@@ -451,6 +463,7 @@ def test_internal_group_turn_claim_and_multi_reply_are_durable_and_idempotent(tm
             with pytest.raises(ChatTurnUnavailableError, match="chat_turn_already_claimed"):
                 await restored.claim_group(group.conversation_id, sent.turn_id)
             assert await restored.complete_group_reply(claim, second_character, 1, "收到") == second
+            assert (await restored.group_turn(group.conversation_id, sent.turn_id)) == finished
         finally:
             await reopened.close()
 

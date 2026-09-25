@@ -34,7 +34,8 @@ PROFILE_REVISION = "0016_local_profiles"
 WORLD_CONTENT_REVISION = "0017_world_content_imports"
 CHAT_CONVERSATION_REVISION = "0018_chat_conversations"
 CHAT_MESSAGE_REVISION = "0019_chat_messages"
-HEAD_REVISION = "0020_chat_turn_dispatch"
+CHAT_DISPATCH_REVISION = "0020_chat_turn_dispatch"
+HEAD_REVISION = "0021_group_turn_completion"
 CHAT_IDENTITY_TABLES = {"chat_conversations", "chat_participants"}
 CHAT_MESSAGE_TABLES = {"chat_turns", "chat_messages"}
 CHAT_DISPATCH_TABLES = {"chat_turn_dispatches"}
@@ -191,6 +192,11 @@ def _current_revision(connection: Connection) -> str:
 
 
 def _validate_managed_state(connection: Connection, revision: str) -> None:
+    # 0021 is an additive nullable column on the reviewed 0020 table shape.
+    # Keep the 0020 table-presence rules, but validate its extra column only at 0021.
+    pre_completion_revision = revision != HEAD_REVISION
+    if revision == HEAD_REVISION:
+        revision = CHAT_DISPATCH_REVISION
     if revision not in {
         LEGACY_REVISION,
         DOMAIN_BASELINE_REVISION,
@@ -211,20 +217,21 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         WORLD_CONTENT_REVISION,
         CHAT_CONVERSATION_REVISION,
         CHAT_MESSAGE_REVISION,
-        HEAD_REVISION,
+        CHAT_DISPATCH_REVISION,
     }:
         _fail("alembic_revision_unsupported")
-    # Chat revisions only add tables. Validate each historical cursor
-    # against the reviewed head shape minus its later tables.
+    # Through 0020, chat revisions only add tables. Validate each historical
+    # cursor against that reviewed shape minus its later tables; 0021 is the
+    # separately checked nullable completion column.
     pre_chat_revision = revision not in {
         CHAT_CONVERSATION_REVISION,
         CHAT_MESSAGE_REVISION,
-        HEAD_REVISION,
+        CHAT_DISPATCH_REVISION,
     }
-    pre_message_revision = revision not in {CHAT_MESSAGE_REVISION, HEAD_REVISION}
-    pre_dispatch_revision = revision != HEAD_REVISION
+    pre_message_revision = revision not in {CHAT_MESSAGE_REVISION, CHAT_DISPATCH_REVISION}
+    pre_dispatch_revision = revision != CHAT_DISPATCH_REVISION
     if revision in {WORLD_CONTENT_REVISION, CHAT_CONVERSATION_REVISION, CHAT_MESSAGE_REVISION}:
-        revision = HEAD_REVISION
+        revision = CHAT_DISPATCH_REVISION
     _validate_legacy_metadata(connection)
     tables = _table_names(connection)
     expected = LEGACY_TABLES | {"alembic_version"}
@@ -250,7 +257,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
             MEMORY_REVISION,
             BINDING_REVISION,
             PROFILE_REVISION,
-            HEAD_REVISION,
+            CHAT_DISPATCH_REVISION,
         }:
             expected -= {"world_ledger_cursors"}
     if revision in {
@@ -265,7 +272,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         MEMORY_REVISION,
         BINDING_REVISION,
         PROFILE_REVISION,
-        HEAD_REVISION,
+        CHAT_DISPATCH_REVISION,
     }:
         expected |= CONTENT_TABLES
         if revision not in {
@@ -278,7 +285,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
             MEMORY_REVISION,
             BINDING_REVISION,
             PROFILE_REVISION,
-            HEAD_REVISION,
+            CHAT_DISPATCH_REVISION,
         }:
             expected -= PACKAGE_TABLES
         if revision == CONTENT_REVISION:
@@ -292,7 +299,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         MEMORY_REVISION,
         BINDING_REVISION,
         PROFILE_REVISION,
-        HEAD_REVISION,
+        CHAT_DISPATCH_REVISION,
     }:
         expected |= set(AccountingBase.metadata.tables)
         if revision == ACCOUNTING_REVISION:
@@ -304,7 +311,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         MEMORY_REVISION,
         BINDING_REVISION,
         PROFILE_REVISION,
-        HEAD_REVISION,
+        CHAT_DISPATCH_REVISION,
     }:
         expected -= SIMULATION_TABLES
     elif revision not in {
@@ -312,7 +319,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         MEMORY_REVISION,
         BINDING_REVISION,
         PROFILE_REVISION,
-        HEAD_REVISION,
+        CHAT_DISPATCH_REVISION,
     }:
         expected -= SPARSE_TABLES
     if revision not in {
@@ -321,16 +328,21 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         MEMORY_REVISION,
         BINDING_REVISION,
         PROFILE_REVISION,
-        HEAD_REVISION,
+        CHAT_DISPATCH_REVISION,
     }:
         expected -= ACTION_TABLES
-    if revision not in {MEMORY_REVISION, BINDING_REVISION, PROFILE_REVISION, HEAD_REVISION}:
+    if revision not in {
+        MEMORY_REVISION,
+        BINDING_REVISION,
+        PROFILE_REVISION,
+        CHAT_DISPATCH_REVISION,
+    }:
         expected -= MEMORY_TABLES
-    if revision not in {BINDING_REVISION, PROFILE_REVISION, HEAD_REVISION}:
+    if revision not in {BINDING_REVISION, PROFILE_REVISION, CHAT_DISPATCH_REVISION}:
         expected -= {"local_player_bindings"}
-    if revision not in {PROFILE_REVISION, HEAD_REVISION}:
+    if revision not in {PROFILE_REVISION, CHAT_DISPATCH_REVISION}:
         expected -= LOCAL_PROFILE_TABLES
-    if revision != HEAD_REVISION:
+    if revision != CHAT_DISPATCH_REVISION:
         expected -= {"world_content_imports"}
     if tables != expected:
         _fail("alembic_schema_state_mismatch")
@@ -342,6 +354,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
             pre_chat_revision=pre_chat_revision,
             pre_message_revision=pre_message_revision,
             pre_dispatch_revision=pre_dispatch_revision,
+            pre_completion_revision=pre_completion_revision,
         )
     if revision in {
         CONTENT_REVISION,
@@ -355,7 +368,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         MEMORY_REVISION,
         BINDING_REVISION,
         PROFILE_REVISION,
-        HEAD_REVISION,
+        CHAT_DISPATCH_REVISION,
     }:
         _validate_domain_shape(connection, revision, ContentBase.metadata)
 
@@ -368,7 +381,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         MEMORY_REVISION,
         BINDING_REVISION,
         PROFILE_REVISION,
-        HEAD_REVISION,
+        CHAT_DISPATCH_REVISION,
     }:
         _validate_domain_shape(connection, revision, AccountingBase.metadata)
 
@@ -393,16 +406,17 @@ def _validate_domain_shape(
     pre_chat_revision: bool | None = None,
     pre_message_revision: bool | None = None,
     pre_dispatch_revision: bool | None = None,
+    pre_completion_revision: bool = True,
 ) -> None:
     """Detect partial/mismatched schemas; never infer a revision from them."""
 
     inspector = inspect(connection)
     if pre_chat_revision is None:
-        pre_chat_revision = revision != HEAD_REVISION
+        pre_chat_revision = revision != CHAT_DISPATCH_REVISION
     if pre_message_revision is None:
-        pre_message_revision = revision != HEAD_REVISION
+        pre_message_revision = revision != CHAT_DISPATCH_REVISION
     if pre_dispatch_revision is None:
-        pre_dispatch_revision = revision != HEAD_REVISION
+        pre_dispatch_revision = revision != CHAT_DISPATCH_REVISION
     # Explicit reviewed deltas describe historical shapes for each Alembic cursor.
     # The Alembic cursor selects the expected shape; shape never selects migrations.
     baseline = revision == DOMAIN_BASELINE_REVISION
@@ -433,7 +447,7 @@ def _validate_domain_shape(
                 MEMORY_REVISION,
                 BINDING_REVISION,
                 PROFILE_REVISION,
-                HEAD_REVISION,
+                CHAT_DISPATCH_REVISION,
             }
             and table.name in SIMULATION_TABLES
         ):
@@ -445,7 +459,7 @@ def _validate_domain_shape(
                 MEMORY_REVISION,
                 BINDING_REVISION,
                 PROFILE_REVISION,
-                HEAD_REVISION,
+                CHAT_DISPATCH_REVISION,
             }
             and table.name in SPARSE_TABLES
         ):
@@ -458,22 +472,26 @@ def _validate_domain_shape(
                 MEMORY_REVISION,
                 BINDING_REVISION,
                 PROFILE_REVISION,
-                HEAD_REVISION,
+                CHAT_DISPATCH_REVISION,
             }
             and table.name in ACTION_TABLES
         ):
             continue
         if (
-            revision not in {MEMORY_REVISION, BINDING_REVISION, PROFILE_REVISION, HEAD_REVISION}
+            revision
+            not in {MEMORY_REVISION, BINDING_REVISION, PROFILE_REVISION, CHAT_DISPATCH_REVISION}
             and table.name in MEMORY_TABLES
         ):
             continue
-        if revision != HEAD_REVISION and table.name == "world_content_imports":
-            continue
-        if revision not in {PROFILE_REVISION, HEAD_REVISION} and table.name in LOCAL_PROFILE_TABLES:
+        if revision != CHAT_DISPATCH_REVISION and table.name == "world_content_imports":
             continue
         if (
-            revision not in {BINDING_REVISION, PROFILE_REVISION, HEAD_REVISION}
+            revision not in {PROFILE_REVISION, CHAT_DISPATCH_REVISION}
+            and table.name in LOCAL_PROFILE_TABLES
+        ):
+            continue
+        if (
+            revision not in {BINDING_REVISION, PROFILE_REVISION, CHAT_DISPATCH_REVISION}
             and table.name == "local_player_bindings"
         ):
             continue
@@ -491,7 +509,7 @@ def _validate_domain_shape(
                 MEMORY_REVISION,
                 BINDING_REVISION,
                 PROFILE_REVISION,
-                HEAD_REVISION,
+                CHAT_DISPATCH_REVISION,
             }
             and table.name in PACKAGE_TABLES
         ):
@@ -513,7 +531,7 @@ def _validate_domain_shape(
                 MEMORY_REVISION,
                 BINDING_REVISION,
                 PROFILE_REVISION,
-                HEAD_REVISION,
+                CHAT_DISPATCH_REVISION,
             }
             and table.name == "world_ledger_cursors"
         ):
@@ -534,7 +552,7 @@ def _validate_domain_shape(
                         MEMORY_REVISION,
                         BINDING_REVISION,
                         PROFILE_REVISION,
-                        HEAD_REVISION,
+                        CHAT_DISPATCH_REVISION,
                     }
                     and table.name == "simulation_activations"
                     and column.name == "source_trigger_id"
@@ -542,6 +560,11 @@ def _validate_domain_shape(
                 else column.nullable,
             )
             for column in table.columns
+            if not (
+                pre_completion_revision
+                and table.name == "chat_turn_dispatches"
+                and column.name == "completed_at_utc"
+            )
             if not (baseline and column.name in added_columns.get(table.name, set()))
             and not (
                 legacy_observations
@@ -556,7 +579,7 @@ def _validate_domain_shape(
                     MEMORY_REVISION,
                     BINDING_REVISION,
                     PROFILE_REVISION,
-                    HEAD_REVISION,
+                    CHAT_DISPATCH_REVISION,
                 }
                 and table.name == "observations"
                 and column.name == "basis"
@@ -568,7 +591,7 @@ def _validate_domain_shape(
                     MEMORY_REVISION,
                     BINDING_REVISION,
                     PROFILE_REVISION,
-                    HEAD_REVISION,
+                    CHAT_DISPATCH_REVISION,
                 }
                 and table.name == "simulation_scheduled_triggers"
                 and column.name
@@ -589,7 +612,7 @@ def _validate_domain_shape(
                     MEMORY_REVISION,
                     BINDING_REVISION,
                     PROFILE_REVISION,
-                    HEAD_REVISION,
+                    CHAT_DISPATCH_REVISION,
                 }
                 and table.name == "simulation_activations"
                 and column.name
@@ -620,7 +643,7 @@ def _validate_domain_shape(
                     MEMORY_REVISION,
                     BINDING_REVISION,
                     PROFILE_REVISION,
-                    HEAD_REVISION,
+                    CHAT_DISPATCH_REVISION,
                 }
                 and table.name == "world_events"
                 and column.name == "ledger_position"
@@ -660,7 +683,7 @@ def _validate_domain_shape(
                     MEMORY_REVISION,
                     BINDING_REVISION,
                     PROFILE_REVISION,
-                    HEAD_REVISION,
+                    CHAT_DISPATCH_REVISION,
                 }
                 and table.name in {"simulation_scheduled_triggers", "simulation_activations"}
                 and foreign_key.referred_table.name == "characters"
@@ -689,7 +712,7 @@ def _validate_domain_shape(
                     MEMORY_REVISION,
                     BINDING_REVISION,
                     PROFILE_REVISION,
-                    HEAD_REVISION,
+                    CHAT_DISPATCH_REVISION,
                 }
                 and constraint.name
                 in {
@@ -718,7 +741,7 @@ def _validate_domain_shape(
                     MEMORY_REVISION,
                     BINDING_REVISION,
                     PROFILE_REVISION,
-                    HEAD_REVISION,
+                    CHAT_DISPATCH_REVISION,
                 }
                 and constraint.name == "ck_world_event_ledger_position"
             )
@@ -732,7 +755,7 @@ def _validate_domain_shape(
                 MEMORY_REVISION,
                 BINDING_REVISION,
                 PROFILE_REVISION,
-                HEAD_REVISION,
+                CHAT_DISPATCH_REVISION,
             }
             and not baseline
         ):
@@ -775,7 +798,7 @@ def _validate_domain_shape(
                     MEMORY_REVISION,
                     BINDING_REVISION,
                     PROFILE_REVISION,
-                    HEAD_REVISION,
+                    CHAT_DISPATCH_REVISION,
                 }
                 and constraint.name == "uq_simulation_activation_enqueue_position"
             )
@@ -810,7 +833,7 @@ def _validate_domain_shape(
                     MEMORY_REVISION,
                     BINDING_REVISION,
                     PROFILE_REVISION,
-                    HEAD_REVISION,
+                    CHAT_DISPATCH_REVISION,
                 }
                 and index.name == "uq_world_event_ledger_position"
             )
@@ -822,7 +845,7 @@ def _validate_domain_shape(
                     MEMORY_REVISION,
                     BINDING_REVISION,
                     PROFILE_REVISION,
-                    HEAD_REVISION,
+                    CHAT_DISPATCH_REVISION,
                 }
                 and index.name
                 in {
@@ -839,7 +862,7 @@ def _validate_domain_shape(
                     MEMORY_REVISION,
                     BINDING_REVISION,
                     PROFILE_REVISION,
-                    HEAD_REVISION,
+                    CHAT_DISPATCH_REVISION,
                 }
                 and index.name
                 in {
