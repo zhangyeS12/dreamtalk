@@ -8,3 +8,5 @@ the public V2/V3 specifications. They contain no community card content.
 containers and deliberate malformed/duplicate payloads from these JSON files.
 Tests add unknown fields, extensions, embedded books and asset descriptors
 explicitly; no downloaded images or third-party application code are used.
+`group_second.json` adds a distinct neutral contact for the real browser group
+creation and world-isolation smoke.
