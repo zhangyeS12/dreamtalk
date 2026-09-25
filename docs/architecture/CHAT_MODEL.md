@@ -104,9 +104,13 @@ interrupted/unknown attempt consumes its reservation and closes the turn.
 Reported usage above the trusted bound closes the turn as an integrity failure
 without rewriting the factual provider outcome. This is deliberately
 conservative: a model whose full configured bound exceeds the remaining turn
-budget cannot be called even for a short prompt. Chat generation remains
-unavailable until a Character reply orchestrator actually passes its durable
-turn budget into this gateway; the current pending-message API does not do so.
+budget cannot be called even for a short prompt. An internal direct-reply service
+now creates one turn budget from the persisted ceiling and passes it through the
+routed gateway. It checks the trusted input bound, reduces the requested output
+cap to fit the turn, and checks route availability before claiming. It accepts only
+a nonblank bounded reply with a complete stop or explicit refusal. Truncated,
+wrong-invocation and over-bound responses cannot enter the transcript. This
+service is not yet composed into the production HTTP/UI send flow.
 
 ## Information and content boundaries
 
@@ -158,5 +162,5 @@ are separate transactions. An interrupted claim remains unresolved without a
 fabricated reply or automatic provider replay, because the provider outcome may
 be unknown. The legacy `chat_turns.status = pending` field records the initial
 player-send receipt; the claim and Character message establish later execution
-state. This is an internal boundary, not a reply-write API. No model orchestrator
-or normal UI send flow invokes it yet.
+state. This is an internal boundary, not a reply-write API. The internal
+direct-reply service invokes it, but no normal UI send flow does yet.

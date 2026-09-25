@@ -7,6 +7,10 @@ from pathlib import Path
 def test_llm_contracts_are_provider_neutral_and_existing_world_content_are_independent():
     root = Path(__file__).resolve().parents[2] / "services/core/src/livingworld"
     providers = {"openai", "anthropic", "google", "google_genai", "deepseek", "ollama"}
+    chat_llm_consumers = {
+        root / "application/chat_context.py",
+        root / "application/chat_reply.py",
+    }
     for layer in ("domain", "application"):
         for source in (root / layer).rglob("*.py"):
             for node in ast.walk(ast.parse(source.read_text("utf-8"))):
@@ -38,7 +42,8 @@ def test_llm_contracts_are_provider_neutral_and_existing_world_content_are_indep
         for node in ast.walk(ast.parse(source.read_text("utf-8"))):
             if isinstance(node, ast.ImportFrom):
                 assert not (node.module or "").startswith("livingworld.infrastructure.llm"), source
-                assert not (node.module or "").startswith("livingworld.application.llm"), source
+                if source not in chat_llm_consumers:
+                    assert not (node.module or "").startswith("livingworld.application.llm"), source
 
 
 def test_inner_layers_have_no_outward_dependencies():
