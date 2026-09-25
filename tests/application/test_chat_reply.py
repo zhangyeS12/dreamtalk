@@ -1,12 +1,15 @@
 """One direct reply uses the shared token guard and does not fake world events."""
 
 import asyncio
+import io
 from dataclasses import replace
 from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
 from card_fixtures import card_document, json_bytes
+from fastapi.testclient import TestClient
+from livingworld.adapters.http.app import create_app
 from livingworld.application.chat_context import DirectChatContext, DirectChatContextBuilder
 from livingworld.application.chat_conversations import ChatConversationService
 from livingworld.application.chat_messages import (
@@ -15,7 +18,12 @@ from livingworld.application.chat_messages import (
     ClaimedDirectTurn,
     PlayerSend,
 )
-from livingworld.application.chat_reply import ChatReplyValidationError, DirectChatReplyService
+from livingworld.application.chat_reply import (
+    ChatReplyBudgetError,
+    ChatReplyUnavailableError,
+    ChatReplyValidationError,
+    DirectChatReplyService,
+)
 from livingworld.application.command_handler import CommandHandler
 from livingworld.application.commands import CreateWorld
 from livingworld.application.errors import ChatTurnUnavailableError
@@ -35,7 +43,6 @@ from livingworld.application.llm import (
 from livingworld.application.llm_budget import ModelLimitUsageBounder, ModelUsageLimits
 from livingworld.application.llm_chat_turn_budget import (
     TurnTokenBoundViolation,
-    TurnTokenBudgetError,
 )
 from livingworld.application.llm_registry import ModelRegistry, RegisteredModel, RegisteredProvider
 from livingworld.application.llm_routing import (
@@ -45,6 +52,7 @@ from livingworld.application.llm_routing import (
 )
 from livingworld.application.player_event_feed import PlayerEventFeedService
 from livingworld.application.player_onboarding import LocalPlayerOnboardingService
+from livingworld.application.runtime import RuntimeStatus, ShutdownRequests
 from livingworld.application.simulation_clock import EffectiveWorldTimeSource, SystemMonotonicClock
 from livingworld.domain.contracts import RequestId
 from livingworld.domain.identifiers import (
@@ -57,6 +65,7 @@ from livingworld.domain.identifiers import (
 )
 from livingworld.infrastructure.clock import SystemWallClock
 from livingworld.infrastructure.llm.fake import FakeModelGateway
+from livingworld.infrastructure.logging import StructuredLogger
 from livingworld.infrastructure.persistence import Database
 from livingworld.infrastructure.persistence.models import ObservationRecord, WorldEventRecord
 from sqlalchemy import func, select
@@ -233,7 +242,7 @@ def test_unaffordable_turn_rejects_before_claim_or_provider():
         sent, character = _sent()
         sent = replace(sent, token_ceiling=100)
         calls = []
-        with pytest.raises(TurnTokenBudgetError, match="turn_token_limit_exceeded"):
+        with pytest.raises(ChatReplyBudgetError, match="turn_token_limit_exceeded"):
             await _service(sent, character, _Gateway(calls), calls).reply(sent)
         assert calls == []
 
@@ -253,7 +262,28 @@ def test_missing_trusted_input_bound_rejects_before_claim_or_provider():
             model,
             2048,
         )
-        with pytest.raises(TurnTokenBudgetError, match="turn_input_bound_unavailable"):
+        with pytest.raises(ChatReplyBudgetError, match="turn_input_bound_unavailable"):
+            await service.reply(sent)
+        assert calls == []
+
+    asyncio.run(run())
+
+
+def test_missing_session_credential_rejects_before_claim_or_provider():
+    async def run():
+        sent, character = _sent()
+        calls = []
+        model = ModelRef(ProviderId("configured"), "model")
+        service = DirectChatReplyService(
+            _Messages(sent, character, calls),
+            _Context(),
+            _Gateway(calls),
+            ModelLimitUsageBounder({model: ModelUsageLimits(100, 2048)}),
+            model,
+            2048,
+            available=lambda: False,
+        )
+        with pytest.raises(ChatReplyUnavailableError, match="chat_model_unavailable"):
             await service.reply(sent)
         assert calls == []
 
@@ -377,12 +407,50 @@ def test_direct_reply_persists_once_without_creating_world_facts(tmp_path):
             reply = await service.reply(sent)
             assert reply.sender_id == conversation.character_id
             assert reply.text == "欢迎来到图书馆。"
+            completed = await messages.direct_turn(conversation.conversation_id, sent.turn_id)
+            assert completed.state == "completed"
+            assert completed.reply == reply
+            http_sent = await messages.send_player(
+                RequestId(uuid4()), conversation.conversation_id, "从页面发起", 50000
+            )
+            app = create_app(
+                RuntimeStatus("test", "generation"),
+                ShutdownRequests(),
+                "secret",
+                lambda: None,
+                StructuredLogger(io.StringIO()),
+                chat_messages=messages,
+                chat_reply=service,
+            )
+            path = (
+                f"/api/v1/worlds/{world.value}/conversations/"
+                f"{conversation.conversation_id.value}/turns/{http_sent.turn_id.value}/reply"
+            )
+            with TestClient(app, base_url="http://127.0.0.1") as client:
+                assert client.post(path).status_code == 401
+                headers = {"Authorization": "Bearer secret"}
+                first_http = client.post(path, headers=headers)
+                assert first_http.status_code == 200
+                assert first_http.json()["state"] == "completed"
+                assert first_http.json()["reply"]["text"] == "欢迎来到图书馆。"
+                assert client.post(path, headers=headers).json() == first_http.json()
+            assert calls == ["provider", "provider"]
+            interrupted = await messages.send_player(
+                RequestId(uuid4()), conversation.conversation_id, "下一条", 50000
+            )
+            await messages.claim_direct(conversation.conversation_id, interrupted.turn_id)
+            claimed = await messages.direct_turn(conversation.conversation_id, interrupted.turn_id)
+            assert claimed.state == "claimed"
+            assert claimed.reply is None
             with pytest.raises(ChatTurnUnavailableError, match="chat_turn_already_claimed"):
                 await service.reply(sent)
-            assert calls == ["provider"]
+            assert calls == ["provider", "provider"]
             assert await messages.list_messages(conversation.conversation_id) == (
                 sent.message,
                 reply,
+                http_sent.message,
+                (await messages.direct_turn(conversation.conversation_id, http_sent.turn_id)).reply,
+                interrupted.message,
             )
             async with db._sessions() as session:
                 assert (

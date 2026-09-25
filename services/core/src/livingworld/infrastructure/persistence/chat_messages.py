@@ -7,7 +7,12 @@ from uuid import uuid4
 
 from sqlalchemy import func, select
 
-from livingworld.application.chat_messages import ChatMessage, ClaimedDirectTurn, PlayerSend
+from livingworld.application.chat_messages import (
+    ChatMessage,
+    ClaimedDirectTurn,
+    DirectTurnView,
+    PlayerSend,
+)
 from livingworld.application.errors import (
     ChatTurnUnavailableError,
     EntityNotFoundError,
@@ -165,6 +170,42 @@ class SqlAlchemyChatMessageStore:
                 )
             ).all()
             return tuple(_message(row) for row in rows)
+
+    async def direct_turn(
+        self, conversation_id: ConversationId, turn_id: ChatTurnId, player_id: PlayerId
+    ) -> DirectTurnView:
+        if turn_id.world_id != conversation_id.world_id:
+            raise EntityNotFoundError("chat_world_mismatch")
+        async with self._sessions() as session:
+            conversation = await self._conversation(session, conversation_id, player_id)
+            if conversation.kind != "direct":
+                raise ChatTurnUnavailableError("direct_turn_required")
+            turn = await session.get(
+                ChatTurnRecord, (conversation_id.world_id.value, turn_id.value)
+            )
+            if turn is None or turn.conversation_id != conversation_id.value:
+                raise EntityNotFoundError("chat_turn_not_found")
+            rows = (
+                await session.scalars(
+                    select(ChatMessageRecord).where(
+                        ChatMessageRecord.world_id == conversation_id.world_id.value,
+                        ChatMessageRecord.conversation_id == conversation_id.value,
+                        ChatMessageRecord.turn_id == turn_id.value,
+                    )
+                )
+            ).all()
+            player_rows = [row for row in rows if row.sender_player_id == player_id.value]
+            replies = [row for row in rows if row.sender_character_id is not None]
+            if len(player_rows) != 1 or len(replies) > 1 or len(rows) != 1 + len(replies):
+                raise EntityNotFoundError("chat_state_invalid")
+            sent = PlayerSend(turn_id, _message(player_rows[0]), turn.token_ceiling, turn.status)
+            dispatch = await session.get(
+                ChatTurnDispatchRecord, (conversation_id.world_id.value, turn_id.value)
+            )
+            if replies and dispatch is None:
+                raise EntityNotFoundError("chat_state_invalid")
+            state = "completed" if replies else "claimed" if dispatch else "pending"
+            return DirectTurnView(sent, state, _message(replies[0]) if replies else None)
 
     async def claim_direct(
         self, conversation_id: ConversationId, turn_id: ChatTurnId, player_id: PlayerId

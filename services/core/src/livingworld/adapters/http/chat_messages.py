@@ -7,10 +7,27 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
-from livingworld.application.chat_messages import ChatMessage, ChatMessageService, PlayerSend
-from livingworld.application.errors import EntityNotFoundError, IdempotencyConflictError
+from livingworld.application.chat_messages import (
+    ChatMessage,
+    ChatMessageService,
+    DirectTurnView,
+    PlayerSend,
+)
+from livingworld.application.chat_reply import (
+    ChatReplyBudgetError,
+    ChatReplyGenerationError,
+    ChatReplyIntegrityError,
+    ChatReplyUnavailableError,
+    ChatReplyValidationError,
+    DirectChatReplyService,
+)
+from livingworld.application.errors import (
+    ChatTurnUnavailableError,
+    EntityNotFoundError,
+    IdempotencyConflictError,
+)
 from livingworld.domain.contracts import API_PROTOCOL, RequestId
-from livingworld.domain.identifiers import ConversationId, PlayerId, WorldId
+from livingworld.domain.identifiers import ChatTurnId, ConversationId, PlayerId, WorldId
 
 
 class PlayerMessageRequest(BaseModel):
@@ -33,11 +50,29 @@ def _view(message: ChatMessage) -> dict:
     }
 
 
-def chat_message_router(service: ChatMessageService, authorize) -> APIRouter:
+def _turn_view(turn: DirectTurnView) -> dict:
+    return {
+        "turn_id": str(turn.sent.turn_id.value),
+        "state": turn.state,
+        "token_ceiling": turn.sent.token_ceiling,
+        "player_message": _view(turn.sent.message),
+        "reply": _view(turn.reply) if turn.reply is not None else None,
+    }
+
+
+def chat_message_router(
+    service: ChatMessageService,
+    authorize,
+    reply_service: DirectChatReplyService | None = None,
+) -> APIRouter:
     router = APIRouter(
         prefix=f"/api/v{API_PROTOCOL}/worlds/{{world_id}}/conversations",
         dependencies=[Depends(authorize)],
     )
+
+    @router.get("/reply-availability")
+    async def reply_availability() -> dict[str, bool]:
+        return {"available": reply_service is not None and reply_service.available}
 
     @router.get("/{conversation_id}/messages")
     async def list_messages(world_id: UUID, conversation_id: UUID) -> list[dict]:
@@ -83,5 +118,48 @@ def chat_message_router(service: ChatMessageService, authorize) -> APIRouter:
             "status": sent.status,
             "message": _view(sent.message),
         }
+
+    @router.get("/{conversation_id}/turns/{turn_id}")
+    async def get_turn(world_id: UUID, conversation_id: UUID, turn_id: UUID) -> dict:
+        try:
+            turn = await service.direct_turn(
+                ConversationId(WorldId(world_id), conversation_id),
+                ChatTurnId(WorldId(world_id), turn_id),
+            )
+        except EntityNotFoundError:
+            raise HTTPException(404, "chat_turn_not_found") from None
+        except ChatTurnUnavailableError:
+            raise HTTPException(409, "direct_turn_required") from None
+        return _turn_view(turn)
+
+    @router.post("/{conversation_id}/turns/{turn_id}/reply")
+    async def generate_reply(world_id: UUID, conversation_id: UUID, turn_id: UUID) -> dict:
+        if reply_service is None:
+            raise HTTPException(503, "chat_model_unavailable")
+        conversation = ConversationId(WorldId(world_id), conversation_id)
+        try:
+            current = await service.direct_turn(
+                conversation, ChatTurnId(conversation.world_id, turn_id)
+            )
+            if current.state == "completed":
+                return _turn_view(current)
+            if current.state == "claimed":
+                raise HTTPException(409, "chat_turn_already_claimed")
+            await reply_service.reply(current.sent)
+            return _turn_view(await service.direct_turn(conversation, current.sent.turn_id))
+        except EntityNotFoundError:
+            raise HTTPException(404, "chat_turn_not_found") from None
+        except ChatTurnUnavailableError:
+            raise HTTPException(409, "chat_turn_already_claimed") from None
+        except ChatReplyBudgetError:
+            raise HTTPException(422, "chat_token_limit_unverifiable") from None
+        except ChatReplyUnavailableError:
+            raise HTTPException(503, "chat_model_unavailable") from None
+        except ChatReplyIntegrityError:
+            raise HTTPException(503, "chat_accounting_unavailable") from None
+        except ChatReplyValidationError:
+            raise HTTPException(502, "chat_reply_invalid") from None
+        except ChatReplyGenerationError:
+            raise HTTPException(502, "chat_generation_failed") from None
 
     return router

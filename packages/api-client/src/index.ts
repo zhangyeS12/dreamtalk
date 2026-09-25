@@ -82,6 +82,13 @@ export interface PendingPlayerSend {
   status: "pending";
   message: ChatMessage;
 }
+export interface DirectTurnView {
+  turn_id: string;
+  state: "pending" | "claimed" | "completed";
+  token_ceiling: number;
+  player_message: ChatMessage;
+  reply: ChatMessage | null;
+}
 
 export class CoreClient {
   private readonly endpoint: URL;
@@ -156,6 +163,15 @@ export class CoreClient {
       method: "POST", headers: { "Content-Type": "application/json", "X-Request-Id": requestId },
       body: JSON.stringify({ text, token_ceiling: tokenCeiling }),
     });
+  }
+  directReplyAvailability(worldId: string): Promise<{ available: boolean }> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/reply-availability`);
+  }
+  directTurn(worldId: string, conversationId: string, turnId: string): Promise<DirectTurnView> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/${encodeURIComponent(conversationId)}/turns/${encodeURIComponent(turnId)}`);
+  }
+  generateDirectReply(worldId: string, conversationId: string, turnId: string): Promise<DirectTurnView> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/${encodeURIComponent(conversationId)}/turns/${encodeURIComponent(turnId)}/reply`, { method: "POST" });
   }
   openDirectConversation(worldId: string, importId: string): Promise<ChatConversation> {
     return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/direct/${encodeURIComponent(importId)}`, { method: "POST" });

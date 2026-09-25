@@ -40,6 +40,15 @@ class PlayerSend:
 
 
 @dataclass(frozen=True, slots=True)
+class DirectTurnView:
+    """Owner-scoped durable outcome; claimed work is never implicitly retried."""
+
+    sent: PlayerSend
+    state: str
+    reply: ChatMessage | None = field(repr=False)
+
+
+@dataclass(frozen=True, slots=True)
 class ClaimedDirectTurn:
     """A durable, one-time claim; an interrupted claim is never auto-replayed."""
 
@@ -65,6 +74,10 @@ class ChatMessageStore(Protocol):
     async def list_for_player(
         self, conversation_id: ConversationId, player_id: PlayerId
     ) -> tuple[ChatMessage, ...]: ...
+
+    async def direct_turn(
+        self, conversation_id: ConversationId, turn_id: ChatTurnId, player_id: PlayerId
+    ) -> DirectTurnView: ...
 
     async def claim_direct(
         self, conversation_id: ConversationId, turn_id: ChatTurnId, player_id: PlayerId
@@ -119,6 +132,13 @@ class ChatMessageService:
     async def list_messages(self, conversation_id: ConversationId) -> tuple[ChatMessage, ...]:
         return await self._store.list_for_player(
             conversation_id, await self._player(conversation_id)
+        )
+
+    async def direct_turn(
+        self, conversation_id: ConversationId, turn_id: ChatTurnId
+    ) -> DirectTurnView:
+        return await self._store.direct_turn(
+            conversation_id, turn_id, await self._player(conversation_id)
         )
 
     async def claim_direct(

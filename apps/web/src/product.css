@@ -144,9 +144,9 @@
 .import-preview { border-top: 1px solid var(--line); padding-top: 24px; }
 .content-details { padding: 24px; max-width: 900px; overflow-wrap: anywhere; }
 .contact-chat-action { padding: 20px 24px 0; }
-.chat-thread { min-height: 100%; }
+.chat-thread { min-height: 100%; display: flex; flex-direction: column; }
 .thread-heading .transcript-refresh { display: inline-flex; font-size: .82rem; }
-.message-list { list-style: none; max-width: 980px; margin: 0 auto; padding: 24px; display: flex; flex-direction: column; gap: 16px; }
+.message-list { list-style: none; width: 100%; max-width: 980px; margin: 0 auto; padding: 24px; display: flex; flex: 1; flex-direction: column; gap: 16px; }
 .message-row { display: flex; justify-content: flex-start; }
 .message-row.own { justify-content: flex-end; }
 .message-bubble { max-width: min(72%, 680px); min-width: 100px; padding: 12px 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); overflow-wrap: anywhere; }
@@ -155,6 +155,12 @@
 .message-bubble p { margin: 7px 0 10px; white-space: pre-wrap; line-height: 1.6; }
 .message-bubble time { display: block; color: var(--muted); font-size: .72rem; text-align: right; }
 .transcript-status { margin: 0; padding: 12px 24px 24px; text-align: center; color: var(--muted); font-size: .82rem; }
+.chat-composer { position: sticky; bottom: 0; display: flex; flex-direction: column; gap: 9px; padding: 14px 24px; border-top: 1px solid var(--line); background: var(--surface); }
+.chat-composer textarea { width: 100%; resize: vertical; min-height: 74px; max-height: 220px; padding: 11px 13px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); font: inherit; }
+.chat-composer textarea:focus { outline: 2px solid var(--green); outline-offset: 1px; }
+.chat-composer-actions { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.chat-composer-actions small, .chat-feedback { color: var(--muted); font-size: .8rem; }
+.chat-feedback { margin: 0; line-height: 1.5; }
 .content-details h2 { font-size: 1.2rem; }
 .content-details h3 { font-size: .92rem; margin: 20px 0 8px; }
 .content-details p { white-space: pre-wrap; line-height: 1.75; color: var(--muted); }

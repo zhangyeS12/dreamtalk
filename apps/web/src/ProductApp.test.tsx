@@ -148,6 +148,7 @@ it("opens a contact lazily and shows only the selected world's real conversation
     listPlayers: vi.fn((worldId: string) => Promise.resolve([{ player_id: worldId === "world-a" ? "player-a" : "player-b", name: "我" }])),
     selectedPlayer: vi.fn((worldId: string) => Promise.resolve({ player_id: worldId === "world-a" ? "player-a" : "player-b" })),
     conversations, openDirectConversation, conversationMessages: vi.fn().mockResolvedValue([]),
+    directReplyAvailability: vi.fn().mockResolvedValue({ available: false }),
   } as unknown as CoreClient;
   render(<ProductApp client={client} />);
   fireEvent.click(screen.getByRole("button", { name: "通讯录" }));
@@ -157,7 +158,7 @@ it("opens a contact lazily and shows only the selected world's real conversation
   fireEvent.click(await screen.findByRole("button", { name: "打开会话" }));
   await waitFor(() => expect(openDirectConversation).toHaveBeenCalledWith("world-a", "card-a"));
   expect(await screen.findByRole("region", { name: "角色甲的会话" })).toBeTruthy();
-  expect(screen.getByText(/消息发送功能尚未开放/)).toBeTruthy();
+  expect(await screen.findByText(/尚未配置可用的单一聊天模型/)).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "设置" }));
   fireEvent.change(screen.getByRole("combobox", { name: "当前世界" }), { target: { value: "world-b" } });
   fireEvent.click(screen.getByRole("button", { name: "聊天" }));

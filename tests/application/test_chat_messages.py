@@ -19,7 +19,7 @@ from livingworld.application.player_onboarding import LocalPlayerOnboardingServi
 from livingworld.application.runtime import RuntimeStatus, ShutdownRequests
 from livingworld.application.simulation_clock import EffectiveWorldTimeSource, SystemMonotonicClock
 from livingworld.domain.contracts import RequestId
-from livingworld.domain.identifiers import ConversationId, WorldId
+from livingworld.domain.identifiers import ChatTurnId, ConversationId, WorldId
 from livingworld.infrastructure.clock import SystemWallClock
 from livingworld.infrastructure.logging import StructuredLogger
 from livingworld.infrastructure.persistence import Database
@@ -77,6 +77,14 @@ def test_player_send_is_ordered_idempotent_and_world_scoped(tmp_path):
             second = await messages.send_player(
                 RequestId(uuid4()), conversation.conversation_id, "再聊聊", 50_000
             )
+            turn_view = await messages.direct_turn(conversation.conversation_id, first.turn_id)
+            assert turn_view.sent == first
+            assert turn_view.state == "pending"
+            assert turn_view.reply is None
+            with pytest.raises(EntityNotFoundError):
+                await messages.direct_turn(
+                    conversation.conversation_id, ChatTurnId(worlds[1], first.turn_id.value)
+                )
             assert second.message.position == 2
             assert second.message.message_id != first.message.message_id
             assert second.turn_id != first.turn_id
@@ -256,6 +264,17 @@ def test_chat_transcript_http_is_authenticated_and_bound_to_selected_world_playe
             assert pending["message"]["text"] == "新消息"
             assert pending["message"]["sender_kind"] == "player"
             assert pending["message"]["position"] == 2
+            turn_path = path.removesuffix("/messages") + f"/turns/{pending['turn_id']}"
+            assert client.get(turn_path).status_code == 401
+            turn_response = client.get(turn_path, headers=headers)
+            assert turn_response.status_code == 200
+            assert turn_response.json()["state"] == "pending"
+            assert turn_response.json()["player_message"] == pending["message"]
+            assert client.post(turn_path + "/reply", headers=headers).status_code == 503
+            assert client.get(
+                f"/api/v1/worlds/{worlds[0].value}/conversations/reply-availability",
+                headers=headers,
+            ).json() == {"available": False}
             assert client.post(path, json=body, headers=send_headers).json() == pending
             assert (
                 client.post(path, json={**body, "text": "改写"}, headers=send_headers).status_code
@@ -294,6 +313,13 @@ def test_chat_transcript_http_is_authenticated_and_bound_to_selected_world_playe
             assert client.get(other_world_path, headers=headers).status_code == 409
             asyncio.run(LocalPlayerOnboardingService(handler, players).start_at_home(worlds[1]))
             assert client.get(other_world_path, headers=headers).status_code == 404
+            assert (
+                client.get(
+                    other_world_path.removesuffix("/messages") + f"/turns/{pending['turn_id']}",
+                    headers=headers,
+                ).status_code
+                == 404
+            )
             assert (
                 client.post(
                     other_world_path, json=body, headers={**headers, "X-Request-Id": str(uuid4())}

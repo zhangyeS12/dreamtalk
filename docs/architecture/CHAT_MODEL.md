@@ -42,25 +42,37 @@ the same durable identity boundary later. The current direct-conversation API
 opens/lists identities only. An authenticated POST endpoint now persists a Player
 message and its pending turn through the application service, returning the same
 result for a repeated request ID. It returns `202 pending`; it does not dispatch
-a model or promise a Character reply. The ordinary UI can open a contact and
-show the resulting durable conversation in the Chat tab, but marks message
-sending unavailable until the reply pipeline is connected.
+a model or promise a Character reply. The ordinary UI opens a contact and
+shows the durable conversation in the Chat tab. Message sending is enabled only
+when a suitable production chat model and session credential are available.
 
 An authenticated transcript read endpoint now returns stored messages in their
 Conversation order for the currently selected local Player only. Missing Player
 selection and cross-world/foreign Conversations fail closed. This read path does
-not create a Message, Observation, KnowledgeAssertion, or WorldEvent. It is not
-a player-send endpoint and cannot dispatch a Character reply. The Chat tab reads
+not create a Message, Observation, KnowledgeAssertion, or WorldEvent. The Chat tab reads
 this endpoint when a Conversation is opened and renders the durable ordered
 transcript. Switching worlds or Conversations discards a late response from the
-previous selection. The UI continues to state that sending is unavailable until
-a validated reply path and its token guard are connected.
+previous selection. The Chat tab sends through the authenticated player-send
+endpoint and asks for a direct reply only when a single text-capable production
+model has a trusted billable-token bound and a session credential. No model is
+chosen implicitly when several are configured. The per-turn token ceiling is
+saved locally in the UI and persisted with each player send; later setting changes
+cannot alter an existing turn. An unavailable model disables sending.
 
-The POST endpoint requires bearer authorization and `X-Request-Id`. It rejects
+The player-send POST endpoint requires bearer authorization and `X-Request-Id`. It rejects
 an unselected Player, a foreign/world-mismatched Conversation, blank or oversized
 text, invalid token ceiling, and a request ID reused for different semantics.
 It creates no WorldEvent, Observation, or KnowledgeAssertion. A pending turn is
 not retried or completed by process startup.
+
+The authenticated direct-turn read returns `pending`, `claimed`, or `completed`
+from the dispatch and reply records, always under selected-Player authorization.
+The direct-reply POST reads the original PlayerSend and ceiling from persistence;
+it accepts no client-supplied message or model output. It returns an already
+committed reply without a new provider call. A claimed turn cannot be replayed,
+including after an HTTP timeout or restart. The UI may query its state once but
+does not resend the uncertain model request. Provider and validation failures
+are presented with bounded error labels rather than prompt/output data.
 
 ## Direct and group conversations
 
@@ -152,8 +164,8 @@ Retrying the same request returns the original turn/message identities and
 position; reusing it for different semantics fails. New requests append in
 per-Conversation order. The initial durable status is `pending` and does not
 itself trigger provider generation. The current schema stores player messages;
-the sender columns reserve an explicit Character identity for a later validated
-reply path. The internal direct-reply boundary can claim a pending turn once in
+the sender columns hold an explicit Character identity for the validated reply
+path. The internal direct-reply boundary can claim a pending turn once in
 a durable `chat_turn_dispatches` row before provider work. A second or restarted
 claimant cannot generate it again. A caller-provided, bounded nonblank reply
 can be appended in transcript order; repeating the same completion returns
@@ -162,5 +174,7 @@ are separate transactions. An interrupted claim remains unresolved without a
 fabricated reply or automatic provider replay, because the provider outcome may
 be unknown. The legacy `chat_turns.status = pending` field records the initial
 player-send receipt; the claim and Character message establish later execution
-state. This is an internal boundary, not a reply-write API. The internal
-direct-reply service invokes it, but no normal UI send flow does yet.
+state. The public API cannot write arbitrary Character text. The internal
+direct-reply service generates and validates a reply through the governed LLM
+gateway before committing it. This is direct-chat plumbing only; it does not
+create an autonomous Character Agent or implement group speaker selection.

@@ -35,6 +35,15 @@ function displayTime(raw: string): string {
   return `第 ${day} 天 · ${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`;
 }
 
+const TOKEN_CEILING_KEY = "livingworld.chat.turnTokenCeiling";
+function savedTokenCeiling(): number {
+  try {
+    const value = Number(window.localStorage.getItem(TOKEN_CEILING_KEY));
+    if (Number.isSafeInteger(value) && value >= 1 && value <= 1_000_000) return value;
+  } catch { /* Storage can be disabled; keep a safe local default. */ }
+  return 50_000;
+}
+
 export function ProductApp({ client }: { client: CoreClient }) {
   const [tab, setTab] = useState<Tab>("chats");
   const [meVisited, setMeVisited] = useState(false);
@@ -55,6 +64,8 @@ export function ProductApp({ client }: { client: CoreClient }) {
   const [conversationDirectory, setConversationDirectory] = useState<{ worldId: string; playerId: string; items: ChatConversation[] } | null>(null);
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [conversationsLoading, setConversationsLoading] = useState(false);
+  const [tokenCeiling, setTokenCeiling] = useState(savedTokenCeiling);
+  const [tokenCeilingInput, setTokenCeilingInput] = useState(() => String(savedTokenCeiling()));
 
   const refresh = useCallback(async () => {
     const items = await client.listProductWorlds();
@@ -172,7 +183,7 @@ export function ProductApp({ client }: { client: CoreClient }) {
           {eventsOpen ? <section className="event-thread" aria-label="世界事件时间线">
         <div className="thread-heading"><button type="button" className="text-action" onClick={() => setEventsOpen(false)}>返回聊天</button><h2>世界事件</h2><span>最近 100 条</span></div>
         {!world ? <p className="thread-hint">先创建世界，才能查看事件。</p> : !selectedPlayer ? <div className="thread-empty"><p>先进入当前世界，才能查看你获知的事件。</p><button type="button" className="text-action" onClick={() => { setEventsOpen(false); setTab("me"); }}>前往我的身份</button></div> : visibleEvents.length === 0 ? <p className="thread-hint">你目前还没有获知世界事件。以后在这里找聊天话题。</p> : <ol className="event-list">{visibleEvents.map(item => <li key={item.event_id} className="event-item"><time>{displayTime(item.occurred_at)}</time><strong>{item.title}</strong>{item.observed_at !== item.occurred_at ? <small>获知于 {displayTime(item.observed_at)}</small> : null}</li>)}</ol>}
-      </section> : selectedConversation && selectedPlayer ? <ChatTranscript key={`${worldId}:${selectedPlayer}:${selectedConversation.conversation_id}`} client={client} worldId={worldId} playerId={selectedPlayer} conversation={selectedConversation} onBack={() => setSelectedConversationId(null)} /> : <div className="conversation-placeholder"><h2>与世界保持联系</h2><p>从左侧选择会话，或查看你已获知的世界事件。</p></div>}
+      </section> : selectedConversation && selectedPlayer ? <ChatTranscript key={`${worldId}:${selectedPlayer}:${selectedConversation.conversation_id}`} client={client} worldId={worldId} playerId={selectedPlayer} conversation={selectedConversation} tokenCeiling={tokenCeiling} onBack={() => setSelectedConversationId(null)} /> : <div className="conversation-placeholder"><h2>与世界保持联系</h2><p>从左侧选择会话，或查看你已获知的世界事件。</p></div>}
         </div>
       </div>}
 
@@ -199,6 +210,9 @@ export function ProductApp({ client }: { client: CoreClient }) {
             }, next === "available" ? "当前状态已设为可用。" : "当前状态已设为忙碌。");
           }}>{selectedPlayerState.availability === "available" ? "设为忙碌" : "设为可用"}</button></div>
         </section>}
+        <section className="settings-section"><div className="section-heading"><h2>聊天额度</h2><p>每轮输入和输出共用上限。系统按可信上界预留，额度不足时不会开始下一次模型调用。</p></div>
+          <div className="setting-row"><label className="field"><span>每轮 Token 上限</span><input type="number" min="1" max="1000000" step="1" value={tokenCeilingInput} onChange={event => setTokenCeilingInput(event.target.value)} /></label><button type="button" className="secondary-button" disabled={!Number.isSafeInteger(Number(tokenCeilingInput)) || Number(tokenCeilingInput) < 1 || Number(tokenCeilingInput) > 1_000_000} onClick={() => { const next = Number(tokenCeilingInput); setTokenCeiling(next); try { window.localStorage.setItem(TOKEN_CEILING_KEY, String(next)); } catch { /* Session setting remains active. */ } setNotice("聊天额度已更新。"); }}>应用</button></div>
+        </section>
         {world ? <WorldImports key={world.world_id} client={client} worldId={world.world_id} /> : <section className="settings-section"><h2>导入内容</h2><p className="inline-hint">创建世界后即可导入。</p></section>}
       </div>}
 
