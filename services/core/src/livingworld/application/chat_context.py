@@ -28,6 +28,66 @@ _SYSTEM = (
 )
 
 
+async def private_chat_memories(
+    reader: Callable[[CharacterId], CharacterMemoryReader], owner: CharacterId
+) -> list[dict[str, str]]:
+    """Read only an authorized Character's bounded episodic memory view."""
+    page = await reader(owner).list(limit=_MAX_CHAT_MEMORY_ITEMS)
+    memories: list[dict[str, str]] = []
+    memory_bytes = 0
+    for memory in page.items:
+        if memory.owner_character_id != owner:
+            raise EntityNotFoundError("chat_memory_owner_invalid")
+        size = len(memory.content.encode("utf-8"))
+        if memory_bytes + size > _MAX_CHAT_MEMORY_CONTENT_BYTES:
+            continue
+        memories.append(
+            {
+                "content": memory.content,
+                "experienced_from": str(memory.experienced_from.microseconds),
+                "experienced_to": str(memory.experienced_to.microseconds),
+            }
+        )
+        memory_bytes += size
+    return memories
+
+
+def recent_chat_transcript(
+    visible: tuple[ChatMessage, ...], current: ChatMessage, *, allow_current_replies: bool
+) -> tuple[ChatMessage, ...]:
+    """Bound prompt history by complete turns; never trim the current turn."""
+    turns: dict[ChatTurnId, list[ChatMessage]] = {}
+    for message in visible:
+        turns.setdefault(message.turn_id, []).append(message)
+    current_turn = turns.get(current.turn_id, [])
+    if (
+        not current_turn
+        or current_turn[0] != current
+        or (not allow_current_replies and current_turn != [current])
+    ):
+        raise EntityNotFoundError("chat_turn_order_invalid")
+    selected: list[list[ChatMessage]] = [current_turn]
+    count = len(current_turn)
+    size = sum(len(item.text.encode("utf-8")) for item in current_turn)
+    if count > _MAX_CHAT_TRANSCRIPT_MESSAGES or size > _MAX_CHAT_TRANSCRIPT_BYTES:
+        raise ValueError("chat_context_limit_exceeded")
+    previous = sorted(
+        (turn for identity, turn in turns.items() if identity != current.turn_id),
+        key=lambda turn: max(item.position for item in turn),
+        reverse=True,
+    )
+    for turn in previous:
+        next_count = count + len(turn)
+        next_size = size + sum(len(item.text.encode("utf-8")) for item in turn)
+        if next_count > _MAX_CHAT_TRANSCRIPT_MESSAGES or next_size > _MAX_CHAT_TRANSCRIPT_BYTES:
+            break
+        selected.append(turn)
+        count, size = next_count, next_size
+    return tuple(
+        sorted((item for turn in selected for item in turn), key=lambda item: item.position)
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class DirectChatContext:
     messages: tuple[LLMMessage, ...] = field(repr=False)
@@ -66,25 +126,7 @@ class DirectChatContextBuilder:
             raise EntityNotFoundError("chat_message_not_found")
         visible = tuple(item for item in transcript if item.position <= sent.message.position)
         visible = self._recent_transcript(visible, sent.message)
-        memory_page = await self._memory_reader(conversation.character_id).list(
-            limit=_MAX_CHAT_MEMORY_ITEMS
-        )
-        memories = []
-        memory_bytes = 0
-        for memory in memory_page.items:
-            if memory.owner_character_id != conversation.character_id:
-                raise EntityNotFoundError("chat_memory_owner_invalid")
-            size = len(memory.content.encode("utf-8"))
-            if memory_bytes + size > _MAX_CHAT_MEMORY_CONTENT_BYTES:
-                continue
-            memories.append(
-                {
-                    "content": memory.content,
-                    "experienced_from": str(memory.experienced_from.microseconds),
-                    "experienced_to": str(memory.experienced_to.microseconds),
-                }
-            )
-            memory_bytes += size
+        memories = await private_chat_memories(self._memory_reader, conversation.character_id)
         persona = {
             "character": {
                 "name": character.display_name,
@@ -123,27 +165,4 @@ class DirectChatContextBuilder:
         visible: tuple[ChatMessage, ...], current: ChatMessage
     ) -> tuple[ChatMessage, ...]:
         """Keep complete recent turns even if concurrent sends interleave replies."""
-
-        turns: dict[ChatTurnId, list[ChatMessage]] = {}
-        for message in visible:
-            turns.setdefault(message.turn_id, []).append(message)
-        if turns.get(current.turn_id) != [current]:
-            raise EntityNotFoundError("chat_turn_order_invalid")
-        selected: list[list[ChatMessage]] = [[current]]
-        count = 1
-        size = len(current.text.encode("utf-8"))
-        previous = sorted(
-            (turn for identity, turn in turns.items() if identity != current.turn_id),
-            key=lambda turn: max(item.position for item in turn),
-            reverse=True,
-        )
-        for turn in previous:
-            next_count = count + len(turn)
-            next_size = size + sum(len(item.text.encode("utf-8")) for item in turn)
-            if next_count > _MAX_CHAT_TRANSCRIPT_MESSAGES or next_size > _MAX_CHAT_TRANSCRIPT_BYTES:
-                break
-            selected.append(turn)
-            count, size = next_count, next_size
-        return tuple(
-            sorted((item for turn in selected for item in turn), key=lambda item: item.position)
-        )
+        return recent_chat_transcript(visible, current, allow_current_replies=False)

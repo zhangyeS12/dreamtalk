@@ -241,3 +241,31 @@ class ChatConversationService:
             ):
                 return _character(item)
         raise EntityNotFoundError("contact_not_found")
+
+    async def current_group_characters(
+        self, conversation_id: ConversationId
+    ) -> tuple[tuple[GroupChatParticipant, CharacterDefinition], ...]:
+        """Resolve only this Player's current accepted personas for group context."""
+        group = next(
+            (
+                item
+                for item in await self.list_groups_for_world(conversation_id.world_id)
+                if item.conversation_id == conversation_id
+            ),
+            None,
+        )
+        if group is None:
+            raise EntityNotFoundError("conversation_not_found")
+        required = {participant.root_import_id for participant in group.participants}
+        current: dict[UUID, CharacterDefinition] = {}
+        for item in await self._imports.list_imports(conversation_id.world_id):
+            if item.kind != "character":
+                continue
+            root_id = (await self._root(item)).import_id
+            if root_id in required:
+                current[root_id] = _character(item)
+        if set(current) != required:
+            raise EntityNotFoundError("contact_not_found")
+        return tuple(
+            (participant, current[participant.root_import_id]) for participant in group.participants
+        )

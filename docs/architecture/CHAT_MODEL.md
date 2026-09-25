@@ -67,6 +67,18 @@ shared Token ceiling are not yet composed. An interrupted claimed group turn
 is not automatically replayed, because an earlier provider outcome might be
 unknown.
 
+The internal group-context builder resolves every participant through the
+current accepted card in that world's replacement lineage while keeping the
+same runtime Character identity. Speaker-selection input contains accepted
+public persona fields and a bounded owner-scoped group transcript, but no
+private Character memories. A selected Character's reply input adds only that
+Character's own bounded EpisodicMemory view and the local Player's general and
+current-world descriptions. Imported instructions and transcript text remain
+lower-trust data. An exact `@display-name` in the Player message can identify
+one participant; ambiguous names or multiple addressed participants fail
+closed. This builder prepares input only: it does not select a speaker,
+dispatch a model, or open public group sends.
+
 The current direct-conversation API opens/lists identities only. An authenticated POST endpoint now persists a Player
 message and its pending turn through the application service, returning the same
 result for a repeated request ID. It returns `202 pending`; it does not dispatch

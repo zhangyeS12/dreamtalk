@@ -1,6 +1,8 @@
 """Group membership and internal transcript writes stay durable and owner-scoped."""
 
 import asyncio
+import json
+from dataclasses import replace
 from uuid import uuid4
 
 import pytest
@@ -8,17 +10,28 @@ from card_fixtures import card_document, json_bytes
 from livingworld.application.chat_conversations import ChatConversationService
 from livingworld.application.chat_messages import ChatMessageService
 from livingworld.application.command_handler import CommandHandler
-from livingworld.application.commands import CreateWorld
+from livingworld.application.commands import AcquireKnowledge, AssertWorldTruth, CreateWorld
 from livingworld.application.errors import (
     ChatTurnUnavailableError,
     EntityNotFoundError,
     IdempotencyConflictError,
 )
+from livingworld.application.group_chat_context import GroupChatContextBuilder
+from livingworld.application.local_profile import LocalProfile
+from livingworld.application.memory import EpisodicMemoryService, RecordEpisodicMemory
 from livingworld.application.player_event_feed import PlayerEventFeedService
 from livingworld.application.player_onboarding import LocalPlayerOnboardingService
 from livingworld.application.simulation_clock import EffectiveWorldTimeSource, SystemMonotonicClock
 from livingworld.domain.contracts import RequestId
-from livingworld.domain.identifiers import CharacterId, ChatTurnId, WorldId
+from livingworld.domain.identifiers import (
+    CharacterId,
+    ChatTurnId,
+    ConversationId,
+    KnowledgeAssertionId,
+    WorldId,
+)
+from livingworld.domain.knowledge import ObservationChannel
+from livingworld.domain.values import WorldTime
 from livingworld.infrastructure.clock import SystemWallClock
 from livingworld.infrastructure.persistence import Database
 from livingworld.infrastructure.persistence.models import (
@@ -243,6 +256,23 @@ def test_internal_group_turn_claim_and_multi_reply_are_durable_and_idempotent(tm
             group = await chats.create_group(
                 world, RequestId(uuid4()), tuple(card.import_id for card in cards)
             )
+            current = await chats.current_group_characters(group.conversation_id)
+            assert {persona.display_name for _, persona in current} == {"角色甲", "角色乙"}
+            replacement = card_document()
+            replacement["data"]["name"] = "角色甲新版"
+            staged = await imports.prepare(
+                world, "character", json_bytes(replacement), cards[0].import_id
+            )
+            await imports.commit(world, staged.item.import_id, staged.item.reviewed_hash)
+            updated = await chats.current_group_characters(group.conversation_id)
+            assert {persona.display_name for _, persona in updated} == {"角色甲新版", "角色乙"}
+            assert tuple(participant.character_id for participant, _ in updated) == tuple(
+                participant.character_id for participant, _ in current
+            )
+            with pytest.raises(EntityNotFoundError, match="conversation_not_found"):
+                await chats.current_group_characters(
+                    ConversationId(other_world, group.conversation_id.value)
+                )
             async with db._sessions() as session:
                 event_count = await session.scalar(
                     select(func.count()).select_from(WorldEventRecord)
@@ -270,7 +300,97 @@ def test_internal_group_turn_claim_and_multi_reply_are_durable_and_idempotent(tm
             with pytest.raises(ChatTurnUnavailableError, match="chat_turn_already_claimed"):
                 await messages.claim_group(group.conversation_id, sent.turn_id)
             first_character, second_character = claim.character_ids
+            truth = await handler.execute(
+                AssertWorldTruth(
+                    request_id=RequestId(uuid4()),
+                    world_id=world,
+                    assertion_id=KnowledgeAssertionId(world, uuid4()),
+                    subject="garden",
+                    predicate="state",
+                    value="open",
+                    valid_from=WorldTime(0),
+                )
+            )
+            for character_id, content in (
+                (first_character, "FIRST_PRIVATE_MEMORY_CANARY"),
+                (second_character, "SECOND_PRIVATE_MEMORY_CANARY"),
+            ):
+                learned = await handler.execute(
+                    AcquireKnowledge(
+                        request_id=RequestId(uuid4()),
+                        world_id=world,
+                        assertion_id=KnowledgeAssertionId(world, uuid4()),
+                        receiver_id=character_id,
+                        source_assertion_id=truth.entity_reference,
+                        channel=ObservationChannel.TOLD,
+                    )
+                )
+                await EpisodicMemoryService(
+                    db.unit_of_work,
+                    clock,
+                    world_time_source=EffectiveWorldTimeSource(clock, SystemMonotonicClock()),
+                ).execute(
+                    RecordEpisodicMemory(
+                        request_id=RequestId(uuid4()),
+                        world_id=world,
+                        owner_character_id=character_id,
+                        source_observation_ids=(learned.observation_id,),
+                        content=content,
+                    )
+                )
+            async with db._sessions() as session:
+                event_count = await session.scalar(
+                    select(func.count()).select_from(WorldEventRecord)
+                )
+            profiles = db.local_profile_store()
+            await profiles.save(LocalProfile("通用姓名", "喜欢散步"))
+            await profiles.save(LocalProfile("世界身份", "在这里是旅人"), world)
+            context = GroupChatContextBuilder(chats, messages, profiles, db.character_memory_reader)
+            participants = tuple(
+                (participant.character_id, persona) for participant, persona in updated
+            )
+            named = next(
+                identity
+                for identity, persona in participants
+                if persona.display_name == "角色甲新版"
+            )
+            assert context.explicit_target("你好 @角色甲新版！", participants) == named
+            assert context.explicit_target("你好", participants) is None
+            duplicate_name = replace(
+                participants[1][1], display_name=participants[0][1].display_name
+            )
+            with pytest.raises(ValueError, match="group_mention_ambiguous"):
+                context.explicit_target(
+                    f"@{participants[0][1].display_name}",
+                    (participants[0], (participants[1][0], duplicate_name)),
+                )
+            selection = await context.build_selection(claim)
+            selection_data = json.loads(selection.messages[1].content[0].text)
+            assert {item["name"] for item in selection_data["participants"]} == {
+                "角色甲新版",
+                "角色乙",
+            }
+            assert "PRIVATE_MEMORY_CANARY" not in repr(selection)
+            assert "PRIVATE_MEMORY_CANARY" not in selection.messages[1].content[0].text
+            first_context = await context.build_reply(claim, first_character)
+            first_data = json.loads(first_context.messages[1].content[0].text)
+            assert [item["content"] for item in first_data["character_memories"]] == [
+                "FIRST_PRIVATE_MEMORY_CANARY"
+            ]
+            assert first_data["player"]["current_world"]["description"] == "在这里是旅人"
+            assert "SECOND_PRIVATE_MEMORY_CANARY" not in first_context.messages[1].content[0].text
             first = await messages.complete_group_reply(claim, first_character, 0, "你好")
+            later_selection = await context.build_selection(claim)
+            assert (
+                json.loads(later_selection.messages[1].content[0].text)["transcript"][-1]["text"]
+                == "你好"
+            )
+            second_context = await context.build_reply(claim, second_character)
+            second_data = json.loads(second_context.messages[1].content[0].text)
+            assert [item["content"] for item in second_data["character_memories"]] == [
+                "SECOND_PRIVATE_MEMORY_CANARY"
+            ]
+            assert "FIRST_PRIVATE_MEMORY_CANARY" not in second_context.messages[1].content[0].text
             assert await messages.complete_group_reply(claim, first_character, 0, "你好") == first
             with pytest.raises(IdempotencyConflictError, match="chat_reply_conflict"):
                 await messages.complete_group_reply(claim, second_character, 0, "你好")
