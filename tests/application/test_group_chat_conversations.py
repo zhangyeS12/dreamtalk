@@ -292,6 +292,21 @@ def test_internal_group_turn_claim_and_multi_reply_are_durable_and_idempotent(tm
                 await messages.claim_group(
                     group.conversation_id, ChatTurnId(other_world, sent.turn_id.value)
                 )
+            preclaim_context = GroupChatContextBuilder(
+                chats, messages, db.local_profile_store(), db.character_memory_reader
+            )
+            assert (
+                json.loads(
+                    (await preclaim_context.build_selection(sent)).messages[1].content[0].text
+                )["transcript"][-1]["text"]
+                == "大家好"
+            )
+            assert json.loads(
+                (await preclaim_context.build_reply(sent, updated[0][0].character_id))
+                .messages[1]
+                .content[0]
+                .text
+            )["character"]["name"] in {"角色甲新版", "角色乙"}
             claim = await messages.claim_group(group.conversation_id, sent.turn_id)
             assert set(claim.character_ids) == {
                 participant.character_id for participant in group.participants

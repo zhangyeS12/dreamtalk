@@ -77,7 +77,10 @@ current-world descriptions. Imported instructions and transcript text remain
 lower-trust data. An exact `@display-name` in the Player message can identify
 one participant; ambiguous names or multiple addressed participants fail
 closed. This builder prepares input only: it does not select a speaker,
-dispatch a model, or open public group sends.
+dispatch a model, or open public group sends. It accepts an owner-scoped pending
+Player send before the one-time dispatch claim, so a future runner can perform
+model and Token preflight without consuming the claim. After claiming, it also
+checks the fixed participant set before preparing further replies.
 
 The current direct-conversation API opens/lists identities only. An authenticated POST endpoint now persists a Player
 message and its pending turn through the application service, returning the same

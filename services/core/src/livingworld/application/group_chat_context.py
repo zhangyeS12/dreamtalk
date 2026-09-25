@@ -9,13 +9,18 @@ from dataclasses import dataclass, field
 
 from livingworld.application.chat_context import private_chat_memories, recent_chat_transcript
 from livingworld.application.chat_conversations import ChatConversationService
-from livingworld.application.chat_messages import ChatMessage, ChatMessageService, ClaimedGroupTurn
+from livingworld.application.chat_messages import (
+    ChatMessage,
+    ChatMessageService,
+    ClaimedGroupTurn,
+    PlayerSend,
+)
 from livingworld.application.errors import EntityNotFoundError
 from livingworld.application.llm import LLMMessage, MessageRole, TextContent
 from livingworld.application.local_profile import LocalProfileStore
 from livingworld.application.ports import CharacterMemoryReader
 from livingworld.domain.content.models import CharacterDefinition
-from livingworld.domain.identifiers import CharacterId
+from livingworld.domain.identifiers import CharacterId, PlayerId
 
 _SELECT_SYSTEM = (
     "你是群聊发言顺序调度器，不是世界 Director。依据已确认的角色性格与群聊记录，"
@@ -51,29 +56,37 @@ class GroupChatContextBuilder:
         self._memory_reader = memory_reader
 
     async def _input(
-        self, claim: ClaimedGroupTurn
+        self, source: PlayerSend | ClaimedGroupTurn
     ) -> tuple[tuple[tuple[CharacterId, CharacterDefinition], ...], tuple[ChatMessage, ...]]:
-        current = await self._conversations.current_group_characters(claim.conversation_id)
-        if len(current) < 2 or {participant.character_id for participant, _ in current} != set(
-            claim.character_ids
+        sent = source.message if isinstance(source, PlayerSend) else source.player_message
+        conversation_id = sent.conversation_id
+        turn_id = source.turn_id
+        player_id = sent.sender_id
+        if not isinstance(player_id, PlayerId) or sent.turn_id != turn_id:
+            raise EntityNotFoundError("chat_message_invalid")
+        current = await self._conversations.current_group_characters(conversation_id)
+        participant_ids = {participant.character_id for participant, _ in current}
+        if len(current) < 2 or (
+            isinstance(source, ClaimedGroupTurn)
+            and (
+                participant_ids != set(source.character_ids)
+                or source.player_id != player_id
+                or source.conversation_id != conversation_id
+            )
         ):
             raise EntityNotFoundError("group_participants_changed")
-        groups = await self._conversations.list_groups_for_world(claim.conversation_id.world_id)
-        group = next(
-            (item for item in groups if item.conversation_id == claim.conversation_id), None
-        )
-        if group is None or group.player_id != claim.player_id:
+        groups = await self._conversations.list_groups_for_world(conversation_id.world_id)
+        group = next((item for item in groups if item.conversation_id == conversation_id), None)
+        if group is None or group.player_id != player_id:
             raise EntityNotFoundError("conversation_not_found")
-        transcript = await self._messages.list_messages(claim.conversation_id)
-        if claim.player_message not in transcript:
+        transcript = await self._messages.list_messages(conversation_id)
+        if sent not in transcript:
             raise EntityNotFoundError("chat_message_not_found")
         visible = tuple(
-            item
-            for item in transcript
-            if item.position <= claim.player_message.position or item.turn_id == claim.turn_id
+            item for item in transcript if item.position <= sent.position or item.turn_id == turn_id
         )
-        visible = recent_chat_transcript(visible, claim.player_message, allow_current_replies=True)
-        allowed = {claim.player_id, *claim.character_ids}
+        visible = recent_chat_transcript(visible, sent, allow_current_replies=True)
+        allowed = {player_id, *participant_ids}
         if any(item.sender_id not in allowed for item in visible):
             raise EntityNotFoundError("chat_sender_invalid")
         return tuple(
@@ -99,8 +112,8 @@ class GroupChatContextBuilder:
             return next(iter(mentioned))
         return None
 
-    async def build_selection(self, claim: ClaimedGroupTurn) -> GroupChatContext:
-        participants, transcript = await self._input(claim)
+    async def build_selection(self, source: PlayerSend | ClaimedGroupTurn) -> GroupChatContext:
+        participants, transcript = await self._input(source)
         data = {
             "participants": [
                 {
@@ -125,13 +138,19 @@ class GroupChatContextBuilder:
             )
         )
 
-    async def build_reply(self, claim: ClaimedGroupTurn, speaker: CharacterId) -> GroupChatContext:
-        participants, transcript = await self._input(claim)
+    async def build_reply(
+        self, source: PlayerSend | ClaimedGroupTurn, speaker: CharacterId
+    ) -> GroupChatContext:
+        participants, transcript = await self._input(source)
         persona = next((item for identity, item in participants if identity == speaker), None)
         if persona is None:
             raise EntityNotFoundError("group_speaker_invalid")
         general = await self._profiles.load()
-        world = await self._profiles.load(claim.conversation_id.world_id)
+        world = await self._profiles.load(
+            source.message.conversation_id.world_id
+            if isinstance(source, PlayerSend)
+            else source.conversation_id.world_id
+        )
         data = {
             "character": {
                 "id": str(speaker.value),
