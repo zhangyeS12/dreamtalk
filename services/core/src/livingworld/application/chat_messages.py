@@ -60,8 +60,30 @@ class ClaimedDirectTurn:
     token_ceiling: int
 
 
+@dataclass(frozen=True, slots=True)
+class ClaimedGroupTurn:
+    """One durable group dispatch with its fixed participant set."""
+
+    turn_id: ChatTurnId
+    conversation_id: ConversationId
+    player_id: PlayerId
+    character_ids: tuple[CharacterId, ...]
+    player_message: ChatMessage = field(repr=False)
+    token_ceiling: int
+
+
 class ChatMessageStore(Protocol):
     async def send_player(
+        self,
+        request_id: RequestId,
+        conversation_id: ConversationId,
+        player_id: PlayerId,
+        text: str,
+        token_ceiling: int,
+        fingerprint: str,
+    ) -> PlayerSend: ...
+
+    async def send_group_player(
         self,
         request_id: RequestId,
         conversation_id: ConversationId,
@@ -85,6 +107,14 @@ class ChatMessageStore(Protocol):
 
     async def complete_direct(self, claim: ClaimedDirectTurn, text: str) -> ChatMessage: ...
 
+    async def claim_group(
+        self, conversation_id: ConversationId, turn_id: ChatTurnId, player_id: PlayerId
+    ) -> ClaimedGroupTurn: ...
+
+    async def complete_group_reply(
+        self, claim: ClaimedGroupTurn, character_id: CharacterId, ordinal: int, text: str
+    ) -> ChatMessage: ...
+
 
 class ChatMessageService:
     def __init__(self, store: ChatMessageStore, players: PlayerEventFeedService) -> None:
@@ -103,6 +133,29 @@ class ChatMessageService:
         conversation_id: ConversationId,
         text: str,
         token_ceiling: int,
+    ) -> PlayerSend:
+        return await self._send_player(
+            request_id, conversation_id, text, token_ceiling, group=False
+        )
+
+    async def send_group_player(
+        self,
+        request_id: RequestId,
+        conversation_id: ConversationId,
+        text: str,
+        token_ceiling: int,
+    ) -> PlayerSend:
+        """Internal group runner entry; the public send path remains direct-only."""
+        return await self._send_player(request_id, conversation_id, text, token_ceiling, group=True)
+
+    async def _send_player(
+        self,
+        request_id: RequestId,
+        conversation_id: ConversationId,
+        text: str,
+        token_ceiling: int,
+        *,
+        group: bool,
     ) -> PlayerSend:
         if not isinstance(text, str) or not text.strip() or len(text.encode("utf-8")) > 65536:
             raise ValueError("chat_message_invalid")
@@ -125,9 +178,8 @@ class ChatMessageService:
                 "utf-8"
             )
         ).hexdigest()
-        return await self._store.send_player(
-            request_id, conversation_id, player, text, token_ceiling, fingerprint
-        )
+        send = self._store.send_group_player if group else self._store.send_player
+        return await send(request_id, conversation_id, player, text, token_ceiling, fingerprint)
 
     async def list_messages(self, conversation_id: ConversationId) -> tuple[ChatMessage, ...]:
         return await self._store.list_for_player(
@@ -149,6 +201,25 @@ class ChatMessageService:
         )
 
     async def complete_direct(self, claim: ClaimedDirectTurn, text: str) -> ChatMessage:
+        self._validate_reply(text)
+        return await self._store.complete_direct(claim, text)
+
+    async def claim_group(
+        self, conversation_id: ConversationId, turn_id: ChatTurnId
+    ) -> ClaimedGroupTurn:
+        return await self._store.claim_group(
+            conversation_id, turn_id, await self._player(conversation_id)
+        )
+
+    async def complete_group_reply(
+        self, claim: ClaimedGroupTurn, character_id: CharacterId, ordinal: int, text: str
+    ) -> ChatMessage:
+        self._validate_reply(text)
+        if type(ordinal) is not int or ordinal < 0:
+            raise ValueError("chat_reply_ordinal_invalid")
+        return await self._store.complete_group_reply(claim, character_id, ordinal, text)
+
+    @staticmethod
+    def _validate_reply(text: str) -> None:
         if not isinstance(text, str) or not text.strip() or len(text.encode("utf-8")) > 65536:
             raise ValueError("chat_reply_invalid")
-        return await self._store.complete_direct(claim, text)

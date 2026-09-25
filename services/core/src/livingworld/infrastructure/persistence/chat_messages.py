@@ -10,6 +10,7 @@ from sqlalchemy import func, select
 from livingworld.application.chat_messages import (
     ChatMessage,
     ClaimedDirectTurn,
+    ClaimedGroupTurn,
     DirectTurnView,
     PlayerSend,
 )
@@ -79,6 +80,46 @@ class SqlAlchemyChatMessageStore:
         token_ceiling: int,
         fingerprint: str,
     ) -> PlayerSend:
+        return await self._send_player(
+            request_id,
+            conversation_id,
+            player_id,
+            text,
+            token_ceiling,
+            fingerprint,
+            expected_kind="direct",
+        )
+
+    async def send_group_player(
+        self,
+        request_id: RequestId,
+        conversation_id: ConversationId,
+        player_id: PlayerId,
+        text: str,
+        token_ceiling: int,
+        fingerprint: str,
+    ) -> PlayerSend:
+        return await self._send_player(
+            request_id,
+            conversation_id,
+            player_id,
+            text,
+            token_ceiling,
+            fingerprint,
+            expected_kind="group",
+        )
+
+    async def _send_player(
+        self,
+        request_id: RequestId,
+        conversation_id: ConversationId,
+        player_id: PlayerId,
+        text: str,
+        token_ceiling: int,
+        fingerprint: str,
+        *,
+        expected_kind: str,
+    ) -> PlayerSend:
         async with self._sessions() as session, session.begin():
             # SQLite obtains a write reservation before any receipt/position read.
             await session.connection(execution_options={"livingworld_write_intent": True})
@@ -93,6 +134,12 @@ class SqlAlchemyChatMessageStore:
                     or existing.token_ceiling != token_ceiling
                 ):
                     raise IdempotencyConflictError("chat_request_conflict")
+            conversation = await self._conversation(session, conversation_id, player_id)
+            if conversation.kind != expected_kind:
+                raise ChatTurnUnavailableError(
+                    "group_turn_unavailable" if expected_kind == "direct" else "group_turn_required"
+                )
+            if existing is not None:
                 message = await session.scalar(
                     select(ChatMessageRecord).where(
                         ChatMessageRecord.world_id == existing.world_id,
@@ -108,9 +155,6 @@ class SqlAlchemyChatMessageStore:
                     existing.token_ceiling,
                     existing.status,
                 )
-            conversation = await self._conversation(session, conversation_id, player_id)
-            if conversation.kind != "direct":
-                raise ChatTurnUnavailableError("group_turn_unavailable")
             position = (
                 await session.scalar(
                     select(func.max(ChatMessageRecord.position)).where(
@@ -336,6 +380,157 @@ class SqlAlchemyChatMessageStore:
                 position=position,
                 sender_player_id=None,
                 sender_character_id=claim.character_id.value,
+                text=text,
+                created_at_utc=datetime.now(UTC),
+            )
+            session.add(row)
+            await session.flush()
+            return _message(row)
+
+    async def claim_group(
+        self, conversation_id: ConversationId, turn_id: ChatTurnId, player_id: PlayerId
+    ) -> ClaimedGroupTurn:
+        if turn_id.world_id != conversation_id.world_id:
+            raise EntityNotFoundError("chat_world_mismatch")
+        async with self._sessions() as session, session.begin():
+            await session.connection(execution_options={"livingworld_write_intent": True})
+            conversation = await self._conversation(session, conversation_id, player_id)
+            if conversation.kind != "group":
+                raise ChatTurnUnavailableError("group_turn_required")
+            turn = await session.get(
+                ChatTurnRecord, (conversation_id.world_id.value, turn_id.value)
+            )
+            if turn is None or turn.conversation_id != conversation_id.value:
+                raise EntityNotFoundError("chat_turn_not_found")
+            if turn.status != "pending":
+                raise ChatTurnUnavailableError("chat_turn_state_invalid")
+            if (
+                await session.get(
+                    ChatTurnDispatchRecord, (conversation_id.world_id.value, turn_id.value)
+                )
+                is not None
+            ):
+                raise ChatTurnUnavailableError("chat_turn_already_claimed")
+            participants = (
+                await session.scalars(
+                    select(ChatParticipantRecord)
+                    .where(
+                        ChatParticipantRecord.world_id == conversation_id.world_id.value,
+                        ChatParticipantRecord.conversation_id == conversation_id.value,
+                    )
+                    .order_by(ChatParticipantRecord.character_id)
+                )
+            ).all()
+            if len(participants) < 2:
+                raise ChatTurnUnavailableError("group_participants_invalid")
+            player_message = await session.scalar(
+                select(ChatMessageRecord).where(
+                    ChatMessageRecord.world_id == conversation_id.world_id.value,
+                    ChatMessageRecord.turn_id == turn_id.value,
+                    ChatMessageRecord.sender_player_id == player_id.value,
+                )
+            )
+            if player_message is None or player_message.conversation_id != conversation_id.value:
+                raise EntityNotFoundError("chat_state_invalid")
+            session.add(
+                ChatTurnDispatchRecord(
+                    world_id=conversation_id.world_id.value,
+                    turn_id=turn_id.value,
+                    claimed_at_utc=datetime.now(UTC),
+                )
+            )
+            await session.flush()
+            return ClaimedGroupTurn(
+                turn_id,
+                conversation_id,
+                player_id,
+                tuple(CharacterId(conversation_id.world_id, p.character_id) for p in participants),
+                _message(player_message),
+                turn.token_ceiling,
+            )
+
+    async def complete_group_reply(
+        self, claim: ClaimedGroupTurn, character_id: CharacterId, ordinal: int, text: str
+    ) -> ChatMessage:
+        if not (
+            claim.turn_id.world_id
+            == claim.conversation_id.world_id
+            == claim.player_id.world_id
+            == character_id.world_id
+        ):
+            raise EntityNotFoundError("chat_world_mismatch")
+        world_id = claim.conversation_id.world_id.value
+        async with self._sessions() as session, session.begin():
+            await session.connection(execution_options={"livingworld_write_intent": True})
+            conversation = await self._conversation(session, claim.conversation_id, claim.player_id)
+            turn = await session.get(ChatTurnRecord, (world_id, claim.turn_id.value))
+            dispatch = await session.get(ChatTurnDispatchRecord, (world_id, claim.turn_id.value))
+            participants = (
+                await session.scalars(
+                    select(ChatParticipantRecord)
+                    .where(
+                        ChatParticipantRecord.world_id == world_id,
+                        ChatParticipantRecord.conversation_id == claim.conversation_id.value,
+                    )
+                    .order_by(ChatParticipantRecord.character_id)
+                )
+            ).all()
+            player_message = await session.scalar(
+                select(ChatMessageRecord).where(
+                    ChatMessageRecord.world_id == world_id,
+                    ChatMessageRecord.turn_id == claim.turn_id.value,
+                    ChatMessageRecord.sender_player_id == claim.player_id.value,
+                )
+            )
+            if (
+                conversation.kind != "group"
+                or turn is None
+                or turn.conversation_id != claim.conversation_id.value
+                or turn.token_ceiling != claim.token_ceiling
+                or dispatch is None
+                or len(participants) < 2
+                or tuple(p.character_id for p in participants)
+                != tuple(item.value for item in claim.character_ids)
+                or character_id not in claim.character_ids
+                or player_message is None
+                or _message(player_message) != claim.player_message
+            ):
+                raise ChatTurnUnavailableError("chat_turn_claim_invalid")
+            replies = (
+                await session.scalars(
+                    select(ChatMessageRecord)
+                    .where(
+                        ChatMessageRecord.world_id == world_id,
+                        ChatMessageRecord.turn_id == claim.turn_id.value,
+                        ChatMessageRecord.sender_character_id.is_not(None),
+                    )
+                    .order_by(ChatMessageRecord.position)
+                )
+            ).all()
+            if ordinal < len(replies):
+                existing = replies[ordinal]
+                if existing.sender_character_id != character_id.value or existing.text != text:
+                    raise IdempotencyConflictError("chat_reply_conflict")
+                return _message(existing)
+            if ordinal != len(replies):
+                raise ChatTurnUnavailableError("chat_reply_ordinal_gap")
+            position = (
+                await session.scalar(
+                    select(func.max(ChatMessageRecord.position)).where(
+                        ChatMessageRecord.world_id == world_id,
+                        ChatMessageRecord.conversation_id == claim.conversation_id.value,
+                    )
+                )
+                or 0
+            ) + 1
+            row = ChatMessageRecord(
+                world_id=world_id,
+                message_id=uuid4(),
+                conversation_id=claim.conversation_id.value,
+                turn_id=claim.turn_id.value,
+                position=position,
+                sender_player_id=None,
+                sender_character_id=character_id.value,
                 text=text,
                 created_at_utc=datetime.now(UTC),
             )

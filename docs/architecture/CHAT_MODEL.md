@@ -55,6 +55,18 @@ completed. Creating a group does not move anyone, create an Observation, or
 invent a WorldEvent beyond the existing canonical CharacterCreated events for
 newly opened contacts.
 
+An internal group transcript path now persists one idempotent Player send and
+allows one durable dispatch claim. Under that claim, Character replies are
+appended in zero-based reply order. A repeated append at the same ordinal must
+match the committed Character and text; gaps and conflicting retries fail. The
+claim fixes the eligible participant set, and a restart cannot acquire it
+again. These records are Conversation messages, not WorldEvents or Observations.
+This is an internal persistence boundary only: the public send endpoint still
+rejects group turns, since speaker selection, governed generation and the
+shared Token ceiling are not yet composed. An interrupted claimed group turn
+is not automatically replayed, because an earlier provider outcome might be
+unknown.
+
 The current direct-conversation API opens/lists identities only. An authenticated POST endpoint now persists a Player
 message and its pending turn through the application service, returning the same
 result for a repeated request ID. It returns `202 pending`; it does not dispatch

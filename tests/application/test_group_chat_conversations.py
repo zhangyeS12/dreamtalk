@@ -1,4 +1,4 @@
-"""Group membership is durable, world-scoped, and cannot yet send a turn."""
+"""Group membership and internal transcript writes stay durable and owner-scoped."""
 
 import asyncio
 from uuid import uuid4
@@ -18,12 +18,13 @@ from livingworld.application.player_event_feed import PlayerEventFeedService
 from livingworld.application.player_onboarding import LocalPlayerOnboardingService
 from livingworld.application.simulation_clock import EffectiveWorldTimeSource, SystemMonotonicClock
 from livingworld.domain.contracts import RequestId
-from livingworld.domain.identifiers import WorldId
+from livingworld.domain.identifiers import CharacterId, ChatTurnId, WorldId
 from livingworld.infrastructure.clock import SystemWallClock
 from livingworld.infrastructure.persistence import Database
 from livingworld.infrastructure.persistence.models import (
     CharacterRecord,
     ChatConversationRecord,
+    ChatMessageRecord,
     ChatParticipantRecord,
     ChatTurnRecord,
     WorldEventRecord,
@@ -207,3 +208,115 @@ def test_group_api_requires_auth_and_rejects_undispatched_messages(tmp_path):
         assert sent.status_code == 409
         assert sent.json()["detail"] == "group_turn_unavailable"
     asyncio.run(db.close())
+
+
+def test_internal_group_turn_claim_and_multi_reply_are_durable_and_idempotent(tmp_path):
+    async def run():
+        db = Database(tmp_path)
+        await db.initialize()
+        clock = SystemWallClock()
+        handler = CommandHandler(
+            db.unit_of_work,
+            clock,
+            world_time_source=EffectiveWorldTimeSource(clock, SystemMonotonicClock()),
+        )
+        players = PlayerEventFeedService(db.player_event_feed_store())
+        imports = db.world_content_service()
+        chats = ChatConversationService(db.chat_conversation_store(), imports, players, handler)
+        messages = ChatMessageService(db.chat_message_store(), players)
+        world, other_world = WorldId(uuid4()), WorldId(uuid4())
+        try:
+            for item in (world, other_world):
+                await handler.execute(
+                    CreateWorld(request_id=RequestId(uuid4()), world_id=item, name="世界")
+                )
+            await LocalPlayerOnboardingService(handler, players).start_at_home(world)
+            await LocalPlayerOnboardingService(handler, players).start_at_home(other_world)
+            cards = []
+            for name in ("角色甲", "角色乙"):
+                document = card_document()
+                document["data"]["name"] = name
+                staged = await imports.prepare(world, "character", json_bytes(document))
+                cards.append(
+                    await imports.commit(world, staged.item.import_id, staged.item.reviewed_hash)
+                )
+            group = await chats.create_group(
+                world, RequestId(uuid4()), tuple(card.import_id for card in cards)
+            )
+            async with db._sessions() as session:
+                event_count = await session.scalar(
+                    select(func.count()).select_from(WorldEventRecord)
+                )
+            request = RequestId(uuid4())
+            sent = await messages.send_group_player(request, group.conversation_id, "大家好", 5000)
+            assert (
+                await messages.send_group_player(request, group.conversation_id, "大家好", 5000)
+                == sent
+            )
+            with pytest.raises(IdempotencyConflictError, match="chat_request_conflict"):
+                await messages.send_group_player(request, group.conversation_id, "不同内容", 5000)
+            # Even a matching public retry cannot bypass the direct-only endpoint boundary.
+            with pytest.raises(ChatTurnUnavailableError, match="group_turn_unavailable"):
+                await messages.send_player(request, group.conversation_id, "大家好", 5000)
+            with pytest.raises(EntityNotFoundError, match="chat_world_mismatch"):
+                await messages.claim_group(
+                    group.conversation_id, ChatTurnId(other_world, sent.turn_id.value)
+                )
+            claim = await messages.claim_group(group.conversation_id, sent.turn_id)
+            assert set(claim.character_ids) == {
+                participant.character_id for participant in group.participants
+            }
+            assert claim.player_message == sent.message
+            with pytest.raises(ChatTurnUnavailableError, match="chat_turn_already_claimed"):
+                await messages.claim_group(group.conversation_id, sent.turn_id)
+            first_character, second_character = claim.character_ids
+            first = await messages.complete_group_reply(claim, first_character, 0, "你好")
+            assert await messages.complete_group_reply(claim, first_character, 0, "你好") == first
+            with pytest.raises(IdempotencyConflictError, match="chat_reply_conflict"):
+                await messages.complete_group_reply(claim, second_character, 0, "你好")
+            with pytest.raises(ChatTurnUnavailableError, match="chat_reply_ordinal_gap"):
+                await messages.complete_group_reply(claim, second_character, 2, "收到")
+            with pytest.raises(ChatTurnUnavailableError, match="chat_turn_claim_invalid"):
+                await messages.complete_group_reply(
+                    claim, CharacterId(world, uuid4()), 1, "不在群里的角色"
+                )
+            second = await messages.complete_group_reply(claim, second_character, 1, "收到")
+            assert [
+                item.message_id for item in await messages.list_messages(group.conversation_id)
+            ] == [
+                sent.message.message_id,
+                first.message_id,
+                second.message_id,
+            ]
+            async with db._sessions() as session:
+                assert await session.scalar(select(func.count()).select_from(ChatTurnRecord)) == 1
+                assert (
+                    await session.scalar(select(func.count()).select_from(ChatMessageRecord)) == 3
+                )
+                assert (
+                    await session.scalar(select(func.count()).select_from(WorldEventRecord))
+                    == event_count
+                )
+        finally:
+            await db.close()
+        reopened = Database(tmp_path)
+        await reopened.initialize()
+        try:
+            restored = ChatMessageService(
+                reopened.chat_message_store(),
+                PlayerEventFeedService(reopened.player_event_feed_store()),
+            )
+            assert [
+                item.message_id for item in await restored.list_messages(group.conversation_id)
+            ] == [
+                sent.message.message_id,
+                first.message_id,
+                second.message_id,
+            ]
+            with pytest.raises(ChatTurnUnavailableError, match="chat_turn_already_claimed"):
+                await restored.claim_group(group.conversation_id, sent.turn_id)
+            assert await restored.complete_group_reply(claim, second_character, 1, "收到") == second
+        finally:
+            await reopened.close()
+
+    asyncio.run(run())
