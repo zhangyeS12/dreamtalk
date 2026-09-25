@@ -5,6 +5,10 @@ class IdempotencyConflictError(ValueError):
     """A request identity is occupied by different or unverifiable semantics."""
 
 
+class ChatTurnUnavailableError(ValueError):
+    """A chat turn has already been claimed or its state is incompatible."""
+
+
 class EntityNotFoundError(ValueError):
     """A referenced current-state entity does not exist."""
 

@@ -12,7 +12,7 @@ LivingWorld 是持久化、事件驱动的多角色 AI 世界，不是普通聊�
 
 Q-001B 提供仅开发环境启用的 [开发者运行时检查器](docs/architecture/RUNTIME_INSPECTOR.md)，用于通过真实 API/application 路径观察时钟、位置、Scene、trigger、activation、WorldEvent、Observation 与 owner-scoped EpisodicMemory。它不是最终产品 UI，也没有加入 Activation consumer 或自动 Observation→Memory。
 
-普通用户入口已建立“聊天 / 通讯录 / 设置 / 我”四标签基础，支持创建与切换世界、暂停/恢复及时间倍率设置、在每个世界绑定 Player；未绑定的新世界可通过 canonical 命令从“家”创建本地玩家并进入。支持通用与世界专属个人资料保存，以及置顶的玩家已知“世界事件”时间线。事件查询先按绑定 Player 的 Observation 授权，再读取安全展示信息。设置支持导入、预览确认和独立更新当前世界的角色卡与世界书；通讯录只显示当前世界已确认的角色资料。首次打开角色会建立世界隔离的持久私聊会话；聊天页可读取该 Player 有权查看的消息记录。内部服务和受认证 API 可幂等保存玩家消息与待处理回合，但角色回复、整轮 Token 保护和页面发送入口尚未接入。详见 [产品界面与知情边界](docs/architecture/PRODUCT_SURFACE.md) 与 [聊天模型](docs/architecture/CHAT_MODEL.md)。开发者检查器通过 URL 查询参数 `?developer=1` 进入。
+普通用户入口已建立“聊天 / 通讯录 / 设置 / 我”四标签基础，支持创建与切换世界、暂停/恢复及时间倍率设置、在每个世界绑定 Player；未绑定的新世界可通过 canonical 命令从“家”创建本地玩家并进入。支持通用与世界专属个人资料保存，以及置顶的玩家已知“世界事件”时间线。事件查询先按绑定 Player 的 Observation 授权，再读取安全展示信息。设置支持导入、预览确认和独立更新当前世界的角色卡与世界书；通讯录只显示当前世界已确认的角色资料。首次打开角色会建立世界隔离的持久私聊会话；聊天页可读取该 Player 有权查看的消息记录。内部服务和受认证 API 可幂等保存玩家消息与待处理回合；模型执行层已有逐次调用的保守 Token 预留，角色回复具备内部一次性领取与幂等提交边界，但尚未接入模型编排和页面发送入口。详见 [产品界面与知情边界](docs/architecture/PRODUCT_SURFACE.md) 与 [聊天模型](docs/architecture/CHAT_MODEL.md)。开发者检查器通过 URL 查询参数 `?developer=1` 进入。
 
 Stage 5 — World Kernel & Simulation Runtime 已完成并冻结。C-006D 的 clock reconciliation、C-006C sparse activation/coalescing 与 C-006B deterministic Action/Scene/event-time perception 继续作为 Stage 6 substrate。详见 [Stage 5 验收](docs/architecture/STAGE5_ACCEPTANCE.md)、[Clock Reconciliation](docs/architecture/CLOCK_RECONCILIATION.md)、[Sparse Activation](docs/architecture/SPARSE_ACTIVATION.md)、[Action Resolution](docs/architecture/ACTION_RESOLUTION.md) 和 [Scenes and Perception](docs/architecture/SCENES_AND_PERCEPTION.md)。
 

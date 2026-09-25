@@ -139,4 +139,14 @@ position; reusing it for different semantics fails. New requests append in
 per-Conversation order. The initial durable status is `pending` and does not
 itself trigger provider generation. The current schema stores player messages;
 the sender columns reserve an explicit Character identity for a later validated
-reply path. No automatic replay of pending/uncertain model work exists.
+reply path. The internal direct-reply boundary can claim a pending turn once in
+a durable `chat_turn_dispatches` row before provider work. A second or restarted
+claimant cannot generate it again. A caller-provided, bounded nonblank reply
+can be appended in transcript order; repeating the same completion returns
+the committed message, while conflicting content fails. Claim and reply writes
+are separate transactions. An interrupted claim remains unresolved without a
+fabricated reply or automatic provider replay, because the provider outcome may
+be unknown. The legacy `chat_turns.status = pending` field records the initial
+player-send receipt; the claim and Character message establish later execution
+state. This is an internal boundary, not a reply-write API. No model orchestrator
+or normal UI send flow invokes it yet.

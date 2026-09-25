@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Protocol
 
@@ -27,7 +27,7 @@ class ChatMessage:
     turn_id: ChatTurnId
     position: int
     sender_id: PlayerId | CharacterId
-    text: str
+    text: str = field(repr=False)
     created_at_utc: datetime
 
 
@@ -37,6 +37,18 @@ class PlayerSend:
     message: ChatMessage
     token_ceiling: int
     status: str
+
+
+@dataclass(frozen=True, slots=True)
+class ClaimedDirectTurn:
+    """A durable, one-time claim; an interrupted claim is never auto-replayed."""
+
+    turn_id: ChatTurnId
+    conversation_id: ConversationId
+    player_id: PlayerId
+    character_id: CharacterId
+    player_message: ChatMessage = field(repr=False)
+    token_ceiling: int
 
 
 class ChatMessageStore(Protocol):
@@ -53,6 +65,12 @@ class ChatMessageStore(Protocol):
     async def list_for_player(
         self, conversation_id: ConversationId, player_id: PlayerId
     ) -> tuple[ChatMessage, ...]: ...
+
+    async def claim_direct(
+        self, conversation_id: ConversationId, turn_id: ChatTurnId, player_id: PlayerId
+    ) -> ClaimedDirectTurn: ...
+
+    async def complete_direct(self, claim: ClaimedDirectTurn, text: str) -> ChatMessage: ...
 
 
 class ChatMessageService:
@@ -102,3 +120,15 @@ class ChatMessageService:
         return await self._store.list_for_player(
             conversation_id, await self._player(conversation_id)
         )
+
+    async def claim_direct(
+        self, conversation_id: ConversationId, turn_id: ChatTurnId
+    ) -> ClaimedDirectTurn:
+        return await self._store.claim_direct(
+            conversation_id, turn_id, await self._player(conversation_id)
+        )
+
+    async def complete_direct(self, claim: ClaimedDirectTurn, text: str) -> ChatMessage:
+        if not isinstance(text, str) or not text.strip() or len(text.encode("utf-8")) > 65536:
+            raise ValueError("chat_reply_invalid")
+        return await self._store.complete_direct(claim, text)

@@ -33,10 +33,12 @@ BINDING_REVISION = "0015_local_player_binding"
 PROFILE_REVISION = "0016_local_profiles"
 WORLD_CONTENT_REVISION = "0017_world_content_imports"
 CHAT_CONVERSATION_REVISION = "0018_chat_conversations"
-HEAD_REVISION = "0019_chat_messages"
+CHAT_MESSAGE_REVISION = "0019_chat_messages"
+HEAD_REVISION = "0020_chat_turn_dispatch"
 CHAT_IDENTITY_TABLES = {"chat_conversations", "chat_participants"}
 CHAT_MESSAGE_TABLES = {"chat_turns", "chat_messages"}
-CHAT_TABLES = CHAT_IDENTITY_TABLES | CHAT_MESSAGE_TABLES
+CHAT_DISPATCH_TABLES = {"chat_turn_dispatches"}
+CHAT_TABLES = CHAT_IDENTITY_TABLES | CHAT_MESSAGE_TABLES | CHAT_DISPATCH_TABLES
 LOCAL_PROFILE_TABLES = {"local_user_profile", "local_world_profiles"}
 BUDGET_TABLES = {"llm_budgets", "llm_budget_reservations"}
 SIMULATION_TABLES = {
@@ -208,14 +210,20 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         PROFILE_REVISION,
         WORLD_CONTENT_REVISION,
         CHAT_CONVERSATION_REVISION,
+        CHAT_MESSAGE_REVISION,
         HEAD_REVISION,
     }:
         _fail("alembic_revision_unsupported")
-    # Both chat revisions only add tables. Validate each historical cursor
+    # Chat revisions only add tables. Validate each historical cursor
     # against the reviewed head shape minus its later tables.
-    pre_chat_revision = revision not in {CHAT_CONVERSATION_REVISION, HEAD_REVISION}
-    pre_message_revision = revision != HEAD_REVISION
-    if revision in {WORLD_CONTENT_REVISION, CHAT_CONVERSATION_REVISION}:
+    pre_chat_revision = revision not in {
+        CHAT_CONVERSATION_REVISION,
+        CHAT_MESSAGE_REVISION,
+        HEAD_REVISION,
+    }
+    pre_message_revision = revision not in {CHAT_MESSAGE_REVISION, HEAD_REVISION}
+    pre_dispatch_revision = revision != HEAD_REVISION
+    if revision in {WORLD_CONTENT_REVISION, CHAT_CONVERSATION_REVISION, CHAT_MESSAGE_REVISION}:
         revision = HEAD_REVISION
     _validate_legacy_metadata(connection)
     tables = _table_names(connection)
@@ -227,6 +235,8 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
             expected -= CHAT_IDENTITY_TABLES
         if pre_message_revision:
             expected -= CHAT_MESSAGE_TABLES
+        if pre_dispatch_revision:
+            expected -= CHAT_DISPATCH_TABLES
         if revision not in {
             LEDGER_REVISION,
             CONTENT_REVISION,
@@ -331,6 +341,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
             revision,
             pre_chat_revision=pre_chat_revision,
             pre_message_revision=pre_message_revision,
+            pre_dispatch_revision=pre_dispatch_revision,
         )
     if revision in {
         CONTENT_REVISION,
@@ -381,6 +392,7 @@ def _validate_domain_shape(
     *,
     pre_chat_revision: bool | None = None,
     pre_message_revision: bool | None = None,
+    pre_dispatch_revision: bool | None = None,
 ) -> None:
     """Detect partial/mismatched schemas; never infer a revision from them."""
 
@@ -389,6 +401,8 @@ def _validate_domain_shape(
         pre_chat_revision = revision != HEAD_REVISION
     if pre_message_revision is None:
         pre_message_revision = revision != HEAD_REVISION
+    if pre_dispatch_revision is None:
+        pre_dispatch_revision = revision != HEAD_REVISION
     # Explicit reviewed deltas describe historical shapes for each Alembic cursor.
     # The Alembic cursor selects the expected shape; shape never selects migrations.
     baseline = revision == DOMAIN_BASELINE_REVISION
@@ -407,6 +421,8 @@ def _validate_domain_shape(
         if pre_chat_revision and table.name in CHAT_IDENTITY_TABLES:
             continue
         if pre_message_revision and table.name in CHAT_MESSAGE_TABLES:
+            continue
+        if pre_dispatch_revision and table.name in CHAT_DISPATCH_TABLES:
             continue
         if (
             revision

@@ -1086,6 +1086,20 @@ class ChatTurnRecord(Base):
     )
 
 
+class ChatTurnDispatchRecord(Base):
+    """One-way durable claim before any provider work; never auto-replayed."""
+
+    __tablename__ = "chat_turn_dispatches"
+    world_id: Mapped[UUID] = mapped_column(UUIDStorage(), primary_key=True)
+    turn_id: Mapped[UUID] = mapped_column(UUIDStorage(), primary_key=True)
+    claimed_at_utc: Mapped[datetime] = mapped_column(UTCTimestampStorage(), nullable=False)
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["world_id", "turn_id"], ["chat_turns.world_id", "chat_turns.turn_id"]
+        ),
+    )
+
+
 class ChatMessageRecord(Base):
     """Ordered transcript record; it does not confer knowledge or world truth."""
 
