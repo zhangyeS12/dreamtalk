@@ -171,6 +171,15 @@ assertions are not yet retrieved. The current-world profile is explicitly given
 precedence over the general description. This builder prepares input only; it
 does not dispatch a model or authorize any new knowledge.
 
+The persisted transcript remains complete. Prompt assembly always includes the
+current Player send, then retains the most recent complete prior turns while
+staying within 32 messages and 96 KiB of message text. Delayed replies may
+interleave with later sends; selection groups records by durable turn identity
+and restores message position order in the prompt. The first older turn that
+cannot fit ends the history window. This bounded window is only a prompt view;
+it does not delete or summarize stored messages or weaken the physical-attempt
+Token preflight.
+
 ## Persistence boundary
 
 Conversation and Message are durable interaction records. They are not entries in

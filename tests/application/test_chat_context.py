@@ -2,12 +2,13 @@
 
 import asyncio
 import json
+from datetime import UTC, datetime
 from uuid import uuid4
 
 from card_fixtures import card_document, json_bytes
 from livingworld.application.chat_context import DirectChatContextBuilder
 from livingworld.application.chat_conversations import ChatConversationService
-from livingworld.application.chat_messages import ChatMessageService
+from livingworld.application.chat_messages import ChatMessage, ChatMessageService
 from livingworld.application.command_handler import CommandHandler
 from livingworld.application.commands import AcquireKnowledge, AssertWorldTruth, CreateWorld
 from livingworld.application.llm import MessageRole
@@ -17,7 +18,15 @@ from livingworld.application.player_event_feed import PlayerEventFeedService
 from livingworld.application.player_onboarding import LocalPlayerOnboardingService
 from livingworld.application.simulation_clock import EffectiveWorldTimeSource, SystemMonotonicClock
 from livingworld.domain.contracts import RequestId
-from livingworld.domain.identifiers import KnowledgeAssertionId, WorldId
+from livingworld.domain.identifiers import (
+    CharacterId,
+    ChatTurnId,
+    ConversationId,
+    KnowledgeAssertionId,
+    MessageId,
+    PlayerId,
+    WorldId,
+)
 from livingworld.domain.knowledge import ObservationChannel
 from livingworld.domain.values import WorldTime
 from livingworld.infrastructure.clock import SystemWallClock
@@ -179,3 +188,42 @@ def test_context_tracks_current_accepted_persona_and_only_own_chat(tmp_path):
             await db.close()
 
     asyncio.run(run())
+
+
+def test_context_window_keeps_current_send_and_complete_recent_turns():
+    world = WorldId(uuid4())
+    conversation = ConversationId(world, uuid4())
+    player = PlayerId(world, uuid4())
+    character = CharacterId(world, uuid4())
+    old_turn, recent_turn, current_turn = (ChatTurnId(world, uuid4()) for _ in range(3))
+
+    def message(turn, position, sender, text):
+        return ChatMessage(
+            MessageId(world, uuid4()),
+            conversation,
+            turn,
+            position,
+            sender,
+            text,
+            datetime.now(UTC),
+        )
+
+    old = message(old_turn, 1, player, "A" * 60_000)
+    old_reply = message(old_turn, 2, character, "旧回复")
+    recent = message(recent_turn, 3, player, "B" * 60_000)
+    recent_reply = message(recent_turn, 4, character, "新回复")
+    current = message(current_turn, 5, player, "最新问题")
+    selected = DirectChatContextBuilder._recent_transcript(
+        (old, old_reply, recent, recent_reply, current), current
+    )
+    assert selected == (recent, recent_reply, current)
+
+    # A delayed response can interleave with another Player send. Keep each
+    # selected turn intact, then restore the actual transcript order.
+    overlapping = (
+        message(old_turn, 1, player, "甲"),
+        message(recent_turn, 2, player, "乙"),
+        message(old_turn, 3, character, "回复甲"),
+        current,
+    )
+    assert DirectChatContextBuilder._recent_transcript(overlapping, current) == overlapping
