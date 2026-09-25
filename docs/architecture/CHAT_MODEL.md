@@ -44,8 +44,11 @@ Player's world. It resolves replacement roots, reuses the same lazy runtime
 Character creation path as direct chat, and atomically stores one group
 Conversation and its participants. The request ID identifies a retried create;
 it cannot be reused for a different participant set. A separate owner-scoped
-group-list endpoint reads these records. The existing direct-list endpoint and
-ordinary UI still show direct conversations only. Group message sends are
+group-list endpoint reads these records. The ordinary Chat tab now lists the
+selected Player's direct and group conversations separately, lets the Player
+select current-world Character Card contacts to create a group, and displays
+its persisted members. An uncertain create can be retried with the same request
+ID and member set. Group message sends are
 explicitly rejected until the independent speaker scheduler and shared-turn
 budget are connected; this avoids storing a group turn that cannot be safely
 completed. Creating a group does not move anyone, create an Observation, or

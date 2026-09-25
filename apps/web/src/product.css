@@ -98,6 +98,18 @@
 .conversation-list { min-width: 0; overflow-y: auto; border-right: 1px solid var(--line); background: var(--surface); }
 .conversation-list .empty-state { padding: 40px 20px; }
 .conversation-row.selected { background: var(--green-soft); }
+.group-create-link { display: block; width: 100%; padding: 12px 20px; border: 0; border-bottom: 1px solid var(--line); background: var(--surface); color: var(--green-hover); text-align: left; font: inherit; cursor: pointer; }
+.group-create-link:hover { background: var(--page); }
+.group-setup form { padding: 12px 24px 24px; }
+.group-contact-list { display: grid; gap: 0; max-width: 620px; margin: 14px 0; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.group-contact { display: flex; align-items: center; gap: 12px; padding: 13px 16px; border-bottom: 1px solid var(--line); cursor: pointer; }
+.group-contact:last-child { border-bottom: 0; }
+.group-contact input { width: 18px; height: 18px; accent-color: var(--green); }
+.group-actions { margin-top: 20px; }
+.group-members { padding: 24px; }
+.group-members h3 { margin: 0 0 12px; font-size: .95rem; }
+.group-members ul { display: flex; flex-wrap: wrap; gap: 8px; padding: 0; list-style: none; }
+.group-members li { padding: 8px 12px; border-radius: 8px; background: var(--green-soft); }
 .conversation-detail { min-width: 0; overflow-y: auto; background: var(--page); }
 .conversation-placeholder { height: 100%; min-height: 300px; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 32px; text-align: center; }
 .conversation-placeholder h2 { font-size: 1.1rem; font-weight: 600; margin: 0 0 12px; }

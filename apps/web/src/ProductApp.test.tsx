@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { CoreClient, type ChatConversation, type WorldContentItem, type WorldSettings } from "@livingworld/api-client";
+import { CoreClient, type ChatConversation, type GroupChatConversation, type WorldContentItem, type WorldSettings } from "@livingworld/api-client";
 import { ProductApp } from "./ProductApp";
 
 afterEach(cleanup);
@@ -13,11 +13,21 @@ const cardA: WorldContentItem = {
   lorebooks: [], entries: [],
 };
 const chatA: ChatConversation = { conversation_id: "chat-a", player_id: "player-a", character_id: "character-a", root_import_id: "card-a", character_name: "角色甲", kind: "direct" };
+const cardB: WorldContentItem = { ...cardA, import_id: "card-b", characters: [{ ...cardA.characters[0], id: "character-b", name: "角色乙" }] };
+const groupA: GroupChatConversation = { conversation_id: "group-a", player_id: "player-a", kind: "group", participants: [
+  { character_id: "character-a", root_import_id: "card-a", character_name: "角色甲" },
+  { character_id: "character-b", root_import_id: "card-b", character_name: "角色乙" },
+] };
+
+function renderProduct(client: CoreClient) {
+  if (!("groupConversations" in client)) Object.assign(client, { groupConversations: vi.fn().mockResolvedValue([]) });
+  return render(<ProductApp client={client} />);
+}
 
 it("renders four bottom tabs and keeps the known-event entry pinned", async () => {
   const client = { worldContent: vi.fn().mockResolvedValue([]),
     listProductWorlds: vi.fn().mockResolvedValue([worldA]), listPlayers: vi.fn().mockResolvedValue([]), selectedPlayer: vi.fn().mockResolvedValue({ player_id: null }) } as unknown as CoreClient;
-  render(<ProductApp client={client} />);
+  renderProduct(client);
   expect((await screen.findAllByText("世界甲")).length).toBeGreaterThan(0);
   expect(screen.getByRole("navigation", { name: "主导航" }).querySelectorAll("button")).toHaveLength(4);
   expect(screen.getByRole("button", { name: "世界事件你已获知的事件置顶" })).toBeTruthy();
@@ -29,7 +39,7 @@ it("creates and switches worlds using the product client", async () => {
   const listProductWorlds = vi.fn().mockResolvedValueOnce([worldA]).mockResolvedValue([worldA, worldB]);
   const createWorld = vi.fn().mockResolvedValue({ world_id: "world-b" });
   const client = { worldContent: vi.fn().mockResolvedValue([]), listProductWorlds, createWorld, pauseProductWorld: vi.fn(), listPlayers: vi.fn().mockResolvedValue([]), selectedPlayer: vi.fn().mockResolvedValue({ player_id: null }) } as unknown as CoreClient;
-  render(<ProductApp client={client} />);
+  renderProduct(client);
   fireEvent.click(screen.getByRole("button", { name: "设置" }));
   expect(await screen.findByRole("combobox", { name: "当前世界" })).toBeTruthy();
   fireEvent.change(screen.getByPlaceholderText("给世界起个名字"), { target: { value: "世界乙" } });
@@ -47,7 +57,7 @@ it("shows the player-scoped world-event thread in chronological order", async ()
     { event_id: "event-2", title: "你获知了一件世界事件", occurred_at: "120000000", observed_at: "180000000", ledger_position: 7 },
   ]);
   const client = { worldContent: vi.fn().mockResolvedValue([]), listProductWorlds: vi.fn().mockResolvedValue([worldA]), listPlayers: vi.fn().mockResolvedValue([{ player_id: playerId, name: "我" }]), selectedPlayer: vi.fn().mockResolvedValue({ player_id: playerId }), knownEvents, conversations: vi.fn().mockResolvedValue([]) } as unknown as CoreClient;
-  render(<ProductApp client={client} />);
+  renderProduct(client);
   await screen.findAllByText("世界甲");
   await waitFor(() => expect(client.selectedPlayer).toHaveBeenCalledWith("world-a"));
   fireEvent.click(screen.getByRole("button", { name: "世界事件你已获知的事件置顶" }));
@@ -73,7 +83,7 @@ it("does not display a late event response after switching worlds", async () => 
     knownEvents,
     conversations: vi.fn().mockResolvedValue([]),
   } as unknown as CoreClient;
-  render(<ProductApp client={client} />);
+  renderProduct(client);
   await waitFor(() => expect(client.selectedPlayer).toHaveBeenCalledWith("world-a"));
   fireEvent.click(screen.getByRole("button", { name: "世界事件你已获知的事件置顶" }));
   await waitFor(() => expect(knownEvents).toHaveBeenCalledWith("world-a"));
@@ -96,7 +106,7 @@ it("enters a new world at home through the product client", async () => {
   const client = { worldContent: vi.fn().mockResolvedValue([]), listProductWorlds: vi.fn().mockResolvedValue([worldA]), listPlayers, selectedPlayer, startAtHome,
     profile: vi.fn().mockResolvedValue({ name: "", description: "", revision: 0 }),
   } as unknown as CoreClient;
-  render(<ProductApp client={client} />);
+  renderProduct(client);
   fireEvent.click(screen.getByRole("button", { name: "我" }));
   const enter = await screen.findByRole("button", { name: "进入世界" });
   expect(screen.getByText(/你会从“家”开始/)).toBeTruthy();
@@ -113,7 +123,7 @@ it("offers home-entry recovery when player creation completed before binding", a
     startAtHome: vi.fn().mockResolvedValue({ player_id: player.player_id }),
     profile: vi.fn().mockResolvedValue({ name: "", description: "", revision: 0 }),
   } as unknown as CoreClient;
-  render(<ProductApp client={client} />);
+  renderProduct(client);
   fireEvent.click(screen.getByRole("button", { name: "我" }));
   fireEvent.click(await screen.findByRole("button", { name: "继续从家进入" }));
   await waitFor(() => expect(client.startAtHome).toHaveBeenCalledWith("world-a"));
@@ -129,7 +139,7 @@ it("changes only the bound player's busy/available state from Settings", async (
     listPlayers: vi.fn().mockResolvedValue([{ player_id: "player-a", name: "我" }]), selectedPlayer,
     setPlayerAvailability, conversations: vi.fn().mockResolvedValue([]),
   } as unknown as CoreClient;
-  render(<ProductApp client={client} />);
+  renderProduct(client);
   await waitFor(() => expect(selectedPlayer).toHaveBeenCalledWith("world-a"));
   fireEvent.click(screen.getByRole("button", { name: "设置" }));
   const toggle = await screen.findByRole("button", { name: "设为可用" });
@@ -150,7 +160,7 @@ it("opens a contact lazily and shows only the selected world's real conversation
     conversations, openDirectConversation, conversationMessages: vi.fn().mockResolvedValue([]),
     directReplyAvailability: vi.fn().mockResolvedValue({ available: false }),
   } as unknown as CoreClient;
-  render(<ProductApp client={client} />);
+  renderProduct(client);
   fireEvent.click(screen.getByRole("button", { name: "通讯录" }));
   const contact = await screen.findByRole("button", { name: "角色甲查看角色资料" });
   expect(openDirectConversation).not.toHaveBeenCalled();
@@ -164,4 +174,48 @@ it("opens a contact lazily and shows only the selected world's real conversation
   fireEvent.click(screen.getByRole("button", { name: "聊天" }));
   expect(screen.queryByRole("region", { name: "角色甲的会话" })).toBeNull();
   await waitFor(() => expect(conversations).toHaveBeenCalledWith("world-b"));
+});
+
+it("creates a durable group from current-world cards and never offers unsupported sends", async () => {
+  const createGroupConversation = vi.fn().mockResolvedValue(groupA);
+  const client = {
+    worldContent: vi.fn().mockResolvedValue([cardA, cardB]),
+    listProductWorlds: vi.fn().mockResolvedValue([worldA]),
+    listPlayers: vi.fn().mockResolvedValue([{ player_id: "player-a", name: "我" }]),
+    selectedPlayer: vi.fn().mockResolvedValue({ player_id: "player-a" }),
+    conversations: vi.fn().mockResolvedValue([]), groupConversations: vi.fn().mockResolvedValue([]),
+    createGroupConversation,
+  } as unknown as CoreClient;
+  renderProduct(client);
+  fireEvent.click(await screen.findByRole("button", { name: "＋ 新建群聊" }));
+  const setup = await screen.findByRole("region", { name: "创建群聊" });
+  fireEvent.click(screen.getByRole("checkbox", { name: "角色甲" }));
+  fireEvent.click(screen.getByRole("checkbox", { name: "角色乙" }));
+  fireEvent.click(screen.getByRole("button", { name: "创建群聊" }));
+  await waitFor(() => expect(createGroupConversation).toHaveBeenCalledOnce());
+  expect(createGroupConversation.mock.calls[0]?.slice(0, 2)).toEqual(["world-a", ["card-a", "card-b"]]);
+  expect(setup.isConnected).toBe(false);
+  expect(await screen.findByRole("region", { name: "群聊成员" })).toBeTruthy();
+  expect(screen.getByText(/发言调度与整轮 Token 额度接线完成后/)).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "发送" })).toBeNull();
+});
+
+it("does not carry a group into another world's conversation list", async () => {
+  const client = {
+    worldContent: vi.fn().mockResolvedValue([]), listProductWorlds: vi.fn().mockResolvedValue([worldA, worldB]),
+    listPlayers: vi.fn((id: string) => Promise.resolve([{ player_id: `${id}-player`, name: "我" }])),
+    selectedPlayer: vi.fn((id: string) => Promise.resolve({ player_id: `${id}-player` })),
+    conversations: vi.fn().mockResolvedValue([]),
+    groupConversations: vi.fn((id: string) => Promise.resolve(id === "world-a" ? [groupA] : [])),
+  } as unknown as CoreClient;
+  renderProduct(client);
+  const groupRow = await screen.findByRole("button", { name: /角色甲、角色乙群聊/ });
+  fireEvent.click(groupRow);
+  expect(await screen.findByRole("region", { name: "群聊成员" })).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "设置" }));
+  fireEvent.change(screen.getByRole("combobox", { name: "当前世界" }), { target: { value: "world-b" } });
+  fireEvent.click(screen.getByRole("button", { name: "聊天" }));
+  await waitFor(() => expect(client.groupConversations).toHaveBeenCalledWith("world-b"));
+  expect(screen.queryByRole("region", { name: "群聊成员" })).toBeNull();
+  expect(screen.queryByRole("button", { name: /角色甲、角色乙群聊/ })).toBeNull();
 });
