@@ -98,10 +98,12 @@ export function GroupChatDetails({ client, worldId, playerId, group, tokenCeilin
       try {
         await client.generateGroupReply(worldId, group.conversation_id, sent.turn_id);
         setRefresh(value => value + 1);
-      } catch {
+      } catch (failure) {
         const turn = await client.groupTurn(worldId, group.conversation_id, sent.turn_id).catch(() => null);
         setRefresh(value => value + 1);
-        if (turn?.state !== "completed") setFeedback("这一轮未能完整结束，已有发言仍会保留。为避免重复消耗，系统不会自动重试；你可以发送新消息。");
+        if (turn?.state !== "completed") setFeedback(failure instanceof CoreRequestError && failure.status === 422
+          ? "这一轮未获预算授权或额度已耗尽。请核对每轮 Token 额度、模型可信上界与费用预算；已有发言会保留，系统不会自动重试。"
+          : "这一轮未能完整结束，已有发言仍会保留。为避免重复消耗，系统不会自动重试；你可以发送新消息。");
       }
     } catch {
       setFeedback("消息保存结果尚未确认。可重试保存同一条消息，不会创建重复回合。");

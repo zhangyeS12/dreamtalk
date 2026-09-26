@@ -101,3 +101,13 @@ it("requires a new key when changing provider and never overwrites an advanced c
   expect(await screen.findByText("当前配置由高级方式管理；此处不会覆盖其中的路由、定价或其他设置。")).toBeTruthy();
   expect(screen.queryByRole("button", { name: "更新模型设置" })).toBeNull();
 });
+
+it("warns when the current turn ceiling cannot fit the trusted input bound", async () => {
+  vi.mocked(isTauri).mockReturnValue(true);
+  vi.mocked(invoke).mockResolvedValue({
+    provider_kind: "anthropic", model_id: "large-model", base_url: null,
+    max_billable_input_tokens: 50_000, max_output_tokens: 2_000,
+  });
+  render(<ModelSetup client={client("ready")} turnTokenCeiling={50_000} />);
+  expect(await screen.findByText(/无法再为回复预留至少 1 Token/)).toBeTruthy();
+});

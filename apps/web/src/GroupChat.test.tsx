@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { CoreClient, type GroupChatConversation, type WorldContentItem } from "@dreamtalk/api-client";
+import { CoreClient, CoreRequestError, type GroupChatConversation, type WorldContentItem } from "@dreamtalk/api-client";
 import { GroupChatDetails, GroupChatSetup } from "./GroupChat";
 
 afterEach(cleanup);
@@ -51,4 +51,24 @@ it("sends one group turn and shows the committed character reply", async () => {
   expect(sendGroupMessage.mock.calls[0]?.slice(0, 4)).toEqual(["world-a", "group-a", "@角色乙 你好", 500]);
   expect(await screen.findByText("你好")).toBeTruthy();
   expect(screen.getByText("角色乙")).toBeTruthy();
+});
+
+it("reports group budget denial without replaying the saved turn", async () => {
+  const group: GroupChatConversation = { conversation_id: "group-a", player_id: "player-a", kind: "group", participants: [
+    { character_id: "character-a", root_import_id: "card-a", character_name: "角色甲" },
+    { character_id: "character-b", root_import_id: "card-b", character_name: "角色乙" },
+  ] };
+  const sendGroupMessage = vi.fn().mockResolvedValue({ turn_id: "t1" });
+  const generateGroupReply = vi.fn().mockRejectedValue(new CoreRequestError(422));
+  const client = { conversationMessages: vi.fn().mockResolvedValue([]), sendGroupMessage,
+    generateGroupReply, groupTurn: vi.fn().mockResolvedValue({ state: "pending" }),
+    groupReplyAvailability: vi.fn().mockResolvedValue({ available: true }) } as unknown as CoreClient;
+  render(<GroupChatDetails client={client} worldId="world-a" playerId="player-a" group={group} tokenCeiling={500} onBack={() => {}} />);
+  const draft = await screen.findByRole("textbox", { name: "发送群聊消息" });
+  await waitFor(() => expect(draft).toHaveProperty("disabled", false));
+  fireEvent.change(draft, { target: { value: "你好" } });
+  fireEvent.click(screen.getByRole("button", { name: "发送" }));
+  expect(await screen.findByText(/这一轮未获预算授权或额度已耗尽/)).toBeTruthy();
+  expect(sendGroupMessage).toHaveBeenCalledOnce();
+  expect(generateGroupReply).toHaveBeenCalledOnce();
 });

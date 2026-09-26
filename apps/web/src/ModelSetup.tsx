@@ -20,8 +20,9 @@ const statusText: Record<LLMRuntimeStatus, string> = {
   degraded: "模型配置或凭据状态异常。世界和已有聊天记录仍可使用。",
 };
 
-export function ModelSetup({ client, onConfigured = () => window.location.reload() }: {
+export function ModelSetup({ client, turnTokenCeiling, onConfigured = () => window.location.reload() }: {
   client: CoreClient;
+  turnTokenCeiling?: number;
   onConfigured?: () => void;
 }) {
   const [status, setStatus] = useState<LLMRuntimeStatus | null>(null);
@@ -106,6 +107,7 @@ export function ModelSetup({ client, onConfigured = () => window.location.reload
     <div className="section-heading"><h2>聊天模型</h2><p>{status === null ? "正在读取模型状态…" : statusText[status]}</p></div>
     {error ? <p className="app-alert" role="alert">{error}</p> : null}
     {managedUnsupported && status !== "unconfigured" ? <p className="inline-hint">当前配置由高级方式管理；此处不会覆盖其中的路由、定价或其他设置。</p> : null}
+    {turnTokenCeiling !== undefined && inputBound >= turnTokenCeiling && (editing || status === "unconfigured") ? <p className="compatibility-notice" role="status">当前单次输入可信上界已达到或超过每轮 {turnTokenCeiling.toLocaleString("zh-CN")} Token 额度，无法再为回复预留至少 1 Token。请提高下面的聊天额度，或核对并如实调整模型上界。</p> : null}
     {isTauri() && (status === "unconfigured" || (editing && !managedUnsupported)) ? <form onSubmit={event => void save(event)}>
       <div className="model-setup-fields">
         <label className="field"><span>提供商</span><select value={providerKind} disabled={saving} onChange={event => setProviderKind(event.target.value as ProviderKind)}><option value="openai-responses">OpenAI</option><option value="anthropic">Anthropic</option><option value="gemini">Gemini</option><option value="openai-compatible">兼容 Chat Completions 的服务</option></select></label>

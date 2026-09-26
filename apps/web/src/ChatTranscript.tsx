@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { CoreClient, type ChatConversation, type ChatMessage } from "@dreamtalk/api-client";
+import { CoreClient, CoreRequestError, type ChatConversation, type ChatMessage } from "@dreamtalk/api-client";
 
 interface Props {
   client: CoreClient;
@@ -56,11 +56,13 @@ export function ChatTranscript({ client, worldId, playerId, conversation, tokenC
       try {
         await client.generateDirectReply(worldId, conversation.conversation_id, sent.turn_id);
         setRefresh(value => value + 1);
-      } catch {
+      } catch (failure) {
         // Query once for a completed reply; never replay an uncertain model call.
         const turn = await client.directTurn(worldId, conversation.conversation_id, sent.turn_id).catch(() => null);
         if (turn?.state === "completed") setRefresh(value => value + 1);
-        else setFeedback("这轮回复未完成。为避免重复消耗，系统不会自动重试；你可以继续发送新消息。");
+        else setFeedback(failure instanceof CoreRequestError && failure.status === 422
+          ? "这轮回复未获预算授权。请核对每轮 Token 额度、模型可信上界与费用预算；消息已保存，系统不会自动重试模型调用。"
+          : "这轮回复未完成。为避免重复消耗，系统不会自动重试；你可以继续发送新消息。");
       }
     } catch {
       setFeedback("消息保存结果尚未确认。可重试保存同一条消息，不会创建重复回合。");

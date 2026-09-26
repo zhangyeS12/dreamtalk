@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { CoreClient, type ChatConversation, type ChatMessage } from "@dreamtalk/api-client";
+import { CoreClient, CoreRequestError, type ChatConversation, type ChatMessage } from "@dreamtalk/api-client";
 import { ChatTranscript } from "./ChatTranscript";
 
 afterEach(cleanup);
@@ -73,4 +73,20 @@ it("checks an uncertain reply without replaying the model call", async () => {
   await screen.findByText(/这轮回复未完成/);
   expect(generateDirectReply).toHaveBeenCalledOnce();
   expect(directTurn).toHaveBeenCalledOnce();
+});
+
+it("explains a budget denial without replaying an already saved player message", async () => {
+  const player: ChatMessage = { message_id: "m1", turn_id: "t1", conversation_id: "conversation-a", position: 1, sender_kind: "player", sender_id: "player-a", text: "你好", created_at_utc: "2026-09-24T10:00:00+00:00" };
+  const sendPlayerMessage = vi.fn().mockResolvedValue({ turn_id: "t1", token_ceiling: 50_000, status: "pending", message: player });
+  const generateDirectReply = vi.fn().mockRejectedValue(new CoreRequestError(422));
+  const client = { conversationMessages: vi.fn().mockResolvedValue([player]), sendPlayerMessage,
+    generateDirectReply, directTurn: vi.fn().mockResolvedValue({ state: "pending" }),
+    directReplyAvailability: vi.fn().mockResolvedValue({ available: true }) } as unknown as CoreClient;
+  render(<ChatTranscript client={client} worldId="world-a" playerId="player-a" conversation={conversation} tokenCeiling={50_000} onBack={() => {}} />);
+  await waitFor(() => expect(screen.getByRole("textbox").hasAttribute("disabled")).toBe(false));
+  fireEvent.change(screen.getByRole("textbox"), { target: { value: "你好" } });
+  fireEvent.click(screen.getByRole("button", { name: "发送" }));
+  expect(await screen.findByText(/这轮回复未获预算授权/)).toBeTruthy();
+  expect(sendPlayerMessage).toHaveBeenCalledOnce();
+  expect(generateDirectReply).toHaveBeenCalledOnce();
 });
