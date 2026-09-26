@@ -13,6 +13,7 @@ use std::{
 use supervisor::{event, CoreConnection, CoreSupervisor, LaunchConfig};
 use tauri::{Manager, RunEvent, State};
 use tokio::sync::Mutex;
+use uuid::Uuid;
 
 use credentials::{
     status, CredentialStatus, CredentialStore, CredentialStoreError, NativeCredentialStore,
@@ -125,6 +126,91 @@ async fn credential_status(
     Ok(status(credentials.inner().as_ref(), &secret_ref))
 }
 
+async fn rollback_chat_model_setup(
+    supervisor: &mut CoreSupervisor,
+    config: &LaunchConfig,
+    credentials: &dyn CredentialStore,
+    reference: &str,
+    previous: &[u8],
+) -> Result<(), String> {
+    if llm_config::write_atomic(&config.llm_config_path, previous)
+        .await
+        .is_err()
+    {
+        let _ = supervisor.stop(Duration::from_secs(3)).await;
+        return Err("model_setup_recovery_failed".to_owned());
+    }
+    // Restore the previous runtime even if deleting the now-orphaned credential fails.
+    let restarted = supervisor.restart(config).await.is_ok();
+    let deleted = credentials.delete(reference).is_ok();
+    if restarted && deleted {
+        Ok(())
+    } else {
+        Err("model_setup_recovery_failed".to_owned())
+    }
+}
+
+#[tauri::command]
+async fn configure_chat_model(
+    setup: llm_config::ChatModelSetup,
+    mut secret: String,
+    config: State<'_, LaunchConfig>,
+    credentials: State<'_, SharedCredentialStore>,
+    supervisor: State<'_, SharedSupervisor>,
+) -> Result<(), String> {
+    if secret.is_empty() || secret.len() > 4096 {
+        return Err("model_setup_invalid".to_owned());
+    }
+    let reference = Uuid::new_v4().to_string();
+    let document = llm_config::single_chat_document(&setup, &reference).map_err(str::to_owned)?;
+    let mut supervisor = supervisor.lock().await;
+    if supervisor
+        .authenticated_health()
+        .await
+        .map_err(str::to_owned)?
+        .llm_status
+        != "unconfigured"
+    {
+        return Err("model_setup_requires_empty_configuration".to_owned());
+    }
+    let previous = tokio::fs::read(&config.llm_config_path)
+        .await
+        .map_err(|_| "llm_config_read_failed".to_owned())?;
+    if !llm_config::is_empty_configuration(&previous) {
+        return Err("model_setup_requires_empty_configuration".to_owned());
+    }
+    credentials
+        .put(&reference, &secret)
+        .map_err(credential_error)?;
+    secret.clear();
+    if llm_config::write_atomic(&config.llm_config_path, &document)
+        .await
+        .is_err()
+    {
+        credentials.delete(&reference).map_err(credential_error)?;
+        return Err("llm_config_write_failed".to_owned());
+    }
+    let started = supervisor.restart(&config).await.is_ok();
+    let ready = started
+        && supervisor
+            .authenticated_health()
+            .await
+            .is_ok_and(|health| health.llm_status == "ready");
+    if !ready {
+        rollback_chat_model_setup(
+            &mut supervisor,
+            &config,
+            credentials.inner().as_ref(),
+            &reference,
+            &previous,
+        )
+        .await
+        .map_err(|_| "model_setup_recovery_failed".to_owned())?;
+        return Err("model_setup_failed".to_owned());
+    }
+    Ok(())
+}
+
 pub fn run() {
     let credentials: SharedCredentialStore = Arc::new(NativeCredentialStore);
     let supervisor = Arc::new(Mutex::new(CoreSupervisor::with_credential_store(
@@ -139,7 +225,8 @@ pub fn run() {
             report_ui_ready,
             credential_put,
             credential_delete,
-            credential_status
+            credential_status,
+            configure_chat_model
         ])
         .setup(|app| {
             let mut app_data = app.path().app_data_dir()?;
@@ -157,6 +244,7 @@ pub fn run() {
                 llm_config_path: app_data.join("config").join("llm.json"),
             };
             let supervisor = app.state::<SharedSupervisor>().inner().clone();
+            app.manage(config.clone());
             tauri::async_runtime::spawn(async move {
                 let _ = supervisor.lock().await.start(&config).await;
             });

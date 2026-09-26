@@ -82,6 +82,7 @@ pub struct Health {
     pub llm_status: String,
 }
 
+#[derive(Clone)]
 pub struct LaunchConfig {
     pub project_root: PathBuf,
     pub app_data: PathBuf,

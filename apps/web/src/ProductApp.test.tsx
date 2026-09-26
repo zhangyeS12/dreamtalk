@@ -21,6 +21,7 @@ const groupA: GroupChatConversation = { conversation_id: "group-a", player_id: "
 
 function renderProduct(client: CoreClient) {
   if (!("groupConversations" in client)) Object.assign(client, { groupConversations: vi.fn().mockResolvedValue([]) });
+  if (!("health" in client)) Object.assign(client, { health: vi.fn().mockResolvedValue({ llm_status: "unconfigured" }) });
   return render(<ProductApp client={client} />);
 }
 

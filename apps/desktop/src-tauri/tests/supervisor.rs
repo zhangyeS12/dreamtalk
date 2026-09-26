@@ -1,6 +1,7 @@
 #![cfg(windows)]
 
 use livingworld_desktop_lib::credentials::{CredentialStore, MemoryCredentialStore};
+use livingworld_desktop_lib::llm_config::{single_chat_document, write_atomic, ChatModelSetup};
 use livingworld_desktop_lib::supervisor::{
     contract, CoreSupervisor, LaunchConfig, SupervisorState,
 };
@@ -132,6 +133,58 @@ fn windows_credentials_are_reprovisioned_after_restart_without_disk_leak() {
             }
         }
         assert_clean(directory.path(), secret.as_bytes());
+    });
+}
+
+#[test]
+fn windows_first_time_chat_setup_restarts_core_with_in_memory_credential() {
+    tauri::async_runtime::block_on(async {
+        let directory = tempfile::tempdir().unwrap();
+        let reference = "00000000-0000-0000-0000-000000000002";
+        let config_path = directory.path().join("config").join("llm.json");
+        let launch = LaunchConfig {
+            project_root: PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("../../..")
+                .canonicalize()
+                .unwrap(),
+            app_data: directory.path().to_owned(),
+            startup_timeout: Duration::from_secs(12),
+            llm_config_path: config_path.clone(),
+        };
+        let credentials = Arc::new(MemoryCredentialStore::default());
+        let mut supervisor = CoreSupervisor::with_credential_store(credentials.clone());
+        supervisor.start(&launch).await.unwrap();
+        assert_eq!(
+            supervisor.authenticated_health().await.unwrap().llm_status,
+            "unconfigured"
+        );
+        let original = std::fs::read(&config_path).unwrap();
+        credentials.put(reference, "KEY-CANARY").unwrap();
+        let document = single_chat_document(
+            &ChatModelSetup {
+                provider_kind: "anthropic".to_owned(),
+                model_id: "exact-model".to_owned(),
+                base_url: None,
+                max_billable_input_tokens: 20_000,
+                max_output_tokens: 2_000,
+            },
+            reference,
+        )
+        .unwrap();
+        write_atomic(&config_path, &document).await.unwrap();
+        supervisor.restart(&launch).await.unwrap();
+        assert_eq!(
+            supervisor.authenticated_health().await.unwrap().llm_status,
+            "ready"
+        );
+        supervisor.stop(Duration::from_secs(4)).await.unwrap();
+        assert_eq!(std::fs::read(&config_path).unwrap(), document);
+        assert!(!original
+            .windows(b"KEY-CANARY".len())
+            .any(|part| part == b"KEY-CANARY"));
+        assert!(!document
+            .windows(b"KEY-CANARY".len())
+            .any(|part| part == b"KEY-CANARY"));
     });
 }
 

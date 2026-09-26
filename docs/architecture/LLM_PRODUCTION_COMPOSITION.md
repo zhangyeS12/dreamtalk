@@ -87,6 +87,12 @@ rotation 先写 native store，再替换 Core session value；已 dispatch reque
 
 [live-llm-smoke.py](../../scripts/live-llm-smoke.py) 与 pytest/CI 分离。它必须同时获得 `--enable-live-provider`、exact provider/model、config/data-dir 和显式 credential environment variable name；输出最多 512 个 response characters，max output 限制为 1–64，并明确警告可能产生外部费用。仅仅设置环境变量不会启用网络。C-005E5 没有运行该脚本。
 
-## 7. 范围与迁移
+## 7. 首次聊天模型设置
 
-没有 settings UI、online discovery/pricing、tool/vision/audio、conversation persistence、Director、Agent、Memory 或 World simulation。LLM operational configuration/credentials 不进入 canonical world/content state。本任务未新增表；Alembic head 保持 `0010_llm_budget_guard`。
+桌面“设置 → 聊天模型”在配置仍为空且 Core 报告 `unconfigured` 时，允许明确选择四种已支持的 adapter 之一、填写 exact model ID、必要的兼容服务地址、API key，以及由用户核对的单次输入计费与输出 Token 上界。高级 Token 参数默认折叠，但缺少可信上界时不能保存。这个入口只建立一条可用聊天模型配置，不进行模型发现、凭据试用或有费用的调用；浏览器开发入口只读。已有配置不由该入口覆盖。
+
+Rust 将 key 写入 native credential store，将不含 key 的 v1 配置原子写入 app-data `config/llm.json`，随后重启 Core 并以 authenticated health 确认 `ready`。如果重启或加载失败，恢复原配置并重启原 Core；恢复失败则报告固定错误码。页面成功后重新连接 Core。用户填写的 usage limits 是显式配置，不是应用推测的 provider 事实；选择与核实相应模型的可信上界仍是配置者责任。该流程未配置价格，因此需要可信价格的 HARD 金额预算仍会拒绝无可验证定价的调用。
+
+## 8. 范围与迁移
+
+首次设置以外的模型编辑/轮换 UI、online discovery/pricing、tool/vision/audio 不在本入口范围内。LLM operational configuration/credentials 不进入 canonical world/content state。C-005E5 本身未新增表；其 Alembic head 为 `0010_llm_budget_guard`。
