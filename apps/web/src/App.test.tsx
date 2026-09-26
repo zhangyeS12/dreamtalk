@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { act, cleanup, render, screen } from "@testing-library/react";
-import { API_PROTOCOL } from "@livingworld/api-client";
+import { API_PROTOCOL } from "@dreamtalk/api-client";
 import { App } from "./App";
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.useRealTimers(); });

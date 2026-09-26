@@ -19,7 +19,7 @@ external source (untrusted)
 
 | 边界 | 回答的问题 | 数据 |
 | --- | --- | --- |
-| canonical root | LivingWorld 理解哪些内容？ | CharacterDefinition / WorldContent / LoreEntry / LoreCollection 的 versioned semantic JSON |
+| canonical root | dreamtalk 理解哪些内容？ | CharacterDefinition / WorldContent / LoreEntry / LoreCollection 的 versioned semantic JSON |
 | opaque canonical metadata | 哪些兼容数据需要保留但尚未解释？ | JSON extensions、authored_instructions、activation/insertion metadata |
 | RawImportEnvelope | 原始外部文件究竟包含什么？ | typed RawImportId、完整 original_payload bytes、来源元数据及 opaque unknown_extensions |
 
@@ -53,7 +53,7 @@ Alembic 0006 建立独立内容表；0007 新增 LoreCollection 与 legacy-nulla
 
 - system_prompt / creator_note / instruction 等字段名不提升权限；只在 canonical 文本/opaque JSON 或 raw bytes 中保存。
 - 不执行指令、不调用工具、LLM、web research、不读文件资源、不运行 prompt insertion/activation。
-- extensions 不变成 runtime 行为；原始文件不是 LivingWorld 应用配置，不添加 secret/API key 配置入口。
+- extensions 不变成 runtime 行为；原始文件不是 dreamtalk 应用配置，不添加 secret/API key 配置入口。
 - 不把作者描述当作 Truth 或玩家已知事实。未来 Agent context 仍需 permission filtering before semantic retrieval，不能用卡片 instruction 解除隔离。
 - 来源 ID 不授予外部资料可信性，也不授予其他主体知识读取权限。保留文件内容不意味着授权执行、发布或把它写入日志。
 
@@ -63,7 +63,7 @@ Alembic 0006 建立独立内容表；0007 新增 LoreCollection 与 legacy-nulla
 
 [CharacterCardImporter](../../services/core/src/livingworld/infrastructure/imports/character_cards.py) 接收 bytes、调用方提供的 aware imported_at 和可选 original_name，返回 [ImportDraft](../../services/core/src/livingworld/application/imports.py)。文件名只作来源记录；识别由 bytes 决定。该 adapter 没有 repository、运行 Kernel、网络、shell、LLM 或浏览器能力。
 
-ImportDraft.preview() 返回 ImportPreview，其 content 是既有 ContentPreview，其 warnings 从 Draft 中 LivingWorld 自有元数据读取。错误是 ContentImportError(code, structural path)；警告不阻断 Commit。警告及兼容元数据已经纳入既有 preview_hash，不能在确认后悄悄移除警告而保持同一个 hash。外部 extensions 单独嵌套保留，不能覆盖 livingworld.import 的审阅信息。
+ImportDraft.preview() 返回 ImportPreview，其 content 是既有 ContentPreview，其 warnings 从 Draft 中 dreamtalk 自有元数据读取。错误是 ContentImportError(code, structural path)；警告不阻断 Commit。警告及兼容元数据已经纳入既有 preview_hash，不能在确认后悄悄移除警告而保持同一个 hash。外部 extensions 单独嵌套保留，不能覆盖 livingworld.import 的审阅信息。
 
 显式用户确认仍由可信调用方提供 reviewed_hash，并通过 ContentService.commit(preview.content, ...) 原子保存。解析和 Preview 都不写数据库。相同 bytes 的每次独立 parse 生成新的 typed content/raw/asset IDs，不按 hash 自动覆盖；所有原始 bytes、来源、兼容数据与引用复用 C-004A 的一个事务。无需新 migration 或新的数据库字段。
 

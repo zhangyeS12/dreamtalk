@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { CoreClient, type ChatConversation, type ChatMessage } from "@livingworld/api-client";
+import { CoreClient, type ChatConversation, type ChatMessage } from "@dreamtalk/api-client";
 
 interface Props {
   client: CoreClient;

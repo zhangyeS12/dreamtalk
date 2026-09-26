@@ -1,11 +1,12 @@
 {
-  "name": "@livingworld/web",
+  "name": "@dreamtalk/web",
   "version": "0.1.0",
   "private": true,
+  "license": "Apache-2.0",
   "type": "module",
   "scripts": { "dev": "vite", "build": "vite build" },
   "dependencies": {
-    "@livingworld/api-client": "0.1.0",
+    "@dreamtalk/api-client": "0.1.0",
     "@tauri-apps/api": "^2.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"

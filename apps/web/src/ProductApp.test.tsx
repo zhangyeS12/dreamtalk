@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { CoreClient, type ChatConversation, type GroupChatConversation, type WorldContentItem, type WorldSettings } from "@livingworld/api-client";
+import { CoreClient, type ChatConversation, type GroupChatConversation, type WorldContentItem, type WorldSettings } from "@dreamtalk/api-client";
 import { ProductApp } from "./ProductApp";
 
 afterEach(() => { cleanup(); window.localStorage.removeItem("livingworld.lastWorldId"); });

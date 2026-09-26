@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { CoreClient, CoreRequestError, type ChatMessage, type GroupChatConversation, type WorldContentItem } from "@livingworld/api-client";
+import { CoreClient, CoreRequestError, type ChatMessage, type GroupChatConversation, type WorldContentItem } from "@dreamtalk/api-client";
 
 export function GroupChatSetup({ client, worldId, onCreated, onBack }: {
   client: CoreClient;

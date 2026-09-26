@@ -18,7 +18,7 @@ Registry 只做 exact typed lookup，不解析 model/provider 名称，不调用
 
 ## 2. Profile、purpose 与 RoutePlan
 
-`FAST` / `BALANCED` / `BEST` 是安装配置的产品 policy labels，不是 LivingWorld 对模型速度或质量的客观排名。每个 `PurposePolicy` 明确给出 open `LLMPurpose`、profile、ordered candidates、policy identity 与允许的 fallback reasons。缺 purpose-specific policy 时仅可使用显式配置的 default policy；engine 不制造候选链。
+`FAST` / `BALANCED` / `BEST` 是安装配置的产品 policy labels，不是 dreamtalk 对模型速度或质量的客观排名。每个 `PurposePolicy` 明确给出 open `LLMPurpose`、profile、ordered candidates、policy identity 与允许的 fallback reasons。缺 purpose-specific policy 时仅可使用显式配置的 default policy；engine 不制造候选链。
 
 显式 `ModelRef` 选择默认只有该 exact model。只有调用方同时提供以该 model 为首项的 explicit fallback policy，才可改变 model。Profile selection 明确授权使用对应配置链。
 
@@ -86,7 +86,7 @@ Anthropic Messages、Gemini Interactions 和 OpenAI Responses native adapters �
 
 Registry 用 `AdapterKind.ANTHROPIC` 标识协议族，ProviderId 仍是配置实例身份，capabilities 来自显式 Anthropic profile。受控 route 证明 OpenAI-compatible candidate 的 503/529 类安全 transient attempts 耗尽后，可按 policy 切换到 Anthropic native candidate；同一 InvocationId 延续，global ordinal 不重置，每个 candidate 都重新执行 budget admission、accounting START/FINAL 和 settlement。
 
-Anthropic SSE `event: error` 使用 `DISPATCHED_OR_UNKNOWN`，不会触发 provider shopping；terminal refusal 是成功结果，也不会 fallback。Anthropic adapter 明确禁用 server-side fallback，避免 provider 在 LivingWorld budget/attempt identity 之外更换执行目标。协议细节见 [ANTHROPIC_MESSAGES_ADAPTER.md](ANTHROPIC_MESSAGES_ADAPTER.md)。
+Anthropic SSE `event: error` 使用 `DISPATCHED_OR_UNKNOWN`，不会触发 provider shopping；terminal refusal 是成功结果，也不会 fallback。Anthropic adapter 明确禁用 server-side fallback，避免 provider 在 dreamtalk budget/attempt identity 之外更换执行目标。协议细节见 [ANTHROPIC_MESSAGES_ADAPTER.md](ANTHROPIC_MESSAGES_ADAPTER.md)。
 
 ## 9. C-005E3 Gemini quota 与三协议 route
 
@@ -105,7 +105,7 @@ attempt ordinal 为 1/2/3/4，每个 candidate 重新执行 budget admission、r
 和 finalization。Responses adapter 没有 routing-specific branch；retry/fallback 继续只依据通用 typed
 failure、shared deadline、dispatch certainty、budget/accounting integrity 和 STARTED lock。
 
-Response ID 只是 provider diagnostic，不参与 route identity，也不能替代 LivingWorld-managed history。
+Response ID 只是 provider diagnostic，不参与 route identity，也不能替代 dreamtalk-managed history。
 完整协议边界见 [OPENAI_RESPONSES_ADAPTER.md](OPENAI_RESPONSES_ADAPTER.md)。
 
 ## 11. C-005E5 production wiring

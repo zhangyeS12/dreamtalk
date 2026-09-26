@@ -21,7 +21,7 @@ raw text != validated structured result
 | ProviderId | 明确的能力提供方/配置身份；nonblank opaque string，不是用途或 model name |
 | ModelRef | ProviderId + opaque model_id；不包含 capability、price 或 profile，也不解析名称猜行为 |
 | LLMPurpose | 开放的 nonblank application use-case 标签；调用方明确指定，不预先冻结所有未来用途 |
-| InvocationId | LivingWorld-owned typed UUID，由调用方生成；独立于 provider request ID、RequestId、EventId 和 WorldTime |
+| InvocationId | dreamtalk-owned typed UUID，由调用方生成；独立于 provider request ID、RequestId、EventId 和 WorldTime |
 | CorrelationId | 复用现有跨工作关联身份，optional；不是 invocation 或 provider identity |
 
 ModelCatalog/ModelRegistry 提供按完整 ModelRef 的显式能力查询，unknown 返回 None，不由 model-name substring 推断。ModelCapabilities 保留 text_generation、streaming、structured_output、vision、tool_calling、reasoning_controls 声明。C-005C1 增加中立 StructuredOutputMode：NONE、NATIVE_JSON_SCHEMA、JSON_OBJECT_LOCAL_VALIDATE；非 NONE 要求 structured_output=true，真实 Chat gateway 同时准确报告布尔和模式。旧布尔声明保留源兼容，但单独 true 不证明原生 schema 保证，不能据此选择 wire 模式。C-005E1 routing 仅读取这些显式事实；online probing 仍未实现。
@@ -30,7 +30,7 @@ ModelCatalog/ModelRegistry 提供按完整 ModelRef 的显式能力查询，unkn
 
 LLMRequest 包含 invocation_id、model、purpose、messages、optional 正整数 max_output_tokens、optional temperature，以及 structured_output、stop_sequences、correlation_id、JSON metadata 与 streaming flag。max_output_tokens 缺失表示由 adapter 的显式 model profile 决定；没有显式 default 的必填协议必须在网络前失败。
 
-LLMMessage 使用 LivingWorld 自有 SYSTEM / DEVELOPER / USER / ASSISTANT roles 与 typed TextContent blocks。消息必须有至少一个 block；text 原样保留，作者/消息数组顺序有语义，不自动 trim/merge。当前只实现 text。未来 image/file/tool-result 可通过 closed content union 增加新类型，不能注入任意 provider block，当前也没有 tool execution。
+LLMMessage 使用 dreamtalk 自有 SYSTEM / DEVELOPER / USER / ASSISTANT roles 与 typed TextContent blocks。消息必须有至少一个 block；text 原样保留，作者/消息数组顺序有语义，不自动 trim/merge。当前只实现 text。未来 image/file/tool-result 可通过 closed content union 增加新类型，不能注入任意 provider block，当前也没有 tool execution。
 
 max_output_tokens 表示请求的输出 token 上限，不定义全球统一 tokenizer。stop_sequences 是 ordered nonempty literal text sequences 的停止请求，不是 regex；adapter 必须明确支持或返回 unsupported capability，不能 silently drop。SYSTEM / DEVELOPER translation、token-limit 字段与 finish-code mapping 是 protocol-profile 事实，不假定不同 provider 等价。temperature 是可选请求意图；只有显式 provider/model profile 能证明支持范围时才允许发送，不能 clamp、改写或按模型名猜测。top_p/seed 等 sampling semantics 仍未进入公共契约。
 
@@ -133,7 +133,7 @@ LLMUsage 保留 input/output/total，新增 optional cached_input/cache_write_in
 
 [Budget policy/bounds ports](../../services/core/src/livingworld/application/llm_budget.py)、[preflight pricing](../../services/core/src/livingworld/application/llm_preflight.py) 在 application；operational persistence 通过 [SqlAlchemyBudgetGuard](../../services/core/src/livingworld/infrastructure/persistence/llm_budget_repository.py) 实现，provider adapter 无 DB/budget/world 能力。可信 ModelUsageLimits/exhaustive requested-alias PricingEnvelope 由 composition 显式注入；不猜 tokenizer/model/provider 语义，缺可信 bounds/context/prices 的 HARD 零调用 fail closed。
 
-HARD 授权 LivingWorld trusted estimated upper-bound spend，不承诺 invoice/余额。SOFT warning 不改变请求、模型/output cap。Budget scope/admission/history/query/retry 统一 exact requested ModelRef；reported metadata 独立用于实际 pricing/analytics。START/reservation 与 final accounting/settlement 各共享 SQLite write transaction；crash/partial/unknown 保留 holds，没有自动 expiry/reconcile。本地 failure 不重放 provider，outcome/cancellation 保持。没有 production default wiring/catalog、routing/UI/智能层。详见 [LLM_BUDGET_GUARD.md](LLM_BUDGET_GUARD.md)。
+HARD 授权 dreamtalk trusted estimated upper-bound spend，不承诺 invoice/余额。SOFT warning 不改变请求、模型/output cap。Budget scope/admission/history/query/retry 统一 exact requested ModelRef；reported metadata 独立用于实际 pricing/analytics。START/reservation 与 final accounting/settlement 各共享 SQLite write transaction；crash/partial/unknown 保留 holds，没有自动 expiry/reconcile。本地 failure 不重放 provider，outcome/cancellation 保持。没有 production default wiring/catalog、routing/UI/智能层。详见 [LLM_BUDGET_GUARD.md](LLM_BUDGET_GUARD.md)。
 ## C-005E1：registry 与 routing
 
 [Model Registry 与 Routing](LLM_ROUTING.md) 位于 application 层、provider adapters 之上。ProviderId 继续表示 configured provider instance；AdapterKind 独立表示 openai-compatible / anthropic / gemini / openai-responses protocol family。Registry 使用 exact ModelRef 和显式 ModelCapabilities，不按名字猜测、不发现在线模型，也不保存 secret、client 或价格表。
@@ -169,6 +169,6 @@ content；optional encrypted reasoning 只进入短生命周期 `ProviderContinu
 knowledge、content 或 durable accounting state。
 
 `ProviderDiagnostics` 可分别携带经过 allowlist 校验的 `x-request-id` 和 Response ID；二者都不是
-LivingWorld identity 或 conversation identity。OpenAI usage 将 reasoning tokens 标记为
+dreamtalk identity 或 conversation identity。OpenAI usage 将 reasoning tokens 标记为
 `INCLUDED_IN_OUTPUT`，防止 output pricing 二次计费。完整契约和证据见
 [OPENAI_RESPONSES_ADAPTER.md](OPENAI_RESPONSES_ADAPTER.md)。无 migration、SDK 或新依赖。

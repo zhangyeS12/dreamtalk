@@ -40,7 +40,7 @@ ProviderConfig 只保留 SecretRef。Preflight 和本地配置检查通过后，
 
 明文仅作为临时 transport-boundary 值构造 Authorization，不放入 config/request/response/diagnostics。finally 删除 wire request 的 Authorization、清空临时 provider cookies、关闭 response 并释放本地 secret reference；client default headers 不存 bearer，后续请求不发送 cookie。Python 字符串不被宣称为可保证物理内存擦除。Injected transport 属于可信边界，负责不记录凭据或消息。
 
-| LivingWorld | 外部请求 |
+| dreamtalk | 外部请求 |
 | --- | --- |
 | model.model_id | model，原样 opaque ID |
 | ordered messages / ordered TextContent blocks | 同角色消息，block text 按顺序无分隔符连接 |
@@ -58,7 +58,7 @@ ProviderConfig 只保留 SecretRef。Preflight 和本地配置检查通过后，
 
 保留提供方报告的实际 model string，但 ProviderId 和 InvocationId 始终来自本地 request。Content 是 TextContent，不返回外部 message dict；`reasoning_content`、annotations、tool arguments、raw payload 均不透传。若提供方把本次 bearer 直接反射入 model/output，拒绝该响应。
 
-| 外部语义 | LivingWorld |
+| 外部语义 | dreamtalk |
 | --- | --- |
 | stop | STOP |
 | length | OUTPUT_LIMIT |

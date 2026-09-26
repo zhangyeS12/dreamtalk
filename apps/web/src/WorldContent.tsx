@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { CoreClient, CoreRequestError, type WorldContentItem } from "@livingworld/api-client";
+import { CoreClient, CoreRequestError, type WorldContentItem } from "@dreamtalk/api-client";
 
 function ContentDetails({ item }: { item: WorldContentItem }) {
   return <div className="content-details">

@@ -9,10 +9,10 @@ from pathlib import Path
 if os.name != "nt":
     raise SystemExit("Windows desktop integration only")
 root = Path(__file__).resolve().parents[1]
-binary = root / "apps/desktop/src-tauri/target/debug/livingworld-desktop.exe"
+binary = root / "apps/desktop/src-tauri/target/debug/dreamtalk-desktop.exe"
 environment = os.environ.copy()
 environment["LW_DESKTOP_SMOKE"] = "1"
-with tempfile.TemporaryDirectory(prefix="livingworld-desktop-smoke-") as app_data:
+with tempfile.TemporaryDirectory(prefix="dreamtalk-desktop-smoke-") as app_data:
     environment["LW_DESKTOP_SMOKE_APP_DATA"] = app_data
     environment["WEBVIEW2_USER_DATA_FOLDER"] = str(Path(app_data) / "webview")
     try:

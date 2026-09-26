@@ -1,10 +1,8 @@
 #![cfg(windows)]
 
-use livingworld_desktop_lib::credentials::{CredentialStore, MemoryCredentialStore};
-use livingworld_desktop_lib::llm_config::{single_chat_document, write_atomic, ChatModelSetup};
-use livingworld_desktop_lib::supervisor::{
-    contract, CoreSupervisor, LaunchConfig, SupervisorState,
-};
+use dreamtalk_desktop_lib::credentials::{CredentialStore, MemoryCredentialStore};
+use dreamtalk_desktop_lib::llm_config::{single_chat_document, write_atomic, ChatModelSetup};
+use dreamtalk_desktop_lib::supervisor::{contract, CoreSupervisor, LaunchConfig, SupervisorState};
 use std::{path::PathBuf, sync::Arc, time::Duration};
 
 #[test]

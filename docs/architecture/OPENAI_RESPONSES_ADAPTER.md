@@ -27,7 +27,7 @@ Every request explicitly carries:
 }
 ```
 
-LivingWorld supplies the full ordered conversation. The adapter never sends
+dreamtalk supplies the full ordered conversation. The adapter never sends
 `previous_response_id`, `conversation`, tools, arbitrary metadata, `safety_identifier` or
 `prompt_cache_key`. System, developer, user and assistant roles remain separate and ordered; text
 is neither trimmed nor merged. Only text blocks are supported.
@@ -75,7 +75,7 @@ Changing either the artifact or attached assistant text produces `CONTINUATION_S
 before credentials or HTTP. Foreign adapter/provider artifacts are ignored.
 
 On the next turn, the adapter reconstructs prior reasoning and assistant output items in their
-original order from LivingWorld-managed history. It never uses the diagnostic Response ID as
+original order from dreamtalk-managed history. It never uses the diagnostic Response ID as
 conversation state. The artifact remains short-lived request context: it is excluded from repr and
 the accounting persistence codec, and it is not Character memory, Knowledge, authored Content or
 a WorldEvent.
@@ -105,7 +105,7 @@ reasoning tokens to output tokens again. `GENERATED_OUTPUT` pricing and hard-bud
 combined `max_output_tokens` bound. Prices still come only from the injected `PricingCatalog`.
 
 Safe `x-request-id` and Response ID are separate optional diagnostics. `InvocationId` remains the
-LivingWorld identity and Response ID is never a conversation key. Errors use HTTP status plus
+dreamtalk identity and Response ID is never a conversation key. Errors use HTTP status plus
 documented machine type/code for authentication, permission, invalid/context requests, rate limit,
 quota/billing, timeout and server availability. The adapter performs no retry.
 

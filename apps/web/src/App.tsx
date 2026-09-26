@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { CoreClient, type CoreConnection } from "@livingworld/api-client";
+import { CoreClient, type CoreConnection } from "@dreamtalk/api-client";
 import { Inspector } from "./Inspector";
 import { ProductApp } from "./ProductApp";
 
@@ -37,5 +37,5 @@ export function App({ discover, onReady }: Props) {
   if (state === "Ready" && client && new URLSearchParams(window.location.search).get("developer") !== "1") {
     return <ProductApp client={client} />;
   }
-  return <main><div className="brand"><h1>LivingWorld</h1><p role="status" aria-live="polite">{stateLabel}</p></div>{state === "Ready" && client ? <Inspector client={client} /> : null}</main>;
+  return <main><div className="brand"><h1>dreamtalk</h1><p role="status" aria-live="polite">{stateLabel}</p></div>{state === "Ready" && client ? <Inspector client={client} /> : null}</main>;
 }

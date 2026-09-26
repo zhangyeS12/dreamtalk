@@ -300,7 +300,7 @@ async def run(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="LivingWorld system runtime")
+    parser = argparse.ArgumentParser(description="dreamtalk system runtime")
     parser.add_argument("--desktop", action="store_true")
     parser.add_argument("--bootstrap-path", type=Path, required=True)
     parser.add_argument("--parent-pid", type=int)

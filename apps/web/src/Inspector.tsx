@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CoreClient, type InspectorSnapshot, type WorldSummary } from "@livingworld/api-client";
+import { CoreClient, type InspectorSnapshot, type WorldSummary } from "@dreamtalk/api-client";
 
 interface Props { client: CoreClient }
 const short = (value: string) => value.slice(0, 8);

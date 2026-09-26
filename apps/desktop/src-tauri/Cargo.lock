@@ -947,6 +947,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "dreamtalk-desktop"
+version = "0.1.0"
+dependencies = [
+ "hmac 0.12.1",
+ "keyring",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tauri",
+ "tauri-build",
+ "tempfile",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
 name = "dtoa"
 version = "1.0.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2164,23 +2181,6 @@ name = "litemap"
 version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "47d9d19d1d6efa0109d2f65ff4c85cddd50bd572e5a00127ab10987290bcefae"
-
-[[package]]
-name = "livingworld-desktop"
-version = "0.1.0"
-dependencies = [
- "hmac 0.12.1",
- "keyring",
- "reqwest 0.12.28",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "tauri",
- "tauri-build",
- "tempfile",
- "tokio",
- "uuid",
-]
 
 [[package]]
 name = "lock_api"

@@ -1,6 +1,6 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import developmentConnection from "virtual:core-connection";
-import type { CoreConnection } from "@livingworld/api-client";
+import type { CoreConnection } from "@dreamtalk/api-client";
 
 export async function discoverConnection(): Promise<CoreConnection> {
   if (isTauri()) return invoke<CoreConnection>("core_connection");

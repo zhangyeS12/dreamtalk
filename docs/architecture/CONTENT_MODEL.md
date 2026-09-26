@@ -57,9 +57,9 @@ C-004C1 对 version=1 增加两项明确的 legacy 编码兼容：旧 LoreEntry 
 
 JSON object keys 排序，紧凑 separators，UTF-8，无非有限数。作者数组顺序有语义，保留不排序；opaque extensions 深度冻结并往返。serialize → deserialize 保持 canonical 相等；semantic_hash 是完整 canonical UTF-8 JSON 的 SHA-256，包含 typed kind、ID、revision、provenance 与正文。因此它不是跨身份内容去重器，也不等于原文件哈希。
 
-该格式定义 LivingWorld 当前 Python canonical 编码，不宣称 RFC 8785 或跨语言浮点归一化。内容不做 Unicode 文本改写；无效 UTF-8 surrogate 明确拒绝。原始文件排版、编码及未知顶层字段通过 raw preservation 保留，不能靠 canonical JSON 恢复原文件 bytes。
+该格式定义 dreamtalk 当前 Python canonical 编码，不宣称 RFC 8785 或跨语言浮点归一化。内容不做 Unicode 文本改写；无效 UTF-8 surrogate 明确拒绝。原始文件排版、编码及未知顶层字段通过 raw preservation 保留，不能靠 canonical JSON 恢复原文件 bytes。
 
-canonical 反序列化仅解释 LivingWorld 格式，不解析外部 Character Card。重复 JSON object keys、未知 canonical kind/version/字段、错误 typed ID、naive 时间、错误 trigger/引用结构均 fail closed。未知外部字段放 opaque extensions 或原始 envelope，不能注入 canonical runtime 字段。
+canonical 反序列化仅解释 dreamtalk 格式，不解析外部 Character Card。重复 JSON object keys、未知 canonical kind/version/字段、错误 typed ID、naive 时间、错误 trigger/引用结构均 fail closed。未知外部字段放 opaque extensions 或原始 envelope，不能注入 canonical runtime 字段。
 
 ## 5. 校验、持久化与安全
 

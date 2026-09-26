@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { CoreClient, type GroupChatConversation, type WorldContentItem } from "@livingworld/api-client";
+import { CoreClient, type GroupChatConversation, type WorldContentItem } from "@dreamtalk/api-client";
 import { GroupChatDetails, GroupChatSetup } from "./GroupChat";
 
 afterEach(cleanup);

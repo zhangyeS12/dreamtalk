@@ -1,5 +1,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    livingworld_desktop_lib::run();
+    dreamtalk_desktop_lib::run();
 }

@@ -4,7 +4,7 @@
 
 ```text
 valid provider text != valid JSON != schema-valid value
-provider-side schema enforcement != LivingWorld local trust boundary
+provider-side schema enforcement != dreamtalk local trust boundary
 completed generation + unusable result still consumes factual reported usage
 ```
 
@@ -19,8 +19,8 @@ completed generation + unusable result still consumes factual reported usage
 | StructuredOutputMode | Wire | Schema enforcement |
 | --- | --- | --- |
 | NONE（默认） | 文本；结构化请求 unsupported | 无 |
-| NATIVE_JSON_SCHEMA | `{type: json_schema, json_schema: {name, strict: true, schema}}` | 目标声明的 native 子集 + LivingWorld 本地 |
-| JSON_OBJECT_LOCAL_VALIDATE | `{type: json_object}` | 仅 LivingWorld 本地 |
+| NATIVE_JSON_SCHEMA | `{type: json_schema, json_schema: {name, strict: true, schema}}` | 目标声明的 native 子集 + dreamtalk 本地 |
+| JSON_OBJECT_LOCAL_VALIDATE | `{type: json_object}` | 仅 dreamtalk 本地 |
 
 ChatCompletionsProfile 显式声明模式，gateway ModelCapabilities 同时暴露 mode 和兼容布尔；不按 hostname/provider/model-name 推断。两种 wire 模式限定显式 type=object；不声称支持 $ref-only root、混合 roots 或数组 transport，返回 UNSUPPORTED_CAPABILITY，不改写 schema。通用本地解析/验证可处理 object/array/string/number/boolean/null，并以请求 schema 为准。
 

@@ -78,7 +78,7 @@ UsageUpdate 和 LLMStreamCompletion 共享 closed numeric/None accounting-counte
 
 ## 6. Terminal 安全边界、取消与清理
 
-LLMStreamCompletion 为 immutable 独立类型：invocation_id、model_used、finish_reason、typed outcome、optional usage、latency_ms、bounded selected ProviderDiagnostics。diagnostic code 使用固定闭合集合；provider request ID 仅允许至多 128 个安全 identifier characters，并由 adapter 拒绝已知 bearer/prompt 的直接反射。Provider request ID 是诊断信息，InvocationId 始终由 LivingWorld 定义。
+LLMStreamCompletion 为 immutable 独立类型：invocation_id、model_used、finish_reason、typed outcome、optional usage、latency_ms、bounded selected ProviderDiagnostics。diagnostic code 使用固定闭合集合；provider request ID 仅允许至多 128 个安全 identifier characters，并由 adapter 拒绝已知 bearer/prompt 的直接反射。Provider request ID 是诊断信息，InvocationId 始终由 dreamtalk 定义。
 
 该类型没有 content/text/messages/structured payload/reasoning/raw SSE/headers/HTTP response/credentials/provider error body，也没有任意 JSON diagnostic slot。与 LLMAttemptSummary 复用 ModelRef/Usage/FinishReason 和 safe counter helper，**不是同一种 lifecycle 对象**。上层如果需要全文，可以在自己的生命周期/内存政策下显式累计 TextDelta。
 

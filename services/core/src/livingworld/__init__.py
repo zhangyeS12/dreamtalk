@@ -1,1 +1,1 @@
-"""LivingWorld Core: runtime infrastructure only."""
+"""dreamtalk Core: runtime infrastructure only."""

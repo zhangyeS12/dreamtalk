@@ -6,7 +6,7 @@
 
 ## 1. 职责与边界
 
-LivingWorld 是持久化、事件驱动的多角色 AI 世界（FR-01）。Director 负责世界层面的调度与变化；Character Agent 主要负责自己拥有的记忆、人格表达和与玩家对话（FR-02、FR-03）。
+dreamtalk 是持久化、事件驱动的多角色 AI 世界（FR-01）。Director 负责世界层面的调度与变化；Character Agent 主要负责自己拥有的记忆、人格表达和与玩家对话（FR-02、FR-03）。
 
 | 主体 | 负责 | 边界 |
 | --- | --- | --- |

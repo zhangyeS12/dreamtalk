@@ -1,10 +1,10 @@
-# LivingWorld
+# dreamtalk
 
 All engineering agents must read AGENTS.md before modifying the repository.
 
 ## 项目定位
 
-LivingWorld 是持久化、事件驱动的多角色 AI 世界，不是普通聊天机器人。Director 负责世界与宏观剧情调度，Character Agent 主要负责自己拥有的记忆、人格表达和与玩家对话；世界真实事实、角色知识和玩家知识相互分离。
+dreamtalk 是持久化、事件驱动的多角色 AI 世界，不是普通聊天机器人。Director 负责世界与宏观剧情调度，Character Agent 主要负责自己拥有的记忆、人格表达和与玩家对话；世界真实事实、角色知识和玩家知识相互分离。项目计划在 GitHub 公开开发，源码采用 [Apache-2.0 许可证](LICENSE)。旧工程名及仍需兼容的内部标识见 [项目命名与兼容性](docs/architecture/PROJECT_IDENTITY.md)。
 
 ## 开发状态
 
@@ -20,9 +20,9 @@ Stage 4 — LLM Infrastructure 已完成并冻结。C-005E5 将四种 provider a
 
 Stage 3 已完成 canonical authored-content、Character Card/Lorebook 离线导入、Draft/Preview/confirmed Commit、外部 JSON 导出和 `.lwcontent` 原生内容包。原生包支持显式 roots 的依赖闭包、shared references、完整来源、本地 SHA-256 资产、六种三方冲突与事务化 accepted baseline。详见 [Stage 3 验收](docs/architecture/STAGE_3_ACCEPTANCE.md)、[原生内容包](docs/architecture/NATIVE_CONTENT_PACKAGE.md)、[内容模型](docs/architecture/CONTENT_MODEL.md)、[导入](docs/architecture/IMPORT_MODEL.md)、[导出](docs/architecture/EXPORT_MODEL.md) 和 [持久化](docs/architecture/PERSISTENCE_MODEL.md)。
 
-`.lwcontent` = authored content package；`.lworld` 保留给未来 runtime-world/state package。content package != backup != running world；hash integrity != publisher authentication；filesystem blobs + SQLite 不被宣称为一个 ACID transaction。导入/导出不创建 Runtime World/Character，不断言 Truth 或授予 Belief/PlayerKnowledge。作者文本/regex/activation metadata 保持不可信数据，不执行。
+`.lwcontent` = authored content package；`.lworld` 保留给未来 runtime-world/state package。旧格式后缀为兼容标识，不随项目改名而变。content package != backup != running world；hash integrity != publisher authentication；filesystem blobs + SQLite 不被宣称为一个 ACID transaction。导入/导出不创建 Runtime World/Character，不断言 Truth 或授予 Belief/PlayerKnowledge。作者文本/regex/activation metadata 保持不可信数据，不执行。
 
-运行内容实例化、automatic Lore→Truth/Belief、基于角色知识与记忆的完整 prompt assembly、Reflection、memory consolidation/forgetting/semantic retrieval/RAG、Director、Character Agent、AI Builder、activation consumption、checkpoint/branch、`.lworld`、cloud sync、marketplace 和 final UI 尚未实现。Stage 5 catch-up 只 materialize 到期 work，不编造离线叙事或角色决定；fidelity 只表示 operational context，不是剧情重要性、WorldTruth 或 LLM 策略。Scene 只是互动上下文，Observation 只记录历史访问；形成 EpisodicMemory 必须走 C-007A 的显式 owner-authorized command。外部 PNG/APNG writer、CHARX、任意图复制、签名与 orphan blob GC 仍 deferred。Stage 2 的资源级 CAS、幂等、ledger/rebuild 和知识隔离继续沿用，见 [Stage 2 验收](docs/architecture/STAGE_2_ACCEPTANCE.md)。provider tools、LLM settings UI 和真实付费 API 验证尚未实现。
+运行内容实例化、automatic Lore→Truth/Belief、基于角色知识与记忆的完整 prompt assembly、Reflection、memory consolidation/forgetting/semantic retrieval/RAG、Director、Character Agent、AI Builder、activation consumption、checkpoint/branch、`.lworld`、cloud sync、marketplace 和 final UI 尚未实现。Stage 5 catch-up 只 materialize 到期 work，不编造离线叙事或角色决定；fidelity 只表示 operational context，不是剧情重要性、WorldTruth 或 LLM 策略。Scene 只是互动上下文，Observation 只记录历史访问；形成 EpisodicMemory 必须走 C-007A 的显式 owner-authorized command。外部 PNG/APNG writer、CHARX、任意图复制、签名与 orphan blob GC 仍 deferred。Stage 2 的资源级 CAS、幂等、ledger/rebuild 和知识隔离继续沿用，见 [Stage 2 验收](docs/architecture/STAGE_2_ACCEPTANCE.md)。provider tools、完整模型管理 UI 和真实付费 API 验证尚未实现。
 
 C-002 运行时基础继续沿用：共享 React UI、Tauri v2 Windows 开发壳、Python Core 启停协议、系统 API、SQLite 迁移元数据、结构化日志和 CI。连接阶段显示“正在连接核心 / 核心已就绪 / 核心连接失败”；就绪后默认进入普通用户四标签页面。
 
@@ -46,7 +46,7 @@ npm run dev:web
 npm run dev:core
 ```
 
-直接使用 bootstrap 启动 Core：`uv run livingworld-core --desktop --bootstrap-path <absolute-path> --parent-pid <pid>`。bootstrap 必须由调用方创建，详见 [运行时协议](docs/architecture/RUNTIME_FOUNDATION.md)。
+直接使用 bootstrap 启动 Core：`uv run dreamtalk-core --desktop --bootstrap-path <absolute-path> --parent-pid <pid>`。旧命令 `livingworld-core` 仍作为兼容别名保留。bootstrap 必须由调用方创建，详见 [运行时协议](docs/architecture/RUNTIME_FOUNDATION.md)。
 
 ## 检查与开发产物
 
@@ -75,6 +75,6 @@ npm run test:llm-live -- --config <path> --data-dir <path> --provider <id> --mod
 
 `build:core` 生成 `artifacts/core/*.whl`；`build:desktop` 生成未签名、未打包的 Windows debug executable。该桌面开发产物依赖当前 checkout 的 `.venv`，尚不是独立安装包。
 
-开发数据库与日志保存在 app data。桌面使用 Tauri 的 `app_data_dir`；独立 Core / browser 开发 launcher 使用 `%LOCALAPPDATA%/LivingWorld/development`。安装和源码目录不保存运行数据库或 bootstrap credentials。
+开发数据库与日志保存在 app data。桌面使用 Tauri 的 `app_data_dir`；独立 Core / browser 开发 launcher 暂时沿用历史兼容路径 `%LOCALAPPDATA%/LivingWorld/development`。安装和源码目录不保存运行数据库或 bootstrap credentials。
 
 GitHub Actions 配置包含 Python lint/test/wheel、TypeScript lint/test/Web build、真实 browser smoke 和 Windows supervisor/WebView smoke。远程 CI 结果以实际运行记录为准。

@@ -1,8 +1,10 @@
-# LivingWorld — Codex Project Constitution
+# dreamtalk — Codex Project Constitution
 
 This file is a permanent instruction for all Codex work in this repository.
 
-Before starting ANY LivingWorld engineering task:
+The public project name is dreamtalk. Existing `livingworld` code, storage and protocol identifiers remain compatibility boundaries; see [PROJECT_IDENTITY.md](docs/architecture/PROJECT_IDENTITY.md). This naming change does not alter any product or architecture rule below.
+
+Before starting ANY dreamtalk engineering task:
 
 1. Read this file completely.
 2. Read the current task specification completely.
@@ -14,9 +16,9 @@ If a task instruction conflicts with this file, STOP and report the conflict ins
 
 ---
 
-# 1. What LivingWorld is
+# 1. What dreamtalk is
 
-LivingWorld is NOT:
+dreamtalk is NOT:
 
 - a chatbot wrapper;
 - a SillyTavern plugin;
@@ -25,7 +27,7 @@ LivingWorld is NOT:
 - a collection of independent agents constantly talking to each other;
 - a project whose purpose is to accumulate trendy frameworks.
 
-LivingWorld is intended to become a production-grade, resume-level AI persistent-world product.
+dreamtalk is intended to become a production-grade, resume-level AI persistent-world product.
 
 The final product should allow a user to enter a persistent virtual world populated by characters that appear to continue living even when the player is not actively talking to them.
 
@@ -45,7 +47,7 @@ We do NOT intentionally create disposable architecture merely to obtain a quick 
 
 # 2. Core product vision
 
-The important illusion LivingWorld must create is:
+The important illusion dreamtalk must create is:
 
 "The world continues to exist when I am not looking at it."
 
@@ -74,7 +76,7 @@ The player must NOT receive omniscient system notifications for hidden world eve
 
 # 3. Responsibility split
 
-LivingWorld has three major intelligence layers.
+dreamtalk has three major intelligence layers.
 
 ## Director
 
@@ -355,7 +357,7 @@ Do NOT trigger a new LLM call for every minor deviation.
 
 # 10. AI World Builder and Character Builder
 
-LivingWorld must eventually allow ordinary users to type things such as:
+dreamtalk must eventually allow ordinary users to type things such as:
 
 "Create the Zenless Zone Zero world."
 
@@ -392,7 +394,7 @@ SillyTavern is:
 - a source of useful UX lessons;
 - a compatible ecosystem target.
 
-LivingWorld is NOT built on top of SillyTavern.
+dreamtalk is NOT built on top of SillyTavern.
 
 We may independently implement compatibility with:
 
@@ -401,7 +403,7 @@ We may independently implement compatibility with:
 - PNG/JSON cards;
 - Lorebooks.
 
-Do not copy SillyTavern implementation code into LivingWorld.
+Do not copy SillyTavern implementation code into dreamtalk.
 
 Do not create architecture that requires SillyTavern to run.
 
@@ -415,7 +417,7 @@ React + TypeScript
         ↓
 versioned HTTP/WebSocket API
         ↓
-Python LivingWorld Core
+Python dreamtalk Core
         ↓
 Application / Domain / Kernel
         ↓
@@ -803,12 +805,12 @@ visible activity.
 
 Being busy is not the goal.
 
-Moving LivingWorld toward the finished product is the goal.
+Moving dreamtalk toward the finished product is the goal.
 ---
 
 # 用户补充：遇到不确定或难以解决的问题必须停止并汇报
 
-在 LivingWorld 工作中遇到不确定问题或难以解决的问题时，必须立即停止相关工作并向用户汇报，不能自行猜测、擅自决定或持续死磕。
+在 dreamtalk 工作中遇到不确定问题或难以解决的问题时，必须立即停止相关工作并向用户汇报，不能自行猜测、擅自决定或持续死磕。
 
 汇报应明确说明：
 

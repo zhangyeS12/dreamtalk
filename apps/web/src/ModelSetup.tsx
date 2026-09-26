@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
-import { type CoreClient, type LLMRuntimeStatus } from "@livingworld/api-client";
+import { type CoreClient, type LLMRuntimeStatus } from "@dreamtalk/api-client";
 
 type ProviderKind = "openai-responses" | "anthropic" | "gemini" | "openai-compatible";
 

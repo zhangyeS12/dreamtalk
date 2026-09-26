@@ -3,9 +3,10 @@ requires = ["hatchling>=1.27,<2"]
 build-backend = "hatchling.build"
 
 [project]
-name = "livingworld-core"
+name = "dreamtalk-core"
 version = "0.1.0"
-description = "LivingWorld application runtime foundation"
+description = "dreamtalk application runtime foundation"
+license = "Apache-2.0"
 requires-python = ">=3.12"
 dependencies = [
     "aiosqlite>=0.20,<1",
@@ -20,6 +21,7 @@ dependencies = [
 ]
 
 [project.scripts]
+dreamtalk-core = "livingworld.bootstrap.cli:main"
 livingworld-core = "livingworld.bootstrap.cli:main"
 
 [dependency-groups]

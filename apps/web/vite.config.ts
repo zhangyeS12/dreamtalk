@@ -17,6 +17,6 @@ export default defineConfig(({ command }) => ({
     },
   }],
   clearScreen: false,
-  resolve: { alias: { "@livingworld/api-client": fileURLToPath(new URL("../../packages/api-client/src/index.ts", import.meta.url)) } },
+  resolve: { alias: { "@dreamtalk/api-client": fileURLToPath(new URL("../../packages/api-client/src/index.ts", import.meta.url)) } },
   server: { host: "127.0.0.1", strictPort: true },
 }));

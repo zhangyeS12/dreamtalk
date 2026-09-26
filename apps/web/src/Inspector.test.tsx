@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
-import { CoreClient, type InspectorSnapshot } from "@livingworld/api-client";
+import { CoreClient, type InspectorSnapshot } from "@dreamtalk/api-client";
 import { Inspector } from "./Inspector";
 
 afterEach(cleanup);

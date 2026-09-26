@@ -26,7 +26,7 @@ canonical world state
 | `WORLD` | 一个世界级工作单元，供未来编排、广域事件或 catch-up 聚合使用 |
 | `CHARACTER` | 一个明确 Character 的定向工作 |
 
-`PLAYER` 不是 activation target；LivingWorld 不创建“Player AI”。WORLD 也不表示“激活所有角色”。
+`PLAYER` 不是 activation target；dreamtalk 不创建“Player AI”。WORLD 也不表示“激活所有角色”。
 
 `ActivationCause` 是 immutable typed union：
 

@@ -43,9 +43,9 @@ Gemini artifact v1 只保存有序 step layout、thought signatures、model-outp
 
 ## 3. 请求映射
 
-LivingWorld message 顺序原样映射：
+dreamtalk message 顺序原样映射：
 
-| LivingWorld | Interactions step |
+| dreamtalk | Interactions step |
 | --- | --- |
 | leading SYSTEM（最多一个） | top-level `system_instruction` string |
 | USER | `user_input` + ordered text content |
@@ -67,7 +67,7 @@ Non-stream structured request 使用：
   "response_format": {
     "type": "text",
     "mime_type": "application/json",
-    "schema": "<original LivingWorld schema>"
+    "schema": "<original dreamtalk schema>"
   }
 }
 ```

@@ -1,4 +1,4 @@
-# LivingWorld 领域概念模型
+# dreamtalk 领域概念模型
 
 状态：Stage 0 领域语言保留；Stage 2 已建立领域模型、SQLite 映射、命令事务、知识隔离、canonical ledger、回放及资源级乐观并发；Stage 3 建立独立创作内容边界；Stage 5 建立 scheduler、typed ActionProposal、persistent Scene、event-time perception、sparse activation 与 clock reconciliation；C-007A 新增 Character-owned evidence-backed EpisodicMemory。见 [EPISODIC_MEMORY.md](EPISODIC_MEMORY.md)、[ACTION_RESOLUTION.md](ACTION_RESOLUTION.md)、[SCENES_AND_PERCEPTION.md](SCENES_AND_PERCEPTION.md)、[SPARSE_ACTIVATION.md](SPARSE_ACTIVATION.md)、[CLOCK_RECONCILIATION.md](CLOCK_RECONCILIATION.md) 和 [PERSISTENCE_MODEL.md](PERSISTENCE_MODEL.md)。Director、Agent、Reflection、memory retrieval 与业务 HTTP API 仍未实现。
 
@@ -106,7 +106,7 @@ RequestId 是命令幂等身份，ObservationId 是观察发生身份；运行�
 
 ### Important invariants
 
-- LivingWorld 是持久化、事件驱动的多角色 AI 世界，不是普通聊天机器人（FR-01）。
+- dreamtalk 是持久化、事件驱动的多角色 AI 世界，不是普通聊天机器人（FR-01）。
 - 世界真实事实、Character Knowledge 和 Player Knowledge 必须分离（FR-04）。
 - AI World Builder 可联网研究作品/世界并生成带来源的 World Draft；自动生成内容必须经过 Draft → Preview → Commit（FR-18、FR-19）。
 - 世界支持 Checkpoint 与 Timeline Branch（FR-22）；一个 World 对应多少玩家以及是否支持多人共同参与，待确认。

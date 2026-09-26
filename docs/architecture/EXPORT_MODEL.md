@@ -43,7 +43,7 @@ name/description/personality/scenario/creator_notes/tags 使用当前同义字�
 
 canonical 多个 example_dialogue blocks 没有定义到单个外部字符串的拼接规则；返回 typed example_dialogue_serialization_required。调用方须明确准备一个导出 block，exporter 不猜 delimiter、不写回内容库。aliases/background/speech_guidance/legacy lore_entry_ids 等没有已定义外部字段的语义发出损失警告，不私藏于自创 extension。
 
-V3 映射已表示的 nickname、multilingual notes、source、group greetings 和 source dates；不采样当前时间。V2→V3 没有 group greetings 时输出必需的空数组，没有资产时输出空 assets 数组；不创造昵称、URL、日期、资产或多语言备注。V3→V2 省略不能表达的字段并逐字段发出 v3_field_not_representable_in_v2，保留 LivingWorld 内部来源。较新 source V3 version 导出为当前 3.0 时发出 source_schema_version_not_preserved，不伪称保留版本。
+V3 映射已表示的 nickname、multilingual notes、source、group greetings 和 source dates；不采样当前时间。V2→V3 没有 group greetings 时输出必需的空数组，没有资产时输出空 assets 数组；不创造昵称、URL、日期、资产或多语言备注。V3→V2 省略不能表达的字段并逐字段发出 v3_field_not_representable_in_v2，保留 dreamtalk 内部来源。较新 source V3 version 导出为当前 3.0 时发出 source_schema_version_not_preserved，不伪称保留版本。
 
 V3 ContentAsset 使用当前 descriptor/reference。data URL 的明确 raw pointer 只从已提供 envelope 的 preserved descriptors 恢复；不下载、读取、解码或物化资产。JSON 不能携带 PNG container-image / embedded-file 资源，保留 descriptor 并发出 export_asset_reference_not_packaged。无已知 descriptor 的 generic asset 省略并 warning，不猜 URI/type。
 

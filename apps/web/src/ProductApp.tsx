@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
-import { CoreClient, type ChatConversation, type GroupChatConversation, type KnownWorldEvent, type PlayerAvailability, type SelectablePlayer, type SelectedPlayerState, type WorldSettings } from "@livingworld/api-client";
+import { CoreClient, type ChatConversation, type GroupChatConversation, type KnownWorldEvent, type PlayerAvailability, type SelectablePlayer, type SelectedPlayerState, type WorldSettings } from "@dreamtalk/api-client";
 import { ChatTranscript } from "./ChatTranscript";
 import { GroupChatDetails, GroupChatSetup } from "./GroupChat";
 import { ModelSetup } from "./ModelSetup";
@@ -196,7 +196,7 @@ export function ProductApp({ client }: { client: CoreClient }) {
   const selectedConversation = conversations.find(item => item.conversation_id === selectedConversationId);
   const selectedGroup = groups.find(item => item.conversation_id === selectedGroupId);
   return <div className="product-shell">
-    <header className="app-header"><span className="app-brand">LivingWorld</span><span role="status" className="sr-only">核心已就绪</span><span className="world-context">{world?.name ?? "尚未创建世界"}</span></header>
+    <header className="app-header"><span className="app-brand">dreamtalk</span><span role="status" className="sr-only">核心已就绪</span><span className="world-context">{world?.name ?? "尚未创建世界"}</span></header>
     <main className="app-content" id="main-content">
       <div className="page-heading"><h1>{title}</h1>{world ? <span className="page-world">{world.name}</span> : null}</div>
       {error ? <p className="app-alert" role="alert">{error}</p> : null}

@@ -17,7 +17,7 @@ structured validation failure != transport retry
 
 [DeepSeek errors](https://api-docs.deepseek.com/quick_start/error_codes/) 将 429、500、503 与认证/参数/余额错误区分；[当前 rate-limit/isolation 文档](https://api-docs.deepseek.com/quick_start/rate_limit/) 说明账户 concurrency 超限返回 429，以及保留连接/SSE comments 的机制。限流页面经公开 HTTP 直读核对，浏览工具直读失败。没有实现 concurrency scheduler、user_id、改消息/参数或切换提供方。
 
-这些指导不是所有 compatible 服务已实测的承诺。LivingWorld 通过 normalized dispatch/status 和明确 policy 判断，保守拒绝 uncertain replay；不解析任意 provider message 猜恢复策略，不采用 SDK 隐藏重试。
+这些指导不是所有 compatible 服务已实测的承诺。dreamtalk 通过 normalized dispatch/status 和明确 policy 判断，保守拒绝 uncertain replay；不解析任意 provider message 猜恢复策略，不采用 SDK 隐藏重试。
 
 ## 2. Invocation 与 attempt
 

@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { CoreClient, CoreRequestError } from "@livingworld/api-client";
+import { CoreClient, CoreRequestError } from "@dreamtalk/api-client";
 import { ProfileEditor } from "./ProfileEditor";
 
 afterEach(cleanup);

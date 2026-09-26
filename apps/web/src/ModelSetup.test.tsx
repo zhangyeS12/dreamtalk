@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { type CoreClient } from "@livingworld/api-client";
+import { type CoreClient } from "@dreamtalk/api-client";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { ModelSetup } from "./ModelSetup";
 

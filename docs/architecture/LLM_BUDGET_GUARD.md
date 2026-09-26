@@ -2,7 +2,7 @@
 
 状态：opt-in application budget policy、可信 preflight bounds、SQLite 原子准入/结算、持久化 reservation、安全拒绝事实与 route integration 已实现并离线验证。没有生产价格目录、真实付费 API 测试、预算 UI 或 reconciliation。
 
-**Hard Budget = 对 LivingWorld 可信 estimated upper-bound spend 的硬授权；不是 provider invoice、余额、信用卡或预付费上限保证。**
+**Hard Budget = 对 dreamtalk 可信 estimated upper-bound spend 的硬授权；不是 provider invoice、余额、信用卡或预付费上限保证。**
 
 ```text
 no trusted upper bound → HARD fails closed

@@ -1,5 +1,5 @@
 import { useEffect, useId, useState, type FormEvent } from "react";
-import { CoreClient, CoreRequestError, type LocalProfile } from "@livingworld/api-client";
+import { CoreClient, CoreRequestError, type LocalProfile } from "@dreamtalk/api-client";
 
 export function ProfileEditor({ client, worldId, onDirtyChange }: {
   client: CoreClient;

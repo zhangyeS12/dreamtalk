@@ -1,15 +1,15 @@
 # Anthropic Native Messages Adapter — C-005E2
 
-状态：LivingWorld 已实现可注入、默认未启用的 Anthropic 原生 Messages adapter。实现直接使用 `httpx` 和 `POST /v1/messages`，测试全部使用离线 `MockTransport` 与受控 fixtures；没有 Anthropic SDK、真实 API key、付费调用、在线 model discovery 或 production default wiring。
+状态：dreamtalk 已实现可注入、默认未启用的 Anthropic 原生 Messages adapter。实现直接使用 `httpx` 和 `POST /v1/messages`，测试全部使用离线 `MockTransport` 与受控 fixtures；没有 Anthropic SDK、真实 API key、付费调用、在线 model discovery 或 production default wiring。
 
 ```text
 AdapterKind.ANTHROPIC != AdapterKind.OPENAI_COMPATIBLE
 ProviderId = configured provider instance
 ModelRef = ProviderId + opaque configured model identity
-LivingWorld routing remains authoritative
+dreamtalk routing remains authoritative
 ```
 
-实现：[anthropic_messages.py](../../services/core/src/livingworld/infrastructure/llm/anthropic_messages.py)。协议依据在 2026-09-19 核对当前 Anthropic 官方 [Messages API](https://platform.claude.com/docs/en/api/messages/create)、[API overview](https://platform.claude.com/docs/en/api/overview)、[versioning](https://platform.claude.com/docs/en/api/versioning)、[streaming](https://platform.claude.com/docs/en/build-with-claude/streaming)、[errors](https://platform.claude.com/docs/en/api/errors)、[structured outputs](https://platform.claude.com/docs/en/build-with-claude/structured-outputs) 与 [prompt caching](https://platform.claude.com/docs/en/build-with-claude/prompt-caching)。LivingWorld 的具体安全边界和已冻结产品决策仍以本文件与工程任务为准。
+实现：[anthropic_messages.py](../../services/core/src/livingworld/infrastructure/llm/anthropic_messages.py)。协议依据在 2026-09-19 核对当前 Anthropic 官方 [Messages API](https://platform.claude.com/docs/en/api/messages/create)、[API overview](https://platform.claude.com/docs/en/api/overview)、[versioning](https://platform.claude.com/docs/en/api/versioning)、[streaming](https://platform.claude.com/docs/en/build-with-claude/streaming)、[errors](https://platform.claude.com/docs/en/api/errors)、[structured outputs](https://platform.claude.com/docs/en/build-with-claude/structured-outputs) 与 [prompt caching](https://platform.claude.com/docs/en/build-with-claude/prompt-caching)。dreamtalk 的具体安全边界和已冻结产品决策仍以本文件与工程任务为准。
 
 ## 1. HTTP、版本和凭据
 
@@ -23,7 +23,7 @@ content-type: application/json
 
 可选 `AnthropicWorkspaceId` 只允许通过 typed safe field 添加 `anthropic-workspace-id`。不存在任意 caller header map，不发送 `x-api-key`、`anthropic-beta` 或 provider-side fallback beta。redirect response 不会把 bearer 转发到其他 origin。完成、失败和取消路径都会移除 adapter-owned wire Authorization、清理 cookie 并关闭 response；Python 字符串不承诺物理擦除，注入 transport 仍必须是可信基础设施。
 
-`request-id` 仅在满足有界安全 identifier 规则且不反射 secret/prompt/stop text 时进入 `ProviderDiagnostics`。InvocationId 始终是 LivingWorld 的权威调用身份。
+`request-id` 仅在满足有界安全 identifier 规则且不反射 secret/prompt/stop text 时进入 `ProviderDiagnostics`。InvocationId 始终是 dreamtalk 的权威调用身份。
 
 ## 2. 请求翻译和显式 profile
 
@@ -31,7 +31,7 @@ content-type: application/json
 
 `max_tokens` 是必需 wire 字段：优先使用 `LLMRequest.max_output_tokens`；缺失时只使用 profile 中明确配置的 default；两者都缺失则在凭据/网络前返回 INVALID_REQUEST。超过 profile 声明上限同样本地失败，不 clamp、不选择较便宜值。
 
-LivingWorld role 映射：
+dreamtalk role 映射：
 
 - 连续的 SYSTEM prefix 按原序变成 top-level `system` text blocks；
 - USER / ASSISTANT 按原消息和 block 顺序映射，不 trim、merge 或重写；
@@ -48,7 +48,7 @@ LivingWorld role 映射：
 
 终止映射：
 
-| Anthropic stop reason | LivingWorld |
+| Anthropic stop reason | dreamtalk |
 | --- | --- |
 | `end_turn`, `stop_sequence` | `FinishReason.STOP` |
 | `max_tokens` | `FinishReason.OUTPUT_LIMIT` |
@@ -63,7 +63,7 @@ LivingWorld role 映射：
 {"output_config":{"format":{"type":"json_schema","schema":{}}}}
 ```
 
-实际 schema 是调用方的完整原始 Draft 2020-12 schema；adapter 不做 SDK-style schema transformation，不删除约束、不填 `additionalProperties`、不发送旧 `output_format` 或 beta header。成功后仍通过 LivingWorld 现有严格 JSON parser 和原 schema local validator。先判断 refusal、output limit 和 context limit：refusal 不解析 JSON；两种 truncation 都产生带安全 attempt facts 的 structured failure。没有 repair 或隐藏 retry。
+实际 schema 是调用方的完整原始 Draft 2020-12 schema；adapter 不做 SDK-style schema transformation，不删除约束、不填 `additionalProperties`、不发送旧 `output_format` 或 beta header。成功后仍通过 dreamtalk 现有严格 JSON parser 和原 schema local validator。先判断 refusal、output limit 和 context limit：refusal 不解析 JSON；两种 truncation 都产生带安全 attempt facts 的 structured failure。没有 repair 或隐藏 retry。
 
 ## 4. Anthropic 命名 SSE
 

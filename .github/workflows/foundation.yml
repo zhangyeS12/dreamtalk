@@ -1,4 +1,4 @@
-name: Application runtime foundation
+name: dreamtalk continuous integration
 on: [push, pull_request]
 permissions:
   contents: read

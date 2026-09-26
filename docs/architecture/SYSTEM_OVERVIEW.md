@@ -4,7 +4,7 @@
 
 ## 1. 系统目标与边界
 
-LivingWorld 的核心是持续存在、由事件推动的多角色世界（FR-01）。玩家对话是其中一种互动，而不是整个世界的全部状态。
+dreamtalk 的核心是持续存在、由事件推动的多角色世界（FR-01）。玩家对话是其中一种互动，而不是整个世界的全部状态。
 
 | 概念职责 | 负责什么 | 边界 |
 | --- | --- | --- |
@@ -82,7 +82,7 @@ Planning Window 耗尽或大量计划失效才触发 Replan（FR-15）；上述�
 
 ## 6. C-005A LLM 契约边界
 
-应用只依赖 LivingWorld-owned ModelGateway.generate/stream 与 typed request/response，provider adapter 属于 infrastructure。Provider != Model != Purpose；能力显式查询，不解析 model-name 猜行为。LLM contract 不授予 world/content/knowledge mutation capability，既有 Kernel 提交路径与先权限后检索的边界不变。
+应用只依赖 dreamtalk-owned ModelGateway.generate/stream 与 typed request/response，provider adapter 属于 infrastructure。Provider != Model != Purpose；能力显式查询，不解析 model-name 猜行为。LLM contract 不授予 world/content/knowledge mutation capability，既有 Kernel 提交路径与先权限后检索的边界不变。
 
 结构化生成是独立 request/validated-result 概念，raw JSON-looking text 不等于验证结果；C-005C 才实现验证/重试。流为 provider-neutral typed async events，取消使用标准 asyncio。Refusal 是成功 round-trip 的独立结果，usage 是 factual token data，price/cost 是 C-005D 的配置政策。凭据只通过 SecretRef/CredentialProvider seam 引用，不写入 prompt、normal logs、canonical 项目数据或 `.lwcontent`。
 

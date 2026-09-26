@@ -1,4 +1,4 @@
-# LivingWorld Content Package — C-004D2
+# dreamtalk Content Package — C-004D2
 
 **`.lwcontent` = portable authored content。`.lworld` = reserved future runtime-world/state package。**
 

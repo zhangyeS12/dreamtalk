@@ -29,11 +29,11 @@
 | name | display_name 原样；空白名称无法满足既有 canonical invariant，明确拒绝，不造名称 |
 | description / personality / scenario / creator_notes | 同义 canonical 文本原样保留 |
 | mes_example | 整个非空白来源块作为一个 example_dialogue 成员；不拆分或改写；原值亦完整保存在 authored_instructions |
-| system_prompt / post_history_instructions | authored_instructions.character_card；不替换 LivingWorld 系统设置、不执行 {{original}} |
+| system_prompt / post_history_instructions | authored_instructions.character_card；不替换 dreamtalk 系统设置、不执行 {{original}} |
 | first_mes / alternate_greetings | authored_instructions.character_card；保留空字符串、顺序及模板；不创建对话历史 |
 | tags | 非空白值原样映射，保持空格/大小写/重复项及顺序；空白值仅省略 canonical 并 warning |
 | creator / character_version | livingworld.character_card 兼容元数据，不充当内容 schema version |
-| extensions | external_extensions opaque structured data；不与 LivingWorld 自有 namespace 合并 |
+| extensions | external_extensions opaque structured data；不与 dreamtalk 自有 namespace 合并 |
 | unknown top-level / data | 兼容元数据、raw unknown_extensions 和完整原始 bytes 中保留；不解释 |
 | character_book | 完整嵌套对象保存在 compatibility metadata，关联相同 raw provenance；不生成 LoreEntry/Truth |
 | V3 nickname | 独立 compatibility 字段；display_name、aliases 不变；不实施 preferred prompt-name 规则 |
