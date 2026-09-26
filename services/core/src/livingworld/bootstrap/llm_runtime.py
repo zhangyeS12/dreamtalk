@@ -10,6 +10,8 @@ from uuid import uuid4
 from livingworld.application.chat_context import DirectChatContextBuilder
 from livingworld.application.chat_messages import ChatMessageService
 from livingworld.application.chat_reply import DirectChatReplyService
+from livingworld.application.group_chat_context import GroupChatContextBuilder
+from livingworld.application.group_chat_reply import GroupChatReplyService
 from livingworld.application.llm import InvocationId, LLMPurpose
 from livingworld.application.llm_config import LLMRuntimeHealth, SecretRef
 from livingworld.application.llm_registry import ModelRegistry
@@ -88,7 +90,24 @@ def configure_direct_chat_reply(
     context: DirectChatContextBuilder,
 ) -> DirectChatReplyService | None:
     """Use the explicit BALANCED route, or the sole eligible configured model."""
+    configured = _chat_reply_configuration(session)
+    if configured is None:
+        return None
+    return DirectChatReplyService(messages, context, *configured)
 
+
+def configure_group_chat_reply(
+    session: ProductionLLMSession,
+    messages: ChatMessageService,
+    context: GroupChatContextBuilder,
+) -> GroupChatReplyService | None:
+    configured = _chat_reply_configuration(session)
+    if configured is None:
+        return None
+    return GroupChatReplyService(messages, context, *configured)
+
+
+def _chat_reply_configuration(session: ProductionLLMSession):
     runtime = session.runtime
     if runtime is None:
         return None
@@ -122,15 +141,13 @@ def configure_direct_chat_reply(
         return None
     primary = entries[0]
     secret_ref = runtime.configuration.providers[primary.model.provider_id].config.secret_ref
-    return DirectChatReplyService(
-        messages,
-        context,
+    return (
         runtime.gateway,
         runtime.registry.usage_bounder(),
         primary.model,
         min(entry.limits.max_output_tokens for entry in entries),
-        available=lambda: session.credentials.contains(secret_ref),
-        selection=selection,
+        lambda: session.credentials.contains(secret_ref),
+        selection,
     )
 
 

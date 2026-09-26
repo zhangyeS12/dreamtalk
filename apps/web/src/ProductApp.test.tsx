@@ -176,7 +176,7 @@ it("opens a contact lazily and shows only the selected world's real conversation
   await waitFor(() => expect(conversations).toHaveBeenCalledWith("world-b"));
 });
 
-it("creates a durable group from current-world cards and never offers unsupported sends", async () => {
+it("creates a durable group from current-world cards and opens its transcript", async () => {
   const createGroupConversation = vi.fn().mockResolvedValue(groupA);
   const client = {
     worldContent: vi.fn().mockResolvedValue([cardA, cardB]),
@@ -185,6 +185,8 @@ it("creates a durable group from current-world cards and never offers unsupporte
     selectedPlayer: vi.fn().mockResolvedValue({ player_id: "player-a" }),
     conversations: vi.fn().mockResolvedValue([]), groupConversations: vi.fn().mockResolvedValue([]),
     createGroupConversation,
+    conversationMessages: vi.fn().mockResolvedValue([]),
+    groupReplyAvailability: vi.fn().mockResolvedValue({ available: false }),
   } as unknown as CoreClient;
   renderProduct(client);
   fireEvent.click(await screen.findByRole("button", { name: "＋ 新建群聊" }));
@@ -195,9 +197,9 @@ it("creates a durable group from current-world cards and never offers unsupporte
   await waitFor(() => expect(createGroupConversation).toHaveBeenCalledOnce());
   expect(createGroupConversation.mock.calls[0]?.slice(0, 2)).toEqual(["world-a", ["card-a", "card-b"]]);
   expect(setup.isConnected).toBe(false);
-  expect(await screen.findByRole("region", { name: "群聊成员" })).toBeTruthy();
-  expect(screen.getByText(/发言调度与整轮 Token 额度接线完成后/)).toBeTruthy();
-  expect(screen.queryByRole("button", { name: "发送" })).toBeNull();
+  expect(await screen.findByRole("region", { name: "群聊" })).toBeTruthy();
+  expect(screen.getByText(/尚未配置可用的聊天模型或可信 Token 上限/)).toBeTruthy();
+  expect(screen.getByRole("button", { name: "发送" })).toHaveProperty("disabled", true);
 });
 
 it("does not carry a group into another world's conversation list", async () => {
@@ -207,15 +209,17 @@ it("does not carry a group into another world's conversation list", async () => 
     selectedPlayer: vi.fn((id: string) => Promise.resolve({ player_id: `${id}-player` })),
     conversations: vi.fn().mockResolvedValue([]),
     groupConversations: vi.fn((id: string) => Promise.resolve(id === "world-a" ? [groupA] : [])),
+    conversationMessages: vi.fn().mockResolvedValue([]),
+    groupReplyAvailability: vi.fn().mockResolvedValue({ available: false }),
   } as unknown as CoreClient;
   renderProduct(client);
   const groupRow = await screen.findByRole("button", { name: /角色甲、角色乙群聊/ });
   fireEvent.click(groupRow);
-  expect(await screen.findByRole("region", { name: "群聊成员" })).toBeTruthy();
+  expect(await screen.findByRole("region", { name: "群聊" })).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "设置" }));
   fireEvent.change(screen.getByRole("combobox", { name: "当前世界" }), { target: { value: "world-b" } });
   fireEvent.click(screen.getByRole("button", { name: "聊天" }));
   await waitFor(() => expect(client.groupConversations).toHaveBeenCalledWith("world-b"));
-  expect(screen.queryByRole("region", { name: "群聊成员" })).toBeNull();
+  expect(screen.queryByRole("region", { name: "群聊" })).toBeNull();
   expect(screen.queryByRole("button", { name: /角色甲、角色乙群聊/ })).toBeNull();
 });

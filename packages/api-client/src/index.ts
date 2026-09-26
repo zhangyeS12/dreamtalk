@@ -95,6 +95,13 @@ export interface DirectTurnView {
   player_message: ChatMessage;
   reply: ChatMessage | null;
 }
+export interface GroupTurnView {
+  turn_id: string;
+  state: "pending" | "claimed" | "completed";
+  token_ceiling: number;
+  player_message: ChatMessage;
+  replies: ChatMessage[];
+}
 
 export class CoreClient {
   private readonly endpoint: URL;
@@ -187,6 +194,21 @@ export class CoreClient {
   }
   generateDirectReply(worldId: string, conversationId: string, turnId: string): Promise<DirectTurnView> {
     return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/${encodeURIComponent(conversationId)}/turns/${encodeURIComponent(turnId)}/reply`, { method: "POST" });
+  }
+  groupReplyAvailability(worldId: string): Promise<{ available: boolean }> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/group-reply-availability`);
+  }
+  sendGroupMessage(worldId: string, conversationId: string, text: string, tokenCeiling: number, requestId: string): Promise<PendingPlayerSend> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/${encodeURIComponent(conversationId)}/group-messages`, {
+      method: "POST", headers: { "Content-Type": "application/json", "X-Request-Id": requestId },
+      body: JSON.stringify({ text, token_ceiling: tokenCeiling }),
+    });
+  }
+  groupTurn(worldId: string, conversationId: string, turnId: string): Promise<GroupTurnView> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/${encodeURIComponent(conversationId)}/group-turns/${encodeURIComponent(turnId)}`);
+  }
+  generateGroupReply(worldId: string, conversationId: string, turnId: string): Promise<GroupTurnView> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/${encodeURIComponent(conversationId)}/group-turns/${encodeURIComponent(turnId)}/reply`, { method: "POST" });
   }
   openDirectConversation(worldId: string, importId: string): Promise<ChatConversation> {
     return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/direct/${encodeURIComponent(importId)}`, { method: "POST" });

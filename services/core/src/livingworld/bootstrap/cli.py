@@ -20,6 +20,7 @@ from livingworld.application.developer_inspector import (
     INSPECTOR_TRIGGER_KIND,
     DeveloperInspectorService,
 )
+from livingworld.application.group_chat_context import GroupChatContextBuilder
 from livingworld.application.memory import EpisodicMemoryService
 from livingworld.application.player_event_feed import PlayerEventFeedService
 from livingworld.application.player_onboarding import LocalPlayerOnboardingService
@@ -43,6 +44,7 @@ from livingworld.application.world_settings import WorldSettingsService
 from livingworld.bootstrap.llm_control import HostControlListener
 from livingworld.bootstrap.llm_runtime import (
     configure_direct_chat_reply,
+    configure_group_chat_reply,
     start_production_llm_session,
 )
 from livingworld.bootstrap.reader import derive_session, read_bootstrap
@@ -186,6 +188,16 @@ async def run(
                 database.character_memory_reader,
             ),
         )
+        group_chat_reply = configure_group_chat_reply(
+            llm_session,
+            chat_messages,
+            GroupChatContextBuilder(
+                chat_conversations,
+                chat_messages,
+                database.local_profile_store(),
+                database.character_memory_reader,
+            ),
+        )
         status = RuntimeStatus(
             version("livingworld-core"), generation, llm_health=llm_session.health
         )
@@ -212,6 +224,7 @@ async def run(
             chat_conversations,
             chat_messages,
             chat_reply,
+            group_chat_reply,
         )
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.bind((LOOPBACK_HOST, 0))

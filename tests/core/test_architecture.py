@@ -11,6 +11,7 @@ def test_llm_contracts_are_provider_neutral_and_existing_world_content_are_indep
         root / "application/chat_context.py",
         root / "application/chat_reply.py",
         root / "application/group_chat_context.py",
+        root / "application/group_chat_reply.py",
     }
     for layer in ("domain", "application"):
         for source in (root / layer).rglob("*.py"):

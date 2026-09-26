@@ -20,7 +20,11 @@ from livingworld.application.llm_routing import (
     RoutingConfiguration,
     RoutingProfile,
 )
-from livingworld.bootstrap.llm_runtime import ProductionLLMSession, configure_direct_chat_reply
+from livingworld.bootstrap.llm_runtime import (
+    ProductionLLMSession,
+    configure_direct_chat_reply,
+    configure_group_chat_reply,
+)
 
 
 def _session(*, model_count: int, routed: bool):
@@ -75,11 +79,15 @@ def test_one_enabled_model_is_an_unambiguous_direct_chat_choice():
     service = configure_direct_chat_reply(session, object(), object())
     assert service is not None
     assert service.available
+    group = configure_group_chat_reply(session, object(), object())
+    assert group is not None
+    assert group.available
 
 
 def test_multiple_models_without_explicit_chat_route_do_not_pick_one():
     session, _ = _session(model_count=2, routed=False)
     assert configure_direct_chat_reply(session, object(), object()) is None
+    assert configure_group_chat_reply(session, object(), object()) is None
 
 
 def test_explicit_balanced_route_permits_composition():

@@ -50,7 +50,7 @@ class ChatReplyIntegrityError(RuntimeError):
     """Local accounting or budget integrity prevented reliable continuation."""
 
 
-class DirectChatGateway(Protocol):
+class ChatGateway(Protocol):
     def plan(self, request: LLMRequest, *, selection: ModelSelection | None = None): ...
 
     async def generate(
@@ -67,7 +67,7 @@ class DirectChatReplyService:
         self,
         messages: ChatMessageService,
         context: DirectChatContextBuilder,
-        gateway: DirectChatGateway,
+        gateway: ChatGateway,
         token_bounder: PreflightUsageBounder,
         model: ModelRef,
         max_output_tokens: int,

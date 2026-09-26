@@ -79,4 +79,17 @@ describe("CoreClient", () => {
     expect(fetcher.mock.calls[0][1].headers["X-Request-Id"]).toBe(id);
     expect(JSON.parse(fetcher.mock.calls[0][1].body)).toEqual({ text: "你好", token_ceiling: 50_000 });
   });
+  it("uses distinct authenticated group send and turn routes", async () => {
+    const fetcher = vi.fn().mockImplementation(async () => new Response(JSON.stringify({ turn_id: "turn", state: "completed" })));
+    const client = new CoreClient(connection, fetcher);
+    const id = "0f6d14aa-1363-4451-a1bf-9ed40a9cbb95";
+    await client.sendGroupMessage("world", "group", "@角色乙 你好", 500, id);
+    expect(fetcher.mock.calls[0][0].toString()).toBe(`${connection.endpoint}/api/v${API_PROTOCOL}/worlds/world/conversations/group/group-messages`);
+    expect(fetcher.mock.calls[0][1].headers["X-Request-Id"]).toBe(id);
+    expect(JSON.parse(fetcher.mock.calls[0][1].body)).toEqual({ text: "@角色乙 你好", token_ceiling: 500 });
+    await client.generateGroupReply("world", "group", "turn");
+    expect(fetcher.mock.calls[1][0].toString()).toBe(`${connection.endpoint}/api/v${API_PROTOCOL}/worlds/world/conversations/group/group-turns/turn/reply`);
+    await client.groupTurn("world", "group", "turn");
+    expect(fetcher.mock.calls[2][0].toString()).toBe(`${connection.endpoint}/api/v${API_PROTOCOL}/worlds/world/conversations/group/group-turns/turn`);
+  });
 });

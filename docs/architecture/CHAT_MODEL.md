@@ -48,10 +48,9 @@ group-list endpoint reads these records. The ordinary Chat tab now lists the
 selected Player's direct and group conversations separately, lets the Player
 select current-world Character Card contacts to create a group, and displays
 its persisted members. An uncertain create can be retried with the same request
-ID and member set. Group message sends are
-explicitly rejected until the independent speaker scheduler and shared-turn
-budget are connected; this avoids storing a group turn that cannot be safely
-completed. Creating a group does not move anyone, create an Observation, or
+ID and member set. Group messages use a separate authenticated send endpoint;
+the legacy direct-message POST remains direct-only. Creating a group does not
+move anyone, create an Observation, or
 invent a WorldEvent beyond the existing canonical CharacterCreated events for
 newly opened contacts.
 
@@ -66,9 +65,11 @@ at least one durable reply, and no new reply can follow completion. The 0021
 additive migration preserves existing 0020 dispatch rows with an unset
 completion timestamp. These records are Conversation messages, not WorldEvents
 or Observations.
-This is an internal persistence boundary only: the public send endpoint still
-rejects group turns, since speaker selection, governed generation and the
-shared Token ceiling are not yet composed. An interrupted claimed group turn
+The group send endpoint stores the Player message and ceiling before generation.
+The group reply endpoint reads that durable turn, preflights a trusted model
+route and input/output bound, claims it once, then selects and generates
+speakers under one shared token budget. A completed turn is read back without
+another provider call. An interrupted claimed group turn
 is not automatically replayed, because an earlier provider outcome might be
 unknown.
 
@@ -82,10 +83,21 @@ current-world descriptions. Imported instructions and transcript text remain
 lower-trust data. An exact `@display-name` in the Player message can identify
 one participant; ambiguous names or multiple addressed participants fail
 closed. This builder prepares input only: it does not select a speaker,
-dispatch a model, or open public group sends. It accepts an owner-scoped pending
-Player send before the one-time dispatch claim, so a future runner can perform
+dispatch a model. It accepts an owner-scoped pending
+Player send before the one-time dispatch claim, so the group runner can perform
 model and Token preflight without consuming the claim. After claiming, it also
 checks the fixed participant set before preparing further replies.
+
+The independent group runner chooses an eligible Character ID from the public
+persona and group transcript. An exact unique `@display-name` bypasses the
+first selection call; otherwise the selector chooses the first speaker. After
+each durable reply it may select another speaker or stop. The selected
+Character's prompt contains only that Character's permitted memory and
+current accepted persona. It cannot access another member's private memory.
+The group runner does not commit WorldEvents, infer Knowledge, or replace the
+world Director. A model/transport failure after a claim leaves the turn
+claimed and unreplayed; replies already committed remain visible. The UI
+queries an uncertain turn once and never automatically repeats generation.
 
 The current direct-conversation API opens/lists identities only. An authenticated POST endpoint now persists a Player
 message and its pending turn through the application service, returning the same
@@ -173,8 +185,11 @@ cap to fit the turn, and checks route availability before claiming. It accepts o
 a nonblank bounded reply with a complete stop or explicit refusal. Truncated,
 wrong-invocation and over-bound responses cannot enter the transcript. This
 service is composed into the production direct-chat HTTP/UI flow when one suitable
-model or an explicit suitable BALANCED chat route is configured. Group scheduling
-remains separate work.
+model or an explicit suitable BALANCED chat route is configured. The group runner
+uses the same configured route and one persisted turn ceiling across selector
+and Character responses. It stops before another physical attempt when the
+remaining trusted bound cannot fit. The Chat tab exposes a group transcript and
+composer when the governed model and credential are available.
 
 ## Information and content boundaries
 
@@ -242,5 +257,6 @@ be unknown. The legacy `chat_turns.status = pending` field records the initial
 player-send receipt; the claim and Character message establish later execution
 state. The public API cannot write arbitrary Character text. The internal
 direct-reply service generates and validates a reply through the governed LLM
-gateway before committing it. This is direct-chat plumbing only; it does not
-create an autonomous Character Agent or implement group speaker selection.
+gateway before committing it. Group replies use the analogous one-time claim,
+ordered reply append, and explicit terminal completion. Neither chat path
+turns dialogue into canonical world facts.
