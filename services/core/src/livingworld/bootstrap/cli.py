@@ -198,9 +198,7 @@ async def run(
                 database.character_memory_reader,
             ),
         )
-        status = RuntimeStatus(
-            version("livingworld-core"), generation, llm_health=llm_session.health
-        )
+        status = RuntimeStatus(version("dreamtalk-core"), generation, llm_health=llm_session.health)
         if desktop:
             # Read from the unbuffered OS pipe so interpreter shutdown cannot race
             # a BufferedReader lock held by the control thread.
