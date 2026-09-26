@@ -73,6 +73,34 @@ try:
         page.get_by_placeholder("给世界起个名字").fill("world_profile_smoke")
         page.get_by_role("button", name="创建世界", exact=True).click()
         page.get_by_text("世界已创建。", exact=True).wait_for()
+        clock_section = page.locator("section.settings-section").filter(
+            has=page.get_by_role("heading", name="世界时间", exact=True)
+        )
+        clock_section.get_by_role("spinbutton", name="时间倍率").fill("1000")
+        clock_section.get_by_role("button", name="应用").click()
+        page.get_by_text("时间倍率已更新。", exact=True).wait_for()
+        clock_section.get_by_role("button", name="暂停").click()
+        page.get_by_text("世界已暂停。", exact=True).wait_for()
+        paused_time = clock_section.locator(".section-heading p").inner_text()
+        page.wait_for_timeout(2500)
+        assert clock_section.locator(".section-heading p").inner_text() == paused_time
+        clock_section.get_by_role("button", name="恢复").click()
+        page.get_by_text("世界已恢复。", exact=True).wait_for()
+        page.wait_for_function(
+            (
+                "previous => [...document.querySelectorAll('section.settings-section')]"
+                ".find(section => section.querySelector('h2')?.textContent === '世界时间')"
+                "?.querySelector('.section-heading p')?.textContent !== previous"
+            ),
+            arg=paused_time,
+            timeout=10_000,
+        )
+        budget_section = page.locator("section.settings-section").filter(
+            has=page.get_by_role("heading", name="聊天额度", exact=True)
+        )
+        budget_section.get_by_role("spinbutton", name="每轮 Token 上限").fill("60000")
+        budget_section.get_by_role("button", name="应用").click()
+        page.get_by_text("聊天额度已更新。", exact=True).wait_for()
         page.get_by_label("选择文件", exact=True).set_input_files(
             root / "tests/fixtures/character_cards/v2.json"
         )
@@ -87,6 +115,20 @@ try:
         page.get_by_role("button", name="先进入世界，再打开会话").click()
         page.get_by_role("button", name="进入世界", exact=True).click()
         page.get_by_text("已绑定：我", exact=True).wait_for()
+        page.get_by_role("button", name="设置", exact=True).click()
+        availability_section = page.locator("section.settings-section").filter(
+            has=page.get_by_role("heading", name="交流状态", exact=True)
+        )
+        availability_section.get_by_role("button", name="设为忙碌").click()
+        expect(availability_section.locator("strong")).to_have_text("忙碌")
+        availability_section.get_by_role("button", name="设为可用").click()
+        expect(availability_section.locator("strong")).to_have_text("可用")
+        page.reload(wait_until="networkidle")
+        page.get_by_role("button", name="设置", exact=True).click()
+        expect(budget_section.get_by_role("spinbutton", name="每轮 Token 上限")).to_have_value(
+            "60000"
+        )
+        expect(availability_section.locator("strong")).to_have_text("可用")
         page.get_by_role("button", name="通讯录", exact=True).click()
         page.locator(".contacts-workspace .conversation-row").click()
         page.get_by_role("button", name="打开会话", exact=True).click()
