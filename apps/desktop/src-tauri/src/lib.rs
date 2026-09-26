@@ -235,10 +235,25 @@ pub fn run() {
                     app_data = isolated.into();
                 }
             }
-            let config = LaunchConfig {
-                project_root: std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            let executable_dir = std::env::current_exe()?
+                .parent()
+                .ok_or("desktop_executable_directory_missing")?
+                .to_path_buf();
+            let project_root = if executable_dir
+                .join("core")
+                .join("dreamtalk-core.exe")
+                .is_file()
+            {
+                executable_dir
+            } else if cfg!(debug_assertions) {
+                std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
                     .join("../../..")
-                    .canonicalize()?,
+                    .canonicalize()?
+            } else {
+                executable_dir
+            };
+            let config = LaunchConfig {
+                project_root,
                 app_data: app_data.clone(),
                 startup_timeout: Duration::from_secs(12),
                 llm_config_path: app_data.join("config").join("llm.json"),

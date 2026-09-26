@@ -60,7 +60,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      - run: uv sync --frozen
+      - run: uv sync --frozen --group packaging
       - run: npm ci
       - run: npm run build:web
       - run: cargo fmt --manifest-path apps/desktop/src-tauri/Cargo.toml --check
@@ -68,3 +68,4 @@ jobs:
       - run: npm run test:desktop
       - run: npm run build:desktop
       - run: npm run test:desktop-smoke
+      - run: npm run build:portable

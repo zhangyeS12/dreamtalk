@@ -16,6 +16,8 @@
     "test:web-smoke": "uv run --frozen --group browser-test python scripts/browser-smoke.py",
     "build:web": "npm run build --workspace @dreamtalk/web",
     "build:desktop": "npm exec --workspace @dreamtalk/desktop -- tauri build --debug --no-bundle --features custom-protocol",
+    "build:desktop:release": "npm exec --workspace @dreamtalk/desktop -- tauri build --no-bundle --features custom-protocol",
+    "build:portable": "uv run --frozen --group packaging python scripts/build-portable.py",
     "build:core": "uv build --wheel --out-dir artifacts/core",
     "test:desktop": "cargo test --locked --manifest-path apps/desktop/src-tauri/Cargo.toml",
     "test:desktop-smoke": "uv run python scripts/desktop-smoke.py",

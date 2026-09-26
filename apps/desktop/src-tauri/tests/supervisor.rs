@@ -6,6 +6,39 @@ use dreamtalk_desktop_lib::supervisor::{contract, CoreSupervisor, LaunchConfig, 
 use std::{path::PathBuf, sync::Arc, time::Duration};
 
 #[test]
+fn windows_packaged_core_lifecycle() {
+    let Some(root) = std::env::var_os("DREAMTALK_PACKAGED_CORE_ROOT") else {
+        return;
+    };
+    tauri::async_runtime::block_on(async {
+        let directory = tempfile::tempdir().unwrap();
+        let config = LaunchConfig {
+            project_root: PathBuf::from(root),
+            app_data: directory.path().to_owned(),
+            startup_timeout: Duration::from_secs(30),
+            llm_config_path: directory.path().join("config").join("llm.json"),
+        };
+        assert!(config
+            .project_root
+            .join("core/dreamtalk-core.exe")
+            .is_file());
+        assert!(!config.project_root.join(".venv").exists());
+        let mut supervisor = CoreSupervisor::new();
+        supervisor.start(&config).await.unwrap();
+        assert_eq!(supervisor.state, SupervisorState::Ready);
+        assert!(supervisor.authenticated_health().await.unwrap().ready);
+        assert!(
+            supervisor
+                .stop(Duration::from_secs(8))
+                .await
+                .unwrap()
+                .graceful
+        );
+        assert!(supervisor.connection().is_err());
+    });
+}
+
+#[test]
 fn windows_supervisor_lifecycle_restart_and_authentication() {
     tauri::async_runtime::block_on(async {
         let directory = tempfile::tempdir().unwrap();

@@ -94,13 +94,10 @@ class SqlAlchemyWorldContentStore:
                 if await session.get(WorldRecord, item.world_id.value) is None:
                     raise EntityNotFoundError("world_not_found")
                 if item.replaces_import_id is not None:
-                    previous = await session.get(
-                        WorldContentImportRecord, item.replaces_import_id
-                    )
+                    previous = await session.get(WorldContentImportRecord, item.replaces_import_id)
                     successor = await session.scalar(
                         select(WorldContentImportRecord.import_id).where(
-                            WorldContentImportRecord.replaces_import_id
-                            == item.replaces_import_id
+                            WorldContentImportRecord.replaces_import_id == item.replaces_import_id
                         )
                     )
                     if (

@@ -26,6 +26,7 @@ livingworld-core = "livingworld.bootstrap.cli:main"
 
 [dependency-groups]
 browser-test = ["playwright>=1.63,<2"]
+packaging = ["pyinstaller>=6.16,<7"]
 dev = [
     "httpx2>=2.13.0",
     "pytest>=8.3,<10",

@@ -63,6 +63,9 @@ npm run build:core
 uv run python scripts/check-wheel.py
 uv run python scripts/check-doc-links.py
 
+# Windows：构建随附 Python Core 的本地便携目录/zip（不需要使用者安装开发依赖）
+npm run build:portable
+
 # Windows integration
 npm run test:desktop
 npm run build:desktop
@@ -73,7 +76,7 @@ npm run test:desktop-smoke
 npm run test:llm-live -- --config <path> --data-dir <path> --provider <id> --model <id> --credential-env <ENV_NAME>
 ```
 
-`build:core` 生成 `artifacts/core/*.whl`；`build:desktop` 生成未签名、未打包的 Windows debug executable。该桌面开发产物依赖当前 checkout 的 `.venv`，尚不是独立安装包。
+`build:core` 生成 `artifacts/core/*.whl`；`build:desktop` 生成未签名的 Windows debug executable，依赖当前 checkout 的 `.venv`。`build:portable` 先冻结 Python Core 并验证独立启动和迁移，再构建 release 桌面程序，生成 `artifacts/portable/dreamtalk/` 与 zip。它是本地便携产物，尚非签名安装包或 GitHub 发布；使用说明见 [Windows 便携版](docs/PORTABLE_WINDOWS.md)。
 
 开发数据库与日志保存在 app data。桌面使用 Tauri 的 `app_data_dir`；独立 Core / browser 开发 launcher 暂时沿用历史兼容路径 `%LOCALAPPDATA%/LivingWorld/development`。安装和源码目录不保存运行数据库或 bootstrap credentials。
 

@@ -47,7 +47,7 @@ Core 验证并读取后删除 bootstrap 文件。Core 以 OS 分配端口只绑�
 
 ## Supervisor 与关闭
 
-CoreSupervisor 定义 Starting、Ready、Degraded、Restarting、Failed、Stopping。Rust 直接启动 checkout `.venv` 的 Python，并等待 ready record，校验身份、loopback URL 和契约后进行鉴权 health。失败时清理所属子进程和短期文件。health 失败进入 Degraded；显式 restart 会结束旧进程并建立新 generation。当前未实现自动重启策略。
+CoreSupervisor 定义 Starting、Ready、Degraded、Restarting、Failed、Stopping。Windows 开发构建使用 checkout `.venv` 的 Python；便携目录中使用相邻 `core/dreamtalk-core.exe` 冻结 Core，正式构建若缺少 Core 则失败，不回退到开发环境。Rust 等待 ready record，校验身份、loopback URL 和契约后进行鉴权 health。失败时清理所属子进程和短期文件。health 失败进入 Degraded；显式 restart 会结束旧进程并建立新 generation。当前未实现自动重启策略。
 
 窗口关闭时 Tauri 暂缓退出，Rust 发送鉴权 shutdown，等待 Core lifespan 完成及进程退出；超时后仅终止自己启动的 Windows 进程树。Core 还监视 Windows supervisor parent PID，在父进程消失后结束。没有实现 macOS/Linux desktop 的特有进程机制。
 
@@ -82,7 +82,7 @@ Alembic 是唯一迁移执行器，alembic_version 是权威 cursor：0001 精�
 ## 明确的扩展与测试点
 
 - Python BootstrapFileAccess 与 Rust BootstrapFilePolicy 预留 owner/ACL 校验接口；当前仅做文件基本验证、create_new 和随机目录，未实现生产 ACL 加固。
-- 当前开发 executable 依赖 checkout Python venv；独立 Python runtime 分发、安装包、签名和更新不在 C-002 内。
+- 开发 executable 依赖 checkout Python venv；Windows 便携构建将冻结 Core 与 release 桌面程序一起组装。签名安装包和更新尚未实现。详见 [便携版说明](../PORTABLE_WINDOWS.md)。
 - SQLite migration 已由 C-003B 接管为 Alembic；后续新增 schema 必须由明确任务及新 revision 定义，不能恢复第二套 runner。
 - CoreClient 的连接来源可被后续 server transport 替换；当前不提供云鉴权或多用户连接协议。
 - 现阶段没有业务 trace、LLM 调用、真实费用统计或世界行为。

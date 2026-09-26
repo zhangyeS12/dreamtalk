@@ -210,20 +210,26 @@ impl CoreSupervisor {
             .map_err(|_| "bootstrap_write_failed")?;
         file.sync_all().await.map_err(|_| "bootstrap_sync_failed")?;
         drop(file);
-        let python = config
-            .project_root
-            .join(".venv")
-            .join("Scripts")
-            .join("python.exe");
-        let mut command = Command::new(python);
+        let packaged_core = config.project_root.join("core").join("dreamtalk-core.exe");
+        let packaged = packaged_core.is_file();
+        let executable = if packaged {
+            packaged_core
+        } else if cfg!(debug_assertions) {
+            config
+                .project_root
+                .join(".venv")
+                .join("Scripts")
+                .join("python.exe")
+        } else {
+            return Err("packaged_core_missing");
+        };
+        let mut command = Command::new(executable);
+        command.current_dir(&config.project_root);
+        if !packaged {
+            command.args(["-m", "livingworld.bootstrap"]);
+        }
         command
-            .current_dir(&config.project_root)
-            .args([
-                "-m",
-                "livingworld.bootstrap",
-                "--desktop",
-                "--bootstrap-path",
-            ])
+            .args(["--desktop", "--bootstrap-path"])
             .arg(&bootstrap_path)
             .arg("--parent-pid")
             .arg(std::process::id().to_string())
@@ -232,7 +238,9 @@ impl CoreSupervisor {
             .stderr(Stdio::null())
             .kill_on_drop(true);
         #[cfg(debug_assertions)]
-        command.arg("--developer-tools");
+        if !packaged {
+            command.arg("--developer-tools");
+        }
         #[cfg(windows)]
         command.creation_flags(0x08000000);
         let mut child = command.spawn().map_err(|_| "core_spawn_failed")?;
