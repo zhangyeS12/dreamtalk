@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { CoreClient, type ChatConversation, type GroupChatConversation, type WorldContentItem, type WorldSettings } from "@livingworld/api-client";
 import { ProductApp } from "./ProductApp";
 
-afterEach(cleanup);
+afterEach(() => { cleanup(); window.localStorage.removeItem("livingworld.lastWorldId"); });
 
 const worldA: WorldSettings = { world_id: "world-a", name: "世界甲", world_time: "0", clock_state: "running", time_scale: "1", runtime_state: "ready" };
 const worldB: WorldSettings = { world_id: "world-b", name: "世界乙", world_time: "60000000", clock_state: "paused", time_scale: "2", runtime_state: "paused" };
@@ -48,6 +48,27 @@ it("creates and switches worlds using the product client", async () => {
   expect(createWorld.mock.calls[0][0]).toBe("世界乙");
   await waitFor(() => expect((screen.getByRole("combobox", { name: "当前世界" }) as HTMLSelectElement).value).toBe("world-b"));
   expect(screen.getByText("第 1 天 · 00:01")).toBeTruthy();
+  await waitFor(() => expect(window.localStorage.getItem("livingworld.lastWorldId")).toBe("world-b"));
+});
+
+it("reopens the last valid world and ignores a world that no longer exists", async () => {
+  window.localStorage.setItem("livingworld.lastWorldId", "world-b");
+  const client = {
+    worldContent: vi.fn().mockResolvedValue([]),
+    listProductWorlds: vi.fn().mockResolvedValue([worldA, worldB]),
+    listPlayers: vi.fn().mockResolvedValue([]),
+    selectedPlayer: vi.fn().mockResolvedValue({ player_id: null }),
+    conversations: vi.fn().mockResolvedValue([]),
+    groupConversations: vi.fn().mockResolvedValue([]),
+  } as unknown as CoreClient;
+  const view = renderProduct(client);
+  fireEvent.click(screen.getByRole("button", { name: "设置" }));
+  await waitFor(() => expect((screen.getByRole("combobox", { name: "当前世界" }) as HTMLSelectElement).value).toBe("world-b"));
+  view.unmount();
+  window.localStorage.setItem("livingworld.lastWorldId", "missing-world");
+  renderProduct(client);
+  fireEvent.click(screen.getByRole("button", { name: "设置" }));
+  await waitFor(() => expect((screen.getByRole("combobox", { name: "当前世界" }) as HTMLSelectElement).value).toBe("world-a"));
 });
 
 it("shows the player-scoped world-event thread in chronological order", async () => {

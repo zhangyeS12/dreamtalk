@@ -37,6 +37,13 @@ function displayTime(raw: string): string {
 }
 
 const TOKEN_CEILING_KEY = "livingworld.chat.turnTokenCeiling";
+const LAST_WORLD_KEY = "livingworld.lastWorldId";
+function savedWorldId(): string | null {
+  try {
+    const value = window.localStorage.getItem(LAST_WORLD_KEY);
+    return value && value.length <= 128 ? value : null;
+  } catch { return null; }
+}
 function savedTokenCeiling(): number {
   try {
     const value = Number(window.localStorage.getItem(TOKEN_CEILING_KEY));
@@ -74,7 +81,11 @@ export function ProductApp({ client }: { client: CoreClient }) {
   const refresh = useCallback(async () => {
     const items = await client.listProductWorlds();
     setWorlds(items);
-    setWorldId(current => items.some(item => item.world_id === current) ? current : (items[0]?.world_id ?? ""));
+    setWorldId(current => {
+      if (items.some(item => item.world_id === current)) return current;
+      const remembered = savedWorldId();
+      return items.find(item => item.world_id === remembered)?.world_id ?? items[0]?.world_id ?? "";
+    });
   }, [client]);
   useEffect(() => {
     void refresh().catch(() => setError("无法读取世界，请检查核心连接。"));
@@ -82,6 +93,11 @@ export function ProductApp({ client }: { client: CoreClient }) {
     return () => window.clearInterval(timer);
   }, [refresh]);
   const world = useMemo(() => worlds.find(item => item.world_id === worldId), [worlds, worldId]);
+  useEffect(() => {
+    if (!world) return;
+    try { window.localStorage.setItem(LAST_WORLD_KEY, world.world_id); }
+    catch { /* The current world remains selected for this session. */ }
+  }, [world?.world_id]);
   useEffect(() => { if (tab === "me") setMeVisited(true); }, [tab]);
   useEffect(() => { if (world) setScale(world.time_scale); }, [world?.world_id, world?.time_scale]);
   const loadIdentity = useCallback(async (id: string) => {
