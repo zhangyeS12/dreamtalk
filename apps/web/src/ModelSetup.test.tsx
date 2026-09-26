@@ -59,3 +59,45 @@ it("does not claim a failed secure-store write configured the model", async () =
   expect(await screen.findByRole("alert")).toHaveProperty("textContent", "Windows 安全凭据存储不可用，密钥未保存。");
   expect(onConfigured).not.toHaveBeenCalled();
 });
+
+it("edits a managed model without reading or resubmitting the existing key", async () => {
+  vi.mocked(isTauri).mockReturnValue(true);
+  vi.mocked(invoke).mockImplementation(async command => {
+    if (command === "managed_chat_model_setup") return {
+      provider_kind: "anthropic", model_id: "old-model", base_url: null,
+      max_billable_input_tokens: 10000, max_output_tokens: 1000,
+    };
+    return { old_credential_cleanup_incomplete: false };
+  });
+  const onConfigured = vi.fn();
+  render(<ModelSetup client={client("ready")} onConfigured={onConfigured} />);
+  const save = await screen.findByRole("button", { name: "更新模型设置" });
+  expect(screen.getByRole("textbox", { name: "模型名称" })).toHaveProperty("value", "old-model");
+  expect(screen.getByLabelText("新 API 密钥（可留空）")).toHaveProperty("value", "");
+  fireEvent.change(screen.getByRole("textbox", { name: "模型名称" }), { target: { value: "new-model" } });
+  fireEvent.click(save);
+  await waitFor(() => expect(invoke).toHaveBeenCalledWith("update_chat_model", {
+    setup: { provider_kind: "anthropic", model_id: "new-model", base_url: null,
+      max_billable_input_tokens: 10000, max_output_tokens: 1000 },
+    secret: "",
+  }));
+  expect(onConfigured).toHaveBeenCalledOnce();
+});
+
+it("requires a new key when changing provider and never overwrites an advanced configuration", async () => {
+  vi.mocked(isTauri).mockReturnValue(true);
+  vi.mocked(invoke).mockResolvedValueOnce({
+    provider_kind: "anthropic", model_id: "old-model", base_url: null,
+    max_billable_input_tokens: 10000, max_output_tokens: 1000,
+  });
+  const view = render(<ModelSetup client={client("ready")} />);
+  const save = await screen.findByRole("button", { name: "更新模型设置" });
+  fireEvent.change(screen.getByLabelText("提供商"), { target: { value: "gemini" } });
+  expect(save).toHaveProperty("disabled", true);
+  view.unmount();
+
+  vi.mocked(invoke).mockRejectedValue("model_edit_requires_managed_single_chat_configuration");
+  render(<ModelSetup client={client("ready")} />);
+  expect(await screen.findByText("当前配置由高级方式管理；此处不会覆盖其中的路由、定价或其他设置。")).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "更新模型设置" })).toBeNull();
+});

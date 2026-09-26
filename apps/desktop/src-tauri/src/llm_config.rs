@@ -1,4 +1,4 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::{collections::HashSet, path::Path};
 use tokio::io::AsyncWriteExt;
 
@@ -40,7 +40,7 @@ pub struct HostLlmConfiguration {
     pub credential_refs: Vec<String>,
 }
 
-#[derive(Deserialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ChatModelSetup {
     pub provider_kind: String,
@@ -48,6 +48,58 @@ pub struct ChatModelSetup {
     pub base_url: Option<String>,
     pub max_billable_input_tokens: u64,
     pub max_output_tokens: u64,
+}
+
+pub struct ManagedChatConfiguration {
+    pub setup: ChatModelSetup,
+    pub secret_ref: String,
+}
+
+/// Only the exact document emitted by the desktop setup flow is editable here.
+/// Custom routes, pricing, and other advanced configuration must not be lost.
+pub fn managed_chat_configuration(bytes: &[u8]) -> Result<ManagedChatConfiguration, &'static str> {
+    let value: serde_json::Value = serde_json::from_slice(bytes)
+        .map_err(|_| "model_edit_requires_managed_single_chat_configuration")?;
+    let provider = value
+        .get("providers")
+        .and_then(serde_json::Value::as_array)
+        .and_then(|items| (items.len() == 1).then(|| &items[0]))
+        .ok_or("model_edit_requires_managed_single_chat_configuration")?;
+    let model = value
+        .get("models")
+        .and_then(serde_json::Value::as_array)
+        .and_then(|items| (items.len() == 1).then(|| &items[0]))
+        .ok_or("model_edit_requires_managed_single_chat_configuration")?;
+    let get_string = |object: &serde_json::Value, key: &str| {
+        object
+            .get(key)
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_owned)
+            .ok_or("model_edit_requires_managed_single_chat_configuration")
+    };
+    let get_u64 = |object: &serde_json::Value, key: &str| {
+        object
+            .get(key)
+            .and_then(serde_json::Value::as_u64)
+            .ok_or("model_edit_requires_managed_single_chat_configuration")
+    };
+    let setup = ChatModelSetup {
+        provider_kind: get_string(provider, "adapter_kind")?,
+        model_id: get_string(model, "model_id")?,
+        base_url: provider
+            .get("base_url")
+            .map(|_| get_string(provider, "base_url"))
+            .transpose()?,
+        max_billable_input_tokens: get_u64(&model["limits"], "max_billable_input_tokens")?,
+        max_output_tokens: get_u64(&model["limits"], "max_output_tokens")?,
+    };
+    let secret_ref = get_string(provider, "secret_ref")?;
+    let canonical = single_chat_document(&setup, &secret_ref)
+        .map_err(|_| "model_edit_requires_managed_single_chat_configuration")?;
+    if canonical != bytes {
+        return Err("model_edit_requires_managed_single_chat_configuration");
+    }
+    Ok(ManagedChatConfiguration { setup, secret_ref })
 }
 
 pub fn is_empty_configuration(bytes: &[u8]) -> bool {
@@ -300,6 +352,30 @@ mod tests {
             );
             assert!(!String::from_utf8(bytes).unwrap().contains("API-KEY-CANARY"));
         }
+    }
+
+    #[test]
+    fn only_exact_desktop_managed_configuration_is_editable_without_leaking_secret_reference() {
+        let original = setup("anthropic", None);
+        let bytes = single_chat_document(&original, REFERENCE).unwrap();
+        let managed = managed_chat_configuration(&bytes).unwrap();
+        assert_eq!(managed.setup, original);
+        assert_eq!(managed.secret_ref, REFERENCE);
+        let public_summary = serde_json::to_string(&managed.setup).unwrap();
+        assert!(!public_summary.contains(REFERENCE));
+
+        let mut custom: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        custom["routes"] = serde_json::json!([{"purpose": "chat"}]);
+        assert_eq!(
+            managed_chat_configuration(&serde_json::to_vec(&custom).unwrap()).err(),
+            Some("model_edit_requires_managed_single_chat_configuration")
+        );
+        let mut custom: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        custom["pricing_catalog"]["source_label"] = serde_json::json!("user-prices");
+        assert!(managed_chat_configuration(&serde_json::to_vec(&custom).unwrap()).is_err());
+        let mut duplicated = bytes.clone();
+        duplicated.push(b'\n');
+        assert!(managed_chat_configuration(&duplicated).is_err());
     }
 
     #[test]

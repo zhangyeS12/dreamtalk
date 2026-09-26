@@ -93,6 +93,12 @@ rotation 先写 native store，再替换 Core session value；已 dispatch reque
 
 Rust 将 key 写入 native credential store，将不含 key 的 v1 配置原子写入 app-data `config/llm.json`，随后重启 Core 并以 authenticated health 确认 `ready`。如果重启或加载失败，恢复原配置并重启原 Core；恢复失败则报告固定错误码。页面成功后重新连接 Core。用户填写的 usage limits 是显式配置，不是应用推测的 provider 事实；选择与核实相应模型的可信上界仍是配置者责任。该流程未配置价格，因此需要可信价格的 HARD 金额预算仍会拒绝无可验证定价的调用。
 
-## 8. 范围与迁移
+## 8. 桌面单模型更新
 
-首次设置以外的模型编辑/轮换 UI、online discovery/pricing、tool/vision/audio 不在本入口范围内。LLM operational configuration/credentials 不进入 canonical world/content state。C-005E5 本身未新增表；其 Alembic head 为 `0010_llm_budget_guard`。
+设置页现在可读取由首次设置入口生成的单模型配置。返回给 UI 的摘要只有 adapter、模型名、兼容服务地址和可信 Token 上界；`SecretRef` 与凭据值均不返回。修改同一提供商的模型名或上界时可沿用现有密钥；更换提供商或补齐缺失凭据时必须输入新密钥。
+
+更新先验证当前配置仍是桌面入口原样生成的单模型文档。含自定义路由、定价等高级配置的文件不允许被简化表单覆盖。新密钥先写入安全凭据存储，非秘密配置原子替换，再重启 Core 并通过认证健康检查确认 `ready`。若未就绪，则恢复原配置、重新启动原 Core 并清理新增凭据。成功轮换后清理旧凭据；如系统拒绝清理，更新仍然生效，但 UI 明确提示旧凭据残留。配置编辑不会调用模型或验证 API key 的外部有效性。
+
+## 9. 范围与迁移
+
+自定义多模型路由的可视化编辑、online discovery/pricing、tool/vision/audio 不在此入口范围内。LLM operational configuration/credentials 不进入 canonical world/content state。C-005E5 本身未新增表；其 Alembic head 为 `0010_llm_budget_guard`。
