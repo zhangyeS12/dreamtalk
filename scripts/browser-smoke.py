@@ -116,8 +116,8 @@ try:
         page.get_by_role("checkbox", name="Fixture Billy").check()
         page.get_by_role("checkbox", name="Fixture Charlie").check()
         page.get_by_role("button", name="创建群聊", exact=True).click()
-        page.get_by_role("region", name="群聊成员").wait_for()
-        expect(page.get_by_role("button", name="发送", exact=True)).to_have_count(0)
+        page.get_by_role("region", name="群聊").wait_for()
+        expect(page.get_by_role("button", name="发送", exact=True)).to_be_disabled()
         page.reload(wait_until="networkidle")
         group_row = (
             page.locator(".conversation-list .conversation-row")
@@ -125,7 +125,7 @@ try:
             .filter(has_text="Fixture Charlie")
         )
         group_row.click()
-        page.get_by_role("region", name="群聊成员").wait_for()
+        page.get_by_role("region", name="群聊").wait_for()
         page.get_by_role("button", name="设置", exact=True).click()
         page.get_by_role("combobox", name="内容类型").select_option("lorebook")
         page.get_by_label("选择文件", exact=True).set_input_files(
