@@ -9,6 +9,7 @@ import pytest
 from card_fixtures import card_document, json_bytes
 from fastapi.testclient import TestClient
 from livingworld.adapters.http.app import create_app
+from livingworld.application.chat_context import recent_chat_transcript
 from livingworld.application.chat_conversations import ChatConversationService
 from livingworld.application.chat_messages import ChatMessageService
 from livingworld.application.command_handler import CommandHandler
@@ -192,13 +193,16 @@ def test_transcript_pages_are_bounded_stable_and_owner_scoped(tmp_path):
         conversation = await ChatConversationService(
             db.chat_conversation_store(), imports, players, handler
         ).open_direct(world, card.import_id)
+        sent = []
         for index in range(1, 6):
-            await messages.send_player(
-                RequestId(uuid4()), conversation.conversation_id, f"消息{index}", 50_000
+            sent.append(
+                await messages.send_player(
+                    RequestId(uuid4()), conversation.conversation_id, f"消息{index}", 50_000
+                )
             )
-        return conversation
+        return conversation, sent[0]
 
-    conversation = asyncio.run(setup())
+    conversation, first = asyncio.run(setup())
     app = create_app(
         RuntimeStatus("test", "generation"),
         ShutdownRequests(),
@@ -241,6 +245,48 @@ def test_transcript_pages_are_bounded_stable_and_owner_scoped(tmp_path):
             ] == list(range(1, 7))
             foreign = path.replace(str(world.value), str(uuid4()))
             assert client.get(foreign, headers=headers).status_code == 409
+
+        async def check_context_window():
+            latest = None
+            for index in range(7, 70):
+                latest = await messages.send_player(
+                    RequestId(uuid4()), conversation.conversation_id, f"消息{index}", 50_000
+                )
+            assert latest is not None
+            full = await messages.list_messages(conversation.conversation_id)
+            bounded = await messages.context_messages(
+                conversation.conversation_id, latest.message, allow_current_replies=False
+            )
+            assert len(full) == 69
+            assert len(bounded) == 33
+            assert [item.position for item in bounded] == list(range(37, 70))
+            assert recent_chat_transcript(
+                bounded, latest.message, allow_current_replies=False
+            ) == recent_chat_transcript(full, latest.message, allow_current_replies=False)
+
+            claim = await messages.claim_direct(conversation.conversation_id, first.turn_id)
+            delayed = await messages.complete_direct(claim, "很晚才到的回复")
+            assert delayed.position == 70
+            assert (
+                await messages.context_messages(
+                    conversation.conversation_id, latest.message, allow_current_replies=False
+                )
+                == bounded
+            )
+            assert await messages.context_messages(
+                conversation.conversation_id, first.message, allow_current_replies=True
+            ) == (first.message, delayed)
+            assert await messages.context_messages(
+                conversation.conversation_id, first.message, allow_current_replies=False
+            ) == (first.message,)
+            with pytest.raises(EntityNotFoundError, match="chat_world_mismatch"):
+                await messages.context_messages(
+                    ConversationId(WorldId(uuid4()), conversation.conversation_id.value),
+                    latest.message,
+                    allow_current_replies=False,
+                )
+
+        asyncio.run(check_context_window())
     finally:
         asyncio.run(db.close())
 

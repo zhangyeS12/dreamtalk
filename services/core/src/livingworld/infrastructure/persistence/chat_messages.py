@@ -5,9 +5,10 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 
 from livingworld.application.chat_messages import (
+    MAX_PROMPT_TRANSCRIPT_MESSAGES,
     ChatMessage,
     ChatMessagePage,
     ClaimedDirectTurn,
@@ -245,6 +246,69 @@ class SqlAlchemyChatMessageStore:
                 messages,
                 messages[0].position if has_older else None,
             )
+
+    async def context_for_player(
+        self,
+        conversation_id: ConversationId,
+        player_id: PlayerId,
+        current: ChatMessage,
+        allow_current_replies: bool,
+    ) -> tuple[ChatMessage, ...]:
+        if current.conversation_id != conversation_id:
+            raise EntityNotFoundError("chat_world_mismatch")
+        world_id = conversation_id.world_id.value
+        conversation_value = conversation_id.value
+        current_turn = current.turn_id.value
+        async with self._sessions() as session:
+            await self._conversation(session, conversation_id, player_id)
+            # Descending positions reproduce the old "latest message in turn" order.
+            # Only as many distinct prior turns as could fit the prompt are needed.
+            prior_turns = []
+            seen = set()
+            cursor = current.position + 1
+            while len(prior_turns) < MAX_PROMPT_TRANSCRIPT_MESSAGES:
+                rows = (
+                    await session.execute(
+                        select(ChatMessageRecord.turn_id, ChatMessageRecord.position)
+                        .where(
+                            ChatMessageRecord.world_id == world_id,
+                            ChatMessageRecord.conversation_id == conversation_value,
+                            ChatMessageRecord.position < cursor,
+                            ChatMessageRecord.turn_id != current_turn,
+                        )
+                        .order_by(ChatMessageRecord.position.desc())
+                        .limit(64)
+                    )
+                ).all()
+                for turn_id, _ in rows:
+                    if turn_id not in seen:
+                        seen.add(turn_id)
+                        prior_turns.append(turn_id)
+                        if len(prior_turns) == MAX_PROMPT_TRANSCRIPT_MESSAGES:
+                            break
+                if len(rows) < 64 or len(prior_turns) == MAX_PROMPT_TRANSCRIPT_MESSAGES:
+                    break
+                cursor = rows[-1].position
+
+            visible = ChatMessageRecord.position <= current.position
+            if allow_current_replies:
+                visible = or_(
+                    visible,
+                    ChatMessageRecord.turn_id == current_turn,
+                )
+            rows = (
+                await session.scalars(
+                    select(ChatMessageRecord)
+                    .where(
+                        ChatMessageRecord.world_id == world_id,
+                        ChatMessageRecord.conversation_id == conversation_value,
+                        ChatMessageRecord.turn_id.in_([current_turn, *prior_turns]),
+                        visible,
+                    )
+                    .order_by(ChatMessageRecord.position)
+                )
+            ).all()
+            return tuple(_message(row) for row in rows)
 
     async def direct_turn(
         self, conversation_id: ConversationId, turn_id: ChatTurnId, player_id: PlayerId

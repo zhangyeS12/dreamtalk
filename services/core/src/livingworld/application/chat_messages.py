@@ -19,6 +19,8 @@ from livingworld.domain.identifiers import (
     PlayerId,
 )
 
+MAX_PROMPT_TRANSCRIPT_MESSAGES = 32
+
 
 @dataclass(frozen=True, slots=True)
 class ChatMessage:
@@ -117,6 +119,14 @@ class ChatMessageStore(Protocol):
         limit: int,
         before_position: int | None,
     ) -> ChatMessagePage: ...
+
+    async def context_for_player(
+        self,
+        conversation_id: ConversationId,
+        player_id: PlayerId,
+        current: ChatMessage,
+        allow_current_replies: bool,
+    ) -> tuple[ChatMessage, ...]: ...
 
     async def direct_turn(
         self, conversation_id: ConversationId, turn_id: ChatTurnId, player_id: PlayerId
@@ -224,6 +234,18 @@ class ChatMessageService:
             raise ValueError("chat_page_cursor_invalid")
         return await self._store.page_for_player(
             conversation_id, await self._player(conversation_id), limit, before_position
+        )
+
+    async def context_messages(
+        self, conversation_id: ConversationId, current: ChatMessage, *, allow_current_replies: bool
+    ) -> tuple[ChatMessage, ...]:
+        if current.conversation_id != conversation_id:
+            raise EntityNotFoundError("chat_world_mismatch")
+        return await self._store.context_for_player(
+            conversation_id,
+            await self._player(conversation_id),
+            current,
+            allow_current_replies,
         )
 
     async def direct_turn(

@@ -464,6 +464,32 @@ def test_internal_group_turn_claim_and_multi_reply_are_durable_and_idempotent(tm
                 await restored.claim_group(group.conversation_id, sent.turn_id)
             assert await restored.complete_group_reply(claim, second_character, 1, "收到") == second
             assert (await restored.group_turn(group.conversation_id, sent.turn_id)) == finished
+
+            # A reply to an older group turn can arrive after another Player send.
+            # The older turn's prompt sees its own reply, not that later send.
+            interleaved = await restored.send_group_player(
+                RequestId(uuid4()), group.conversation_id, "先发的回合", 5000
+            )
+            interleaved_claim = await restored.claim_group(
+                group.conversation_id, interleaved.turn_id
+            )
+            later = await restored.send_group_player(
+                RequestId(uuid4()), group.conversation_id, "后来另一个回合", 5000
+            )
+            delayed = await restored.complete_group_reply(
+                interleaved_claim, first_character, 0, "迟到的角色回复"
+            )
+            visible = await restored.context_messages(
+                group.conversation_id, interleaved.message, allow_current_replies=True
+            )
+            assert visible[-2:] == (interleaved.message, delayed)
+            assert later.message not in visible
+            assert (
+                await restored.context_messages(
+                    group.conversation_id, interleaved.message, allow_current_replies=False
+                )
+                == visible[:-1]
+            )
         finally:
             await reopened.close()
 

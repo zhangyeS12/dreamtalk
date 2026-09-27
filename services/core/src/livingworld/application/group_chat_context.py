@@ -84,13 +84,12 @@ class GroupChatContextBuilder:
         group = next((item for item in groups if item.conversation_id == conversation_id), None)
         if group is None or group.player_id != player_id:
             raise EntityNotFoundError("conversation_not_found")
-        transcript = await self._messages.list_messages(conversation_id)
+        transcript = await self._messages.context_messages(
+            conversation_id, sent, allow_current_replies=True
+        )
         if sent not in transcript:
             raise EntityNotFoundError("chat_message_not_found")
-        visible = tuple(
-            item for item in transcript if item.position <= sent.position or item.turn_id == turn_id
-        )
-        visible = recent_chat_transcript(visible, sent, allow_current_replies=True)
+        visible = recent_chat_transcript(transcript, sent, allow_current_replies=True)
         allowed = {player_id, *participant_ids}
         if any(item.sender_id not in allowed for item in visible):
             raise EntityNotFoundError("chat_sender_invalid")

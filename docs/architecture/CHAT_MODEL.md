@@ -244,14 +244,21 @@ cannot fit ends the history window. This bounded window is only a prompt view;
 it does not delete or summarize stored messages or weaken the physical-attempt
 Token preflight.
 
+The prompt reader scans backward by durable message position until it has the
+current turn and at most 32 distinct previous turns. It then loads those complete
+turns within the same visibility cutoff and applies the existing message/byte
+window unchanged. For a group turn already in progress, its committed replies
+remain visible even if newer unrelated messages have since been appended. Older
+history is not materialized in Python merely to discard it during prompt assembly.
+
 The player-facing direct and group transcript now reads bounded, owner-scoped
 pages of at most 50 messages. The newest page is ordered by durable per-conversation
 position, and `before_position` loads older records strictly before the oldest
 displayed position. The `next_before_position` cursor is absent at the beginning
 of history. This position cursor remains stable if new messages are appended
 while older history is being read. The previous complete-list endpoint remains
-available for internal prompt construction; UI pagination does not change which
-turns the Character sees or promote dialogue into WorldEvent/Knowledge/Memory.
+available for compatibility; UI pagination does not change which turns the
+Character sees or promote dialogue into WorldEvent/Knowledge/Memory.
 
 ## Persistence boundary
 

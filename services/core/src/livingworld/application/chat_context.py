@@ -7,7 +7,12 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 
 from livingworld.application.chat_conversations import ChatConversationService
-from livingworld.application.chat_messages import ChatMessage, ChatMessageService, PlayerSend
+from livingworld.application.chat_messages import (
+    MAX_PROMPT_TRANSCRIPT_MESSAGES,
+    ChatMessage,
+    ChatMessageService,
+    PlayerSend,
+)
 from livingworld.application.errors import EntityNotFoundError
 from livingworld.application.llm import LLMMessage, MessageRole, TextContent
 from livingworld.application.local_profile import LocalProfileStore
@@ -17,7 +22,6 @@ from livingworld.domain.identifiers import CharacterId, ChatTurnId
 
 _MAX_CHAT_MEMORY_ITEMS = 12
 _MAX_CHAT_MEMORY_CONTENT_BYTES = 8 * 1024
-_MAX_CHAT_TRANSCRIPT_MESSAGES = 32
 _MAX_CHAT_TRANSCRIPT_BYTES = 96 * 1024
 _MAX_CARD_GREETING_BYTES = 8 * 1024
 
@@ -87,7 +91,7 @@ def recent_chat_transcript(
     selected: list[list[ChatMessage]] = [current_turn]
     count = len(current_turn)
     size = sum(len(item.text.encode("utf-8")) for item in current_turn)
-    if count > _MAX_CHAT_TRANSCRIPT_MESSAGES or size > _MAX_CHAT_TRANSCRIPT_BYTES:
+    if count > MAX_PROMPT_TRANSCRIPT_MESSAGES or size > _MAX_CHAT_TRANSCRIPT_BYTES:
         raise ValueError("chat_context_limit_exceeded")
     previous = sorted(
         (turn for identity, turn in turns.items() if identity != current.turn_id),
@@ -97,7 +101,7 @@ def recent_chat_transcript(
     for turn in previous:
         next_count = count + len(turn)
         next_size = size + sum(len(item.text.encode("utf-8")) for item in turn)
-        if next_count > _MAX_CHAT_TRANSCRIPT_MESSAGES or next_size > _MAX_CHAT_TRANSCRIPT_BYTES:
+        if next_count > MAX_PROMPT_TRANSCRIPT_MESSAGES or next_size > _MAX_CHAT_TRANSCRIPT_BYTES:
             break
         selected.append(turn)
         count, size = next_count, next_size
@@ -139,11 +143,12 @@ class DirectChatContextBuilder:
         character = await self._conversations.current_direct_character(conversation_id)
         general = await self._profiles.load()
         world = await self._profiles.load(conversation_id.world_id)
-        transcript = await self._messages.list_messages(conversation_id)
+        transcript = await self._messages.context_messages(
+            conversation_id, sent.message, allow_current_replies=False
+        )
         if sent.message not in transcript:
             raise EntityNotFoundError("chat_message_not_found")
-        visible = tuple(item for item in transcript if item.position <= sent.message.position)
-        visible = self._recent_transcript(visible, sent.message)
+        visible = self._recent_transcript(transcript, sent.message)
         memories = await private_chat_memories(self._memory_reader, conversation.character_id)
         persona = {
             "character": {
