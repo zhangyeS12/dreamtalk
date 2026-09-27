@@ -12,6 +12,7 @@ from livingworld.application.chat_conversations import ChatConversationService
 from livingworld.application.chat_messages import ChatMessageService
 from livingworld.application.command_handler import CommandHandler
 from livingworld.application.commands import CreateWorld
+from livingworld.application.group_chat_context import GroupChatContextBuilder
 from livingworld.application.llm_accounting import AttemptOutcome, LedgerQuery
 from livingworld.application.player_event_feed import PlayerEventFeedService
 from livingworld.application.player_onboarding import LocalPlayerOnboardingService
@@ -63,15 +64,22 @@ def test_configured_compatible_api_creates_one_durable_chat_reply_and_accounted_
     persona_canary = "CARD_PERSONA_PRIVATE_CANARY"
     secret_canary = "CONTROLLED_TEST_SECRET"
     reply_text = "我记得你刚才问过的事。"
+    group_reply_text = "群聊中轮到我了。"
 
     async def wire(request):
         assert request.headers["authorization"] == f"Bearer {secret_canary}"
         assert str(request.url) == "https://controlled.invalid/v1/chat/completions"
         payload = json.loads(request.content)
         assert payload["model"] == "configured-model"
-        assert persona_canary in json.dumps(payload, ensure_ascii=False)
-        assert "你好" in json.dumps(payload, ensure_ascii=False)
+        rendered = json.dumps(payload, ensure_ascii=False)
+        assert "你好" in rendered
+        if len(calls) == 0:
+            assert persona_canary in rendered
+        elif len(calls) == 1:
+            assert "GROUP_CHARACTER_PERSONA" in rendered
+            assert persona_canary not in rendered
         calls.append(payload)
+        answer = reply_text if len(calls) == 1 else group_reply_text if len(calls) == 2 else "STOP"
         return httpx.Response(
             200,
             json={
@@ -80,7 +88,7 @@ def test_configured_compatible_api_creates_one_durable_chat_reply_and_accounted_
                 "choices": [
                     {
                         "index": 0,
-                        "message": {"role": "assistant", "content": reply_text},
+                        "message": {"role": "assistant", "content": answer},
                         "finish_reason": "stop",
                     }
                 ],
@@ -151,19 +159,49 @@ def test_configured_compatible_api_creates_one_durable_chat_reply_and_accounted_
             assert (
                 await messages.direct_turn(conversation.conversation_id, sent.turn_id)
             ).reply == reply
-            assert len(calls) == 1
+
+            second_card = card_document()
+            second_card["data"]["name"] = "角色乙"
+            second_card["data"]["description"] = "GROUP_CHARACTER_PERSONA"
+            second_staged = await imports.prepare(world, "character", json_bytes(second_card))
+            second = await imports.commit(
+                world, second_staged.item.import_id, second_staged.item.reviewed_hash
+            )
+            group = await conversations.create_group(
+                world, RequestId(uuid4()), (card.import_id, second.import_id)
+            )
+            group_sent = await messages.send_group_player(
+                RequestId(uuid4()), group.conversation_id, "@角色乙 你好", 5000
+            )
+            group_service = composition.configure_group_chat_reply(
+                session,
+                messages,
+                GroupChatContextBuilder(
+                    conversations, messages, db.local_profile_store(), db.character_memory_reader
+                ),
+            )
+            assert group_service is not None and group_service.available
+            group_turn = await group_service.reply(group_sent)
+            assert group_turn.state == "completed"
+            assert len(group_turn.replies) == 1
+            assert group_turn.replies[0].text == group_reply_text
+            assert group_turn.replies[0].sender_id == next(
+                item.character_id for item in group.participants if item.character_name == "角色乙"
+            )
+            assert len(calls) == 3  # Direct reply, @-selected group reply, then STOP.
             rows = await db.llm_usage_ledger().query(LedgerQuery())
-            assert len(rows) == 1
-            assert rows[0].outcome is AttemptOutcome.SUCCESS
-            assert rows[0].start.requested_model.model_id == "configured-model"
-            assert rows[0].facts.usage.input_tokens == 30
-            assert rows[0].facts.usage.output_tokens == 10
+            assert len(rows) == 3
+            assert all(row.outcome is AttemptOutcome.SUCCESS for row in rows)
+            assert all(row.start.requested_model.model_id == "configured-model" for row in rows)
+            assert all(row.facts.usage.input_tokens == 30 for row in rows)
+            assert all(row.facts.usage.output_tokens == 10 for row in rows)
             assert all(
-                canary not in repr(rows) for canary in (secret_canary, persona_canary, reply_text)
+                canary not in repr(rows)
+                for canary in (secret_canary, persona_canary, reply_text, group_reply_text)
             )
             assert all(
                 canary not in log.getvalue()
-                for canary in (secret_canary, persona_canary, reply_text)
+                for canary in (secret_canary, persona_canary, reply_text, group_reply_text)
             )
         finally:
             await runtime.aclose()
