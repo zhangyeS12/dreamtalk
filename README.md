@@ -78,6 +78,8 @@ npm run test:llm-live -- --config <path> --data-dir <path> --provider <id> --mod
 
 `build:core` 生成 `artifacts/core/*.whl`；`build:desktop` 生成未签名的 Windows debug executable，依赖当前 checkout 的 `.venv`。`build:portable` 先冻结 Python Core 并验证独立启动和迁移，再构建 release 桌面程序，生成 `artifacts/portable/dreamtalk/` 与 zip。它是本地便携产物，尚非签名安装包或 GitHub 发布；使用说明见 [Windows 便携版](docs/PORTABLE_WINDOWS.md)。
 
+只生成便携产物、由验收者另行执行生命周期检查时，可使用 `npm run build:portable -- --build-only`；默认命令仍包含自检。
+
 开发数据库与日志保存在 app data。桌面使用 Tauri 的 `app_data_dir`；独立 Core / browser 开发 launcher 暂时沿用历史兼容路径 `%LOCALAPPDATA%/LivingWorld/development`。安装和源码目录不保存运行数据库或 bootstrap credentials。
 
 GitHub Actions 配置包含 Python lint/test/wheel、TypeScript lint/test/Web build、真实 browser smoke 和 Windows supervisor/WebView smoke。远程 CI 结果以实际运行记录为准。
