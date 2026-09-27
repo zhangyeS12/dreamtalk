@@ -46,7 +46,7 @@ it("sends one group turn and shows the committed character reply", async () => {
   const draft = await screen.findByRole("textbox", { name: "发送群聊消息" });
   await waitFor(() => expect(draft).toHaveProperty("disabled", false));
   fireEvent.change(draft, { target: { value: "@角色乙 你好" } });
-  fireEvent.click(screen.getByRole("button", { name: "发送" }));
+  fireEvent.keyDown(draft, { key: "Enter" });
   await waitFor(() => expect(generateGroupReply).toHaveBeenCalledWith("world-a", "group-a", "t1"));
   expect(sendGroupMessage.mock.calls[0]?.slice(0, 4)).toEqual(["world-a", "group-a", "@角色乙 你好", 500]);
   expect(await screen.findByText("你好")).toBeTruthy();

@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { CoreClient, CoreRequestError, type ChatMessage, type GroupChatConversation, type WorldContentItem } from "@dreamtalk/api-client";
 import { useChatScroll } from "./useChatScroll";
 import { ChatMessageBody } from "./ChatMessageBody";
+import { submitChatOnEnter } from "./chatComposerKeys";
 
 export function GroupChatSetup({ client, worldId, onCreated, onBack }: {
   client: CoreClient;
@@ -129,8 +130,8 @@ export function GroupChatDetails({ client, worldId, playerId, group, tokenCeilin
       {feedback ? <p role="status" className="chat-feedback">{feedback}</p> : null}
       {!available ? <p className="chat-feedback">尚未配置可用的聊天模型或可信 Token 上限，暂时无法发送。</p> : null}
       <label htmlFor="group-chat-draft" className="sr-only">发送群聊消息</label>
-      <textarea id="group-chat-draft" value={draft} onChange={event => setDraft(event.target.value)} disabled={!available || sending || !!pending} maxLength={65536} placeholder="输入消息，或用 @角色名 指定下一位发言者…" rows={3} />
-      <div className="chat-composer-actions"><small>本轮所有选人、角色回复的输入与输出共用 {tokenCeiling.toLocaleString("zh-CN")} Token 上限</small><button type="submit" className="primary-button" disabled={!available || sending || (!draft.trim() && !pending)}>{sending ? "正在处理…" : pending ? "重试保存" : "发送"}</button></div>
+      <textarea id="group-chat-draft" value={draft} onChange={event => setDraft(event.target.value)} onKeyDown={submitChatOnEnter} disabled={!available || sending || !!pending} maxLength={65536} placeholder="输入消息，或用 @角色名 指定下一位发言者…" rows={3} />
+      <div className="chat-composer-actions"><small>回车发送 · Shift+回车换行 · 本轮所有发言共用 {tokenCeiling.toLocaleString("zh-CN")} Token 上限</small><button type="submit" className="primary-button" disabled={!available || sending || (!draft.trim() && !pending)}>{sending ? "正在处理…" : pending ? "重试保存" : "发送"}</button></div>
     </form>
   </section>;
 }

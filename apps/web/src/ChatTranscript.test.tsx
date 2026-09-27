@@ -60,6 +60,22 @@ it("sends one durable turn, requests one reply, then refreshes the transcript", 
   expect(generateDirectReply).toHaveBeenCalledWith("world-a", "conversation-a", "t1");
 });
 
+it("sends on Enter but not while composing Chinese text or inserting a newline", async () => {
+  const sendPlayerMessage = vi.fn().mockRejectedValue(new CoreRequestError(422));
+  const client = { conversationMessages: vi.fn().mockResolvedValue([]), sendPlayerMessage,
+    directReplyAvailability: vi.fn().mockResolvedValue({ available: true }) } as unknown as CoreClient;
+  render(<ChatTranscript client={client} worldId="world-a" playerId="player-a" conversation={conversation} tokenCeiling={50_000} onBack={() => {}} />);
+  const draft = await screen.findByRole("textbox");
+  await waitFor(() => expect(draft).toHaveProperty("disabled", false));
+  fireEvent.change(draft, { target: { value: "你好" } });
+  fireEvent.keyDown(draft, { key: "Enter", isComposing: true });
+  fireEvent.keyDown(draft, { key: "Enter", keyCode: 229 });
+  fireEvent.keyDown(draft, { key: "Enter", shiftKey: true });
+  expect(sendPlayerMessage).not.toHaveBeenCalled();
+  fireEvent.keyDown(draft, { key: "Enter" });
+  await waitFor(() => expect(sendPlayerMessage).toHaveBeenCalledOnce());
+});
+
 it("checks an uncertain reply without replaying the model call", async () => {
   const player: ChatMessage = { message_id: "m1", turn_id: "t1", conversation_id: "conversation-a", position: 1, sender_kind: "player", sender_id: "player-a", text: "你好", created_at_utc: "2026-09-24T10:00:00+00:00" };
   const sendPlayerMessage = vi.fn().mockResolvedValue({ turn_id: "t1", token_ceiling: 50_000, status: "pending", message: player });
