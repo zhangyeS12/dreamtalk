@@ -18,7 +18,7 @@ function ContentDetails({ item }: { item: WorldContentItem }) {
       ["说话方式", character.speech_guidance], ["创作者备注", character.creator_notes],
       ["标签", character.tags.join("、")], ["对话示例", character.example_dialogue.join("\n")],
     ] as const).filter(([, value]) => value).map(([label, value]) => <div key={label}><h3>{label}</h3><p>{value}</p></div>)}
-      {greeting && <div><h3>角色卡开场白（原文）</h3><p>{greeting}</p><small>仅供查看，不会自动发送到聊天。</small></div>}
+      {greeting && <div><h3>角色卡开场白（原文）</h3><p>{greeting}</p><small>回复可参考其语气；不会自动作为消息发送。</small></div>}
     </section>;
     })}
     {item.characters.some(character => Object.keys(character.authored_instructions).length > 0) && <details><summary>角色卡附加设定</summary>{item.characters.map(character => <pre key={character.id}>{JSON.stringify(character.authored_instructions, null, 2)}</pre>)}</details>}

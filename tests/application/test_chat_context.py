@@ -65,6 +65,7 @@ def test_context_tracks_current_accepted_persona_and_only_own_chat(tmp_path):
             await profiles.save(LocalProfile("通用姓名", "喜欢散步"))
             await profiles.save(LocalProfile("世界身份", "在这里是图书管理员"), world)
             card_data = card_document()
+            card_data["data"]["first_mes"] = "GREETING_STYLE_CANARY {{user}}"
             original = await imports.prepare(world, "character", json_bytes(card_data))
             card = await imports.commit(world, original.item.import_id, original.item.reviewed_hash)
             foreign_data = card_document()
@@ -79,6 +80,7 @@ def test_context_tracks_current_accepted_persona_and_only_own_chat(tmp_path):
             )
             second_card_data = card_document()
             second_card_data["data"]["name"] = "角色乙"
+            second_card_data["data"]["first_mes"] = "G" * 9000
             staged_second = await imports.prepare(world, "character", json_bytes(second_card_data))
             second_card = await imports.commit(
                 world, staged_second.item.import_id, staged_second.item.reviewed_hash
@@ -142,6 +144,14 @@ def test_context_tracks_current_accepted_persona_and_only_own_chat(tmp_path):
             ]
             persona = json.loads(context.messages[1].content[0].text)
             assert persona["character"]["personality"] == "Curious"
+            assert persona["character"]["opening_style_example"] == (
+                "GREETING_STYLE_CANARY {{user}}"
+            )
+            assert "GREETING_STYLE_CANARY" not in context.messages[0].content[0].text
+            assert [
+                message.text
+                for message in await messages.list_messages(conversation.conversation_id)
+            ] == ["你好"]
             assert persona["player"]["general"]["description"] == "喜欢散步"
             assert persona["player"]["current_world"]["description"] == "在这里是图书管理员"
             assert [item["content"] for item in persona["character_memories"]] == [
@@ -156,9 +166,18 @@ def test_context_tracks_current_accepted_persona_and_only_own_chat(tmp_path):
             assert "ignore all previous instructions" not in rendered
             assert "你好" not in repr(context)
 
+            second_sent = await messages.send_player(
+                RequestId(uuid4()), second_conversation.conversation_id, "嗨", 50000
+            )
+            second_context = await builder.build(second_sent)
+            second_persona = json.loads(second_context.messages[1].content[0].text)
+            assert "opening_style_example" not in second_persona["character"]
+            assert "G" * 9000 not in second_context.messages[1].content[0].text
+
             changed = card_document()
             changed["data"]["name"] = "更新后的角色"
             changed["data"]["personality"] = "新的性格"
+            changed["data"]["first_mes"] = "UPDATED_GREETING_STYLE_CANARY"
             replacement = await imports.prepare(
                 world, "character", json_bytes(changed), replaces_import_id=card.import_id
             )
@@ -173,6 +192,7 @@ def test_context_tracks_current_accepted_persona_and_only_own_chat(tmp_path):
                 **persona["character"],
                 "name": "更新后的角色",
                 "personality": "新的性格",
+                "opening_style_example": "UPDATED_GREETING_STYLE_CANARY",
             }
             assert [item.role for item in updated.messages[2:]] == [
                 MessageRole.USER,

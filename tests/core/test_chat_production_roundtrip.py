@@ -77,6 +77,8 @@ def test_configured_compatible_api_creates_one_durable_chat_reply_and_accounted_
             assert persona_canary in rendered
         elif len(calls) == 1:
             assert "GROUP_CHARACTER_PERSONA" in rendered
+            assert "GROUP_GREETING_STYLE_CANARY" in rendered
+            assert "DIRECT_GREETING_STYLE_CANARY" not in rendered
             assert persona_canary not in rendered
         calls.append(payload)
         answer = reply_text if len(calls) == 1 else group_reply_text if len(calls) == 2 else "STOP"
@@ -135,6 +137,7 @@ def test_configured_compatible_api_creates_one_durable_chat_reply_and_accounted_
             imports = db.world_content_service()
             card_data = card_document()
             card_data["data"]["description"] = persona_canary
+            card_data["data"]["first_mes"] = "DIRECT_GREETING_STYLE_CANARY"
             staged = await imports.prepare(world, "character", json_bytes(card_data))
             card = await imports.commit(world, staged.item.import_id, staged.item.reviewed_hash)
             conversations = ChatConversationService(
@@ -163,6 +166,7 @@ def test_configured_compatible_api_creates_one_durable_chat_reply_and_accounted_
             second_card = card_document()
             second_card["data"]["name"] = "角色乙"
             second_card["data"]["description"] = "GROUP_CHARACTER_PERSONA"
+            second_card["data"]["first_mes"] = "GROUP_GREETING_STYLE_CANARY"
             second_staged = await imports.prepare(world, "character", json_bytes(second_card))
             second = await imports.commit(
                 world, second_staged.item.import_id, second_staged.item.reviewed_hash

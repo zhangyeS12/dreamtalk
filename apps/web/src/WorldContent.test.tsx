@@ -21,6 +21,6 @@ it("shows the imported greeting as source preview without creating a chat messag
     onIdentity={() => {}} onOpenChat={onOpenChat} canOpenChat openingChat={false} />);
   fireEvent.click(await screen.findByRole("button", { name: "角色甲查看角色资料" }));
   expect(screen.getByText("你好，{{user}}。")).toBeTruthy();
-  expect(screen.getByText("仅供查看，不会自动发送到聊天。")).toBeTruthy();
+  expect(screen.getByText("回复可参考其语气；不会自动作为消息发送。")).toBeTruthy();
   expect(onOpenChat).not.toHaveBeenCalled();
 });

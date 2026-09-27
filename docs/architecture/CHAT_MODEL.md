@@ -218,8 +218,15 @@ serialized as lower-trust user data under a fixed system instruction. Card-autho
 system prompts, creator notes, raw import metadata, WorldTruth, hidden events,
 other worlds, and other Characters' private memories are not added. Knowledge
 assertions are not yet retrieved. The current-world profile is explicitly given
-precedence over the general description. This builder prepares input only; it
-does not dispatch a model or authorize any new knowledge.
+precedence over the general description. The context may include the current
+accepted card's nonblank `first_mes` as a bounded
+`opening_style_example` for that Character's direct or group reply. The literal
+source text is limited to 8 KiB UTF-8; larger examples are omitted rather than
+truncated. It remains lower-trust authored data, is not template-expanded, and
+is never inserted as a sent Message or privileged system instruction. A card
+replacement updates this example for later replies without rewriting history.
+The builder prepares input only; it does not dispatch a model or authorize any
+new knowledge.
 
 The persisted transcript remains complete. Prompt assembly always includes the
 current Player send, then retains the most recent complete prior turns while
