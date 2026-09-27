@@ -31,6 +31,8 @@ Research: W-001
 14. **Builder 使用 Research → Evidence → Claim → Conflict → Draft → Preview → Commit。** Builder 的研究证据、声明、冲突、草稿、预览和提交阶段必须明确分离。
 15. **Character Card V2/V3 与 Lorebook 使用独立 adapter 实现兼容，不复制 SillyTavern 源码。** 兼容通过独立实现的格式适配器完成。
 
+决策 15 的独立实现限制后来由产品负责人调整，见 [ADR-0001：优先评估成熟项目复用](ADR/0001_reuse_mature_projects.md)。本记录保留 Stage 0 当时的原始结论。
+
 ## Planning Window 默认实验参数
 
 ```sql

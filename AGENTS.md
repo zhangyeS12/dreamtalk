@@ -21,7 +21,6 @@ If a task instruction conflicts with this file, STOP and report the conflict ins
 dreamtalk is NOT:
 
 - a chatbot wrapper;
-- a SillyTavern plugin;
 - a demo;
 - an MVP that will later be rewritten;
 - a collection of independent agents constantly talking to each other;
@@ -394,7 +393,10 @@ SillyTavern is:
 - a source of useful UX lessons;
 - a compatible ecosystem target.
 
-dreamtalk is NOT built on top of SillyTavern.
+The user no longer requires dreamtalk to implement every capability independently.
+Prefer a mature existing component when it fits the product, reduces maintenance,
+and preserves the Core's authority and privacy boundaries. SillyTavern may be
+evaluated as a reusable component or integration, not only as inspiration.
 
 We may independently implement compatibility with:
 
@@ -403,9 +405,13 @@ We may independently implement compatibility with:
 - PNG/JSON cards;
 - Lorebooks.
 
-Do not copy SillyTavern implementation code into dreamtalk.
-
-Do not create architecture that requires SillyTavern to run.
+The current Apache-2.0 repository and SillyTavern's AGPL-3.0 code have different
+licensing obligations. Do not paste or incorporate its implementation into this
+repository without a concrete license and distribution decision. Reusing its
+public formats, documented behavior, or a separately integrated runtime is a
+different engineering choice; evaluate each against maintenance, licensing,
+security, and the existing World Kernel/knowledge invariants. See
+[ADR-0001](docs/architecture/ADR/0001_reuse_mature_projects.md).
 
 ---
 
