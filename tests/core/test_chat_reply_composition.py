@@ -14,6 +14,7 @@ from livingworld.application.llm_budget import ModelUsageLimits
 from livingworld.application.llm_config import SecretRef
 from livingworld.application.llm_registry import ModelRegistry, RegisteredModel, RegisteredProvider
 from livingworld.application.llm_routing import (
+    FallbackReason,
     PurposePolicy,
     RoutePolicy,
     RoutePolicyId,
@@ -27,7 +28,7 @@ from livingworld.bootstrap.llm_runtime import (
 )
 
 
-def _session(*, model_count: int, routed: bool):
+def _session(*, model_count: int, routed: bool, fallback: bool = False, key_index: int = 0):
     models = tuple(
         ModelRef(ProviderId(f"provider-{index}"), f"model-{index}") for index in range(model_count)
     )
@@ -49,7 +50,11 @@ def _session(*, model_count: int, routed: bool):
         (
             PurposePolicy(
                 RoutingProfile.BALANCED,
-                RoutePolicy(RoutePolicyId("chat"), models),
+                RoutePolicy(
+                    RoutePolicyId("chat"),
+                    models,
+                    frozenset({FallbackReason.CANDIDATE_UNAVAILABLE}) if fallback else frozenset(),
+                ),
                 LLMPurpose("character_dialogue"),
             ),
         )
@@ -69,7 +74,7 @@ def _session(*, model_count: int, routed: bool):
         ),
     )
     credentials = SimpleNamespace(
-        contains=lambda reference: reference == refs[models[0].provider_id]
+        contains=lambda reference: reference == refs[models[key_index].provider_id]
     )
     return ProductionLLMSession(credentials, runtime), models
 
@@ -95,6 +100,19 @@ def test_explicit_balanced_route_permits_composition():
     service = configure_direct_chat_reply(session, object(), object())
     assert service is not None
     assert service.available
+
+
+def test_chat_availability_follows_explicit_credential_fallback_policy():
+    session, _ = _session(model_count=2, routed=True, fallback=True, key_index=1)
+    direct = configure_direct_chat_reply(session, object(), object())
+    group = configure_group_chat_reply(session, object(), object())
+    assert direct is not None and direct.available
+    assert group is not None and group.available
+
+    # Without explicit fallback, a missing primary key makes the route unusable.
+    strict, _ = _session(model_count=2, routed=True, key_index=1)
+    assert not configure_direct_chat_reply(strict, object(), object()).available
+    assert not configure_group_chat_reply(strict, object(), object()).available
 
 
 def test_missing_runtime_keeps_chat_generation_unavailable():

@@ -17,6 +17,7 @@ from livingworld.application.llm_config import LLMRuntimeHealth, SecretRef
 from livingworld.application.llm_registry import ModelRegistry
 from livingworld.application.llm_routing import (
     ConfiguredGateways,
+    FallbackReason,
     ProfileSelection,
     RoutedModelGateway,
     RoutingProfile,
@@ -140,13 +141,30 @@ def _chat_reply_configuration(session: ProductionLLMSession):
     ):
         return None
     primary = entries[0]
-    secret_ref = runtime.configuration.providers[primary.model.provider_id].config.secret_ref
+
+    def available() -> bool:
+        # The route may explicitly permit skipping candidates without a key.
+        # Match the router's candidate-unavailable policy when reporting chat
+        # availability, including after in-memory credential rotation.
+        reachable = (
+            entries
+            if policy is not None
+            and FallbackReason.CANDIDATE_UNAVAILABLE in policy.allowed_fallback
+            else (primary,)
+        )
+        return any(
+            session.credentials.contains(
+                runtime.configuration.providers[entry.model.provider_id].config.secret_ref
+            )
+            for entry in reachable
+        )
+
     return (
         runtime.gateway,
         runtime.registry.usage_bounder(),
         primary.model,
         min(entry.limits.max_output_tokens for entry in entries),
-        lambda: session.credentials.contains(secret_ref),
+        available,
         selection,
     )
 
