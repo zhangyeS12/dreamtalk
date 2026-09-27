@@ -40,8 +40,8 @@ it("sends one group turn and shows the committed character reply", async () => {
   const reply = { ...player, message_id: "m2", position: 2, sender_kind: "character" as const, sender_id: "character-b", text: "你好" };
   const sendGroupMessage = vi.fn().mockResolvedValue({ turn_id: "t1", token_ceiling: 500, status: "pending", message: player });
   const generateGroupReply = vi.fn().mockResolvedValue({ turn_id: "t1", state: "completed", token_ceiling: 500, player_message: player, replies: [reply] });
-  const conversationMessages = vi.fn().mockResolvedValueOnce([]).mockResolvedValue([player, reply]);
-  const client = { conversationMessages, sendGroupMessage, generateGroupReply, groupReplyAvailability: vi.fn().mockResolvedValue({ available: true }) } as unknown as CoreClient;
+  const conversationMessagePage = vi.fn().mockResolvedValueOnce({ items: [], next_before_position: null }).mockResolvedValue({ items: [player, reply], next_before_position: null });
+  const client = { conversationMessagePage, sendGroupMessage, generateGroupReply, groupReplyAvailability: vi.fn().mockResolvedValue({ available: true }) } as unknown as CoreClient;
   render(<GroupChatDetails client={client} worldId="world-a" playerId="player-a" group={group} tokenCeiling={500} onBack={() => {}} />);
   const draft = await screen.findByRole("textbox", { name: "发送群聊消息" });
   await waitFor(() => expect(draft).toHaveProperty("disabled", false));
@@ -60,7 +60,7 @@ it("reports group budget denial without replaying the saved turn", async () => {
   ] };
   const sendGroupMessage = vi.fn().mockResolvedValue({ turn_id: "t1" });
   const generateGroupReply = vi.fn().mockRejectedValue(new CoreRequestError(422));
-  const client = { conversationMessages: vi.fn().mockResolvedValue([]), sendGroupMessage,
+  const client = { conversationMessagePage: vi.fn().mockResolvedValue({ items: [], next_before_position: null }), sendGroupMessage,
     generateGroupReply, groupTurn: vi.fn().mockResolvedValue({ state: "pending" }),
     groupReplyAvailability: vi.fn().mockResolvedValue({ available: true }) } as unknown as CoreClient;
   render(<GroupChatDetails client={client} worldId="world-a" playerId="player-a" group={group} tokenCeiling={500} onBack={() => {}} />);
@@ -79,7 +79,7 @@ it("lets the player edit a group message rejected before persistence", async () 
     { character_id: "character-b", root_import_id: "card-b", character_name: "角色乙" },
   ] };
   const sendGroupMessage = vi.fn().mockRejectedValue(new CoreRequestError(422));
-  const client = { conversationMessages: vi.fn().mockResolvedValue([]), sendGroupMessage,
+  const client = { conversationMessagePage: vi.fn().mockResolvedValue({ items: [], next_before_position: null }), sendGroupMessage,
     groupReplyAvailability: vi.fn().mockResolvedValue({ available: true }) } as unknown as CoreClient;
   render(<GroupChatDetails client={client} worldId="world-a" playerId="player-a" group={group} tokenCeiling={500} onBack={() => {}} />);
   const draft = await screen.findByRole("textbox", { name: "发送群聊消息" });

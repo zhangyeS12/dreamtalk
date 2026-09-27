@@ -168,6 +168,7 @@
 .contact-chat-action { padding: 20px 24px 0; }
 .chat-thread { min-height: 100%; display: flex; flex-direction: column; }
 .thread-heading .transcript-refresh { display: inline-flex; font-size: .82rem; }
+.transcript-history { padding: 14px 24px 0; text-align: center; }
 .message-list { list-style: none; width: 100%; max-width: 980px; margin: 0 auto; padding: 24px; display: flex; flex: 1; flex-direction: column; gap: 16px; }
 .message-row { display: flex; justify-content: flex-start; }
 .message-row.own { justify-content: flex-end; }

@@ -4,7 +4,7 @@ from datetime import UTC
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 
 from livingworld.application.chat_messages import (
@@ -102,6 +102,26 @@ def chat_message_router(
                 raise HTTPException(409, "selected_player_required") from None
             raise HTTPException(404, "conversation_not_found") from None
         return [_view(message) for message in messages]
+
+    @router.get("/{conversation_id}/messages/page")
+    async def page_messages(
+        world_id: UUID,
+        conversation_id: UUID,
+        limit: Annotated[int, Query(ge=1, le=100)] = 50,
+        before_position: Annotated[int | None, Query(ge=1)] = None,
+    ) -> dict:
+        try:
+            page = await service.page_messages(
+                ConversationId(WorldId(world_id), conversation_id), limit, before_position
+            )
+        except EntityNotFoundError as error:
+            if str(error) == "selected_player_required":
+                raise HTTPException(409, "selected_player_required") from None
+            raise HTTPException(404, "conversation_not_found") from None
+        return {
+            "items": [_view(message) for message in page.messages],
+            "next_before_position": page.next_before_position,
+        }
 
     @router.post("/{conversation_id}/messages", status_code=202)
     async def send_player_message(

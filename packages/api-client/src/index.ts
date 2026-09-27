@@ -82,6 +82,10 @@ export interface ChatMessage {
   text: string;
   created_at_utc: string;
 }
+export interface ChatMessagePage {
+  items: ChatMessage[];
+  next_before_position: number | null;
+}
 export interface PendingPlayerSend {
   turn_id: string;
   token_ceiling: number;
@@ -179,6 +183,10 @@ export class CoreClient {
   }
   conversationMessages(worldId: string, conversationId: string): Promise<ChatMessage[]> {
     return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/${encodeURIComponent(conversationId)}/messages`);
+  }
+  conversationMessagePage(worldId: string, conversationId: string, beforePosition?: number): Promise<ChatMessagePage> {
+    const path = `/worlds/${encodeURIComponent(worldId)}/conversations/${encodeURIComponent(conversationId)}/messages/page`;
+    return this.productRequest(`${path}${beforePosition === undefined ? "" : `?before_position=${beforePosition}`}`);
   }
   sendPlayerMessage(worldId: string, conversationId: string, text: string, tokenCeiling: number, requestId: string): Promise<PendingPlayerSend> {
     return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/${encodeURIComponent(conversationId)}/messages`, {

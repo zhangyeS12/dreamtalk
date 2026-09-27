@@ -102,7 +102,7 @@ it("turns a known event into an editable direct or group topic without sending i
     selectedPlayer: vi.fn().mockResolvedValue({ player_id: "player-a" }),
     knownEvents: vi.fn().mockResolvedValue([{ event_id: "event-1", title: "有人移动了位置", occurred_at: "60000000", observed_at: "60000000", ledger_position: 4 }]),
     conversations: vi.fn().mockResolvedValue([chatA]), groupConversations: vi.fn().mockResolvedValue([groupA]),
-    conversationMessages: vi.fn().mockResolvedValue([]), directReplyAvailability: vi.fn().mockResolvedValue({ available: false }),
+    conversationMessagePage: vi.fn().mockResolvedValue({ items: [], next_before_position: null }), directReplyAvailability: vi.fn().mockResolvedValue({ available: false }),
     groupReplyAvailability: vi.fn().mockResolvedValue({ available: false }), sendPlayerMessage, sendGroupMessage,
   } as unknown as CoreClient;
   renderProduct(client);
@@ -129,7 +129,7 @@ it("does not carry an event topic draft into another world", async () => {
     selectedPlayer: vi.fn((id: string) => Promise.resolve({ player_id: id === "world-a" ? "player-a" : "player-b" })),
     knownEvents: vi.fn((id: string) => Promise.resolve(id === "world-a" ? [{ event_id: "event-a", title: "甲世界事件", occurred_at: "0", observed_at: "0", ledger_position: 1 }] : [])),
     conversations: vi.fn((id: string) => Promise.resolve([id === "world-a" ? chatA : otherChat])),
-    groupConversations: vi.fn().mockResolvedValue([]), conversationMessages: vi.fn().mockResolvedValue([]),
+    groupConversations: vi.fn().mockResolvedValue([]), conversationMessagePage: vi.fn().mockResolvedValue({ items: [], next_before_position: null }),
     directReplyAvailability: vi.fn().mockResolvedValue({ available: false }),
   } as unknown as CoreClient;
   renderProduct(client);
@@ -232,7 +232,7 @@ it("opens a contact lazily and shows only the selected world's real conversation
     listProductWorlds: vi.fn().mockResolvedValue([worldA, worldB]),
     listPlayers: vi.fn((worldId: string) => Promise.resolve([{ player_id: worldId === "world-a" ? "player-a" : "player-b", name: "我" }])),
     selectedPlayer: vi.fn((worldId: string) => Promise.resolve({ player_id: worldId === "world-a" ? "player-a" : "player-b" })),
-    conversations, openDirectConversation, conversationMessages: vi.fn().mockResolvedValue([]),
+    conversations, openDirectConversation, conversationMessagePage: vi.fn().mockResolvedValue({ items: [], next_before_position: null }),
     directReplyAvailability: vi.fn().mockResolvedValue({ available: false }),
   } as unknown as CoreClient;
   renderProduct(client);
@@ -260,7 +260,7 @@ it("creates a durable group from current-world cards and opens its transcript", 
     selectedPlayer: vi.fn().mockResolvedValue({ player_id: "player-a" }),
     conversations: vi.fn().mockResolvedValue([]), groupConversations: vi.fn().mockResolvedValue([]),
     createGroupConversation,
-    conversationMessages: vi.fn().mockResolvedValue([]),
+    conversationMessagePage: vi.fn().mockResolvedValue({ items: [], next_before_position: null }),
     groupReplyAvailability: vi.fn().mockResolvedValue({ available: false }),
   } as unknown as CoreClient;
   renderProduct(client);
@@ -284,7 +284,7 @@ it("does not carry a group into another world's conversation list", async () => 
     selectedPlayer: vi.fn((id: string) => Promise.resolve({ player_id: `${id}-player` })),
     conversations: vi.fn().mockResolvedValue([]),
     groupConversations: vi.fn((id: string) => Promise.resolve(id === "world-a" ? [groupA] : [])),
-    conversationMessages: vi.fn().mockResolvedValue([]),
+    conversationMessagePage: vi.fn().mockResolvedValue({ items: [], next_before_position: null }),
     groupReplyAvailability: vi.fn().mockResolvedValue({ available: false }),
   } as unknown as CoreClient;
   renderProduct(client);

@@ -32,6 +32,12 @@ class ChatMessage:
 
 
 @dataclass(frozen=True, slots=True)
+class ChatMessagePage:
+    messages: tuple[ChatMessage, ...]
+    next_before_position: int | None
+
+
+@dataclass(frozen=True, slots=True)
 class PlayerSend:
     turn_id: ChatTurnId
     message: ChatMessage
@@ -103,6 +109,14 @@ class ChatMessageStore(Protocol):
     async def list_for_player(
         self, conversation_id: ConversationId, player_id: PlayerId
     ) -> tuple[ChatMessage, ...]: ...
+
+    async def page_for_player(
+        self,
+        conversation_id: ConversationId,
+        player_id: PlayerId,
+        limit: int,
+        before_position: int | None,
+    ) -> ChatMessagePage: ...
 
     async def direct_turn(
         self, conversation_id: ConversationId, turn_id: ChatTurnId, player_id: PlayerId
@@ -197,6 +211,19 @@ class ChatMessageService:
     async def list_messages(self, conversation_id: ConversationId) -> tuple[ChatMessage, ...]:
         return await self._store.list_for_player(
             conversation_id, await self._player(conversation_id)
+        )
+
+    async def page_messages(
+        self, conversation_id: ConversationId, limit: int, before_position: int | None = None
+    ) -> ChatMessagePage:
+        if type(limit) is not int or not 1 <= limit <= 100:
+            raise ValueError("chat_page_limit_invalid")
+        if before_position is not None and (
+            type(before_position) is not int or before_position < 1
+        ):
+            raise ValueError("chat_page_cursor_invalid")
+        return await self._store.page_for_player(
+            conversation_id, await self._player(conversation_id), limit, before_position
         )
 
     async def direct_turn(

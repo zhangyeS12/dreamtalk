@@ -168,6 +168,83 @@ def test_player_send_rejects_blank_or_unbounded_text_before_write(tmp_path):
     asyncio.run(run())
 
 
+def test_transcript_pages_are_bounded_stable_and_owner_scoped(tmp_path):
+    db = Database(tmp_path)
+    clock = SystemWallClock()
+    handler = CommandHandler(
+        db.unit_of_work,
+        clock,
+        world_time_source=EffectiveWorldTimeSource(clock, SystemMonotonicClock()),
+    )
+    players = PlayerEventFeedService(db.player_event_feed_store())
+    messages = ChatMessageService(db.chat_message_store(), players)
+    world = WorldId(uuid4())
+
+    async def setup():
+        await db.initialize()
+        await handler.execute(
+            CreateWorld(request_id=RequestId(uuid4()), world_id=world, name="世界")
+        )
+        await LocalPlayerOnboardingService(handler, players).start_at_home(world)
+        imports = db.world_content_service()
+        staged = await imports.prepare(world, "character", json_bytes(card_document()))
+        card = await imports.commit(world, staged.item.import_id, staged.item.reviewed_hash)
+        conversation = await ChatConversationService(
+            db.chat_conversation_store(), imports, players, handler
+        ).open_direct(world, card.import_id)
+        for index in range(1, 6):
+            await messages.send_player(
+                RequestId(uuid4()), conversation.conversation_id, f"消息{index}", 50_000
+            )
+        return conversation
+
+    conversation = asyncio.run(setup())
+    app = create_app(
+        RuntimeStatus("test", "generation"),
+        ShutdownRequests(),
+        "secret",
+        lambda: None,
+        StructuredLogger(io.StringIO()),
+        chat_messages=messages,
+    )
+    path = (
+        f"/api/v1/worlds/{world.value}/conversations/"
+        f"{conversation.conversation_id.value}/messages/page"
+    )
+    headers = {"Authorization": "Bearer secret"}
+    try:
+        with TestClient(app, base_url="http://127.0.0.1") as client:
+            assert client.get(path).status_code == 401
+            assert client.get(path, headers={"Authorization": "Bearer wrong"}).status_code == 401
+            assert client.get(path + "?limit=0", headers=headers).status_code == 422
+            assert client.get(path + "?limit=101", headers=headers).status_code == 422
+            assert client.get(path + "?before_position=0", headers=headers).status_code == 422
+
+            newest = client.get(path + "?limit=2", headers=headers)
+            assert newest.status_code == 200
+            assert [item["position"] for item in newest.json()["items"]] == [4, 5]
+            assert newest.json()["next_before_position"] == 4
+
+            asyncio.run(
+                messages.send_player(
+                    RequestId(uuid4()), conversation.conversation_id, "消息6", 50_000
+                )
+            )
+            older = client.get(path + "?limit=2&before_position=4", headers=headers)
+            assert [item["position"] for item in older.json()["items"]] == [2, 3]
+            assert older.json()["next_before_position"] == 2
+            oldest = client.get(path + "?limit=2&before_position=2", headers=headers)
+            assert [item["position"] for item in oldest.json()["items"]] == [1]
+            assert oldest.json()["next_before_position"] is None
+            assert [
+                item["position"] for item in client.get(path, headers=headers).json()["items"]
+            ] == list(range(1, 7))
+            foreign = path.replace(str(world.value), str(uuid4()))
+            assert client.get(foreign, headers=headers).status_code == 409
+    finally:
+        asyncio.run(db.close())
+
+
 def test_chat_transcript_http_is_authenticated_and_bound_to_selected_world_player(tmp_path):
     db = Database(tmp_path)
     clock = SystemWallClock()

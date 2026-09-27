@@ -56,6 +56,16 @@ describe("CoreClient", () => {
     expect(fetcher.mock.calls[0][0].toString()).toBe(`${connection.endpoint}/api/v${API_PROTOCOL}/worlds/world/conversations/conversation/messages`);
     expect(fetcher.mock.calls[0][1].headers.Authorization).toBe("Bearer memory-session");
   });
+  it("reads bounded transcript pages with a stable older-position cursor", async () => {
+    const page = { items: [], next_before_position: null };
+    const fetcher = vi.fn().mockImplementation(async () => new Response(JSON.stringify(page)));
+    const client = new CoreClient(connection, fetcher);
+    expect(await client.conversationMessagePage("world", "conversation")).toEqual(page);
+    expect(fetcher.mock.calls[0][0].toString()).toBe(`${connection.endpoint}/api/v${API_PROTOCOL}/worlds/world/conversations/conversation/messages/page`);
+    expect(fetcher.mock.calls[0][1].headers.Authorization).toBe("Bearer memory-session");
+    await client.conversationMessagePage("world", "conversation", 42);
+    expect(fetcher.mock.calls[1][0].toString()).toBe(`${connection.endpoint}/api/v${API_PROTOCOL}/worlds/world/conversations/conversation/messages/page?before_position=42`);
+  });
   it("creates and lists group membership without using the direct-chat route", async () => {
     const group = { conversation_id: "group", player_id: "player", kind: "group", participants: [] };
     const fetcher = vi.fn().mockImplementation(async () => new Response(JSON.stringify(group)));

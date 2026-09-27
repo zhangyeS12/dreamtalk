@@ -6,8 +6,8 @@ import { useChatScroll } from "./useChatScroll";
 afterEach(cleanup);
 
 function Thread({ messages }: { messages: ChatMessage[] | null }) {
-  const thread = useChatScroll(messages);
-  return <div data-testid="scroll-area"><section ref={thread}>{messages?.length ?? 0}</section></div>;
+  const { thread, beforePrepend } = useChatScroll(messages);
+  return <div data-testid="scroll-area"><button onClick={beforePrepend}>load older</button><section ref={thread}>{messages?.length ?? 0}</section></div>;
 }
 
 const first: ChatMessage = {
@@ -34,4 +34,20 @@ it("opens at the latest message but leaves a reader on older messages until they
   fireEvent.scroll(scroller);
   view.rerender(<Thread messages={[first, { ...first, message_id: "m3", position: 3 }]} />);
   expect(scroller.scrollTop).toBe(1000);
+});
+
+it("keeps the current message in view when older messages are prepended", () => {
+  const view = render(<Thread messages={[first]} />);
+  const scroller = screen.getByTestId("scroll-area");
+  let height = 1000;
+  Object.defineProperties(scroller, {
+    scrollHeight: { configurable: true, get: () => height },
+    clientHeight: { configurable: true, value: 200 },
+  });
+  scroller.scrollTop = 100;
+  fireEvent.scroll(scroller);
+  fireEvent.click(screen.getByRole("button", { name: "load older" }));
+  height = 1300;
+  view.rerender(<Thread messages={[{ ...first, message_id: "older", position: 0 }, first]} />);
+  expect(scroller.scrollTop).toBe(400);
 });

@@ -9,6 +9,7 @@ from sqlalchemy import func, select
 
 from livingworld.application.chat_messages import (
     ChatMessage,
+    ChatMessagePage,
     ClaimedDirectTurn,
     ClaimedGroupTurn,
     DirectTurnView,
@@ -217,6 +218,33 @@ class SqlAlchemyChatMessageStore:
                 )
             ).all()
             return tuple(_message(row) for row in rows)
+
+    async def page_for_player(
+        self,
+        conversation_id: ConversationId,
+        player_id: PlayerId,
+        limit: int,
+        before_position: int | None,
+    ) -> ChatMessagePage:
+        async with self._sessions() as session:
+            await self._conversation(session, conversation_id, player_id)
+            statement = select(ChatMessageRecord).where(
+                ChatMessageRecord.world_id == conversation_id.world_id.value,
+                ChatMessageRecord.conversation_id == conversation_id.value,
+            )
+            if before_position is not None:
+                statement = statement.where(ChatMessageRecord.position < before_position)
+            rows = (
+                await session.scalars(
+                    statement.order_by(ChatMessageRecord.position.desc()).limit(limit + 1)
+                )
+            ).all()
+            has_older = len(rows) > limit
+            messages = tuple(_message(row) for row in reversed(rows[:limit]))
+            return ChatMessagePage(
+                messages,
+                messages[0].position if has_older else None,
+            )
 
     async def direct_turn(
         self, conversation_id: ConversationId, turn_id: ChatTurnId, player_id: PlayerId

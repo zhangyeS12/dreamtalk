@@ -5,6 +5,15 @@ import type { ChatMessage } from "@dreamtalk/api-client";
 export function useChatScroll(messages: ChatMessage[] | null) {
   const thread = useRef<HTMLElement>(null);
   const followLatest = useRef(true);
+  const prependAnchor = useRef<{ height: number; top: number } | null>(null);
+
+  const beforePrepend = () => {
+    const scroller = thread.current?.parentElement;
+    if (scroller) {
+      prependAnchor.current = { height: scroller.scrollHeight, top: scroller.scrollTop };
+      followLatest.current = false;
+    }
+  };
 
   useEffect(() => {
     const scroller = thread.current?.parentElement;
@@ -18,8 +27,12 @@ export function useChatScroll(messages: ChatMessage[] | null) {
 
   useLayoutEffect(() => {
     const scroller = thread.current?.parentElement;
-    if (messages !== null && scroller && followLatest.current) scroller.scrollTop = scroller.scrollHeight;
+    if (messages === null || !scroller) return;
+    if (prependAnchor.current) {
+      scroller.scrollTop = prependAnchor.current.top + scroller.scrollHeight - prependAnchor.current.height;
+      prependAnchor.current = null;
+    } else if (followLatest.current) scroller.scrollTop = scroller.scrollHeight;
   }, [messages]);
 
-  return thread;
+  return { thread, beforePrepend };
 }

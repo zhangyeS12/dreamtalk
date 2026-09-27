@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { CoreClient, CoreRequestError, type ChatConversation, type ChatMessage } from "@dreamtalk/api-client";
+import { CoreClient, CoreRequestError, type ChatConversation } from "@dreamtalk/api-client";
 import { useChatScroll } from "./useChatScroll";
+import { useTranscriptPages } from "./useTranscriptPages";
 import { ChatMessageBody } from "./ChatMessageBody";
 import { submitChatOnEnter } from "./chatComposerKeys";
 
@@ -16,15 +17,14 @@ interface Props {
 }
 
 export function ChatTranscript({ client, worldId, playerId, conversation, tokenCeiling, suggestedDraft, onSuggestionUsed, onBack }: Props) {
-  const [messages, setMessages] = useState<ChatMessage[] | null>(null);
-  const [failed, setFailed] = useState(false);
   const [refresh, setRefresh] = useState(0);
   const [available, setAvailable] = useState(false);
   const [draft, setDraft] = useState("");
   const [pendingSend, setPendingSend] = useState<{ text: string; ceiling: number; requestId: string } | null>(null);
   const [sending, setSending] = useState(false);
   const [feedback, setFeedback] = useState("");
-  const thread = useChatScroll(messages);
+  const { messages, failed, hasOlder, loadingOlder, loadOlder } = useTranscriptPages(client, worldId, conversation.conversation_id, refresh);
+  const { thread, beforePrepend } = useChatScroll(messages);
 
   useEffect(() => {
     if (suggestedDraft) {
@@ -32,17 +32,6 @@ export function ChatTranscript({ client, worldId, playerId, conversation, tokenC
       onSuggestionUsed?.();
     }
   }, [suggestedDraft, onSuggestionUsed]);
-
-  useEffect(() => {
-    let active = true;
-    setFailed(false);
-    void client.conversationMessages(worldId, conversation.conversation_id).then(items => {
-      if (active) setMessages(items);
-    }).catch(() => {
-      if (active) setFailed(true);
-    });
-    return () => { active = false; };
-  }, [client, worldId, conversation.conversation_id, refresh]);
 
   useEffect(() => {
     let active = true;
@@ -94,10 +83,10 @@ export function ChatTranscript({ client, worldId, playerId, conversation, tokenC
       <h2>{conversation.character_name}</h2><span>私聊</span>
       <button type="button" className="text-action transcript-refresh" onClick={() => setRefresh(value => value + 1)}>刷新记录</button>
     </div>
-    {failed ? <p className="thread-hint" role="alert">无法读取会话记录，请重试。</p>
-      : messages === null ? <p className="thread-hint">正在读取消息…</p>
+    {failed ? <p className="thread-hint" role="alert">无法读取会话记录，请刷新后重试。</p> : null}
+    {messages === null ? failed ? null : <p className="thread-hint">正在读取消息…</p>
         : messages.length === 0 ? <div className="conversation-placeholder"><h2>还没有消息</h2><p>发一条消息，开始与角色聊天。</p></div>
-          : <ol className="message-list">{messages.map(message => {
+          : <>{hasOlder ? <div className="transcript-history"><button type="button" className="text-action" disabled={loadingOlder} onClick={() => void loadOlder(beforePrepend)}>{loadingOlder ? "正在加载…" : "加载更早消息"}</button></div> : null}<ol className="message-list">{messages.map(message => {
             const own = message.sender_kind === "player" && message.sender_id === playerId;
             return <li key={message.message_id} className={`message-row ${own ? "own" : ""}`}>
               <div className="message-bubble">
@@ -106,7 +95,7 @@ export function ChatTranscript({ client, worldId, playerId, conversation, tokenC
                 <time dateTime={message.created_at_utc}>{new Date(message.created_at_utc).toLocaleString("zh-CN")}</time>
               </div>
             </li>;
-          })}</ol>}
+          })}</ol></>}
     <form className="chat-composer" onSubmit={event => void send(event)}>
       {feedback ? <p role="status" className="chat-feedback">{feedback}</p> : null}
       {!available ? <p className="chat-feedback">尚未配置可用的聊天模型或路由及可信 Token 上限，暂时无法发送。</p> : null}

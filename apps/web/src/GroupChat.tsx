@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { CoreClient, CoreRequestError, type ChatMessage, type GroupChatConversation, type WorldContentItem } from "@dreamtalk/api-client";
+import { CoreClient, CoreRequestError, type GroupChatConversation, type WorldContentItem } from "@dreamtalk/api-client";
 import { useChatScroll } from "./useChatScroll";
+import { useTranscriptPages } from "./useTranscriptPages";
 import { ChatMessageBody } from "./ChatMessageBody";
 import { submitChatOnEnter } from "./chatComposerKeys";
 
@@ -63,14 +64,14 @@ export function GroupChatDetails({ client, worldId, playerId, group, tokenCeilin
   client: CoreClient; worldId: string; playerId: string; group: GroupChatConversation; tokenCeiling: number;
   suggestedDraft?: string | null; onSuggestionUsed?: () => void; onBack: () => void;
 }) {
-  const [messages, setMessages] = useState<ChatMessage[] | null>(null);
   const [refresh, setRefresh] = useState(0);
   const [available, setAvailable] = useState(false);
   const [draft, setDraft] = useState("");
   const [pending, setPending] = useState<{ text: string; ceiling: number; requestId: string } | null>(null);
   const [sending, setSending] = useState(false);
   const [feedback, setFeedback] = useState("");
-  const thread = useChatScroll(messages);
+  const { messages, failed, hasOlder, loadingOlder, loadOlder } = useTranscriptPages(client, worldId, group.conversation_id, refresh);
+  const { thread, beforePrepend } = useChatScroll(messages);
 
   useEffect(() => {
     if (suggestedDraft) {
@@ -78,14 +79,6 @@ export function GroupChatDetails({ client, worldId, playerId, group, tokenCeilin
       onSuggestionUsed?.();
     }
   }, [suggestedDraft, onSuggestionUsed]);
-
-  useEffect(() => {
-    let active = true;
-    void client.conversationMessages(worldId, group.conversation_id)
-      .then(items => { if (active) setMessages(items); })
-      .catch(() => { if (active) setFeedback("无法读取群聊记录，请刷新后重试。"); });
-    return () => { active = false; };
-  }, [client, worldId, group.conversation_id, refresh]);
 
   useEffect(() => {
     let active = true;
@@ -130,10 +123,11 @@ export function GroupChatDetails({ client, worldId, playerId, group, tokenCeilin
   const names = new Map(group.participants.map(item => [item.character_id, item.character_name]));
   return <section ref={thread} className="chat-thread" aria-label="群聊">
     <div className="thread-heading"><button type="button" className="text-action" onClick={onBack}>返回聊天</button><h2>{group.participants.map(item => item.character_name).join("、")}</h2><span>群聊</span><button type="button" className="text-action transcript-refresh" onClick={() => setRefresh(value => value + 1)}>刷新记录</button></div>
-    {messages === null ? <p className="thread-hint">正在读取消息…</p> : messages.length === 0 ? <div className="conversation-placeholder"><h2>还没有消息</h2><p>发一条消息，开始群聊。</p></div> : <ol className="message-list">{messages.map(message => {
+    {failed ? <p className="thread-hint" role="alert">无法读取群聊记录，请刷新后重试。</p> : null}
+    {messages === null ? failed ? null : <p className="thread-hint">正在读取消息…</p> : messages.length === 0 ? <div className="conversation-placeholder"><h2>还没有消息</h2><p>发一条消息，开始群聊。</p></div> : <>{hasOlder ? <div className="transcript-history"><button type="button" className="text-action" disabled={loadingOlder} onClick={() => void loadOlder(beforePrepend)}>{loadingOlder ? "正在加载…" : "加载更早消息"}</button></div> : null}<ol className="message-list">{messages.map(message => {
       const own = message.sender_kind === "player" && message.sender_id === playerId;
       return <li key={message.message_id} className={`message-row ${own ? "own" : ""}`}><div className="message-bubble"><span className="message-sender">{own ? "我" : names.get(message.sender_id) ?? "角色"}</span><ChatMessageBody text={message.text} /><time dateTime={message.created_at_utc}>{new Date(message.created_at_utc).toLocaleString("zh-CN")}</time></div></li>;
-    })}</ol>}
+    })}</ol></>}
     <form className="chat-composer" onSubmit={event => void send(event)}>
       {feedback ? <p role="status" className="chat-feedback">{feedback}</p> : null}
       {!available ? <p className="chat-feedback">尚未配置可用的聊天模型或可信 Token 上限，暂时无法发送。</p> : null}

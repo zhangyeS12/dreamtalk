@@ -15,29 +15,54 @@ it("shows committed messages in transcript order without turning them into world
     { message_id: "message-a", turn_id: "turn-a", conversation_id: "conversation-a", position: 0, sender_kind: "player", sender_id: "player-a", text: "你好", created_at_utc: "2026-09-24T10:00:00+00:00" },
     { message_id: "message-b", turn_id: "turn-a", conversation_id: "conversation-a", position: 1, sender_kind: "character", sender_id: "character-a", text: "欢迎回来", created_at_utc: "2026-09-24T10:00:01+00:00" },
   ];
-  const conversationMessages = vi.fn().mockResolvedValue(rows);
-  const client = { conversationMessages, directReplyAvailability: vi.fn().mockResolvedValue({ available: false }) } as unknown as CoreClient;
+  const conversationMessagePage = vi.fn().mockResolvedValue({ items: rows, next_before_position: null });
+  const client = { conversationMessagePage, directReplyAvailability: vi.fn().mockResolvedValue({ available: false }) } as unknown as CoreClient;
   render(<ChatTranscript client={client} worldId="world-a" playerId="player-a" conversation={conversation} tokenCeiling={50_000} onBack={() => {}} />);
   await screen.findByText("欢迎回来");
-  expect(conversationMessages).toHaveBeenCalledWith("world-a", "conversation-a");
+  expect(conversationMessagePage).toHaveBeenCalledWith("world-a", "conversation-a");
   const list = screen.getByRole("list");
   expect(list.querySelectorAll("li")[0]?.textContent).toContain("你好");
   expect(list.querySelectorAll("li")[1]?.textContent).toContain("欢迎回来");
   expect(screen.getByText(/尚未配置可用的聊天模型或路由/)).toBeTruthy();
 });
 
+it("loads older history without duplicating messages when the latest page refreshes", async () => {
+  const rows: ChatMessage[] = [1, 2, 3].map(position => ({
+    message_id: `message-${position}`, turn_id: `turn-${position}`, conversation_id: "conversation-a",
+    position, sender_kind: "player", sender_id: "player-a", text: `消息${position}`,
+    created_at_utc: "2026-09-24T10:00:00+00:00",
+  }));
+  const conversationMessagePage = vi.fn((_worldId: string, _conversationId: string, beforePosition?: number) =>
+    Promise.resolve(beforePosition === undefined
+      ? { items: rows.slice(1), next_before_position: 2 }
+      : { items: rows.slice(0, 1), next_before_position: null }));
+  const client = { conversationMessagePage, directReplyAvailability: vi.fn().mockResolvedValue({ available: false }) } as unknown as CoreClient;
+  render(<ChatTranscript client={client} worldId="world-a" playerId="player-a" conversation={conversation} tokenCeiling={50_000} onBack={() => {}} />);
+  await screen.findByText("消息3");
+  expect(screen.queryByText("消息1")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "加载更早消息" }));
+  await screen.findByText("消息1");
+  expect(conversationMessagePage).toHaveBeenCalledWith("world-a", "conversation-a", 2);
+  fireEvent.click(screen.getByRole("button", { name: "刷新记录" }));
+  await waitFor(() => expect(conversationMessagePage).toHaveBeenCalledTimes(3));
+  expect(screen.getAllByText("消息1")).toHaveLength(1);
+  expect(screen.getAllByText("消息2")).toHaveLength(1);
+  expect(screen.getAllByText("消息3")).toHaveLength(1);
+  expect(screen.queryByRole("button", { name: "加载更早消息" })).toBeNull();
+});
+
 it("does not reveal a late transcript from the previous world", async () => {
-  let finishOld!: (messages: ChatMessage[]) => void;
-  const old = new Promise<ChatMessage[]>(resolve => { finishOld = resolve; });
-  const conversationMessages = vi.fn((worldId: string) => worldId === "world-a" ? old : Promise.resolve([]));
-  const client = { conversationMessages, directReplyAvailability: vi.fn().mockResolvedValue({ available: false }) } as unknown as CoreClient;
+  let finishOld!: (page: { items: ChatMessage[]; next_before_position: null }) => void;
+  const old = new Promise<{ items: ChatMessage[]; next_before_position: null }>(resolve => { finishOld = resolve; });
+  const conversationMessagePage = vi.fn((worldId: string) => worldId === "world-a" ? old : Promise.resolve({ items: [], next_before_position: null }));
+  const client = { conversationMessagePage, directReplyAvailability: vi.fn().mockResolvedValue({ available: false }) } as unknown as CoreClient;
   const renderThread = (worldId: string) => <ChatTranscript key={worldId} client={client} worldId={worldId} playerId="player-a" conversation={conversation} tokenCeiling={50_000} onBack={() => {}} />;
   const view = render(renderThread("world-a"));
-  await waitFor(() => expect(conversationMessages).toHaveBeenCalledWith("world-a", "conversation-a"));
+  await waitFor(() => expect(conversationMessagePage).toHaveBeenCalledWith("world-a", "conversation-a"));
   view.rerender(renderThread("world-b"));
-  await waitFor(() => expect(conversationMessages).toHaveBeenCalledWith("world-b", "conversation-a"));
+  await waitFor(() => expect(conversationMessagePage).toHaveBeenCalledWith("world-b", "conversation-a"));
   await act(async () => {
-    finishOld([{ message_id: "private", turn_id: "turn-a", conversation_id: "conversation-a", position: 0, sender_kind: "player", sender_id: "player-a", text: "旧世界私聊", created_at_utc: "2026-09-24T10:00:00+00:00" }]);
+    finishOld({ items: [{ message_id: "private", turn_id: "turn-a", conversation_id: "conversation-a", position: 0, sender_kind: "player", sender_id: "player-a", text: "旧世界私聊", created_at_utc: "2026-09-24T10:00:00+00:00" }], next_before_position: null });
   });
   expect(screen.queryByText("旧世界私聊")).toBeNull();
 });
@@ -45,10 +70,10 @@ it("does not reveal a late transcript from the previous world", async () => {
 it("sends one durable turn, requests one reply, then refreshes the transcript", async () => {
   const player: ChatMessage = { message_id: "m1", turn_id: "t1", conversation_id: "conversation-a", position: 1, sender_kind: "player", sender_id: "player-a", text: "你好", created_at_utc: "2026-09-24T10:00:00+00:00" };
   const reply: ChatMessage = { ...player, message_id: "m2", position: 2, sender_kind: "character", sender_id: "character-a", text: "你好呀" };
-  const conversationMessages = vi.fn().mockResolvedValueOnce([]).mockResolvedValue([player, reply]);
+  const conversationMessagePage = vi.fn().mockResolvedValueOnce({ items: [], next_before_position: null }).mockResolvedValue({ items: [player, reply], next_before_position: null });
   const sendPlayerMessage = vi.fn().mockResolvedValue({ turn_id: "t1", token_ceiling: 50_000, status: "pending", message: player });
   const generateDirectReply = vi.fn().mockResolvedValue({ turn_id: "t1", state: "completed", player_message: player, reply });
-  const client = { conversationMessages, sendPlayerMessage, generateDirectReply, directReplyAvailability: vi.fn().mockResolvedValue({ available: true }) } as unknown as CoreClient;
+  const client = { conversationMessagePage, sendPlayerMessage, generateDirectReply, directReplyAvailability: vi.fn().mockResolvedValue({ available: true }) } as unknown as CoreClient;
   render(<ChatTranscript client={client} worldId="world-a" playerId="player-a" conversation={conversation} tokenCeiling={50_000} onBack={() => {}} />);
   await waitFor(() => expect(screen.getByRole("textbox").hasAttribute("disabled")).toBe(false));
   fireEvent.change(screen.getByRole("textbox"), { target: { value: "你好" } });
@@ -62,7 +87,7 @@ it("sends one durable turn, requests one reply, then refreshes the transcript", 
 
 it("sends on Enter but not while composing Chinese text or inserting a newline", async () => {
   const sendPlayerMessage = vi.fn().mockRejectedValue(new CoreRequestError(422));
-  const client = { conversationMessages: vi.fn().mockResolvedValue([]), sendPlayerMessage,
+  const client = { conversationMessagePage: vi.fn().mockResolvedValue({ items: [], next_before_position: null }), sendPlayerMessage,
     directReplyAvailability: vi.fn().mockResolvedValue({ available: true }) } as unknown as CoreClient;
   render(<ChatTranscript client={client} worldId="world-a" playerId="player-a" conversation={conversation} tokenCeiling={50_000} onBack={() => {}} />);
   const draft = await screen.findByRole("textbox");
@@ -81,7 +106,7 @@ it("checks an uncertain reply without replaying the model call", async () => {
   const sendPlayerMessage = vi.fn().mockResolvedValue({ turn_id: "t1", token_ceiling: 50_000, status: "pending", message: player });
   const generateDirectReply = vi.fn().mockRejectedValue(new Error("network failure"));
   const directTurn = vi.fn().mockResolvedValue({ turn_id: "t1", state: "claimed", player_message: player, reply: null });
-  const client = { conversationMessages: vi.fn().mockResolvedValue([player]), sendPlayerMessage, generateDirectReply, directTurn, directReplyAvailability: vi.fn().mockResolvedValue({ available: true }) } as unknown as CoreClient;
+  const client = { conversationMessagePage: vi.fn().mockResolvedValue({ items: [player], next_before_position: null }), sendPlayerMessage, generateDirectReply, directTurn, directReplyAvailability: vi.fn().mockResolvedValue({ available: true }) } as unknown as CoreClient;
   render(<ChatTranscript client={client} worldId="world-a" playerId="player-a" conversation={conversation} tokenCeiling={50_000} onBack={() => {}} />);
   await waitFor(() => expect(screen.getByRole("textbox").hasAttribute("disabled")).toBe(false));
   fireEvent.change(screen.getByRole("textbox"), { target: { value: "你好" } });
@@ -95,7 +120,7 @@ it("explains a budget denial without replaying an already saved player message",
   const player: ChatMessage = { message_id: "m1", turn_id: "t1", conversation_id: "conversation-a", position: 1, sender_kind: "player", sender_id: "player-a", text: "你好", created_at_utc: "2026-09-24T10:00:00+00:00" };
   const sendPlayerMessage = vi.fn().mockResolvedValue({ turn_id: "t1", token_ceiling: 50_000, status: "pending", message: player });
   const generateDirectReply = vi.fn().mockRejectedValue(new CoreRequestError(422));
-  const client = { conversationMessages: vi.fn().mockResolvedValue([player]), sendPlayerMessage,
+  const client = { conversationMessagePage: vi.fn().mockResolvedValue({ items: [player], next_before_position: null }), sendPlayerMessage,
     generateDirectReply, directTurn: vi.fn().mockResolvedValue({ state: "pending" }),
     directReplyAvailability: vi.fn().mockResolvedValue({ available: true }) } as unknown as CoreClient;
   render(<ChatTranscript client={client} worldId="world-a" playerId="player-a" conversation={conversation} tokenCeiling={50_000} onBack={() => {}} />);
@@ -112,7 +137,7 @@ it("releases a rejected message for editing but reuses identity after an uncerta
     .mockRejectedValueOnce(new CoreRequestError(422))
     .mockRejectedValueOnce(new Error("connection lost"))
     .mockRejectedValueOnce(new Error("connection lost"));
-  const client = { conversationMessages: vi.fn().mockResolvedValue([]), sendPlayerMessage,
+  const client = { conversationMessagePage: vi.fn().mockResolvedValue({ items: [], next_before_position: null }), sendPlayerMessage,
     directReplyAvailability: vi.fn().mockResolvedValue({ available: true }) } as unknown as CoreClient;
   render(<ChatTranscript client={client} worldId="world-a" playerId="player-a" conversation={conversation} tokenCeiling={50_000} onBack={() => {}} />);
   const draft = await screen.findByRole("textbox");

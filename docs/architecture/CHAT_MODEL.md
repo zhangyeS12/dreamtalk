@@ -244,6 +244,15 @@ cannot fit ends the history window. This bounded window is only a prompt view;
 it does not delete or summarize stored messages or weaken the physical-attempt
 Token preflight.
 
+The player-facing direct and group transcript now reads bounded, owner-scoped
+pages of at most 50 messages. The newest page is ordered by durable per-conversation
+position, and `before_position` loads older records strictly before the oldest
+displayed position. The `next_before_position` cursor is absent at the beginning
+of history. This position cursor remains stable if new messages are appended
+while older history is being read. The previous complete-list endpoint remains
+available for internal prompt construction; UI pagination does not change which
+turns the Character sees or promote dialogue into WorldEvent/Knowledge/Memory.
+
 ## Persistence boundary
 
 Conversation and Message are durable interaction records. They are not entries in
