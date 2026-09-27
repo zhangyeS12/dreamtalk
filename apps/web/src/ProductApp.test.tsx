@@ -93,6 +93,59 @@ it("shows the player-scoped world-event thread in chronological order", async ()
   expect(screen.getByRole("button", { name: "世界事件你已获知的事件置顶" })).toBeTruthy();
 });
 
+it("turns a known event into an editable direct or group topic without sending it", async () => {
+  const sendPlayerMessage = vi.fn();
+  const sendGroupMessage = vi.fn();
+  const client = {
+    worldContent: vi.fn().mockResolvedValue([]), listProductWorlds: vi.fn().mockResolvedValue([worldA]),
+    listPlayers: vi.fn().mockResolvedValue([{ player_id: "player-a", name: "我" }]),
+    selectedPlayer: vi.fn().mockResolvedValue({ player_id: "player-a" }),
+    knownEvents: vi.fn().mockResolvedValue([{ event_id: "event-1", title: "有人移动了位置", occurred_at: "60000000", observed_at: "60000000", ledger_position: 4 }]),
+    conversations: vi.fn().mockResolvedValue([chatA]), groupConversations: vi.fn().mockResolvedValue([groupA]),
+    conversationMessages: vi.fn().mockResolvedValue([]), directReplyAvailability: vi.fn().mockResolvedValue({ available: false }),
+    groupReplyAvailability: vi.fn().mockResolvedValue({ available: false }), sendPlayerMessage, sendGroupMessage,
+  } as unknown as CoreClient;
+  renderProduct(client);
+  await waitFor(() => expect(client.conversations).toHaveBeenCalledWith("world-a"));
+  fireEvent.click(screen.getByRole("button", { name: "世界事件你已获知的事件置顶" }));
+  fireEvent.click(await screen.findByRole("button", { name: "聊聊这件事：有人移动了位置" }));
+  fireEvent.click(screen.getByRole("button", { name: /^角色甲$/ }));
+  const directDraft = await screen.findByRole("textbox", { name: "发送给角色甲的消息" });
+  expect(directDraft).toHaveProperty("value", "我看到一条世界事件：「有人移动了位置」（第 1 天 · 00:01）。你知道这件事吗？");
+  expect(sendPlayerMessage).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "世界事件你已获知的事件置顶" }));
+  fireEvent.click(await screen.findByRole("button", { name: "聊聊这件事：有人移动了位置" }));
+  fireEvent.click(screen.getByRole("button", { name: "群聊：角色甲、角色乙" }));
+  const groupDraft = await screen.findByRole("textbox", { name: "发送群聊消息" });
+  expect(groupDraft).toHaveProperty("value", "我看到一条世界事件：「有人移动了位置」（第 1 天 · 00:01）。你知道这件事吗？");
+  expect(sendGroupMessage).not.toHaveBeenCalled();
+});
+
+it("does not carry an event topic draft into another world", async () => {
+  const otherChat: ChatConversation = { ...chatA, conversation_id: "chat-b", player_id: "player-b", character_id: "character-b" };
+  const client = {
+    worldContent: vi.fn().mockResolvedValue([]), listProductWorlds: vi.fn().mockResolvedValue([worldA, worldB]),
+    listPlayers: vi.fn((id: string) => Promise.resolve([{ player_id: id === "world-a" ? "player-a" : "player-b", name: "我" }])),
+    selectedPlayer: vi.fn((id: string) => Promise.resolve({ player_id: id === "world-a" ? "player-a" : "player-b" })),
+    knownEvents: vi.fn((id: string) => Promise.resolve(id === "world-a" ? [{ event_id: "event-a", title: "甲世界事件", occurred_at: "0", observed_at: "0", ledger_position: 1 }] : [])),
+    conversations: vi.fn((id: string) => Promise.resolve([id === "world-a" ? chatA : otherChat])),
+    groupConversations: vi.fn().mockResolvedValue([]), conversationMessages: vi.fn().mockResolvedValue([]),
+    directReplyAvailability: vi.fn().mockResolvedValue({ available: false }),
+  } as unknown as CoreClient;
+  renderProduct(client);
+  await waitFor(() => expect(client.conversations).toHaveBeenCalledWith("world-a"));
+  fireEvent.click(screen.getByRole("button", { name: "世界事件你已获知的事件置顶" }));
+  fireEvent.click(await screen.findByRole("button", { name: "聊聊这件事：甲世界事件" }));
+  fireEvent.click(screen.getByRole("button", { name: /^角色甲$/ }));
+  expect(await screen.findByRole("textbox", { name: "发送给角色甲的消息" })).toHaveProperty("value", expect.stringContaining("甲世界事件"));
+  fireEvent.click(screen.getByRole("button", { name: "设置" }));
+  fireEvent.change(screen.getByRole("combobox", { name: "当前世界" }), { target: { value: "world-b" } });
+  fireEvent.click(screen.getByRole("button", { name: "聊天" }));
+  await waitFor(() => expect(client.conversations).toHaveBeenCalledWith("world-b"));
+  fireEvent.click(await screen.findByRole("button", { name: /角色甲私聊/ }));
+  expect(await screen.findByRole("textbox", { name: "发送给角色甲的消息" })).toHaveProperty("value", "");
+});
+
 it("does not display a late event response after switching worlds", async () => {
   let completeOldRequest!: (events: Array<{ event_id: string; title: string; occurred_at: string; observed_at: string; ledger_position: number }>) => void;
   const oldRequest = new Promise<Parameters<typeof completeOldRequest>[0]>(resolve => { completeOldRequest = resolve; });

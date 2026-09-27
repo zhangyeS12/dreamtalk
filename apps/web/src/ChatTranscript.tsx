@@ -10,10 +10,12 @@ interface Props {
   playerId: string;
   conversation: ChatConversation;
   tokenCeiling: number;
+  suggestedDraft?: string | null;
+  onSuggestionUsed?: () => void;
   onBack: () => void;
 }
 
-export function ChatTranscript({ client, worldId, playerId, conversation, tokenCeiling, onBack }: Props) {
+export function ChatTranscript({ client, worldId, playerId, conversation, tokenCeiling, suggestedDraft, onSuggestionUsed, onBack }: Props) {
   const [messages, setMessages] = useState<ChatMessage[] | null>(null);
   const [failed, setFailed] = useState(false);
   const [refresh, setRefresh] = useState(0);
@@ -23,6 +25,13 @@ export function ChatTranscript({ client, worldId, playerId, conversation, tokenC
   const [sending, setSending] = useState(false);
   const [feedback, setFeedback] = useState("");
   const thread = useChatScroll(messages);
+
+  useEffect(() => {
+    if (suggestedDraft) {
+      setDraft(suggestedDraft);
+      onSuggestionUsed?.();
+    }
+  }, [suggestedDraft, onSuggestionUsed]);
 
   useEffect(() => {
     let active = true;

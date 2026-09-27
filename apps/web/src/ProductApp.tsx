@@ -70,6 +70,8 @@ export function ProductApp({ client }: { client: CoreClient }) {
   const [selectedPlayerState, setSelectedPlayerState] = useState<SelectedPlayerState | null>(null);
   const [playerChoice, setPlayerChoice] = useState("");
   const [knownEvents, setKnownEvents] = useState<{ worldId: string; playerId: string; items: KnownWorldEvent[] } | null>(null);
+  const [topicEvent, setTopicEvent] = useState<KnownWorldEvent | null>(null);
+  const [draftSuggestion, setDraftSuggestion] = useState<{ worldId: string; playerId: string; conversationId: string; text: string } | null>(null);
   const [conversationDirectory, setConversationDirectory] = useState<{ worldId: string; playerId: string; items: ChatConversation[] } | null>(null);
   const [groupDirectory, setGroupDirectory] = useState<{ worldId: string; playerId: string; items: GroupChatConversation[] } | null>(null);
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
@@ -106,7 +108,7 @@ export function ProductApp({ client }: { client: CoreClient }) {
   }, [client]);
   useEffect(() => {
     let active = true;
-    setPlayers([]); setSelectedPlayer(null); setSelectedPlayerState(null); setPlayerChoice(""); setKnownEvents(null); setEventsOpen(false); setConversationDirectory(null); setGroupDirectory(null); setSelectedConversationId(null); setSelectedGroupId(null); setGroupSetupOpen(false);
+    setPlayers([]); setSelectedPlayer(null); setSelectedPlayerState(null); setPlayerChoice(""); setKnownEvents(null); setTopicEvent(null); setDraftSuggestion(null); setEventsOpen(false); setConversationDirectory(null); setGroupDirectory(null); setSelectedConversationId(null); setSelectedGroupId(null); setGroupSetupOpen(false);
     if (worldId) void loadIdentity(worldId).then(([available, selected]) => {
       if (!active) return;
       setPlayers(available); setSelectedPlayer(selected.player_id);
@@ -115,6 +117,7 @@ export function ProductApp({ client }: { client: CoreClient }) {
     }).catch(() => { if (active) setError("无法读取当前世界的玩家身份。"); });
     return () => { active = false; };
   }, [worldId, loadIdentity]);
+  useEffect(() => { setTopicEvent(null); setDraftSuggestion(null); }, [selectedPlayer]);
   useEffect(() => {
     let active = true;
     if (!worldId || !selectedPlayer || tab !== "chats") return;
@@ -195,6 +198,18 @@ export function ProductApp({ client }: { client: CoreClient }) {
   const groups = groupDirectory?.worldId === worldId && groupDirectory.playerId === selectedPlayer ? groupDirectory.items : [];
   const selectedConversation = conversations.find(item => item.conversation_id === selectedConversationId);
   const selectedGroup = groups.find(item => item.conversation_id === selectedGroupId);
+  const discussEvent = (conversationId: string, kind: "direct" | "group") => {
+    if (!topicEvent || !worldId || !selectedPlayer) return;
+    setDraftSuggestion({
+      worldId, playerId: selectedPlayer, conversationId,
+      text: `我看到一条世界事件：「${topicEvent.title}」（${displayTime(topicEvent.occurred_at)}）。你知道这件事吗？`,
+    });
+    setSelectedConversationId(kind === "direct" ? conversationId : null);
+    setSelectedGroupId(kind === "group" ? conversationId : null);
+    setTopicEvent(null);
+    setEventsOpen(false);
+  };
+  const suggestedFor = (conversationId: string) => draftSuggestion?.worldId === worldId && draftSuggestion.playerId === selectedPlayer && draftSuggestion.conversationId === conversationId ? draftSuggestion.text : null;
   return <div className="product-shell">
     <header className="app-header"><span className="app-brand">dreamtalk</span><span role="status" className="sr-only">核心已就绪</span><span className="world-context">{world?.name ?? "尚未创建世界"}</span></header>
     <main className="app-content" id="main-content">
@@ -204,23 +219,24 @@ export function ProductApp({ client }: { client: CoreClient }) {
 
       {tab === "chats" && <div className={`chat-workspace ${eventsOpen || selectedConversation || selectedGroup || groupSetupOpen ? "thread-open" : ""}`}>
         <aside className="conversation-list" aria-label="会话列表">
-        <button className={`conversation-row pinned ${eventsOpen ? "selected" : ""}`} aria-pressed={eventsOpen} type="button" onClick={() => setEventsOpen(true)}>
+        <button className={`conversation-row pinned ${eventsOpen ? "selected" : ""}`} aria-pressed={eventsOpen} type="button" onClick={() => { setTopicEvent(null); setEventsOpen(true); }}>
           <span className="avatar event-avatar" aria-hidden="true">事</span>
           <span className="row-copy"><strong>世界事件</strong><small>你已获知的事件</small></span>
           <span className="pin-label">置顶</span>
         </button>
         {selectedPlayer ? <button type="button" className="group-create-link" onClick={() => { setGroupSetupOpen(true); setSelectedGroupId(null); setSelectedConversationId(null); setEventsOpen(false); }}>＋ 新建群聊</button> : null}
         {conversationsLoading ? <p className="thread-hint">正在读取会话…</p> : conversations.length === 0 && groups.length === 0 ? <div className="empty-state"><h2>还没有会话</h2><p>在通讯录中选择角色，打开与他的会话。</p><button type="button" className="text-action" onClick={() => setTab("contacts")}>前往通讯录</button></div> : <>
-          {groups.map(item => <button key={item.conversation_id} type="button" className={`conversation-row ${!eventsOpen && selectedGroupId === item.conversation_id ? "selected" : ""}`} aria-pressed={!eventsOpen && selectedGroupId === item.conversation_id} onClick={() => { setSelectedGroupId(item.conversation_id); setSelectedConversationId(null); setGroupSetupOpen(false); setEventsOpen(false); }}><span className="avatar event-avatar" aria-hidden="true">群</span><span className="row-copy"><strong>{item.participants.map(member => member.character_name).join("、")}</strong><small>群聊 · {item.participants.length} 位角色</small></span></button>)}
-          {conversations.map(item => <button key={item.conversation_id} type="button" className={`conversation-row ${!eventsOpen && selectedConversationId === item.conversation_id ? "selected" : ""}`} aria-pressed={!eventsOpen && selectedConversationId === item.conversation_id} onClick={() => { setSelectedConversationId(item.conversation_id); setSelectedGroupId(null); setGroupSetupOpen(false); setEventsOpen(false); }}><span className="avatar event-avatar" aria-hidden="true">{Array.from(item.character_name)[0]}</span><span className="row-copy"><strong>{item.character_name}</strong><small>私聊</small></span></button>)}
+          {groups.map(item => <button key={item.conversation_id} type="button" className={`conversation-row ${!eventsOpen && selectedGroupId === item.conversation_id ? "selected" : ""}`} aria-pressed={!eventsOpen && selectedGroupId === item.conversation_id} onClick={() => { setDraftSuggestion(null); setSelectedGroupId(item.conversation_id); setSelectedConversationId(null); setGroupSetupOpen(false); setEventsOpen(false); }}><span className="avatar event-avatar" aria-hidden="true">群</span><span className="row-copy"><strong>{item.participants.map(member => member.character_name).join("、")}</strong><small>群聊 · {item.participants.length} 位角色</small></span></button>)}
+          {conversations.map(item => <button key={item.conversation_id} type="button" className={`conversation-row ${!eventsOpen && selectedConversationId === item.conversation_id ? "selected" : ""}`} aria-pressed={!eventsOpen && selectedConversationId === item.conversation_id} onClick={() => { setDraftSuggestion(null); setSelectedConversationId(item.conversation_id); setSelectedGroupId(null); setGroupSetupOpen(false); setEventsOpen(false); }}><span className="avatar event-avatar" aria-hidden="true">{Array.from(item.character_name)[0]}</span><span className="row-copy"><strong>{item.character_name}</strong><small>私聊</small></span></button>)}
         </>}
 
         </aside>
         <div className="conversation-detail">
           {eventsOpen ? <section className="event-thread" aria-label="世界事件时间线">
         <div className="thread-heading"><button type="button" className="text-action" onClick={() => setEventsOpen(false)}>返回聊天</button><h2>世界事件</h2><span>最近 100 条</span></div>
-        {!world ? <p className="thread-hint">先创建世界，才能查看事件。</p> : !selectedPlayer ? <div className="thread-empty"><p>先进入当前世界，才能查看你获知的事件。</p><button type="button" className="text-action" onClick={() => { setEventsOpen(false); setTab("me"); }}>前往我的身份</button></div> : visibleEvents.length === 0 ? <p className="thread-hint">你目前还没有获知世界事件。以后在这里找聊天话题。</p> : <ol className="event-list">{visibleEvents.map(item => <li key={item.event_id} className="event-item"><time>{displayTime(item.occurred_at)}</time><strong>{item.title}</strong>{item.observed_at !== item.occurred_at ? <small>获知于 {displayTime(item.observed_at)}</small> : null}</li>)}</ol>}
-          </section> : groupSetupOpen ? <GroupChatSetup key={`${worldId}:${selectedPlayer}`} client={client} worldId={worldId} onBack={() => setGroupSetupOpen(false)} onCreated={group => { setGroupDirectory(current => ({ worldId, playerId: selectedPlayer!, items: [...(current?.worldId === worldId && current.playerId === selectedPlayer ? current.items : []).filter(item => item.conversation_id !== group.conversation_id), group] })); setSelectedGroupId(group.conversation_id); setGroupSetupOpen(false); }} /> : selectedGroup && selectedPlayer ? <GroupChatDetails key={`${worldId}:${selectedPlayer}:${selectedGroup.conversation_id}`} client={client} worldId={worldId} playerId={selectedPlayer} group={selectedGroup} tokenCeiling={tokenCeiling} onBack={() => setSelectedGroupId(null)} /> : selectedConversation && selectedPlayer ? <ChatTranscript key={`${worldId}:${selectedPlayer}:${selectedConversation.conversation_id}`} client={client} worldId={worldId} playerId={selectedPlayer} conversation={selectedConversation} tokenCeiling={tokenCeiling} onBack={() => setSelectedConversationId(null)} /> : <div className="conversation-placeholder"><h2>与世界保持联系</h2><p>从左侧选择会话，或查看你已获知的世界事件。</p></div>}
+        {topicEvent ? <div className="event-topic-picker"><strong>聊聊「{topicEvent.title}」</strong><p>选择已有会话，系统只填写一条可编辑的消息，不会自动发送。</p>{conversations.length === 0 && groups.length === 0 ? <p>先从通讯录打开一位角色的会话。</p> : <div className="event-topic-choices">{conversations.map(item => <button type="button" key={item.conversation_id} onClick={() => discussEvent(item.conversation_id, "direct")}>{item.character_name}</button>)}{groups.map(item => <button type="button" key={item.conversation_id} onClick={() => discussEvent(item.conversation_id, "group")}>群聊：{item.participants.map(member => member.character_name).join("、")}</button>)}</div>}</div> : null}
+        {!world ? <p className="thread-hint">先创建世界，才能查看事件。</p> : !selectedPlayer ? <div className="thread-empty"><p>先进入当前世界，才能查看你获知的事件。</p><button type="button" className="text-action" onClick={() => { setEventsOpen(false); setTab("me"); }}>前往我的身份</button></div> : visibleEvents.length === 0 ? <p className="thread-hint">你目前还没有获知世界事件。以后在这里找聊天话题。</p> : <ol className="event-list">{visibleEvents.map(item => <li key={item.event_id} className="event-item"><time>{displayTime(item.occurred_at)}</time><strong>{item.title}</strong>{item.observed_at !== item.occurred_at ? <small>获知于 {displayTime(item.observed_at)}</small> : null}<button type="button" className="text-action" aria-label={`聊聊这件事：${item.title}`} onClick={() => setTopicEvent(item)}>聊聊这件事</button></li>)}</ol>}
+          </section> : groupSetupOpen ? <GroupChatSetup key={`${worldId}:${selectedPlayer}`} client={client} worldId={worldId} onBack={() => setGroupSetupOpen(false)} onCreated={group => { setGroupDirectory(current => ({ worldId, playerId: selectedPlayer!, items: [...(current?.worldId === worldId && current.playerId === selectedPlayer ? current.items : []).filter(item => item.conversation_id !== group.conversation_id), group] })); setSelectedGroupId(group.conversation_id); setGroupSetupOpen(false); }} /> : selectedGroup && selectedPlayer ? <GroupChatDetails key={`${worldId}:${selectedPlayer}:${selectedGroup.conversation_id}`} client={client} worldId={worldId} playerId={selectedPlayer} group={selectedGroup} tokenCeiling={tokenCeiling} suggestedDraft={suggestedFor(selectedGroup.conversation_id)} onSuggestionUsed={() => setDraftSuggestion(null)} onBack={() => setSelectedGroupId(null)} /> : selectedConversation && selectedPlayer ? <ChatTranscript key={`${worldId}:${selectedPlayer}:${selectedConversation.conversation_id}`} client={client} worldId={worldId} playerId={selectedPlayer} conversation={selectedConversation} tokenCeiling={tokenCeiling} suggestedDraft={suggestedFor(selectedConversation.conversation_id)} onSuggestionUsed={() => setDraftSuggestion(null)} onBack={() => setSelectedConversationId(null)} /> : <div className="conversation-placeholder"><h2>与世界保持联系</h2><p>从左侧选择会话，或查看你已获知的世界事件。</p></div>}
         </div>
       </div>}
 

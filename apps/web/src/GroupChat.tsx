@@ -59,8 +59,9 @@ export function GroupChatSetup({ client, worldId, onCreated, onBack }: {
   </section>;
 }
 
-export function GroupChatDetails({ client, worldId, playerId, group, tokenCeiling, onBack }: {
-  client: CoreClient; worldId: string; playerId: string; group: GroupChatConversation; tokenCeiling: number; onBack: () => void;
+export function GroupChatDetails({ client, worldId, playerId, group, tokenCeiling, suggestedDraft, onSuggestionUsed, onBack }: {
+  client: CoreClient; worldId: string; playerId: string; group: GroupChatConversation; tokenCeiling: number;
+  suggestedDraft?: string | null; onSuggestionUsed?: () => void; onBack: () => void;
 }) {
   const [messages, setMessages] = useState<ChatMessage[] | null>(null);
   const [refresh, setRefresh] = useState(0);
@@ -70,6 +71,13 @@ export function GroupChatDetails({ client, worldId, playerId, group, tokenCeilin
   const [sending, setSending] = useState(false);
   const [feedback, setFeedback] = useState("");
   const thread = useChatScroll(messages);
+
+  useEffect(() => {
+    if (suggestedDraft) {
+      setDraft(suggestedDraft);
+      onSuggestionUsed?.();
+    }
+  }, [suggestedDraft, onSuggestionUsed]);
 
   useEffect(() => {
     let active = true;

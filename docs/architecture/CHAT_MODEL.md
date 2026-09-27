@@ -206,6 +206,13 @@ composer when the governed model and credential are available.
   because they exist. Any later event context must pass the relevant owner's
   knowledge boundary.
 
+The known-event timeline can offer a player-selected topic for an existing
+direct or group conversation. The UI copies only the already-visible event
+title and world time into an editable draft. It never sends automatically or
+passes an event payload to the Character prompt. If the player sends the draft,
+it is an ordinary lower-trust Player message, not a grant of Character knowledge
+or a new WorldEvent.
+
 The internal direct-chat context builder resolves the current accepted card
 from the Conversation's world-scoped replacement lineage, then reads only the
 selected Player's transcript up to the current sent message and that Player's

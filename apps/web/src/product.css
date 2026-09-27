@@ -50,6 +50,12 @@
 .event-item { display: flex; flex-direction: column; align-items: flex-start; gap: 7px; margin: 12px 0; padding: 16px 18px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
 .event-item time, .event-item small { color: var(--muted); font-size: .77rem; }
 .event-item strong { font-size: .92rem; font-weight: 600; }
+.event-item .text-action { padding-left: 0; }
+.event-topic-picker { max-width: 860px; margin: 18px auto 0; padding: 18px 20px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.event-topic-picker p { color: var(--muted); font-size: .86rem; line-height: 1.6; }
+.event-topic-choices { display: flex; flex-wrap: wrap; gap: 8px; }
+.event-topic-choices button { padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); cursor: pointer; }
+.event-topic-choices button:hover { border-color: var(--green); }
 .empty-state { padding: 70px 22px 76px; text-align: center; }
 .empty-state h2 { margin: 0 0 8px; font-size: 1.06rem; font-weight: 650; }
 .empty-state p { max-width: 34ch; margin: 0 auto 18px; color: var(--muted); line-height: 1.65; }
