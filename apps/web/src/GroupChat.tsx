@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { CoreClient, CoreRequestError, type GroupChatConversation, type WorldContentItem } from "@dreamtalk/api-client";
 import { useChatScroll } from "./useChatScroll";
 import { useTranscriptPages } from "./useTranscriptPages";
@@ -64,6 +64,7 @@ export function GroupChatDetails({ client, worldId, playerId, group, tokenCeilin
   client: CoreClient; worldId: string; playerId: string; group: GroupChatConversation; tokenCeiling: number;
   suggestedDraft?: string | null; onSuggestionUsed?: () => void; onBack: () => void;
 }) {
+  const draftInput = useRef<HTMLTextAreaElement>(null);
   const [refresh, setRefresh] = useState(0);
   const [available, setAvailable] = useState(false);
   const [draft, setDraft] = useState("");
@@ -120,7 +121,24 @@ export function GroupChatDetails({ client, worldId, playerId, group, tokenCeilin
     } finally { setSending(false); }
   };
 
+  const insertMention = (name: string) => {
+    if (!available || sending || pending) return;
+    const input = draftInput.current;
+    const start = input?.selectionStart ?? draft.length;
+    const end = input?.selectionEnd ?? start;
+    const before = draft.slice(0, start);
+    const after = draft.slice(end);
+    const insertion = `${before && !/\s$/.test(before) ? " " : ""}@${name}${after && /^\s/.test(after) ? "" : " "}`;
+    if (before.length + insertion.length + after.length > 65536) return;
+    setDraft(before + insertion + after);
+    const caret = before.length + insertion.length;
+    requestAnimationFrame(() => { input?.focus(); input?.setSelectionRange(caret, caret); });
+  };
+
   const names = new Map(group.participants.map(item => [item.character_id, item.character_name]));
+  const nameCounts = new Map<string, number>();
+  for (const item of group.participants) nameCounts.set(item.character_name, (nameCounts.get(item.character_name) ?? 0) + 1);
+  const mentionable = group.participants.filter(item => nameCounts.get(item.character_name) === 1);
   return <section ref={thread} className="chat-thread" aria-label="群聊">
     <div className="thread-heading"><button type="button" className="text-action" onClick={onBack}>返回聊天</button><h2>{group.participants.map(item => item.character_name).join("、")}</h2><span>群聊</span><button type="button" className="text-action transcript-refresh" onClick={() => setRefresh(value => value + 1)}>刷新记录</button></div>
     {failed ? <p className="thread-hint" role="alert">无法读取群聊记录，请刷新后重试。</p> : null}
@@ -132,7 +150,8 @@ export function GroupChatDetails({ client, worldId, playerId, group, tokenCeilin
       {feedback ? <p role="status" className="chat-feedback">{feedback}</p> : null}
       {!available ? <p className="chat-feedback">尚未配置可用的聊天模型或可信 Token 上限，暂时无法发送。</p> : null}
       <label htmlFor="group-chat-draft" className="sr-only">发送群聊消息</label>
-      <textarea id="group-chat-draft" value={draft} onChange={event => setDraft(event.target.value)} onKeyDown={submitChatOnEnter} disabled={!available || sending || !!pending} maxLength={65536} placeholder="输入消息，或用 @角色名 指定下一位发言者…" rows={3} />
+      <textarea ref={draftInput} id="group-chat-draft" value={draft} onChange={event => setDraft(event.target.value)} onKeyDown={submitChatOnEnter} disabled={!available || sending || !!pending} maxLength={65536} placeholder="输入消息，或用 @角色名 指定下一位发言者…" rows={3} />
+      {mentionable.length > 0 ? <div className="chat-mention-actions"><span>指定下一位</span>{mentionable.map(item => <button key={item.character_id} type="button" disabled={!available || sending || !!pending} onClick={() => insertMention(item.character_name)}>@{item.character_name}</button>)}</div> : null}
       <div className="chat-composer-actions"><small>回车发送 · Shift+回车换行 · 本轮所有发言共用 {tokenCeiling.toLocaleString("zh-CN")} Token 上限</small><button type="submit" className="primary-button" disabled={!available || sending || (!draft.trim() && !pending)}>{sending ? "正在处理…" : pending ? "重试保存" : "发送"}</button></div>
     </form>
   </section>;

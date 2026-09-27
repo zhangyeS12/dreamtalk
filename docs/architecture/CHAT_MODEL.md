@@ -82,7 +82,9 @@ Character's own bounded EpisodicMemory view and the local Player's general and
 current-world descriptions. Imported instructions and transcript text remain
 lower-trust data. An exact `@display-name` in the Player message can identify
 one participant; ambiguous names or multiple addressed participants fail
-closed. This builder prepares input only: it does not select a speaker,
+closed. The group composer offers one-click `@display-name` insertion for
+uniquely named members; it does not change the server-side selection rule.
+This builder prepares input only: it does not select a speaker,
 dispatch a model. It accepts an owner-scoped pending
 Player send before the one-time dispatch claim, so the group runner can perform
 model and Token preflight without consuming the claim. After claiming, it also
