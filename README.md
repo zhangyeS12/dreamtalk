@@ -8,7 +8,7 @@ dreamtalk 是持久化、事件驱动的多角色 AI 世界，不是普通聊天
 
 ## 开发状态
 
-当前阶段：**Stage 6 — Memory & Cognition，C-007A Episodic Memory Foundation 已完成**。系统支持 Character 从自身已授权 Observation 显式形成不可变、evidence-backed 的主观 EpisodicMemory，并提供 owner-bound SQL 读取、稳定分页、原子幂等写入和 Alembic 0014 persistence。Observation 不自动创建 Memory；Memory 不授予 Truth、Knowledge 或 Belief，也不进入 authored content package 或 projection replay。详见 [Episodic Memory](docs/architecture/EPISODIC_MEMORY.md) 与 [Memory Model](docs/architecture/MEMORY_MODEL.md)。
+当前处于 **Stage 6 之后的产品体验接线阶段**，仍未完成最终产品。C-007A 的情景记忆基础已完成：Character 可从自身已授权 Observation 显式形成不可变、带证据的 EpisodicMemory，并由 owner-scoped 查询读取。Observation 不自动创建 Memory；Memory 不授予 Truth、Knowledge 或 Belief，也不进入 authored content package 或 projection replay。详见 [Episodic Memory](docs/architecture/EPISODIC_MEMORY.md) 与 [Memory Model](docs/architecture/MEMORY_MODEL.md)。
 
 Q-001B 提供仅开发环境启用的 [开发者运行时检查器](docs/architecture/RUNTIME_INSPECTOR.md)，用于通过真实 API/application 路径观察时钟、位置、Scene、trigger、activation、WorldEvent、Observation 与 owner-scoped EpisodicMemory。它不是最终产品 UI，也没有加入 Activation consumer 或自动 Observation→Memory。
 
@@ -22,11 +22,11 @@ Stage 3 已完成 canonical authored-content、Character Card/Lorebook 离线导
 
 `.lwcontent` = authored content package；`.lworld` 保留给未来 runtime-world/state package。旧格式后缀为兼容标识，不随项目改名而变。content package != backup != running world；hash integrity != publisher authentication；filesystem blobs + SQLite 不被宣称为一个 ACID transaction。导入/导出不创建 Runtime World/Character，不断言 Truth 或授予 Belief/PlayerKnowledge。作者文本/regex/activation metadata 保持不可信数据，不执行。
 
-运行内容实例化、automatic Lore→Truth/Belief、基于角色知识与记忆的完整 prompt assembly、Reflection、memory consolidation/forgetting/semantic retrieval/RAG、Director、Character Agent、AI Builder、activation consumption、checkpoint/branch、`.lworld`、cloud sync、marketplace 和 final UI 尚未实现。Stage 5 catch-up 只 materialize 到期 work，不编造离线叙事或角色决定；fidelity 只表示 operational context，不是剧情重要性、WorldTruth 或 LLM 策略。Scene 只是互动上下文，Observation 只记录历史访问；形成 EpisodicMemory 必须走 C-007A 的显式 owner-authorized command。外部 PNG/APNG writer、CHARX、任意图复制、签名与 orphan blob GC 仍 deferred。Stage 2 的资源级 CAS、幂等、ledger/rebuild 和知识隔离继续沿用，见 [Stage 2 验收](docs/architecture/STAGE_2_ACCEPTANCE.md)。provider tools、完整模型管理 UI 和真实付费 API 验证尚未实现。
+当前角色聊天上下文已接入本角色授权记忆、玩家描述、当前世界确认的角色卡，以及逐条开放的公共世界背景。世界书条目默认隐藏；暗线不因导入自动进入角色上下文。群聊记录按固定成员授权，沉默成员同样可在之后读取该群已发送的消息；聊天文本不会自动成为 WorldTruth、KnowledgeAssertion 或 Observation。完整的记忆检索与整理、Director 批量计划/Event Reservoir、世界事件的主动生成和消费、自动知识传播、AI Builder、checkpoint/branch、`.lworld`、cloud sync、marketplace 与最终 UI 仍未完成。Stage 5 catch-up 只 materialize 到期 work，不编造离线叙事或角色决定。外部 PNG/APNG writer、CHARX、任意图复制、签名与 orphan blob GC 仍 deferred。Stage 2 的资源级 CAS、幂等、ledger/rebuild 和知识隔离继续沿用，见 [Stage 2 验收](docs/architecture/STAGE_2_ACCEPTANCE.md)。provider tools、完整模型管理 UI 和真实付费 API 验证尚未完成。
 
 C-002 运行时基础继续沿用：共享 React UI、Tauri v2 Windows 开发壳、Python Core 启停协议、系统 API、SQLite 迁移元数据、结构化日志和 CI。连接阶段显示“正在连接核心 / 核心已就绪 / 核心连接失败”；就绪后默认进入普通用户四标签页面。
 
-Director、Character Agent、认知消费、自动知识传播、语义检索及最终 UI 尚未实现。当前生产 action registry 只有 `move_player` v1；Scene lifecycle 是内部应用操作。生产 snapshot store 只读，正式世界变更通过 Kernel/UoW 管线执行；投影恢复另用内部 ProjectionRebuilder。P-01 的时间推进/离线/暂停部分已由 C-006D 解决；其余待确认问题见 [PRODUCT_SPEC.md](docs/product/PRODUCT_SPEC.md)。Stage 0 审查见 [ARCHITECTURE_REVIEW_001.md](docs/architecture/ARCHITECTURE_REVIEW_001.md)，运行时边界见 [RUNTIME_FOUNDATION.md](docs/architecture/RUNTIME_FOUNDATION.md)。
+当前已有受约束的角色回复与独立群聊发言调度器，但尚未形成完整自主 Character Agent；Director、自动知识传播、语义检索及最终 UI 尚未实现。当前生产 action registry 只有 `move_player` v1；Scene lifecycle 是内部应用操作。生产 snapshot store 只读，正式世界变更通过 Kernel/UoW 管线执行；投影恢复另用内部 ProjectionRebuilder。P-01 的时间推进/离线/暂停部分已由 C-006D 解决；其余待确认问题见 [PRODUCT_SPEC.md](docs/product/PRODUCT_SPEC.md)。Stage 0 审查见 [ARCHITECTURE_REVIEW_001.md](docs/architecture/ARCHITECTURE_REVIEW_001.md)，运行时边界见 [RUNTIME_FOUNDATION.md](docs/architecture/RUNTIME_FOUNDATION.md)。
 
 ## 开发环境与运行
 

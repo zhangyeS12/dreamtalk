@@ -69,7 +69,7 @@ def create_app(
     app.add_middleware(
         CORSMiddleware,
         allow_origins=allowed_origins or [],
-        allow_methods=["GET", "POST"],
+        allow_methods=["GET", "POST", "PUT"],
         allow_headers=["Authorization", "X-Request-Id"],
     )
     bearer = HTTPBearer(auto_error=False)

@@ -86,12 +86,13 @@ export function WorldImports({ client, worldId }: { client: CoreClient; worldId:
     } finally { setBusy(false); }
   };
   const setCommon = async (importId: string, entryId: string, common: boolean) => {
-    setChangingEntry(entryId); setError("");
+    setChangingEntry(entryId); setError(""); setMessage("");
     try {
       await client.setCommonLore(worldId, importId, entryId, common);
       setAccepted(items => items.map(item => item.import_id !== importId ? item : {
         ...item, entries: item.entries.map(entry => entry.id === entryId ? { ...entry, common } : entry),
       }));
+      setMessage(common ? "已设为公共背景。" : "已设为隐藏内容。");
     } catch { setError("无法更新公共背景范围，请重新进入设置后重试。"); }
     finally { setChangingEntry(null); }
   };
