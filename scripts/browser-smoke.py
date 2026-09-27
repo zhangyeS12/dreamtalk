@@ -110,6 +110,9 @@ try:
         page.get_by_role("button", name="通讯录", exact=True).click()
         page.locator(".contacts-workspace .conversation-row").click()
         page.get_by_role("heading", name="角色资料", exact=True).wait_for()
+        contacts = page.locator(".contacts-workspace")
+        expect(contacts.get_by_role("heading", name="角色卡开场白（原文）")).to_be_visible()
+        expect(contacts.get_by_text("Hello {{user}}.", exact=True)).to_be_visible()
         if contacts_screenshot := os.environ.get("LW_CONTACTS_SCREENSHOT"):
             page.screenshot(path=contacts_screenshot, full_page=True)
         page.get_by_role("button", name="先进入世界，再打开会话").click()
