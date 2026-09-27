@@ -1009,6 +1009,20 @@ class WorldContentImportRecord(Base):
     )
 
 
+class WorldCommonLoreRecord(Base):
+    """Explicit local exposure of one accepted entry as common background."""
+
+    __tablename__ = "world_common_lore"
+    world_id: Mapped[UUID] = mapped_column(UUIDStorage(), primary_key=True)
+    import_id: Mapped[UUID] = mapped_column(UUIDStorage(), primary_key=True)
+    entry_id: Mapped[UUID] = mapped_column(UUIDStorage(), primary_key=True)
+    __table_args__ = (
+        ForeignKeyConstraint(["world_id"], ["worlds.world_id"]),
+        ForeignKeyConstraint(["import_id"], ["world_content_imports.import_id"]),
+        Index("ix_world_common_lore_world", "world_id"),
+    )
+
+
 class ChatConversationRecord(Base):
     """A local Player's durable communication space, independent of WorldEvents."""
 

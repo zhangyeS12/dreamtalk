@@ -54,7 +54,7 @@ export interface WorldContentItem {
   import_id: string; replaces_import_id: string | null; kind: "character" | "lorebook"; reviewed_hash: string;
   characters: Array<{ id: string; name: string; description: string; personality: string; background: string; scenario: string; speech_guidance: string; creator_notes: string; tags: string[]; example_dialogue: string[]; authored_instructions: Record<string, unknown> }>;
   lorebooks: Array<{ id: string; name: string; description: string }>;
-  entries: Array<{ id: string; title: string; keywords: string[]; content: string }>;
+  entries: Array<{ id: string; title: string; keywords: string[]; content: string; enabled: boolean; common: boolean }>;
   warnings?: Array<{ code: string; path: string }>;
 }
 
@@ -168,6 +168,11 @@ export class CoreClient {
 
   worldContent(worldId: string): Promise<WorldContentItem[]> {
     return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/content`);
+  }
+  setCommonLore(worldId: string, importId: string, entryId: string, common: boolean): Promise<{ common: boolean }> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/content/${encodeURIComponent(importId)}/entries/${encodeURIComponent(entryId)}/common`, {
+      method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ common }),
+    });
   }
   conversations(worldId: string): Promise<ChatConversation[]> {
     return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations`);

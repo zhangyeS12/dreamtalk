@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, func, or_, select
 
 from livingworld.application.chat_messages import (
     MAX_PROMPT_TRANSCRIPT_MESSAGES,
@@ -219,6 +219,53 @@ class SqlAlchemyChatMessageStore:
                 )
             ).all()
             return tuple(_message(row) for row in rows)
+
+    async def seen_group_messages(
+        self,
+        character_id: CharacterId,
+        player_id: PlayerId,
+        limit: int,
+        exclude_conversation_id: ConversationId | None,
+    ) -> tuple[ChatMessage, ...]:
+        if character_id.world_id != player_id.world_id:
+            raise EntityNotFoundError("chat_world_mismatch")
+        async with self._sessions() as session:
+            statement = (
+                select(ChatMessageRecord)
+                .join(
+                    ChatParticipantRecord,
+                    and_(
+                        ChatParticipantRecord.world_id == ChatMessageRecord.world_id,
+                        ChatParticipantRecord.conversation_id == ChatMessageRecord.conversation_id,
+                    ),
+                )
+                .join(
+                    ChatConversationRecord,
+                    and_(
+                        ChatConversationRecord.world_id == ChatMessageRecord.world_id,
+                        ChatConversationRecord.conversation_id == ChatMessageRecord.conversation_id,
+                    ),
+                )
+                .where(
+                    ChatMessageRecord.world_id == character_id.world_id.value,
+                    ChatParticipantRecord.character_id == character_id.value,
+                    ChatConversationRecord.player_id == player_id.value,
+                    ChatConversationRecord.kind == "group",
+                )
+            )
+            if exclude_conversation_id is not None:
+                statement = statement.where(
+                    ChatMessageRecord.conversation_id != exclude_conversation_id.value
+                )
+            rows = (
+                await session.scalars(
+                    statement.order_by(
+                        ChatMessageRecord.created_at_utc.desc(),
+                        ChatMessageRecord.message_id.desc(),
+                    ).limit(limit)
+                )
+            ).all()
+            return tuple(_message(row) for row in reversed(rows))
 
     async def page_for_player(
         self,

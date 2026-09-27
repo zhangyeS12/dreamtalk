@@ -186,6 +186,7 @@ async def run(
                 chat_messages,
                 database.local_profile_store(),
                 database.character_memory_reader,
+                world_content.list_common_lore,
             ),
         )
         group_chat_reply = configure_group_chat_reply(
@@ -196,6 +197,7 @@ async def run(
                 chat_messages,
                 database.local_profile_store(),
                 database.character_memory_reader,
+                world_content.list_common_lore,
             ),
         )
         status = RuntimeStatus(version("dreamtalk-core"), generation, llm_health=llm_session.health)

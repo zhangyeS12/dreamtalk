@@ -8,7 +8,11 @@ function originalCardGreeting(authored: Record<string, unknown>): string | null 
   return typeof greeting === "string" && greeting.trim() ? greeting : null;
 }
 
-function ContentDetails({ item }: { item: WorldContentItem }) {
+function ContentDetails({ item, onCommonChange, changingEntry }: {
+  item: WorldContentItem;
+  onCommonChange?: (entryId: string, common: boolean) => void;
+  changingEntry?: string | null;
+}) {
   return <div className="content-details">
     {item.characters.map(character => {
       const greeting = originalCardGreeting(character.authored_instructions);
@@ -23,7 +27,7 @@ function ContentDetails({ item }: { item: WorldContentItem }) {
     })}
     {item.characters.some(character => Object.keys(character.authored_instructions).length > 0) && <details><summary>角色卡附加设定</summary>{item.characters.map(character => <pre key={character.id}>{JSON.stringify(character.authored_instructions, null, 2)}</pre>)}</details>}
     {item.lorebooks.map(book => <section key={book.id}><h2>{book.name}</h2><p>{book.description}</p></section>)}
-    {item.entries.length > 0 && <details><summary>世界书条目（{item.entries.length}）</summary>{item.entries.map((entry, index) => <div key={entry.id}><h3>{entry.title || `条目 ${index + 1}`}</h3>{entry.keywords.length > 0 && <p>关键词：{entry.keywords.join("、")}</p>}<p>{entry.content}</p></div>)}</details>}
+    {item.entries.length > 0 && <details><summary>世界书条目（{item.entries.length}）</summary>{item.entries.map((entry, index) => <div key={entry.id}><h3>{entry.title || `条目 ${index + 1}`}</h3>{entry.keywords.length > 0 && <p>关键词：{entry.keywords.join("、")}</p>}<p>{entry.content}</p>{!entry.enabled && <small>来源中已禁用；不会进入角色聊天。</small>}{onCommonChange && <label className="field"><span>角色可见范围</span><select value={entry.common ? "common" : "hidden"} disabled={!entry.enabled || changingEntry === entry.id} onChange={event => onCommonChange(entry.id, event.target.value === "common")}><option value="hidden">隐藏（默认）</option><option value="common">公共背景（所有角色可见）</option></select></label>}</div>)}</details>}
   </div>;
 }
 
@@ -44,6 +48,7 @@ export function WorldImports({ client, worldId }: { client: CoreClient; worldId:
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [accepted, setAccepted] = useState<WorldContentItem[]>([]);
+  const [changingEntry, setChangingEntry] = useState<string | null>(null);
   useEffect(() => {
     let mounted = true;
     void client.worldContent(worldId).then(items => { if (mounted) setAccepted(items); }).catch(() => { if (mounted) setError("无法读取当前世界的已导入内容。"); });
@@ -80,8 +85,18 @@ export function WorldImports({ client, worldId }: { client: CoreClient; worldId:
           : "未能确认保存结果。可以再次确认，同一次导入不会重复保存。");
     } finally { setBusy(false); }
   };
+  const setCommon = async (importId: string, entryId: string, common: boolean) => {
+    setChangingEntry(entryId); setError("");
+    try {
+      await client.setCommonLore(worldId, importId, entryId, common);
+      setAccepted(items => items.map(item => item.import_id !== importId ? item : {
+        ...item, entries: item.entries.map(entry => entry.id === entryId ? { ...entry, common } : entry),
+      }));
+    } catch { setError("无法更新公共背景范围，请重新进入设置后重试。"); }
+    finally { setChangingEntry(null); }
+  };
   return <section className="settings-section import-section"><div className="section-heading"><h2>导入内容</h2><p>预览确认后加入当前世界，其他世界的版本保持独立。</p></div>
-    {(kind === "lorebook" || accepted.some(item => item.kind === "lorebook")) && <p className="inline-hint">世界书目前可导入、查看和更新，但尚不会影响聊天回复。</p>}
+    {(kind === "lorebook" || accepted.some(item => item.kind === "lorebook")) && <p className="inline-hint">世界书条目默认隐藏。确认导入后，可逐条设为公共背景，供当前世界所有角色聊天时参考；暗线请保持隐藏。聊天内容不会因此变成世界事实。</p>}
     {replacement && <p className="inline-hint">正在更新：{replacement.characters[0]?.name ?? replacement.lorebooks[0]?.name} <button type="button" className="text-action" disabled={busy || !!preview} onClick={() => setReplacement(null)}>取消更新</button></p>}
     <label className="field"><span>内容类型</span><select value={kind} disabled={busy || !!preview || !!replacement} onChange={event => setKind(event.target.value as typeof kind)}><option value="character">角色卡（PNG / JSON）</option><option value="lorebook">世界书（JSON）</option></select></label>
     <label className="field import-file"><span>选择文件</span><input type="file" disabled={busy} accept={kind === "character" ? ".png,.json" : ".json"} onChange={event => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void upload(file); }} /></label>
@@ -90,7 +105,7 @@ export function WorldImports({ client, worldId }: { client: CoreClient; worldId:
       {!!preview.warnings?.length && <div className="compatibility-notice"><p>部分来源内容无法完整映射，原始数据仍会保留。确认前请检查以下提示。</p><ul>{preview.warnings.map((warning, index) => <li key={index}>{warning.code.includes("blank_tags") ? "空白标签已从角色标签中省略。" : warning.code.includes("empty_content") ? "空白条目已从世界书中省略。" : warning.code.includes("secondary_keys") ? "存在含义不明确的次级关键词，未作猜测转换。" : "存在兼容性差异，请核对预览内容。"}</li>)}</ul></div>}
       <div className="profile-actions"><button className="primary-button" type="button" disabled={busy} onClick={() => void commit()}>{replacement ? "确认更新当前世界" : "确认加入当前世界"}</button><button className="secondary-button" type="button" disabled={busy} onClick={() => { pendingId.current = null; void client.discardWorldContent(worldId, preview.import_id).catch(() => undefined); setPreview(null); }}>取消</button></div>
     </div>}
-    {accepted.length > 0 && <div className="accepted-content"><h3>当前世界已导入</h3>{accepted.map(item => <div key={item.import_id} className="accepted-item"><details><summary>{item.characters[0]?.name ?? item.lorebooks[0]?.name ?? "导入内容"} · {item.kind === "character" ? "角色卡" : "世界书"}</summary><ContentDetails item={item} /></details><button type="button" className="text-action" disabled={busy || !!preview} onClick={() => { setReplacement(item); setKind(item.kind); setMessage(""); }}>更新</button></div>)}</div>}
+    {accepted.length > 0 && <div className="accepted-content"><h3>当前世界已导入</h3>{accepted.map(item => <div key={item.import_id} className="accepted-item"><details><summary>{item.characters[0]?.name ?? item.lorebooks[0]?.name ?? "导入内容"} · {item.kind === "character" ? "角色卡" : "世界书"}</summary><ContentDetails item={item} onCommonChange={item.kind === "lorebook" ? (entryId, common) => void setCommon(item.import_id, entryId, common) : undefined} changingEntry={changingEntry} /></details><button type="button" className="text-action" disabled={busy || !!preview} onClick={() => { setReplacement(item); setKind(item.kind); setMessage(""); }}>更新</button></div>)}</div>}
   </section>;
 }
 

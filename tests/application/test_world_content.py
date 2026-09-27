@@ -225,5 +225,29 @@ def test_world_content_http_auth_preview_commit_and_read(tmp_path):
             == 200
         )
         assert len(client.get(path, headers=headers).json()) == 1
+        lore_preview = client.post(
+            path + "/preview?kind=lorebook",
+            headers={**headers, "Content-Type": "application/octet-stream"},
+            content=json_bytes(book_document()),
+        ).json()
+        lore = client.post(
+            path + f"/{lore_preview['import_id']}/commit",
+            headers=headers,
+            json={"reviewed_hash": lore_preview["reviewed_hash"]},
+        ).json()
+        entry = lore["entries"][0]
+        assert entry["common"] is False
+        visibility_path = path + f"/{lore['import_id']}/entries/{entry['id']}/common"
+        assert client.put(visibility_path, json={"common": True}).status_code == 401
+        assert client.put(visibility_path, headers=headers, json={"common": True}).json() == {
+            "common": True
+        }
+        stored_lore = next(
+            item for item in client.get(path, headers=headers).json() if item["kind"] == "lorebook"
+        )
+        assert stored_lore["entries"][0]["common"] is True
+        assert client.put(visibility_path, headers=headers, json={"common": False}).json() == {
+            "common": False
+        }
     assert "secret" not in logs.getvalue()
     asyncio.run(database.close())

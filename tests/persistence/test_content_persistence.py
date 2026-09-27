@@ -25,6 +25,7 @@ from livingworld.infrastructure.persistence.migration import (
     LEDGER_REVISION,
     MEMORY_TABLES,
     SIMULATION_TABLES,
+    WORLD_COMMON_LORE_TABLES,
     _alembic_config,
 )
 from livingworld.infrastructure.persistence.models import Base
@@ -273,6 +274,7 @@ def test_0005_takeover_preserves_every_runtime_and_audit_row(tmp_path, populate,
             not in SIMULATION_TABLES
             | ACTION_TABLES
             | CHAT_TABLES
+            | WORLD_COMMON_LORE_TABLES
             | MEMORY_TABLES
             | {
                 "local_player_bindings",

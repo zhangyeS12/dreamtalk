@@ -92,6 +92,12 @@ AcquireKnowledge 不变：既有源 → 显式渠道 Observation → 接收方�
 
 ## 4. 与其他模型的关系
 
+群聊的已发送 Message 对该群全部固定参与 Character 可见，也可由各 Character
+在后续私聊中读取自己所见的有限近期记录。这里的“看到”是通信范围，不将消息中的主张
+自动确认为 WorldTruth、CharacterBelief 或 PlayerKnowledge，也不伪造 Observation。
+世界书的公共背景由当前世界逐条明确开放，未开放的暗线不会进入角色提示；公共背景
+仍是创作素材，不是运行时事实。相关装配见 [CHAT_MODEL.md](CHAT_MODEL.md)。
+
 - **事件**：[EVENT_MODEL.md](EVENT_MODEL.md) 决定候选何时变成真实发生的事件；知识模型处理谁知道，不负责把候选变成事实。
 - **记忆**：[EPISODIC_MEMORY.md](EPISODIC_MEMORY.md) 处理 Character 如何从自己已授权的 Observation 显式形成不可变主观经历。Memory 不授予 Knowledge/Belief/Truth；CharacterBelief 也不自动生成 Memory。
 - **Director / Agent**：Director 的世界调度上下文与 Character Agent 的对话上下文具有不同职责；本文不规定其进程、接口或存储隔离方式。

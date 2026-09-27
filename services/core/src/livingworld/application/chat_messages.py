@@ -128,6 +128,14 @@ class ChatMessageStore(Protocol):
         allow_current_replies: bool,
     ) -> tuple[ChatMessage, ...]: ...
 
+    async def seen_group_messages(
+        self,
+        character_id: CharacterId,
+        player_id: PlayerId,
+        limit: int,
+        exclude_conversation_id: ConversationId | None,
+    ) -> tuple[ChatMessage, ...]: ...
+
     async def direct_turn(
         self, conversation_id: ConversationId, turn_id: ChatTurnId, player_id: PlayerId
     ) -> DirectTurnView: ...
@@ -246,6 +254,28 @@ class ChatMessageService:
             await self._player(conversation_id),
             current,
             allow_current_replies,
+        )
+
+    async def seen_group_messages(
+        self,
+        character_id: CharacterId,
+        *,
+        limit: int = 32,
+        exclude_conversation_id: ConversationId | None = None,
+    ) -> tuple[ChatMessage, ...]:
+        """Group delivery follows fixed membership, regardless of who spoke."""
+        if type(limit) is not int or not 1 <= limit <= 100:
+            raise ValueError("chat_page_limit_invalid")
+        if (
+            exclude_conversation_id is not None
+            and exclude_conversation_id.world_id != character_id.world_id
+        ):
+            raise EntityNotFoundError("chat_world_mismatch")
+        player = await self._players.selected_player(character_id.world_id)
+        if player is None:
+            raise EntityNotFoundError("selected_player_required")
+        return await self._store.seen_group_messages(
+            character_id, player, limit, exclude_conversation_id
         )
 
     async def direct_turn(

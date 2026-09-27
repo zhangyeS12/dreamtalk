@@ -16,6 +16,7 @@ from livingworld.domain.identifiers import WorldId
 from livingworld.infrastructure.clock import SystemWallClock
 from livingworld.infrastructure.persistence import Database
 from livingworld.infrastructure.persistence.migration import (
+    CHAT_COMPLETION_REVISION,
     CHAT_CONVERSATION_REVISION,
     CHAT_DISPATCH_REVISION,
     CHAT_MESSAGE_REVISION,
@@ -24,7 +25,43 @@ from livingworld.infrastructure.persistence.migration import (
     _alembic_config,
 )
 from livingworld.infrastructure.persistence.models import ChatTurnDispatchRecord, WorldRecord
+from lorebook_fixtures import book_document
 from sqlalchemy import text
+
+
+def test_existing_chat_database_adds_empty_common_lore_without_rewriting_imports(tmp_path):
+    async def run():
+        db = Database(tmp_path)
+        world = WorldId(uuid4())
+        try:
+            async with db.engine.begin() as connection:
+                await connection.run_sync(
+                    lambda sync: command.upgrade(_alembic_config(sync), CHAT_COMPLETION_REVISION)
+                )
+            handler = CommandHandler(
+                db.unit_of_work,
+                SystemWallClock(),
+                world_time_source=EffectiveWorldTimeSource(
+                    SystemWallClock(), SystemMonotonicClock()
+                ),
+            )
+            await handler.execute(
+                CreateWorld(request_id=RequestId(uuid4()), world_id=world, name="保留的世界")
+            )
+            imports = db.world_content_service()
+            pending = await imports.prepare(world, "lorebook", json_bytes(book_document()))
+            original = await imports.commit(
+                world, pending.item.import_id, pending.item.reviewed_hash
+            )
+            await db.initialize()
+            assert await imports.store.find(original.import_id) == original
+            assert await imports.list_common_lore(world) == ()
+            await db.initialize()
+            assert await imports.store.find(original.import_id) == original
+        finally:
+            await db.close()
+
+    asyncio.run(run())
 
 
 def test_existing_world_content_database_upgrades_without_recreating_world(tmp_path):

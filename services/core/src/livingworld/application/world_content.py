@@ -12,7 +12,7 @@ from livingworld.application.imports import (
     ImportDraft,
     ImportPreview,
 )
-from livingworld.domain.content.models import CanonicalContent
+from livingworld.domain.content.models import CanonicalContent, LoreEntry
 from livingworld.domain.identifiers import WorldId
 
 ImportKind = Literal["character", "lorebook"]
@@ -28,6 +28,12 @@ class AcceptedWorldContent:
     replaces_import_id: UUID | None = None
 
 
+@dataclass(frozen=True)
+class CommonLoreEntry:
+    import_id: UUID
+    entry: LoreEntry
+
+
 class WorldContentStore(Protocol):
     async def require_world(self, world_id: WorldId) -> None: ...
     async def list_imports(self, world_id: WorldId) -> tuple[AcceptedWorldContent, ...]: ...
@@ -36,6 +42,10 @@ class WorldContentStore(Protocol):
     async def accept(
         self, item: AcceptedWorldContent, preview: ImportPreview
     ) -> AcceptedWorldContent: ...
+    async def list_common_lore(self, world_id: WorldId) -> tuple[CommonLoreEntry, ...]: ...
+    async def set_common_lore(
+        self, world_id: WorldId, import_id: UUID, entry_id: UUID, common: bool
+    ) -> None: ...
 
 
 @dataclass(frozen=True)
@@ -126,3 +136,11 @@ class WorldContentService:
         result = await self.store.accept(pending.item, pending.preview)
         self._pending.pop(import_id, None)
         return result
+
+    async def list_common_lore(self, world_id: WorldId) -> tuple[CommonLoreEntry, ...]:
+        return await self.store.list_common_lore(world_id)
+
+    async def set_common_lore(
+        self, world_id: WorldId, import_id: UUID, entry_id: UUID, common: bool
+    ) -> None:
+        await self.store.set_common_lore(world_id, import_id, entry_id, common)

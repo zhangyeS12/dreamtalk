@@ -202,6 +202,22 @@ composer when the governed model and credential are available.
   context. Permission filtering happens before retrieval or prompt assembly.
 - A message can contain a false claim. Receiving or reading it does not silently
   promote that claim into WorldTruth or PlayerKnowledge.
+- Current group membership is fixed. Every committed group message is treated as
+  seen by every participant, including silent participants. The owner-scoped
+  group-message reader derives this from durable group membership and message
+  records; it does not create an Observation, CharacterBelief or EpisodicMemory.
+  A later direct or other group reply may use a bounded recent slice of messages
+  seen by that Character. The full transcript remains durable; prompt windows
+  are bounded and do not guarantee verbatim recall of all older messages.
+- Imported LoreEntry text is hidden from Character prompts by default. A local
+  world-scoped setting can explicitly mark an individual accepted Lorebook entry
+  as common background. Only entries from current accepted imports are read;
+  replacing a Lorebook requires fresh exposure review. Common entries are inert
+  lower-trust authored background, never WorldTruth or privileged instructions.
+  Source-disabled entries cannot be exposed. Current prompt assembly includes up to 16 enabled common entries and 12 KiB of
+  title/content in deterministic priority/order/ID order. Imported keyword,
+  regex, recursion and placement metadata is still not executed; conditional
+  Lorebook activation is separate work.
 - Hidden WorldEvents are not supplied to the player or a Character merely
   because they exist. Any later event context must pass the relevant owner's
   knowledge boundary.

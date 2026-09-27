@@ -35,11 +35,13 @@ WORLD_CONTENT_REVISION = "0017_world_content_imports"
 CHAT_CONVERSATION_REVISION = "0018_chat_conversations"
 CHAT_MESSAGE_REVISION = "0019_chat_messages"
 CHAT_DISPATCH_REVISION = "0020_chat_turn_dispatch"
-HEAD_REVISION = "0021_group_turn_completion"
+CHAT_COMPLETION_REVISION = "0021_group_turn_completion"
+HEAD_REVISION = "0022_world_common_lore"
 CHAT_IDENTITY_TABLES = {"chat_conversations", "chat_participants"}
 CHAT_MESSAGE_TABLES = {"chat_turns", "chat_messages"}
 CHAT_DISPATCH_TABLES = {"chat_turn_dispatches"}
 CHAT_TABLES = CHAT_IDENTITY_TABLES | CHAT_MESSAGE_TABLES | CHAT_DISPATCH_TABLES
+WORLD_COMMON_LORE_TABLES = {"world_common_lore"}
 LOCAL_PROFILE_TABLES = {"local_user_profile", "local_world_profiles"}
 BUDGET_TABLES = {"llm_budgets", "llm_budget_reservations"}
 SIMULATION_TABLES = {
@@ -192,10 +194,10 @@ def _current_revision(connection: Connection) -> str:
 
 
 def _validate_managed_state(connection: Connection, revision: str) -> None:
-    # 0021 is an additive nullable column on the reviewed 0020 table shape.
-    # Keep the 0020 table-presence rules, but validate its extra column only at 0021.
-    pre_completion_revision = revision != HEAD_REVISION
-    if revision == HEAD_REVISION:
+    # 0021 adds a nullable column; 0022 adds one independent local table.
+    pre_completion_revision = revision not in {CHAT_COMPLETION_REVISION, HEAD_REVISION}
+    pre_common_lore_revision = revision != HEAD_REVISION
+    if revision in {CHAT_COMPLETION_REVISION, HEAD_REVISION}:
         revision = CHAT_DISPATCH_REVISION
     if revision not in {
         LEGACY_REVISION,
@@ -344,6 +346,8 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         expected -= LOCAL_PROFILE_TABLES
     if revision != CHAT_DISPATCH_REVISION:
         expected -= {"world_content_imports"}
+    if pre_common_lore_revision:
+        expected -= WORLD_COMMON_LORE_TABLES
     if tables != expected:
         _fail("alembic_schema_state_mismatch")
     _validate_auxiliary_objects(connection, domain_present)
@@ -355,6 +359,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
             pre_message_revision=pre_message_revision,
             pre_dispatch_revision=pre_dispatch_revision,
             pre_completion_revision=pre_completion_revision,
+            pre_common_lore_revision=pre_common_lore_revision,
         )
     if revision in {
         CONTENT_REVISION,
@@ -407,6 +412,7 @@ def _validate_domain_shape(
     pre_message_revision: bool | None = None,
     pre_dispatch_revision: bool | None = None,
     pre_completion_revision: bool = True,
+    pre_common_lore_revision: bool = True,
 ) -> None:
     """Detect partial/mismatched schemas; never infer a revision from them."""
 
@@ -432,6 +438,8 @@ def _validate_domain_shape(
         "ck_command_receipt_command_result",
     }
     for table in metadata.sorted_tables:
+        if pre_common_lore_revision and table.name in WORLD_COMMON_LORE_TABLES:
+            continue
         if pre_chat_revision and table.name in CHAT_IDENTITY_TABLES:
             continue
         if pre_message_revision and table.name in CHAT_MESSAGE_TABLES:

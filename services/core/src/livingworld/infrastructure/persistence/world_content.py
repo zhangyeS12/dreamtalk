@@ -3,13 +3,14 @@
 from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 
 from livingworld.application.content import ContentConflictError
 from livingworld.application.errors import EntityNotFoundError
 from livingworld.application.imports import ImportPreview
-from livingworld.application.world_content import AcceptedWorldContent
+from livingworld.application.world_content import AcceptedWorldContent, CommonLoreEntry
+from livingworld.domain.content.models import LoreEntry
 from livingworld.domain.content.serialization import (
     deserialize_content,
     parse_json,
@@ -18,7 +19,11 @@ from livingworld.domain.content.serialization import (
 )
 from livingworld.domain.identifiers import WorldId
 from livingworld.infrastructure.persistence.content_repository import save_content_draft
-from livingworld.infrastructure.persistence.models import WorldContentImportRecord, WorldRecord
+from livingworld.infrastructure.persistence.models import (
+    WorldCommonLoreRecord,
+    WorldContentImportRecord,
+    WorldRecord,
+)
 
 
 def _load(row: WorldContentImportRecord) -> AcceptedWorldContent:
@@ -71,6 +76,93 @@ class SqlAlchemyWorldContentStore:
                 )
             )
             return successor is None
+
+    async def list_common_lore(self, world_id: WorldId) -> tuple[CommonLoreEntry, ...]:
+        """Only explicitly exposed entries from current imports in this world."""
+        async with self._sessions() as session:
+            rows = (
+                await session.execute(
+                    select(WorldCommonLoreRecord, WorldContentImportRecord)
+                    .join(
+                        WorldContentImportRecord,
+                        WorldCommonLoreRecord.import_id == WorldContentImportRecord.import_id,
+                    )
+                    .where(
+                        WorldCommonLoreRecord.world_id == world_id.value,
+                        WorldContentImportRecord.world_id == world_id.value,
+                        ~WorldContentImportRecord.import_id.in_(
+                            select(WorldContentImportRecord.replaces_import_id).where(
+                                WorldContentImportRecord.replaces_import_id.is_not(None)
+                            )
+                        ),
+                    )
+                    .order_by(WorldCommonLoreRecord.import_id, WorldCommonLoreRecord.entry_id)
+                )
+            ).all()
+            decoded: dict[UUID, dict[UUID, LoreEntry]] = {}
+            results = []
+            for exposure, imported in rows:
+                if imported.import_id not in decoded:
+                    decoded[imported.import_id] = {
+                        item.content_id.value: item
+                        for item in _load(imported).contents
+                        if isinstance(item, LoreEntry)
+                    }
+                entries = decoded[imported.import_id]
+                if entry := entries.get(exposure.entry_id):
+                    results.append(CommonLoreEntry(imported.import_id, entry))
+            return tuple(results)
+
+    async def set_common_lore(
+        self, world_id: WorldId, import_id: UUID, entry_id: UUID, common: bool
+    ) -> None:
+        async with self._sessions() as session, session.begin():
+            await session.connection(execution_options={"livingworld_write_intent": True})
+            imported = await session.get(WorldContentImportRecord, import_id)
+            successor = await session.scalar(
+                select(WorldContentImportRecord.import_id).where(
+                    WorldContentImportRecord.replaces_import_id == import_id
+                )
+            )
+            entry = (
+                next(
+                    (
+                        item
+                        for item in _load(imported).contents
+                        if isinstance(item, LoreEntry) and item.content_id.value == entry_id
+                    ),
+                    None,
+                )
+                if imported is not None
+                and imported.world_id == world_id.value
+                and imported.kind == "lorebook"
+                else None
+            )
+            if (
+                imported is None
+                or imported.world_id != world_id.value
+                or imported.kind != "lorebook"
+                or successor is not None
+                or entry is None
+                or (common and not entry.enabled)
+            ):
+                raise EntityNotFoundError("current_lore_entry_not_found")
+            key = (world_id.value, import_id, entry_id)
+            if common:
+                if await session.get(WorldCommonLoreRecord, key) is None:
+                    session.add(
+                        WorldCommonLoreRecord(
+                            world_id=world_id.value, import_id=import_id, entry_id=entry_id
+                        )
+                    )
+            else:
+                await session.execute(
+                    delete(WorldCommonLoreRecord).where(
+                        WorldCommonLoreRecord.world_id == world_id.value,
+                        WorldCommonLoreRecord.import_id == import_id,
+                        WorldCommonLoreRecord.entry_id == entry_id,
+                    )
+                )
 
     async def accept(
         self, item: AcceptedWorldContent, preview: ImportPreview

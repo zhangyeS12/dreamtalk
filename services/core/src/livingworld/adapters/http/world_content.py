@@ -24,7 +24,12 @@ class Confirmation(BaseModel):
     reviewed_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
 
 
-def _view(item: AcceptedWorldContent) -> dict:
+class LoreExposure(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    common: bool
+
+
+def _view(item: AcceptedWorldContent, common_ids: set[tuple[UUID, UUID]] | None = None) -> dict:
     characters = [root for root in item.contents if isinstance(root, CharacterDefinition)]
     collections = [root for root in item.contents if isinstance(root, LoreCollection)]
     return {
@@ -58,6 +63,8 @@ def _view(item: AcceptedWorldContent) -> dict:
                 "title": root.title,
                 "keywords": list(root.keywords),
                 "content": root.content,
+                "enabled": root.enabled,
+                "common": (item.import_id, root.content_id.value) in (common_ids or set()),
             }
             for root in item.contents
             if isinstance(root, LoreEntry)
@@ -74,7 +81,12 @@ def world_content_router(service: WorldContentService, authorize) -> APIRouter:
     @router.get("")
     async def list_imports(world_id: UUID) -> list[dict]:
         try:
-            return [_view(item) for item in await service.store.list_imports(WorldId(world_id))]
+            identity = WorldId(world_id)
+            common = {
+                (item.import_id, item.entry.content_id.value)
+                for item in await service.list_common_lore(identity)
+            }
+            return [_view(item, common) for item in await service.store.list_imports(identity)]
         except EntityNotFoundError:
             raise HTTPException(404, "world_not_found") from None
 
@@ -123,5 +135,15 @@ def world_content_router(service: WorldContentService, authorize) -> APIRouter:
     async def discard(world_id: UUID, import_id: UUID) -> dict:
         service.discard(WorldId(world_id), import_id)
         return {"discarded": True}
+
+    @router.put("/{import_id}/entries/{entry_id}/common")
+    async def set_common_lore(
+        world_id: UUID, import_id: UUID, entry_id: UUID, body: LoreExposure
+    ) -> dict:
+        try:
+            await service.set_common_lore(WorldId(world_id), import_id, entry_id, body.common)
+            return {"common": body.common}
+        except EntityNotFoundError:
+            raise HTTPException(404, "current_lore_entry_not_found") from None
 
     return router
