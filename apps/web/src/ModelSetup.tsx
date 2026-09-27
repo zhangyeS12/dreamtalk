@@ -65,12 +65,13 @@ export function ModelSetup({ client, turnTokenCeiling, onConfigured = () => wind
 
   const inputBound = Number(inputLimit);
   const outputBound = Number(outputLimit);
+  const trustedBoundsReady = Number.isSafeInteger(inputBound) && inputBound >= 1 && inputBound <= 1_000_000
+    && Number.isSafeInteger(outputBound) && outputBound >= 1 && outputBound <= 100_000;
   const editing = status !== "unconfigured" && managed !== null;
   const secretRequired = !editing || status !== "ready" || providerKind !== managed?.provider_kind;
   const valid = modelId.length > 0 && modelId.length <= 128 && modelId.trim() === modelId && !/\s/.test(modelId)
     && secret.length <= 4096 && (!secretRequired || secret.length > 0)
-    && Number.isSafeInteger(inputBound) && inputBound >= 1 && inputBound <= 1_000_000
-    && Number.isSafeInteger(outputBound) && outputBound >= 1 && outputBound <= 100_000
+    && trustedBoundsReady
     && (providerKind !== "openai-compatible" || /^https?:\/\//.test(baseUrl));
 
   const save = async (event: FormEvent) => {
@@ -115,7 +116,8 @@ export function ModelSetup({ client, turnTokenCeiling, onConfigured = () => wind
         {providerKind === "openai-compatible" ? <label className="field"><span>服务地址</span><input type="url" value={baseUrl} disabled={saving} onChange={event => setBaseUrl(event.target.value)} placeholder="https://example.com/v1" /></label> : null}
         <label className="field"><span>{secretRequired ? "API 密钥" : "新 API 密钥（可留空）"}</span><input type="password" autoComplete="off" value={secret} disabled={saving} onChange={event => setSecret(event.target.value)} maxLength={4096} placeholder={secretRequired ? "仅保存在 Windows 安全凭据存储" : "留空则沿用现有密钥；不会显示现有密钥"} /></label>
       </div>
-      <details className="model-advanced"><summary>高级设置：可信 Token 上界（必填）</summary><p className="inline-hint">请按所选模型的官方说明填写单次请求可能计费的输入上限和允许的输出上限。系统会在每次调用前保守预留；没有可信上界就不会启动模型请求。</p><div className="model-setup-fields"><label className="field"><span>单次输入 Token 上界</span><input type="number" min="1" max="1000000" step="1" value={inputLimit} disabled={saving} onChange={event => setInputLimit(event.target.value)} /></label><label className="field"><span>单次输出 Token 上界</span><input type="number" min="1" max="100000" step="1" value={outputLimit} disabled={saving} onChange={event => setOutputLimit(event.target.value)} /></label></div></details>
+      {!trustedBoundsReady ? <p className="inline-hint" role="status">保存前请展开下方高级设置，填写可信的输入和输出 Token 上界。</p> : null}
+      <details className="model-advanced"><summary>高级设置：可信 Token 上界（必填，点击展开）</summary><p className="inline-hint">请按所选模型的官方说明填写单次请求可能计费的输入上限和允许的输出上限。系统会在每次调用前保守预留；没有可信上界就不会启动模型请求。</p><div className="model-setup-fields"><label className="field"><span>单次输入 Token 上界</span><input type="number" min="1" max="1000000" step="1" value={inputLimit} disabled={saving} onChange={event => setInputLimit(event.target.value)} /></label><label className="field"><span>单次输出 Token 上界</span><input type="number" min="1" max="100000" step="1" value={outputLimit} disabled={saving} onChange={event => setOutputLimit(event.target.value)} /></label></div></details>
       <div className="group-actions"><button type="submit" className="primary-button" disabled={!valid || saving}>{saving ? "正在保存并重启核心…" : editing ? "更新模型设置" : "保存模型设置"}</button></div>
       <p className="inline-hint">保存后核心会重新启动，页面自动连接。不会测试密钥有效性，也不会在设置时产生模型费用。更新失败时会恢复原配置。</p>
     </form> : null}

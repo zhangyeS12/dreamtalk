@@ -81,6 +81,7 @@ export function WorldImports({ client, worldId }: { client: CoreClient; worldId:
     } finally { setBusy(false); }
   };
   return <section className="settings-section import-section"><div className="section-heading"><h2>导入内容</h2><p>预览确认后加入当前世界，其他世界的版本保持独立。</p></div>
+    {(kind === "lorebook" || accepted.some(item => item.kind === "lorebook")) && <p className="inline-hint">世界书目前可导入、查看和更新，但尚不会影响聊天回复。</p>}
     {replacement && <p className="inline-hint">正在更新：{replacement.characters[0]?.name ?? replacement.lorebooks[0]?.name} <button type="button" className="text-action" disabled={busy || !!preview} onClick={() => setReplacement(null)}>取消更新</button></p>}
     <label className="field"><span>内容类型</span><select value={kind} disabled={busy || !!preview || !!replacement} onChange={event => setKind(event.target.value as typeof kind)}><option value="character">角色卡（PNG / JSON）</option><option value="lorebook">世界书（JSON）</option></select></label>
     <label className="field import-file"><span>选择文件</span><input type="file" disabled={busy} accept={kind === "character" ? ".png,.json" : ".json"} onChange={event => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void upload(file); }} /></label>
