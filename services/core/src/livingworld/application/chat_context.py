@@ -27,6 +27,7 @@ _MAX_CHAT_TRANSCRIPT_BYTES = 96 * 1024
 _MAX_CARD_GREETING_BYTES = 8 * 1024
 _MAX_COMMON_LORE_BYTES = 12 * 1024
 _MAX_COMMON_LORE_ITEMS = 16
+_MAX_COMMON_LORE_MATCH_CHARS = 4096
 _MAX_GROUP_EXPOSURE_BYTES = 8 * 1024
 
 _SYSTEM = (
@@ -82,14 +83,29 @@ async def private_chat_memories(
 async def common_chat_lore(
     reader: Callable[[WorldId], Awaitable[tuple[CommonLoreEntry, ...]]] | None,
     world_id: WorldId,
+    *,
+    relevance_text: str = "",
 ) -> list[dict[str, str]]:
-    """Only user-exposed current-world background, bounded before prompt assembly."""
+    """Rank only user-exposed background by literal current-message keyword relevance."""
     if reader is None:
         return []
     entries = await reader(world_id)
+    recent_text = relevance_text[-_MAX_COMMON_LORE_MATCH_CHARS:].casefold()
+
+    def rank(item: CommonLoreEntry) -> tuple[int, int, int, str]:
+        matched = bool(recent_text) and any(
+            key.strip() and key.casefold() in recent_text for key in item.entry.keywords
+        )
+        return (
+            -int(matched),
+            -item.entry.priority,
+            item.entry.order,
+            str(item.entry.content_id.value),
+        )
+
     ordered = sorted(
         (item for item in entries if item.entry.enabled),
-        key=lambda item: (-item.entry.priority, item.entry.order, str(item.entry.content_id.value)),
+        key=rank,
     )
     selected: list[dict[str, str]] = []
     used = 0
@@ -231,7 +247,9 @@ class DirectChatContextBuilder:
                 self._messages, conversation.character_id
             ),
             "common_world_background": await common_chat_lore(
-                self._common_lore_reader, conversation_id.world_id
+                self._common_lore_reader,
+                conversation_id.world_id,
+                relevance_text=sent.message.text,
             ),
         }
         if greeting := card_greeting_example(character):

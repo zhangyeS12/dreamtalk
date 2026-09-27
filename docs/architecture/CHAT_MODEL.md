@@ -216,10 +216,15 @@ composer when the governed model and credential are available.
   as common background. Only entries from current accepted imports are read;
   replacing a Lorebook requires fresh exposure review. Common entries are inert
   lower-trust authored background, never WorldTruth or privileged instructions.
-  Source-disabled entries cannot be exposed. Current prompt assembly includes up to 16 enabled common entries and 12 KiB of
-  title/content in deterministic priority/order/ID order. Imported keyword,
-  regex, recursion and placement metadata is still not executed; conditional
-  Lorebook activation is separate work.
+  Source-disabled entries cannot be exposed. Current prompt assembly includes up
+  to 16 enabled common entries and 12 KiB of title/content. A plain literal,
+  case-insensitive match between a public entry's primary keyword and the last
+  4096 characters of the current Player message moves that entry ahead of other
+  public entries; ties retain deterministic priority/order/ID ordering. This is
+  relevance ranking inside an already-authorized set, not permission or factual
+  activation. Secondary-key logic, source regex, recursion, probability, scripts
+  and placement metadata are not executed; conditional Lorebook activation for
+  otherwise hidden entries remains separate work.
 - Hidden WorldEvents are not supplied to the player or a Character merely
   because they exist. Any later event context must pass the relevant owner's
   knowledge boundary.
