@@ -1,14 +1,26 @@
 import { useEffect, useRef, useState } from "react";
 import { CoreClient, CoreRequestError, type WorldContentItem } from "@dreamtalk/api-client";
 
+function originalCardGreeting(authored: Record<string, unknown>): string | null {
+  const card = authored.character_card;
+  if (!card || typeof card !== "object" || Array.isArray(card)) return null;
+  const greeting = (card as Record<string, unknown>).first_mes;
+  return typeof greeting === "string" && greeting.trim() ? greeting : null;
+}
+
 function ContentDetails({ item }: { item: WorldContentItem }) {
   return <div className="content-details">
-    {item.characters.map(character => <section key={character.id}><h2>{character.name}</h2>{([
+    {item.characters.map(character => {
+      const greeting = originalCardGreeting(character.authored_instructions);
+      return <section key={character.id}><h2>{character.name}</h2>{([
       ["角色描述", character.description], ["性格", character.personality],
       ["背景", character.background], ["情境", character.scenario],
       ["说话方式", character.speech_guidance], ["创作者备注", character.creator_notes],
       ["标签", character.tags.join("、")], ["对话示例", character.example_dialogue.join("\n")],
-    ] as const).filter(([, value]) => value).map(([label, value]) => <div key={label}><h3>{label}</h3><p>{value}</p></div>)}</section>)}
+    ] as const).filter(([, value]) => value).map(([label, value]) => <div key={label}><h3>{label}</h3><p>{value}</p></div>)}
+      {greeting && <div><h3>角色卡开场白（原文）</h3><p>{greeting}</p><small>仅供查看，不会自动发送到聊天。</small></div>}
+    </section>;
+    })}
     {item.characters.some(character => Object.keys(character.authored_instructions).length > 0) && <details><summary>角色卡附加设定</summary>{item.characters.map(character => <pre key={character.id}>{JSON.stringify(character.authored_instructions, null, 2)}</pre>)}</details>}
     {item.lorebooks.map(book => <section key={book.id}><h2>{book.name}</h2><p>{book.description}</p></section>)}
     {item.entries.length > 0 && <details><summary>世界书条目（{item.entries.length}）</summary>{item.entries.map((entry, index) => <div key={entry.id}><h3>{entry.title || `条目 ${index + 1}`}</h3>{entry.keywords.length > 0 && <p>关键词：{entry.keywords.join("、")}</p>}<p>{entry.content}</p></div>)}</details>}
