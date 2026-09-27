@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { CoreClient, CoreRequestError, type ChatConversation, type ChatMessage } from "@dreamtalk/api-client";
+import { useChatScroll } from "./useChatScroll";
 
 interface Props {
   client: CoreClient;
@@ -19,10 +20,10 @@ export function ChatTranscript({ client, worldId, playerId, conversation, tokenC
   const [pendingSend, setPendingSend] = useState<{ text: string; ceiling: number; requestId: string } | null>(null);
   const [sending, setSending] = useState(false);
   const [feedback, setFeedback] = useState("");
+  const thread = useChatScroll(messages);
 
   useEffect(() => {
     let active = true;
-    setMessages(null);
     setFailed(false);
     void client.conversationMessages(worldId, conversation.conversation_id).then(items => {
       if (active) setMessages(items);
@@ -76,7 +77,7 @@ export function ChatTranscript({ client, worldId, playerId, conversation, tokenC
     }
   };
 
-  return <section className="chat-thread" aria-label={`${conversation.character_name}的会话`}>
+  return <section ref={thread} className="chat-thread" aria-label={`${conversation.character_name}的会话`}>
     <div className="thread-heading">
       <button type="button" className="text-action" onClick={onBack}>返回聊天</button>
       <h2>{conversation.character_name}</h2><span>私聊</span>
