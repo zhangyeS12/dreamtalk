@@ -90,3 +90,27 @@ it("explains a budget denial without replaying an already saved player message",
   expect(sendPlayerMessage).toHaveBeenCalledOnce();
   expect(generateDirectReply).toHaveBeenCalledOnce();
 });
+
+it("releases a rejected message for editing but reuses identity after an uncertain save", async () => {
+  const sendPlayerMessage = vi.fn()
+    .mockRejectedValueOnce(new CoreRequestError(422))
+    .mockRejectedValueOnce(new Error("connection lost"))
+    .mockRejectedValueOnce(new Error("connection lost"));
+  const client = { conversationMessages: vi.fn().mockResolvedValue([]), sendPlayerMessage,
+    directReplyAvailability: vi.fn().mockResolvedValue({ available: true }) } as unknown as CoreClient;
+  render(<ChatTranscript client={client} worldId="world-a" playerId="player-a" conversation={conversation} tokenCeiling={50_000} onBack={() => {}} />);
+  const draft = await screen.findByRole("textbox");
+  await waitFor(() => expect(draft).toHaveProperty("disabled", false));
+  fireEvent.change(draft, { target: { value: "原文" } });
+  fireEvent.click(screen.getByRole("button", { name: "发送" }));
+  await screen.findByText(/消息未保存/);
+  expect(draft).toHaveProperty("disabled", false);
+  fireEvent.change(draft, { target: { value: "修改后" } });
+  fireEvent.click(screen.getByRole("button", { name: "发送" }));
+  await screen.findByText(/保存结果尚未确认/);
+  expect(draft).toHaveProperty("disabled", true);
+  fireEvent.click(screen.getByRole("button", { name: "重试保存" }));
+  await waitFor(() => expect(sendPlayerMessage).toHaveBeenCalledTimes(3));
+  expect(sendPlayerMessage.mock.calls[1]?.slice(2)).toEqual(sendPlayerMessage.mock.calls[2]?.slice(2));
+  expect(sendPlayerMessage.mock.calls[0]?.[4]).not.toBe(sendPlayerMessage.mock.calls[1]?.[4]);
+});

@@ -105,8 +105,13 @@ export function GroupChatDetails({ client, worldId, playerId, group, tokenCeilin
           ? "这一轮未获预算授权或额度已耗尽。请核对每轮 Token 额度、模型可信上界与费用预算；已有发言会保留，系统不会自动重试。"
           : "这一轮未能完整结束，已有发言仍会保留。为避免重复消耗，系统不会自动重试；你可以发送新消息。");
       }
-    } catch {
-      setFeedback("消息保存结果尚未确认。可重试保存同一条消息，不会创建重复回合。");
+    } catch (failure) {
+      if (failure instanceof CoreRequestError && failure.status >= 400 && failure.status < 500) {
+        setPending(null);
+        setFeedback("消息未保存。请检查内容、当前世界和会话后修改重试。");
+      } else {
+        setFeedback("消息保存结果尚未确认。可重试保存同一条消息，不会创建重复回合。");
+      }
     } finally { setSending(false); }
   };
 

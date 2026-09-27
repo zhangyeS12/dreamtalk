@@ -72,3 +72,25 @@ it("reports group budget denial without replaying the saved turn", async () => {
   expect(sendGroupMessage).toHaveBeenCalledOnce();
   expect(generateGroupReply).toHaveBeenCalledOnce();
 });
+
+it("lets the player edit a group message rejected before persistence", async () => {
+  const group: GroupChatConversation = { conversation_id: "group-a", player_id: "player-a", kind: "group", participants: [
+    { character_id: "character-a", root_import_id: "card-a", character_name: "角色甲" },
+    { character_id: "character-b", root_import_id: "card-b", character_name: "角色乙" },
+  ] };
+  const sendGroupMessage = vi.fn().mockRejectedValue(new CoreRequestError(422));
+  const client = { conversationMessages: vi.fn().mockResolvedValue([]), sendGroupMessage,
+    groupReplyAvailability: vi.fn().mockResolvedValue({ available: true }) } as unknown as CoreClient;
+  render(<GroupChatDetails client={client} worldId="world-a" playerId="player-a" group={group} tokenCeiling={500} onBack={() => {}} />);
+  const draft = await screen.findByRole("textbox", { name: "发送群聊消息" });
+  await waitFor(() => expect(draft).toHaveProperty("disabled", false));
+  fireEvent.change(draft, { target: { value: "原文" } });
+  fireEvent.click(screen.getByRole("button", { name: "发送" }));
+  await screen.findByText(/消息未保存/);
+  expect(draft).toHaveProperty("disabled", false);
+  fireEvent.change(draft, { target: { value: "修改后" } });
+  fireEvent.click(screen.getByRole("button", { name: "发送" }));
+  await waitFor(() => expect(sendGroupMessage).toHaveBeenCalledTimes(2));
+  expect(sendGroupMessage.mock.calls[1]?.[2]).toBe("修改后");
+  expect(sendGroupMessage.mock.calls[0]?.[4]).not.toBe(sendGroupMessage.mock.calls[1]?.[4]);
+});
