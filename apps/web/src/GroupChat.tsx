@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { CoreClient, CoreRequestError, type ChatMessage, type GroupChatConversation, type WorldContentItem } from "@dreamtalk/api-client";
 import { useChatScroll } from "./useChatScroll";
+import { ChatMessageBody } from "./ChatMessageBody";
 
 export function GroupChatSetup({ client, worldId, onCreated, onBack }: {
   client: CoreClient;
@@ -122,7 +123,7 @@ export function GroupChatDetails({ client, worldId, playerId, group, tokenCeilin
     <div className="thread-heading"><button type="button" className="text-action" onClick={onBack}>返回聊天</button><h2>{group.participants.map(item => item.character_name).join("、")}</h2><span>群聊</span><button type="button" className="text-action transcript-refresh" onClick={() => setRefresh(value => value + 1)}>刷新记录</button></div>
     {messages === null ? <p className="thread-hint">正在读取消息…</p> : messages.length === 0 ? <div className="conversation-placeholder"><h2>还没有消息</h2><p>发一条消息，开始群聊。</p></div> : <ol className="message-list">{messages.map(message => {
       const own = message.sender_kind === "player" && message.sender_id === playerId;
-      return <li key={message.message_id} className={`message-row ${own ? "own" : ""}`}><div className="message-bubble"><span className="message-sender">{own ? "我" : names.get(message.sender_id) ?? "角色"}</span><p>{message.text}</p><time dateTime={message.created_at_utc}>{new Date(message.created_at_utc).toLocaleString("zh-CN")}</time></div></li>;
+      return <li key={message.message_id} className={`message-row ${own ? "own" : ""}`}><div className="message-bubble"><span className="message-sender">{own ? "我" : names.get(message.sender_id) ?? "角色"}</span><ChatMessageBody text={message.text} /><time dateTime={message.created_at_utc}>{new Date(message.created_at_utc).toLocaleString("zh-CN")}</time></div></li>;
     })}</ol>}
     <form className="chat-composer" onSubmit={event => void send(event)}>
       {feedback ? <p role="status" className="chat-feedback">{feedback}</p> : null}

@@ -168,7 +168,15 @@
 .message-bubble { max-width: min(72%, 680px); min-width: 100px; padding: 12px 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); overflow-wrap: anywhere; }
 .message-row.own .message-bubble { background: var(--green-soft); }
 .message-sender { color: var(--muted); font-size: .78rem; }
-.message-bubble p { margin: 7px 0 10px; white-space: pre-wrap; line-height: 1.6; }
+.message-content { margin: 7px 0 10px; line-height: 1.6; }
+.message-content p { margin: 0 0 .55em; white-space: pre-wrap; }
+.message-content > :last-child { margin-bottom: 0; }
+.message-content ul, .message-content ol { padding-left: 1.5em; margin: .4em 0; }
+.message-content blockquote { margin: .5em 0; padding-left: .8em; border-left: 2px solid var(--line); color: var(--muted); }
+.message-content pre { max-width: 100%; overflow-x: auto; padding: .6em; border-radius: 6px; background: var(--page); }
+.message-content code { font-size: .9em; }
+.message-content a { overflow-wrap: anywhere; }
+.message-image-placeholder { color: var(--muted); font-size: .85em; }
 .message-bubble time { display: block; color: var(--muted); font-size: .72rem; text-align: right; }
 .transcript-status { margin: 0; padding: 12px 24px 24px; text-align: center; color: var(--muted); font-size: .82rem; }
 .chat-composer { position: sticky; bottom: 0; display: flex; flex-direction: column; gap: 9px; padding: 14px 24px; border-top: 1px solid var(--line); background: var(--surface); }

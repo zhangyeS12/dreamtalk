@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { CoreClient, CoreRequestError, type ChatConversation, type ChatMessage } from "@dreamtalk/api-client";
 import { useChatScroll } from "./useChatScroll";
+import { ChatMessageBody } from "./ChatMessageBody";
 
 interface Props {
   client: CoreClient;
@@ -91,7 +92,7 @@ export function ChatTranscript({ client, worldId, playerId, conversation, tokenC
             return <li key={message.message_id} className={`message-row ${own ? "own" : ""}`}>
               <div className="message-bubble">
                 <span className="message-sender">{own ? "我" : conversation.character_name}</span>
-                <p>{message.text}</p>
+                <ChatMessageBody text={message.text} />
                 <time dateTime={message.created_at_utc}>{new Date(message.created_at_utc).toLocaleString("zh-CN")}</time>
               </div>
             </li>;
