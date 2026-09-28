@@ -4,15 +4,17 @@ This file is a permanent instruction for all Codex work in this repository.
 
 The public project name is dreamtalk. Existing `livingworld` code, storage and protocol identifiers remain compatibility boundaries; see [PROJECT_IDENTITY.md](docs/architecture/PROJECT_IDENTITY.md). This naming change does not alter any product or architecture rule below.
 
+Last reconciled with the user's confirmed instructions: 2026-09-28. Later explicit user instructions take precedence over this file. Earlier numbered task restrictions describe those tasks, not a permanent prohibition on subsequently authorized product work.
+
 Before starting ANY dreamtalk engineering task:
 
 1. Read this file completely.
-2. Read the current task specification completely.
+2. Read the current task specification completely and read `HANDOFF.md` when present.
 3. Read the architecture/product documents relevant to the task.
 4. Inspect the existing repository before modifying anything.
 5. Do not begin implementation until the task boundary is understood.
 
-If a task instruction conflicts with this file, STOP and report the conflict instead of guessing.
+Apply the user's latest explicit decisions when they supersede older rules. Stop the affected work only when an essential product/architecture decision remains genuinely undefined; do not ask the user to reconfirm decisions already made.
 
 ---
 
@@ -49,6 +51,8 @@ We do NOT intentionally create disposable architecture merely to obtain a quick 
 The important illusion dreamtalk must create is:
 
 "The world continues to exist when I am not looking at it."
+
+Immersive roleplay chat is the core experience. World progression and player-known events support conversations and supply topics; they must not turn the ordinary interface into a simulation dashboard. Remote direct and group chat are allowed without moving participants.
 
 A player may be talking to Alice while elsewhere:
 
@@ -487,21 +491,15 @@ Prefer the simplest architecture that satisfies the final product requirements.
 
 # 14. User's working style
 
-The user prefers a clear complete roadmap.
+The user has authorized autonomous progress toward a usable complete product and does not want to provide a separate prompt for every implementation step. Complete concrete product slices and continue other authorized, well-defined work; do not stop merely because one historical stage/task ended.
 
-Work is performed stage by stage.
+An explicit current task boundary still applies. A request to only answer, only edit documentation, or stop after a particular task must be respected.
 
-A stage must be completed and validated before proceeding.
+For local uncertainty or a difficult implementation branch: record confirmed facts, the unresolved point and useful evidence; skip that branch and continue independent work that is clear. Do not guess unresolved semantics or repeatedly attack a blocked path.
 
-Do not secretly begin later stages because:
+Stop the dependent work and report when a genuinely new product direction, public contract, persistence, security or financial decision requires the user's judgment, or a frozen architectural boundary would need to change. Ordinary implementation choices are the engineer's responsibility.
 
-"it was easy to add while I was here."
-
-Do not expand task scope.
-
-Do not implement speculative features.
-
-Do not create placeholder production behavior that violates frozen architecture.
+Do not implement speculative features or placeholder production behavior that violates frozen architecture. Prioritize usable chat, real settings and configuration effects over extra architecture for its own sake.
 
 The user values:
 
@@ -561,8 +559,8 @@ CLI
 logs
 process inspection
 configuration files
-test commands
 direct API calls
+build output
 
 whenever equivalent verification is possible.
 
@@ -582,11 +580,7 @@ Ask:
 
 "What cheaper diagnostic can I run?"
 
-If the same blocker still cannot be resolved after approximately 20 minutes of focused diagnosis:
-
-STOP.
-
-Report:
+If the same local blocker still cannot be resolved after approximately 20 minutes of focused diagnosis, stop that branch, record:
 
 - what is blocked;
 - exact error;
@@ -595,11 +589,11 @@ Report:
 - likely causes;
 - recommended next action.
 
-Do not burn another hour silently.
+Then continue independent, well-defined work. Ask the user only if their decision or intervention is necessary. These timeboxes are limits, not permission to keep hammering a problem that should already have been set aside.
 
 ## Long-running command rule
 
-A legitimately long build/test command is different from being stuck.
+A legitimately long build command is different from being stuck.
 
 Long commands are allowed when:
 
@@ -613,13 +607,13 @@ A silent/unresponsive process without evidence of progress must not be assumed h
 
 When blocked, use this sequence:
 
-1. reproduce once;
+1. inspect the existing failure evidence;
 2. capture exact evidence;
 3. inspect logs/state;
 4. form a hypothesis;
-5. test the hypothesis with the cheapest targeted test;
+5. check the hypothesis with the cheapest authorized inspection or build step;
 6. try one alternative approach;
-7. if still blocked, report.
+7. if still blocked, record and skip the branch; report any required user decision or intervention.
 
 Never use:
 
@@ -642,13 +636,12 @@ Prefer deterministic tools.
 Examples:
 
 Prefer:
-pytest
-cargo test
-npm test
-curl/TestClient
+git status/diff/log
+rg and source/configuration inspection
 logs
 process status
 filesystem inspection
+build output
 
 over:
 
@@ -657,19 +650,15 @@ clicking buttons repeatedly
 waiting for UI animations
 guessing whether a window "probably worked"
 
-GUI smoke testing is useful only for validating an actual user-visible integration after underlying components are already verified.
+Do not write or run automated tests or smoke checks unless the user explicitly requests them again; see section 20. GUI inspection is not evidence that unperformed acceptance tests passed.
 
 ---
 
 # 17. Scope discipline
 
-Every engineering task has an explicit boundary.
+Respect the current explicit task boundary. Historical task instructions to stop after C-003, C-004, etc. do not override the user's later authorization to continue the product autonomously.
 
-If assigned C-003:
-
-complete C-003.
-
-Do not begin C-004.
+When the active request is to continue the project, complete the next useful, sufficiently specified slice. Do not ask for another stage prompt merely to proceed.
 
 If a future feature needs an interface now, create the smallest clean seam required.
 
@@ -685,7 +674,7 @@ or:
 
 Unresolved issue
 
-Do not expand the current task unless the task cannot be correctly completed without doing so.
+Do not expand a narrowly scoped current task. Under ongoing product authorization, recorded future work may be taken up when its requirements are clear and it advances the agreed product.
 
 ---
 
@@ -719,7 +708,7 @@ Before adding a dependency, answer:
 
 1. What exact problem does it solve?
 2. Can existing dependencies solve it adequately?
-3. Is it required by the current task?
+3. Is it required by the currently authorized product work?
 4. What maintenance/runtime cost does it introduce?
 
 If there is no strong answer:
@@ -728,32 +717,18 @@ do not add it.
 
 ---
 
-# 20. Testing philosophy
+# 20. Current verification responsibility
 
-Tests are not a checkbox.
+The user explicitly assigned testing and acceptance to themselves. Until they change this instruction:
 
-The important question is:
+- Do not add or run automated tests, test suites, browser/desktop smoke checks, or live-provider smoke calls.
+- Preserve existing tests and CI; do not delete or weaken them to hide a failure.
+- Source inspection, Git diff review, formatting/lint/type checks and necessary compilation/packaging remain allowed. Report them as such, not as runtime acceptance.
+- Inspect build scripts for embedded tests. Use the existing `--build-only` portable-packaging option when producing an artifact without smoke checks.
+- Do not make paid model calls or probe API credentials merely to validate configuration without explicit authorization.
+- Clearly distinguish implemented code, successful compilation, historical test evidence and user-verified behavior. A build does not prove that chat, settings or lifecycle works.
 
-"What invariant does this prove?"
-
-Especially important invariants include:
-
-- LLM cannot directly mutate WorldTruth;
-- one player cannot occupy two physical locations;
-- duplicate commands do not duplicate events;
-- projections can be reconstructed;
-- Character A cannot read Character B's private knowledge;
-- Player cannot see hidden world facts;
-- one proactive reason cannot spam multiple messages;
-- crash/retry cannot duplicate world changes.
-
-Prefer meaningful invariant/integration tests over large numbers of trivial tests.
-
-Do not report success only as:
-
-"300 tests passed."
-
-Explain what important behavior was proven.
+Existing Kernel, knowledge-isolation, idempotency and budget invariants remain mandatory even while automated testing is delegated to the user.
 
 ---
 
@@ -761,14 +736,11 @@ Explain what important behavior was proven.
 
 At the end of a task report:
 
-- what changed;
-- why;
-- tests performed;
-- important invariants proven;
-- commit hash;
-- git status;
-- unresolved issues;
-- any shortcuts or compromises.
+1. 本轮做了什么 — concrete changes, why they help, actual checks/build results, and commit/status when applicable.
+2. 接下来要做什么 — the next useful work in priority order.
+3. 疑问和建议 — unresolved decisions, risks or required user actions; say none when there are none.
+
+Keep routine reports concise. An update is not a request to end ongoing authorized development or to ask for another prompt. Follow a current request for a different report format when one is given.
 
 Do NOT hide:
 
@@ -787,15 +759,14 @@ If something was not verified, explicitly state that it was not verified.
 STOP and ask/report instead of continuing when:
 
 - the task contradicts frozen architecture;
-- a required architectural choice is genuinely undefined;
-- accomplishing the task would require expanding scope substantially;
-- the same technical blocker persists after disciplined diagnosis;
+- an essential new product, public-contract, persistence, security or financial choice is genuinely undefined;
+- a narrowly scoped current task cannot be completed without materially different work;
 - user data or Git history may be destroyed;
 - a migration may irreversibly modify real user data;
 - secrets/credentials would need unsafe handling;
-- successful implementation cannot be distinguished from a broken implementation with available evidence.
+- the user must intervene to unblock the remaining work.
 
-Stopping with a precise engineering report is preferable to spending two hours blindly retrying.
+Stop the affected branch; continue unrelated authorized work where safe. A local technical blocker or missing user acceptance is not permission to guess, falsely claim success, or spend two hours blindly retrying.
 
 ---
 
@@ -814,17 +785,20 @@ Being busy is not the goal.
 Moving dreamtalk toward the finished product is the goal.
 ---
 
-# 用户补充：遇到不确定或难以解决的问题必须停止并汇报
+# 23. Confirmed product experience and release boundary
 
-在 dreamtalk 工作中遇到不确定问题或难以解决的问题时，必须立即停止相关工作并向用户汇报，不能自行猜测、擅自决定或持续死磕。
+The following later user decisions apply alongside the architecture above; details are in [PRODUCT.md](PRODUCT.md), [PRODUCT_SPEC.md](docs/product/PRODUCT_SPEC.md) and [CHAT_MODEL.md](docs/architecture/CHAT_MODEL.md):
 
-汇报应明确说明：
+- PC-first, simple Chinese interface with four bottom tabs in order: 聊天 / 通讯录 / 设置 / 我. Use the available desktop width and familiar WeChat-style navigation, not a phone-sized frame.
+- Create/select a World before importing cards/books. Contacts and conversations are world-scoped; confirmed updates affect only the selected World. A runtime Character is created/reused on first opening chat, not by importing its card.
+- Bind one local Player per World; a newly entered World starts the Player at 家. “可用 / 忙碌” describes unsolicited-contact availability, not network connectivity.
+- Keep general self-description and world-specific identity separate; world-specific identity takes precedence. Put player-known world events at the top of the chat list as topics.
+- Public world background may be shared with all characters. Lorebook entries remain hidden by default until explicitly exposed in that World; imported hidden plot material must not leak into prompts.
+- Persisted group messages are visible to every fixed member, including silent members. Exposure is not WorldTruth, CharacterBelief or automatic EpisodicMemory.
+- Use an independent group speaker scheduler based on accepted personas and shared dialogue. A unique `@` selects the next speaker; the world Director remains the batch planner.
+- A player message starts one bounded turn. Input plus output for selection, every character, retry and fallback share the hard Token ceiling. Before every physical call, require a trustworthy conservative reservation; stop early rather than guess or exceed it.
+- Validated runtime dialogue sends directly. Persistent authored/generated content still requires Draft → Preview → Commit.
+- Prefer mature projects/components where they fit, subject to section 11; the user no longer requires independent implementation.
+- The repository is intended for GitHub open source under Apache-2.0. Do not push or publish before the user completes final acceptance and explicitly approves it. Keep `D:\LivingWorld` and existing app-data/protocol identifiers until a separately approved migration.
 
-- 当前阻塞或不确定的事项；
-- 已确认的事实与仍不确定的部分；
-- 已尝试的方法、具体错误及已收集的证据；
-- 建议的下一步及需要用户决定的内容。
-
-等待用户明确下一步后，再继续相关工作。
-
-本补充是用户对第 15 节和第 22 节的进一步要求：遇到上述情况后，不得以重试次数或 10/20 分钟时间窗口为由继续自行死磕。
+This section and sections 14–22 replace the former blanket instruction to halt on every uncertainty and the former automatic-testing/stage-by-stage-stop workflow.
