@@ -13,6 +13,7 @@ Before starting ANY dreamtalk engineering task:
 3. Read the architecture/product documents relevant to the task.
 4. Inspect the existing repository before modifying anything.
 5. Do not begin implementation until the task boundary is understood.
+6. Before starting a new feature, search for mature existing implementations. Compare reuse, integration and the existing code; choose the best product effect and maintenance cost. Record the investigated sources/version, licensing and the concrete reuse decision. Do not duplicate a solved capability merely to keep the implementation independent.
 
 Apply the user's latest explicit decisions when they supersede older rules. Stop the affected work only when an essential product/architecture decision remains genuinely undefined; do not ask the user to reconfirm decisions already made.
 
@@ -492,6 +493,8 @@ Prefer the simplest architecture that satisfies the final product requirements.
 # 14. User's working style
 
 The user has authorized autonomous progress toward a usable complete product and does not want to provide a separate prompt for every implementation step. Complete concrete product slices and continue other authorized, well-defined work; do not stop merely because one historical stage/task ended.
+
+The user delegates routine technical and component choices to the engineer and judges the achieved product effect. Choose and proceed within the confirmed product/Kernel/knowledge/budget boundaries; do not repeatedly request component-selection approval. Investigate mature implementations before each new feature and include the reuse decision in the completion report.
 
 An explicit current task boundary still applies. A request to only answer, only edit documentation, or stop after a particular task must be respected.
 

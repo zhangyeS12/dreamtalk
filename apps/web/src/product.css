@@ -194,7 +194,8 @@
 .chat-mention-actions button { padding: 5px 9px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--green-hover); cursor: pointer; }
 .chat-mention-actions button:hover:not(:disabled) { border-color: var(--green); background: var(--green-soft); }
 .chat-mention-actions button:disabled { cursor: default; opacity: .5; }
-.chat-composer-actions { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.chat-composer-actions { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; }
+.chat-composer-actions small { flex: 1 1 220px; }
 .chat-composer-actions small, .chat-feedback { color: var(--muted); font-size: .8rem; }
 .chat-feedback { margin: 0; line-height: 1.5; }
 .content-details h2 { font-size: 1.2rem; }

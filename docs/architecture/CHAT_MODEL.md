@@ -283,6 +283,29 @@ while older history is being read. The previous complete-list endpoint remains
 available for compatibility; UI pagination does not change which turns the
 Character sees or promote dialogue into WorldEvent/Knowledge/Memory.
 
+## Chat request feedback
+
+The client retains only bounded machine labels from the existing FastAPI `detail`
+response and maps recognized failures to predefined Chinese messages. It does
+not display arbitrary server detail. Saving, waiting for replies and checking
+durable outcome are shown as distinct UI phases. A status-query failure does not
+turn into a generation retry.
+
+The player may check the recent player message's direct/group turn through the
+existing owner-scoped GET, including after reopening the conversation. `pending`
+means generation has not been claimed, `claimed` means completion is unconfirmed,
+and `completed` reflects the durable outcome. These checks do not claim work or
+replay an uncertain provider request. Group chat reads the existing bounded
+transcript two seconds after each read completes while its generation request is
+pending, so committed replies can appear before the whole turn ends. Two consecutive
+read failures pause polling until explicit refresh. Reads stop when the request
+finishes or the component unmounts; this is not token streaming.
+
+Group completion currently does not persist why a turn ended. Budget exhaustion,
+the reply safety cap and natural speaker STOP can all produce `completed`. The UI
+therefore reports only that the turn ended, without inventing a natural stop reason.
+Durable termination reasons and token streaming remain subsequent work.
+
 ## Persistence boundary
 
 Conversation and Message are durable interaction records. They are not entries in

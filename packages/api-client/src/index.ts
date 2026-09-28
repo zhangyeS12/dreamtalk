@@ -26,7 +26,10 @@ export interface SelectedPlayerState {
 }
 export interface LocalProfile { name: string; description: string; revision: number }
 export class CoreRequestError extends Error {
-  constructor(public readonly status: number) { super(`product_request_failed_${status}`); }
+  constructor(public readonly status: number, public readonly code: string | null = null) {
+    super(`product_request_failed_${status}`);
+    this.name = "CoreRequestError";
+  }
 }
 export interface KnownWorldEvent {
   event_id: string;
@@ -162,7 +165,14 @@ export class CoreClient {
       headers: { Authorization: `Bearer ${this.connection.token}`, ...init?.headers },
       credentials: "omit", cache: "no-store",
     });
-    if (!response.ok) throw new CoreRequestError(response.status);
+    if (!response.ok) {
+      // Keep only bounded machine labels; never expose arbitrary server details.
+      const body: unknown = await response.json().catch(() => null);
+      const code = typeof body === "object" && body !== null && "detail" in body
+        && typeof body.detail === "string" && /^[a-z][a-z0-9_]{0,95}$/.test(body.detail)
+        ? body.detail : null;
+      throw new CoreRequestError(response.status, code);
+    }
     return await response.json() as T;
   }
 
