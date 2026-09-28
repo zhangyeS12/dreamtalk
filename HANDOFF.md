@@ -2,7 +2,19 @@
 
 更新日期：2026-09-28。此文件记录当前开发现场与接续工作，不替代 [AGENTS.md](AGENTS.md)。先读 AGENTS，再读本文，最后核对实际 Git 状态和相关代码；不能把下面的基线哈希当作永远不变的当前 HEAD。
 
-## 最新接续：2026-09-28 自动模型容量与请求预留
+## 最新接续：2026-09-28 群聊自动选人修复
+
+- 从干净 `a9ae5e8` 接续，正式目录 `D:\LivingWorld` / `codex/chat-feedback`。用户实际确认：API 生成角色卡/世界书、单人对话、群聊 @ 指定下一位均有效；无 @ 群聊没有回复，截图显示 generic validation failure。上述为用户验收反馈，不是助手自动测试；整个产品尚未完成最终验收。
+- 源码发现自动选人的首轮/后续调用都固定 `max_output_tokens=64`，推理模型可在产生角色 ID 前耗尽；@ 跳过首次 selector，但后续 selector 仍失败，符合截图的 incomplete 提示。首轮与后续原有两份 UUID 解析也都拒绝完整 JSON/引号/code-block 包装。未捕获用户原始模型响应，因此不把截断/包装作为已直接观察的唯一根因。只读 mode=ro 数据读取失败，immutable view 没有近期 character_dialogue facts；该磁盘视图可能陈旧，不能据此断言未调用 API。未读密钥或写用户 DB。
+- selector 统一 request/result 路径；允许最多 8,192 输出，再受配置的模型/应用 output cap 和原 preflight 剩余额度约束。不是固定消耗，没有自动提高 200,000 整轮额度。每次 selector/角色/retry/fallback 仍共享原 hard budget、trusted input bound、账本和单次 claim。无任何提供商专用分支、没有模型重试或旧消息重放。
+- 完整结果仅接受 UUID/后续 STOP、JSON scalar、恰好一个 character_id 字段、或完整单段 text/json/plain fence；拒绝多个/重复/额外键、非字符串、解释性文本、截断、群外 ID 或 >1,024-byte 决策文本。首轮必须选群内角色，不能 STOP；后续可自然 STOP。仍使用当前 claim 的固定成员集，选择输入只含公开已确认 persona/shared transcript；角色生成的私有知识边界未变。
+- 群聊 HTTP 将 selector invalid / output_limit 作为固定安全 502 标签返回，其他校验错误继续 generic；UI 区分自动选人与角色台词校验，不泄露模型输出。参考 Microsoft AutoGen SelectorGroupChat 的公开候选、单角色校验和独立选择/回复做法；复用现有 stdlib JSON/UUID、governed gateway、claim/context，没有复制 MIT 源码、安装另一个 agent runtime 或增加依赖。调查/版本/许可证与选择见 [记录](docs/research/2026-09-28-group-selector-fix.md)。
+- Ruff lint/format、ESLint/TypeScript、源码 diff 检查通过；Core PyInstaller、Vite 197 模块和 Rust desktop release 成功。包内三个修改 Python 源文件与源 SHA256 一致，原 DeepSeek helper 二进制也一致。按 AGENTS 未新增/修改/执行测试、smoke、GUI 验收或提供商调用，现有测试保留；没有修改用户配置/存档、schema/migration 或终止其进程。
+- 独立新版 `D:\LivingWorld\artifacts\portable\group-selector-fix\dreamtalk\dreamtalk-desktop.exe`；ZIP `D:\LivingWorld\artifacts\portable\group-selector-fix\dreamtalk.zip`，42,572,567 bytes / SHA256 `EDEAB6AD5827E319464214DD0EBDFABA1ABCF30F48CF2FA8985CA59169D5D74A`。日志 `artifacts/group-selector-fix-core-build.log` / `artifacts/group-selector-fix-desktop-build.log`。旧 default/model-autoconfig 等包未覆盖；保留随包第三方 notices。没有 push/release。
+- 接续：用户关闭旧窗口后打开上述 exe，发送一条新的无 @ 群聊消息，核对至少一个角色回应及自然结束，再核对 @ 后后续调度。无需重建角色卡、世界书或重新填写密钥，历史 claimed 回合不自动重跑。若仍失败，新的错误能区分 selector 截断/无有效群内 ID；先看该阶段事实，不默认再改聊天额度。
+- 后续工程仍为其他提供商可信请求预检/复用成熟能力；本轮窄范围只修群聊，不扩展其他架构或自动测试。没有需要用户重新决策的产品问题，真实 API 行为待用户验收。
+
+## 前序切片：2026-09-28 自动模型容量与请求预留
 
 - 从 `36567bc` 接续，正式目录 `D:\LivingWorld` / `codex/chat-feedback`。用户同意把常见模型容量自动匹配、手动值移入高级设置、回复长度独立选择，并改善整份模型容量预留造成的聊天门槛。后续用户明确指出耗时过长、过度集中 DeepSeek；应收紧切片、优先成熟通用实现并如实说明每个提供商的完成范围，不能将自动识别容量等同于所有服务已支持按请求预留。
 - 复用 models.dev/MIT 的 18 个模型与服务容量快照；React、桌面保存校验和 Core 读取同一 JSON。输入可信容量使用完整 context window，不能使用可能减去最大输出额度的 catalog input 字段。已匹配模型自动填容量；未知服务/模型需高级设置；相同模型 ID 的代理不继承直连预设。当前覆盖的是部分 OpenAI/Claude/Gemini/DeepSeek 型号，并非所有最新型号。

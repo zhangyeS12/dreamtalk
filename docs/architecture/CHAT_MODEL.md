@@ -380,3 +380,7 @@ direct-reply service generates and validates a reply through the governed LLM
 gateway before committing it. Group replies use the analogous one-time claim,
 ordered reply append, and explicit terminal completion. Neither chat path
 turns dialogue into canonical world facts.
+
+## 2026-09-28 selector output allowance
+
+The group selector now uses up to 8,192 generated tokens, limited by the configured output cap and remaining shared turn allowance, instead of a fixed 64-token cap that could truncate reasoning before the speaker ID. Initial and subsequent selection share one complete-response decoder and validate exactly one eligible Character or a permitted terminal STOP. Bounded scalar/one-field JSON/code-block wrapping is normalized; partial output and ambiguous/foreign IDs remain rejected. Safe UI errors distinguish selection from final dialogue validation. This adds no replay, retry, schema, Director or knowledge changes. See [reuse and diagnosis](../research/2026-09-28-group-selector-fix.md).

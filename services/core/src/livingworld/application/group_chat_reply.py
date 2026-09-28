@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 from dataclasses import replace
 from uuid import UUID, uuid4
@@ -43,7 +44,9 @@ from livingworld.application.llm_routing import ModelSelection, RoutingError
 from livingworld.domain.identifiers import CharacterId
 
 _MAX_GROUP_REPLIES = 32
-_SELECT_OUTPUT_TOKENS = 64
+# Selection also needs room for a reasoning model's internal output. This is
+# an upper cap, not a fixed charge; model limits and the shared turn still apply.
+_SELECT_OUTPUT_TOKENS = 8192
 _PURPOSE = LLMPurpose("character_dialogue")
 
 
@@ -155,26 +158,64 @@ class GroupChatReplyService:
             raise ChatReplyValidationError("chat_reply_invalid")
         return response
 
-    async def _select(
-        self, source: PlayerSend | ClaimedGroupTurn, budget: ChatTurnTokenBudget
-    ) -> CharacterId | None:
-        context = await self._context.build_selection(source)
-        request = self._preflight(
-            self._request(context.messages, _SELECT_OUTPUT_TOKENS), budget.remaining
+    def _selection_request(self, messages, remaining: int) -> LLMRequest:
+        return self._preflight(
+            self._request(messages, min(_SELECT_OUTPUT_TOKENS, self._max_output_tokens)),
+            remaining,
         )
-        response = await self._generate(request, budget)
-        if response.finish_reason is not FinishReason.STOP:
+
+    @staticmethod
+    def _selection_result(
+        response: LLMResponse, source: ClaimedGroupTurn, *, allow_stop: bool
+    ) -> CharacterId | None:
+        if response.finish_reason is FinishReason.OUTPUT_LIMIT:
+            raise ChatReplyValidationError("group_selection_output_limit")
+        if (
+            response.finish_reason is not FinishReason.STOP
+            or len(response.text.encode("utf-8")) > 1024
+        ):
             raise ChatReplyValidationError("group_selection_invalid")
         choice = response.text.strip()
-        if choice == "STOP":
-            return None
+        if choice.startswith("```"):
+            lines = choice.splitlines()
+            if (
+                len(lines) < 3
+                or lines[0].casefold() not in {"```", "```text", "```json"}
+                or lines[-1] != "```"
+                or "```" in "\n".join(lines[1:-1])
+            ):
+                raise ChatReplyValidationError("group_selection_invalid")
+            choice = "\n".join(lines[1:-1]).strip()
         try:
+            # Normalize only whole scalar/object wrappers. Never extract an ID
+            # from prose or accept multiple choices, partial output or strangers.
+            if choice.startswith(('"', "{")):
+                decoded = json.loads(choice, object_pairs_hook=lambda pairs: pairs)
+                if isinstance(decoded, list):
+                    if len(decoded) != 1 or decoded[0][0] != "character_id":
+                        raise ValueError("selection_shape_invalid")
+                    decoded = decoded[0][1]
+                if not isinstance(decoded, str):
+                    raise ValueError("selection_shape_invalid")
+                choice = decoded.strip()
+            if choice == "STOP":
+                if allow_stop:
+                    return None
+                raise ValueError("first_selection_requires_speaker")
             identity = CharacterId(source.turn_id.world_id, UUID(choice))
         except ValueError:
             raise ChatReplyValidationError("group_selection_invalid") from None
-        if isinstance(source, ClaimedGroupTurn) and identity not in source.character_ids:
+        if identity not in source.character_ids:
             raise ChatReplyValidationError("group_selection_invalid")
         return identity
+
+    async def _select(
+        self, source: ClaimedGroupTurn, budget: ChatTurnTokenBudget
+    ) -> CharacterId | None:
+        context = await self._context.build_selection(source)
+        request = self._selection_request(context.messages, budget.remaining)
+        response = await self._generate(request, budget)
+        return self._selection_result(response, source, allow_stop=True)
 
     async def _reply(
         self,
@@ -221,23 +262,15 @@ class GroupChatReplyService:
         else:
             # A route/usage-bound failure must not consume the one-time claim.
             selection = await self._context.build_selection(sent)
-            first_request = self._preflight(
-                self._request(selection.messages, _SELECT_OUTPUT_TOKENS), budget.remaining
-            )
+            first_request = self._selection_request(selection.messages, budget.remaining)
         claim = await self._messages.claim_group(sent.message.conversation_id, sent.turn_id)
         if claim.player_message != sent.message or claim.token_ceiling != sent.token_ceiling:
             raise ChatReplyValidationError("chat_send_changed")
         if mentioned is None:
             assert first_request is not None
             choice = await self._generate(first_request, budget)
-            if choice.finish_reason is not FinishReason.STOP:
-                raise ChatReplyValidationError("group_selection_invalid")
-            try:
-                speaker = CharacterId(claim.turn_id.world_id, UUID(choice.text.strip()))
-            except ValueError:
-                raise ChatReplyValidationError("group_selection_invalid") from None
-            if speaker not in claim.character_ids:
-                raise ChatReplyValidationError("group_selection_invalid")
+            speaker = self._selection_result(choice, claim, allow_stop=False)
+            assert speaker is not None
             if budget.closed or budget.remaining < 1:
                 raise ChatReplyBudgetError("turn_token_limit_exceeded")
             first_request = None

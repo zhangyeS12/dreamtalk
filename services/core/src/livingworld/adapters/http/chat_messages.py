@@ -246,8 +246,11 @@ def chat_message_router(
             raise HTTPException(503, "chat_model_unavailable") from None
         except ChatReplyIntegrityError:
             raise HTTPException(503, "chat_accounting_unavailable") from None
-        except ChatReplyValidationError:
-            raise HTTPException(502, "chat_reply_invalid") from None
+        except ChatReplyValidationError as error:
+            code = str(error)
+            if code not in {"group_selection_invalid", "group_selection_output_limit"}:
+                code = "chat_reply_invalid"
+            raise HTTPException(502, code) from None
         except ChatReplyGenerationError:
             raise HTTPException(502, "chat_generation_failed") from None
 

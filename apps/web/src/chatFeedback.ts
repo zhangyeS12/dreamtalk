@@ -31,6 +31,8 @@ export function chatReplyFailureFeedback(failure: unknown, kind: ChatKind): stri
     : "这轮回复未获预算授权。请在设置中核对每轮 Token 额度、模型上界与费用预算；消息已保存，系统不会自动重试模型调用。";
   if (code === "chat_accounting_unavailable") return `${prefix}本次用量或费用记录尚未可靠确认。${noReplay}`;
   if (code === "chat_model_unavailable") return `${prefix}聊天模型暂不可用，请在设置中检查模型和凭据。${noReplay}`;
+  if (code === "group_selection_output_limit") return `${prefix}自动选人输出被截断，本轮未能确定下一位发言者。${noReplay}`;
+  if (code === "group_selection_invalid") return `${prefix}自动选人没有返回一个有效的群内角色，未能继续发言。${noReplay}`;
   if (code === "chat_reply_invalid") return `${prefix}模型回复未通过校验，未作为完整回复发送。${noReplay}`;
   if (code === "chat_generation_failed") return `${prefix}生成服务未能完成这次回复。${noReplay}`;
   if (code === "chat_turn_already_claimed") return `${prefix}这轮已开始处理，当前结果尚未确认。${noReplay}`;
