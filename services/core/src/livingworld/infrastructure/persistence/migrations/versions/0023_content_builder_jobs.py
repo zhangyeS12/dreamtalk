@@ -18,7 +18,7 @@ def upgrade():
         sa.Column("state", sa.String(20), nullable=False),
         sa.Column("result_json", sa.Text()),
         sa.Column("error", sa.String(80)),
-        sa.Column("created_at", sa.Text(), nullable=False),
+        sa.Column("created_at", sa.String(32), nullable=False),
         sa.CheckConstraint(
             "state IN ('searching','generating','ready','failed','interrupted')",
             name="ck_builder_job_state",

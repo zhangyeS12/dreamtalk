@@ -2,7 +2,19 @@
 
 更新日期：2026-09-28。此文件记录当前开发现场与接续工作，不替代 [AGENTS.md](AGENTS.md)。先读 AGENTS，再读本文，最后核对实际 Git 状态和相关代码；不能把下面的基线哈希当作永远不变的当前 HEAD。
 
-## 最新接续：2026-09-28 内容编辑与联网生成
+## 最新接续：2026-09-28 修复核心连接失败
+
+- 用户反馈新版启动显示“核心连接失败”。从干净 `ed5f260` 接续，正式目录仍为 `D:\LivingWorld`，分支 `codex/chat-feedback`；没有远程，没有发布或 push。
+- 两次真实失败日志均记录 `migration / alembic_schema_shape_mismatch`。只读检查实际用户数据库游标为 `0014_episodic_memory`；在一次性副本执行同一升级入口后定位为 `content_builder_jobs.created_at`：0023 迁移建成 `TEXT`，但 `UTCTimestampStorage`/ORM 及严格结构校验要求 `VARCHAR(32)`。错误发生在升级后的校验，事务回滚；不是 API 连通性或凭据问题。
+- 修正 0023 新表时间列为 `sa.String(32)`，与现有存储类型一致；没有跳过校验、删库、重置存档或改变 API 配置。失败版本没有成功提交 0023，此次修复现有新增迁移即可，无需操作真实库或新建破坏性修复迁移。
+- 下方上轮“0023 迁移兼容”描述需要补充：当时仅编译打包，没有执行迁移，实际新表类型不一致导致核心无法启动。上轮构建成功不能作为迁移运行成功的证据；本节取代旧产物信息。
+- 本轮按用户故障诊断请求做了有界检查：存档一次性副本从 0014 升级到 0023，严格结构校验通过；修复后冻结 Core 使用另一份隔离副本和空模型配置启动，本地认证 `/system/health` 返回 200 / ready=true，`/system/shutdown` 返回 200，Core 退出码 0，副本最终游标 0023。真实数据库前后 SHA256 一致，临时副本已清理；没有读取真实凭据、调用提供商、执行 DDGS 搜索、自动测试套件或桌面/浏览器验收。
+- 初次诊断辅助脚本的 SQLite 连接未及时关闭导致临时目录清理报文件占用；已修正辅助连接关闭并清理旧临时目录，随后有界启动诊断及清理正常完成。该辅助脚本位于聊天工作目录，未进入正式业务源码或测试。
+- 改动迁移的 Ruff lint/format 和 `git diff --check` 通过。便携包通过 `uv run --frozen --group packaging python scripts/build-portable.py --build-only` 重新生成，Core/Vite/Rust release 构建成功；日志 `artifacts/core-startup-fix-build.log`。既有 PyInstaller 可选模块警告仍存在，隔离 Core 启动已通过，本轮没有验收聊天/生成效果。
+- 最新 ZIP `D:\LivingWorld\artifacts\portable\dreamtalk.zip`，40,642,257 bytes / 2026-09-28 10:25:43 UTC，SHA256 `F87CF89CC24A91C70EF8AC820D4305A6B64F8D572806E309B5F4C4793B4DD4F8`。desktop exe 12,390,400 bytes / 10:25:39 UTC；Core exe 13,723,075 bytes / 10:25:12 UTC。直接运行 `artifacts/portable/dreamtalk/dreamtalk-desktop.exe`，或重新解压整个最新 ZIP，保留 Core 子目录；现有 app-data 会由程序正常升级。
+- 接下来由用户重新打开新版，继续角色卡/世界书编辑与联网生成体验。实际桌面启动与提供商功能验收仍由用户完成；无需重新填写 API，也不需要删除现有数据库。若仍报错，优先检查新日志时间与是否启动了旧解压包。
+
+## 前序切片：2026-09-28 内容编辑与联网生成
 
 - 用户要求在界面新建/编辑角色卡和世界书，并输入自然语言后调用 API 联网辅助填写。本轮从干净 `d55d31f` 接续，正式目录 `D:\LivingWorld`，沿用 `codex/chat-feedback`；未配置远程，没有发布或 push。
 - 实现前调查 SillyTavern 1.19.0 的公开表单/条目规则、DDGS 9.16.0 与独立 Character Card Generator。选择直接复用 MIT DDGS；沿用既有 Pydantic、模型配置/凭据、governed routing/账本/硬 Token 上限和 ContentDraft/Preview/Commit。未复制 AGPL 酒馆源码，也未增加另一套模型或 agent runtime。具体版本、blob、许可证和决定见[本轮复用记录](docs/research/2026-09-28-content-builder-reuse.md)。
