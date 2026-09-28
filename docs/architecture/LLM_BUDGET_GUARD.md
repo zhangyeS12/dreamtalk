@@ -145,3 +145,7 @@ candidate 建立自己的 reservation 与 accounting START。Responses continuat
 ## C-005E5：production admission wiring
 
 ProductionLLMRuntime 从严格配置加载 trusted model limits、pricing schedules/aliases/envelopes，并将 registry bounder、catalog 和 SQLite repositories 注入真实 Budget Guard。所有四个 adapter 通过相同 routed/executing path；不存在 provider-specific bypass。价格缺失不被猜测：普通 policy 沿用既有行为，HARD monetary guarantee 在网络前 fail closed。配置价格是 source-labelled Decimal data，不是 source-code model-name branch。C-005E5 无 migration。
+
+## 2026-09-28：reviewed provider request bounds
+
+Production composition now injects one `ProviderRequestUsageBounder` into reply preflight, routed physical execution and the Budget Guard. Reviewed direct DeepSeek text requests reuse official recipe 0.1.0 framing and a conservative full-framed UTF-8 byte bound; unknown/unsupported shapes retain registry-wide bounds. Estimates are never promoted to HARD_UPPER_BOUND. Model capacity presets and reply preference do not increase the user's turn ceiling. Per-attempt authorization, atomic START, unknown exposure holds, no replay and hidden-knowledge filtering are unchanged. Details/proof/provenance: [reuse record](../research/2026-09-28-model-capacity-request-bounds.md). Earlier stage sections describe historical scope; their “no tokenizer/count APIs” and registry-only production wiring statements are superseded here. This change adds no context compression or exact-token/invoice guarantee.

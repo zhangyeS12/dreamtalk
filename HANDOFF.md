@@ -2,7 +2,20 @@
 
 更新日期：2026-09-28。此文件记录当前开发现场与接续工作，不替代 [AGENTS.md](AGENTS.md)。先读 AGENTS，再读本文，最后核对实际 Git 状态和相关代码；不能把下面的基线哈希当作永远不变的当前 HEAD。
 
-## 最新接续：2026-09-28 聊天未开始的额度准入修复
+## 最新接续：2026-09-28 自动模型容量与请求预留
+
+- 从 `36567bc` 接续，正式目录 `D:\LivingWorld` / `codex/chat-feedback`。用户同意把常见模型容量自动匹配、手动值移入高级设置、回复长度独立选择，并改善整份模型容量预留造成的聊天门槛。后续用户明确指出耗时过长、过度集中 DeepSeek；应收紧切片、优先成熟通用实现并如实说明每个提供商的完成范围，不能将自动识别容量等同于所有服务已支持按请求预留。
+- 复用 models.dev/MIT 的 18 个模型与服务容量快照；React、桌面保存校验和 Core 读取同一 JSON。输入可信容量使用完整 context window，不能使用可能减去最大输出额度的 catalog input 字段。已匹配模型自动填容量；未知服务/模型需高级设置；相同模型 ID 的代理不继承直连预设。当前覆盖的是部分 OpenAI/Claude/Gemini/DeepSeek 型号，并非所有最新型号。
+- 设置界面显示简短 2,048 / 标准 8,192 / 较长 16,384 / 自定义回复上限。新设置默认标准；旧自定义输入/输出保留，50,000 会显示为自定义，不自动改配置、额度或密钥。原数值限制扩为输入 10M / 输出 1M，已知模型保存时另校验真实 output cap。旧 managed 文档的识别不套新增 output 校验，因此旧过大值仍可进入编辑修正。配置序列化形状未改。
+- DeepSeek 官方直接 endpoint 的四个已核对模型 ID 接入 MIT `deepseek-recipe` / `deepseek-recipe-encoding` Rust 0.1.0（Cargo checksum 固定；published source `b60af4cf40768602e6928772f01eba451483a442`）。官方完整 conversation framing 的 UTF-8 byte 长度是已审核文本 ByteLevel BPE 的保守上界，包含 role/BOS/thinking prefix；不声称精确 Token 数。重用官方 converter/renderer，没有独立写模板或字数比例估算。V4/V4.1 元数据核对来自官方仓库参考 `8cadfede7063c896b944e7bae05daa3549ae97ea`；官方 compare API 对发布提交返回 404，未据此声称两个提交完全相同。详见 [复用/上界依据](docs/research/2026-09-28-model-capacity-request-bounds.md)。
+- 同一 `ProviderRequestUsageBounder` 注入 chat preflight、每个 routed physical attempt/retry/fallback 与 Budget Guard。当前只有已核对的 DeepSeek 直接文本调用使用逐请求上界；其他提供商、代理、structured/streaming/image、缺 helper、转换失败、超时等继续 full-model trusted fallback。额度硬约束、单次 claim、accounting START、未知 dispatch hold、禁止自动重放和知识过滤都保留。没有上下文自动压缩/截断、官方 count endpoint 或其他提供商逐请求计数适配；这是明确未完成项。
+- Helper 只通过 stdin 获取无密钥请求 body，4 MiB / 5 秒边界；只输出数值或固定错误，Core 丢弃 stderr；最多缓存 64 个 SHA256 digest→数值，不缓存 prompt。打包脚本先编译 helper，PyInstaller 将其放入 `_internal/request-bound/`。随包附带 MIT notices、195 个锁定 Windows 依赖的版本/下载链接/registry checksum inventory 与 123 组许可证文本。许可证网络获取遇到超时/Windows revocation 离线，jsonschema exact revision license 成功取得，number_prefix 使用已获取官方 exact-revision MIT 原文；不把网络错误描述为项目功能错误。
+- Ruff lint/format、ESLint/TypeScript、Git diff 静态检查通过；helper Rust release、Vite 197 模块/Rust desktop release 和 Core PyInstaller 构建成功。源与包内三个 Python 文件、JSON、helper 二进制 SHA256 一致。按照 AGENTS 未新增/修改/运行自动测试、smoke、GUI 验收、provider calls，未读取密钥、修改用户 DB、已保存配置或重放消息。既有 UI 测试仍描述旧必填字段/静默 disabled 行为，需用户后续授权维护；构建不能证明 API 回复验收通过。首次 spec lint 因非提升模式无法写 Ruff cache，改为只读 --no-cache 后通过。既有 PyInstaller optional imports 警告保留。
+- 新包独立路径 `D:\LivingWorld\artifacts\portable\model-autoconfig\dreamtalk\dreamtalk-desktop.exe`；ZIP `D:\LivingWorld\artifacts\portable\model-autoconfig\dreamtalk.zip`，42,570,087 bytes / SHA256 `61A46CFBBEB9BB8128146F9CF33F10CF18C3C1567E7206C034433532F4BB8EBC`。helper 4,700,160 bytes。默认/旧版本目录均未覆盖；没有启动应用或终止用户进程，没有 push/release。编译日志 `artifacts/model-autoconfig-desktop-build.log` / `artifacts/model-autoconfig-core-build.log`。
+- 用户下一步：关闭旧窗口并使用上述新目录，保留已有 API；建议回复长度选“标准”。已保存聊天额度不变；原 200,000 可在已核对 DeepSeek 短上下文下按新上界准入，但不是任意长上下文/群聊/fallback 全轮的完成保证。发送一条新消息验收，历史 pending 不自动重放。
+- 工程下一步：优先统一提供商的输入预检能力，调查/复用 OpenAI、Anthropic、Google 的官方计数接口或成熟库，分别核对保证语义，再接入同一 admission/ledger，不按每个模型复制模板。未知服务继续可手动配置；上下文管理估算与 HARD 授权上界必须区分。用户这轮质疑应影响后续范围控制，不能继续无限扩大单提供商实现。
+
+## 前序切片：2026-09-28 聊天未开始的额度准入修复
 
 - 从干净 `7170c0e` 接续；正式目录 `D:\LivingWorld` / `codex/chat-feedback`。用户两条“你是谁”已保存，检查状态为 pending。前序截图输入上界 1,000,000、输出 50,000、聊天额度 200,000；当前聊天源码在 claim/provider 前预留整份模型输入上界，因此该组合必定拒绝。没有把短消息估算当作可信硬界限。
 - 发现 UI 的确定冲突：聊天额度输入、应用与持久值恢复均硬限制 <=1,000,000，但模型输入可配置 1,000,000，无法留至少 1 Token 回复空间。解除该 UI 限制至 JavaScript safe integer，保留 Core 既有 int64 ceiling 和整轮 hard budget；未自动提高用户额度或调整模型参数。按上述设置，1,000,001 是首次调用的最小门槛；1,050,000 可预留一次完整 50,000 输出，不保证群聊/fallback 全轮完成。

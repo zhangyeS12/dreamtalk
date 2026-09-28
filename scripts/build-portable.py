@@ -22,6 +22,21 @@ def main() -> None:
     artifacts = root / "artifacts"
     if artifacts.is_symlink() or not artifacts.resolve().is_relative_to(root.resolve()):
         raise SystemExit("artifacts_directory_invalid")
+    cargo = shutil.which("cargo")
+    if cargo is None:
+        raise SystemExit("cargo_not_found")
+    subprocess.run(
+        [
+            cargo,
+            "build",
+            "--locked",
+            "--release",
+            "--manifest-path",
+            str(root / "tools" / "deepseek-request-bound" / "Cargo.toml"),
+        ],
+        check=True,
+        cwd=root,
+    )
     subprocess.run(
         [
             sys.executable,

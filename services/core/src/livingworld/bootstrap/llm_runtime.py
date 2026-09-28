@@ -13,6 +13,7 @@ from livingworld.application.chat_reply import DirectChatReplyService
 from livingworld.application.group_chat_context import GroupChatContextBuilder
 from livingworld.application.group_chat_reply import GroupChatReplyService
 from livingworld.application.llm import InvocationId, LLMPurpose
+from livingworld.application.llm_budget import PreflightUsageBounder
 from livingworld.application.llm_config import LLMRuntimeHealth, SecretRef
 from livingworld.application.llm_registry import ModelRegistry
 from livingworld.application.llm_routing import (
@@ -32,6 +33,7 @@ from livingworld.infrastructure.llm.production_config import (
     ProductionLLMConfiguration,
     load_configuration,
 )
+from livingworld.infrastructure.llm.request_bounds import ProviderRequestUsageBounder
 from livingworld.infrastructure.logging import StructuredLogger
 from livingworld.infrastructure.persistence.engine import Database
 from livingworld.infrastructure.persistence.llm_budget_repository import BudgetDiagnostics
@@ -54,6 +56,7 @@ class ProductionLLMRuntime:
     registry: ModelRegistry
     invocation_factory: InvocationFactory = field(default_factory=InvocationFactory)
     _owned_gateways: tuple[object, ...] = field(default=(), repr=False)
+    token_bounder: PreflightUsageBounder | None = field(default=None, repr=False)
 
     @property
     def health(self) -> LLMRuntimeHealth:
@@ -164,12 +167,20 @@ def _chat_reply_configuration(session: ProductionLLMSession, purpose="character_
 
     return (
         runtime.gateway,
-        runtime.registry.usage_bounder(),
+        runtime.token_bounder or runtime.registry.usage_bounder(),
         primary.model,
         min(entry.limits.max_output_tokens for entry in entries),
         available,
         selection,
-        max(entry.limits.max_billable_input_tokens for entry in entries),
+        max(
+            (
+                entry.limits.max_billable_input_tokens
+                for entry in entries
+                if not isinstance(runtime.token_bounder, ProviderRequestUsageBounder)
+                or not runtime.token_bounder.supports_request_bound(entry.model)
+            ),
+            default=None,
+        ),
     )
 
 
@@ -230,8 +241,9 @@ async def build_production_llm_runtime(
         gateways,
         credential_available=lambda model: credentials.contains(provider_refs[model]),
     )
+    token_bounder = ProviderRequestUsageBounder(configuration, gateways)
     budget = database.llm_budget_guard(
-        bounder=configuration.registry.usage_bounder(),
+        bounder=token_bounder,
         diagnostics=BudgetDiagnostics(logger),
         catalog=configuration.pricing_catalog,
         envelopes=configuration.registry.pricing_envelopes(),
@@ -241,6 +253,7 @@ async def build_production_llm_runtime(
         configuration.routing,
         resolver,
         policy=configuration.retry_policy,
+        token_bounder=token_bounder,
         budget_guard=budget,
         wall_clock=lambda: datetime.now(UTC),
         accounting_diagnostics=AccountingDiagnostics(logger),
@@ -251,6 +264,7 @@ async def build_production_llm_runtime(
         routed,
         configuration.registry,
         _owned_gateways=tuple(owned),
+        token_bounder=token_bounder,
     )
 
 

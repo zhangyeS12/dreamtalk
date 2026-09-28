@@ -697,6 +697,12 @@ class OpenAICompatibleChatGateway:
             payload["n"] = 1
         return payload
 
+    def token_reservation_payload(self, request: LLMRequest) -> dict | None:
+        """The actual text request body, with no credentials or dispatch capability."""
+        if request.structured_output is not None or request.streaming:
+            return None
+        return self._payload(request)
+
     async def _secret(self, request):
         if self._client.is_closed or self._config.secret_ref is None:
             raise self._error(request, LLMErrorCode.CONFIGURATION)

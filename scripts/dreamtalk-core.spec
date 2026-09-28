@@ -10,7 +10,19 @@ PACKAGE = ROOT / "services" / "core" / "src"
 analysis = Analysis(
     [str(ROOT / "scripts" / "core-entry.py")],
     pathex=[str(PACKAGE)],
-    binaries=[],
+    binaries=[
+        (
+            str(
+                ROOT
+                / "tools"
+                / "deepseek-request-bound"
+                / "target"
+                / "release"
+                / "dreamtalk-deepseek-request-bound.exe"
+            ),
+            "request-bound",
+        )
+    ],
     datas=collect_data_files("livingworld", include_py_files=True)
     + copy_metadata("dreamtalk-core")
     + copy_metadata("jieba")

@@ -1,0 +1,199 @@
+{
+  "version": 1,
+  "reviewed_at": "2026-09-28",
+  "source": "https://models.dev/api.json",
+  "models": [
+    {
+      "provider_kind": "openai-compatible",
+      "provider_id": "deepseek",
+      "model_id": "deepseek-flash",
+      "base_urls": [
+        "https://api.deepseek.com",
+        "https://api.deepseek.com/v1"
+      ],
+      "context_tokens": 1000000,
+      "input_tokens": 1000000,
+      "output_tokens": 393216,
+      "bound_encoding": "deepseek-v41"
+    },
+    {
+      "provider_kind": "openai-compatible",
+      "provider_id": "deepseek",
+      "model_id": "deepseek-v4-pro",
+      "base_urls": [
+        "https://api.deepseek.com",
+        "https://api.deepseek.com/v1"
+      ],
+      "context_tokens": 1000000,
+      "input_tokens": 1000000,
+      "output_tokens": 393216,
+      "bound_encoding": "deepseek-v4"
+    },
+    {
+      "provider_kind": "openai-compatible",
+      "provider_id": "deepseek",
+      "model_id": "deepseek-v4-flash",
+      "base_urls": [
+        "https://api.deepseek.com",
+        "https://api.deepseek.com/v1"
+      ],
+      "context_tokens": 1000000,
+      "input_tokens": 1000000,
+      "output_tokens": 393216,
+      "bound_encoding": "deepseek-v41"
+    },
+    {
+      "provider_kind": "openai-compatible",
+      "provider_id": "deepseek",
+      "model_id": "deepseek-v4-flash-vision-exp",
+      "base_urls": [
+        "https://api.deepseek.com",
+        "https://api.deepseek.com/v1"
+      ],
+      "context_tokens": 1000000,
+      "input_tokens": 1000000,
+      "output_tokens": 393216,
+      "bound_encoding": "deepseek-v41"
+    },
+    {
+      "provider_kind": "openai-responses",
+      "provider_id": "openai",
+      "model_id": "gpt-4o",
+      "base_urls": [],
+      "context_tokens": 128000,
+      "input_tokens": 128000,
+      "output_tokens": 16384,
+      "bound_encoding": null
+    },
+    {
+      "provider_kind": "openai-responses",
+      "provider_id": "openai",
+      "model_id": "gpt-4o-mini",
+      "base_urls": [],
+      "context_tokens": 128000,
+      "input_tokens": 128000,
+      "output_tokens": 16384,
+      "bound_encoding": null
+    },
+    {
+      "provider_kind": "openai-responses",
+      "provider_id": "openai",
+      "model_id": "gpt-4.1",
+      "base_urls": [],
+      "context_tokens": 1047576,
+      "input_tokens": 1047576,
+      "output_tokens": 32768,
+      "bound_encoding": null
+    },
+    {
+      "provider_kind": "openai-responses",
+      "provider_id": "openai",
+      "model_id": "gpt-4.1-mini",
+      "base_urls": [],
+      "context_tokens": 1047576,
+      "input_tokens": 1047576,
+      "output_tokens": 32768,
+      "bound_encoding": null
+    },
+    {
+      "provider_kind": "openai-responses",
+      "provider_id": "openai",
+      "model_id": "gpt-4.1-nano",
+      "base_urls": [],
+      "context_tokens": 1047576,
+      "input_tokens": 1047576,
+      "output_tokens": 32768,
+      "bound_encoding": null
+    },
+    {
+      "provider_kind": "openai-responses",
+      "provider_id": "openai",
+      "model_id": "gpt-5-mini",
+      "base_urls": [],
+      "context_tokens": 400000,
+      "input_tokens": 400000,
+      "output_tokens": 128000,
+      "bound_encoding": null
+    },
+    {
+      "provider_kind": "openai-responses",
+      "provider_id": "openai",
+      "model_id": "gpt-5-nano",
+      "base_urls": [],
+      "context_tokens": 400000,
+      "input_tokens": 400000,
+      "output_tokens": 128000,
+      "bound_encoding": null
+    },
+    {
+      "provider_kind": "anthropic",
+      "provider_id": "anthropic",
+      "model_id": "claude-sonnet-4-6",
+      "base_urls": [],
+      "context_tokens": 1000000,
+      "input_tokens": 1000000,
+      "output_tokens": 128000,
+      "bound_encoding": null
+    },
+    {
+      "provider_kind": "anthropic",
+      "provider_id": "anthropic",
+      "model_id": "claude-opus-4-6",
+      "base_urls": [],
+      "context_tokens": 1000000,
+      "input_tokens": 1000000,
+      "output_tokens": 128000,
+      "bound_encoding": null
+    },
+    {
+      "provider_kind": "anthropic",
+      "provider_id": "anthropic",
+      "model_id": "claude-haiku-4-5",
+      "base_urls": [],
+      "context_tokens": 200000,
+      "input_tokens": 200000,
+      "output_tokens": 64000,
+      "bound_encoding": null
+    },
+    {
+      "provider_kind": "gemini",
+      "provider_id": "google",
+      "model_id": "gemini-2.5-flash",
+      "base_urls": [],
+      "context_tokens": 1048576,
+      "input_tokens": 1048576,
+      "output_tokens": 65536,
+      "bound_encoding": null
+    },
+    {
+      "provider_kind": "gemini",
+      "provider_id": "google",
+      "model_id": "gemini-2.5-pro",
+      "base_urls": [],
+      "context_tokens": 1048576,
+      "input_tokens": 1048576,
+      "output_tokens": 65536,
+      "bound_encoding": null
+    },
+    {
+      "provider_kind": "gemini",
+      "provider_id": "google",
+      "model_id": "gemini-2.5-flash-lite",
+      "base_urls": [],
+      "context_tokens": 1048576,
+      "input_tokens": 1048576,
+      "output_tokens": 65536,
+      "bound_encoding": null
+    },
+    {
+      "provider_kind": "gemini",
+      "provider_id": "google",
+      "model_id": "gemini-3.1-pro-preview",
+      "base_urls": [],
+      "context_tokens": 1048576,
+      "input_tokens": 1048576,
+      "output_tokens": 65536,
+      "bound_encoding": null
+    }
+  ]
+}

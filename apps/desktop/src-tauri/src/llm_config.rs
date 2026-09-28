@@ -94,7 +94,7 @@ pub fn managed_chat_configuration(bytes: &[u8]) -> Result<ManagedChatConfigurati
         max_output_tokens: get_u64(&model["limits"], "max_output_tokens")?,
     };
     let secret_ref = get_string(provider, "secret_ref")?;
-    let canonical = single_chat_document(&setup, &secret_ref)
+    let canonical = build_single_chat_document(&setup, &secret_ref, false)
         .map_err(|_| "model_edit_requires_managed_single_chat_configuration")?;
     if canonical != bytes {
         return Err("model_edit_requires_managed_single_chat_configuration");
@@ -126,13 +126,21 @@ pub fn single_chat_document(
     setup: &ChatModelSetup,
     secret_ref: &str,
 ) -> Result<Vec<u8>, &'static str> {
+    build_single_chat_document(setup, secret_ref, true)
+}
+
+fn build_single_chat_document(
+    setup: &ChatModelSetup,
+    secret_ref: &str,
+    validate_presets: bool,
+) -> Result<Vec<u8>, &'static str> {
     validate_secret_ref(secret_ref).map_err(|_| "invalid_secret_ref")?;
     if setup.model_id.is_empty()
         || setup.model_id.len() > 128
         || setup.model_id.chars().any(char::is_whitespace)
         || setup.model_id.chars().any(char::is_control)
-        || !(1..=1_000_000).contains(&setup.max_billable_input_tokens)
-        || !(1..=100_000).contains(&setup.max_output_tokens)
+        || !(1..=10_000_000).contains(&setup.max_billable_input_tokens)
+        || !(1..=1_000_000).contains(&setup.max_output_tokens)
     {
         return Err("model_setup_invalid");
     }
@@ -161,6 +169,32 @@ pub fn single_chat_document(
         }
     } else if setup.base_url.is_some() {
         return Err("model_setup_invalid");
+    }
+    if validate_presets {
+        let presets: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../../services/core/src/livingworld/infrastructure/llm/model_presets.json"
+        ))
+        .map_err(|_| "model_setup_invalid")?;
+        if let Some(preset) = presets["models"].as_array().and_then(|models| {
+            models.iter().find(|preset| {
+                preset["provider_kind"].as_str() == Some(setup.provider_kind.as_str())
+                    && preset["model_id"].as_str() == Some(setup.model_id.as_str())
+                    && (setup.provider_kind != "openai-compatible"
+                        || preset["base_urls"].as_array().is_some_and(|urls| {
+                            urls.iter().any(|url| {
+                                url.as_str()
+                                    == setup
+                                        .base_url
+                                        .as_deref()
+                                        .map(|base| base.trim_end_matches('/'))
+                            })
+                        }))
+            })
+        }) {
+            if setup.max_output_tokens > preset["output_tokens"].as_u64().unwrap_or(0) {
+                return Err("model_setup_invalid");
+            }
+        }
     }
     let mut provider = serde_json::json!({
         "provider_id": provider_id,
