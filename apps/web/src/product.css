@@ -118,8 +118,12 @@
 .group-members li { padding: 8px 12px; border-radius: 8px; background: var(--green-soft); }
 .model-setup form { max-width: 700px; }
 .model-setup-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px 18px; margin: 18px 0; }
-.model-advanced { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 14px; }
-.model-advanced summary { cursor: pointer; color: var(--green-hover); font-weight: 600; }
+.model-limits { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 14px; }
+.model-limits h3 { margin: 0; font-size: .94rem; }
+.model-setup .field > label { font-size: .88rem; font-weight: 600; }
+.model-setup .model-field-hint { font-size: .8rem; font-weight: 400; color: var(--muted); line-height: 1.5; }
+.model-setup .model-field-error { font-size: .8rem; font-weight: 400; color: oklch(0.38 0.14 25); line-height: 1.5; }
+.model-setup input[aria-invalid="true"] { border-color: oklch(0.48 0.16 25); }
 .conversation-detail { min-width: 0; overflow-y: auto; background: var(--page); }
 .conversation-placeholder { height: 100%; min-height: 300px; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 32px; text-align: center; }
 .conversation-placeholder h2 { font-size: 1.1rem; font-weight: 600; margin: 0 0 12px; }

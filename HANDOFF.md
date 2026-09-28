@@ -2,7 +2,18 @@
 
 更新日期：2026-09-28。此文件记录当前开发现场与接续工作，不替代 [AGENTS.md](AGENTS.md)。先读 AGENTS，再读本文，最后核对实际 Git 状态和相关代码；不能把下面的基线哈希当作永远不变的当前 HEAD。
 
-## 最新接续：2026-09-28 修复核心连接失败
+## 最新接续：2026-09-28 模型保存按钮反馈修复
+
+- 用户反馈“保存模型设置”点击无反应，截图中模型名称为 `deep seek`。从干净 `75108ac` 接续，正式目录仍为 `D:\LivingWorld`，分支 `codex/chat-feedback`；没有远程，没有发布或 push。
+- 实际原因是名称含空格未通过已有 frontend/Rust 校验，旧按钮因 `disabled={!valid || saving}` 被静默禁用。截图上方的 Token 额度警告是独立聊天 preflight 限制，本身不阻止保存；没有证据表明这次点击已经发起保存或提供商调用。
+- 保存按钮现在只在保存过程中禁用。点击后在表单及具体字段给出有界中文校验反馈，`aria-invalid`/`aria-describedby` 标注对应输入，并将焦点放到第一项错误；不合格字段不会调用 Rust IPC。校验覆盖模型名空白/控制字符/128 UTF-8 字节、密钥必填/4096 字节、完整服务地址和两个整数 Token 上限。服务地址与既有 host 规则对齐：HTTPS 或本机 HTTP，无 userinfo/query/fragment/空白/反斜线。
+- 必填输入/输出 Token 上限直接显示，移除高级折叠。说明区分官方可信输入上界与本应用允许的输出 cap，未知值不猜；额度提示明确“模型设置仍可保存”。沿用 React/原生 HTML 表单和现有保存/安全凭据/回滚流程，没有增加表单库、模型预设或自动查询密钥的流程。
+- 另核对 [DeepSeek 官方模型文档](https://api-docs.deepseek.com/zh-cn/quick_start/pricing/)（2026-09-28）：当前列出的模型 ID 为 `deepseek-flash` 与 `deepseek-v4-pro`，服务地址为 `https://api.deepseek.com`。仅作为用户填写指导，不静默替换模型，也不沿用过期名称或按品牌名猜 API ID。
+- 本轮 `npm run lint`（ESLint/TypeScript）和 `git diff --check` 通过；`uv run --frozen --group packaging python scripts/build-portable.py --build-only` 成功生成 Core/Vite/Rust release，日志 `artifacts/model-setup-feedback-build.log`。既有 tzdata/pysqlite2/MySQLdb hidden-import 警告仍存在。未新增/修改/执行测试、浏览器/桌面 smoke 或提供商调用，没有读写用户真实模型配置/凭据。既有 ModelSetup 测试的“invalid 按钮 disabled”断言与新交互不同，按用户测试责任保留，需之后授权再维护。
+- 最新 ZIP `D:\LivingWorld\artifacts\portable\dreamtalk.zip`，40,642,550 bytes / 2026-09-28 10:52:16 UTC，SHA256 `B057B11B11A6E1F89B30AAE54137BD366DF3B48E05074A5D23DC77C2D7938C9E`。desktop exe 12,391,424 bytes / 10:52:12 UTC；Core exe 13,723,075 bytes / 10:51:46 UTC。整个目录交付，旧截图中的折叠区/禁用行为由本节替代；桌面实际保存/重启与聊天仍由用户验收。
+- 接下来优先处理可信输入上界与每轮额度的体验门槛。当前规则始终保留整个模型最大计费输入上界，即使短提示也可能超出 50,000 默认额度；输入上限与每轮上限均最多 1,000,000，因此可信输入上界为 1,000,000 的模型无法预留至少一个输出 Token。官方当前 DeepSeek 文档的上下文为 1M；不能只指导用户提高到 1,000,000 或虚填更小上界来声称解决。此次窄范围修复不调整预算/请求边界；应先调查可信逐请求计数/上界与服务端可执行限制的成熟实现，再提出保持整轮硬上限、重试/账本一致性的具体方案。
+
+## 前序切片：2026-09-28 修复核心连接失败
 
 - 用户反馈新版启动显示“核心连接失败”。从干净 `ed5f260` 接续，正式目录仍为 `D:\LivingWorld`，分支 `codex/chat-feedback`；没有远程，没有发布或 push。
 - 两次真实失败日志均记录 `migration / alembic_schema_shape_mismatch`。只读检查实际用户数据库游标为 `0014_episodic_memory`；在一次性副本执行同一升级入口后定位为 `content_builder_jobs.created_at`：0023 迁移建成 `TEXT`，但 `UTCTimestampStorage`/ORM 及严格结构校验要求 `VARCHAR(32)`。错误发生在升级后的校验，事务回滚；不是 API 连通性或凭据问题。
