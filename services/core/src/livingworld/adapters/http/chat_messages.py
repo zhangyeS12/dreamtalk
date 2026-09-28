@@ -72,6 +72,22 @@ def _group_turn_view(turn: GroupTurnView) -> dict:
     }
 
 
+def _reply_availability(service) -> dict:
+    return {
+        "available": service is not None and service.available,
+        "input_token_reservation": service.input_token_reservation if service is not None else None,
+        "max_output_tokens": service.max_output_tokens if service is not None else None,
+    }
+
+
+def _budget_failure_code(error: ChatReplyBudgetError) -> str:
+    # Only fixed safe labels cross HTTP; never stringify an unknown provider error.
+    return {
+        "turn_token_limit_exceeded": "chat_turn_token_limit_exceeded",
+        "turn_input_bound_unavailable": "chat_input_bound_unavailable",
+    }.get(str(error), "chat_token_limit_unverifiable")
+
+
 def chat_message_router(
     service: ChatMessageService,
     authorize,
@@ -84,12 +100,12 @@ def chat_message_router(
     )
 
     @router.get("/reply-availability")
-    async def reply_availability() -> dict[str, bool]:
-        return {"available": reply_service is not None and reply_service.available}
+    async def reply_availability() -> dict:
+        return _reply_availability(reply_service)
 
     @router.get("/group-reply-availability")
-    async def group_reply_availability() -> dict[str, bool]:
-        return {"available": group_reply_service is not None and group_reply_service.available}
+    async def group_reply_availability() -> dict:
+        return _reply_availability(group_reply_service)
 
     @router.get("/{conversation_id}/messages")
     async def list_messages(world_id: UUID, conversation_id: UUID) -> list[dict]:
@@ -224,8 +240,8 @@ def chat_message_router(
             raise HTTPException(404, "chat_turn_not_found") from None
         except ChatTurnUnavailableError:
             raise HTTPException(409, "chat_turn_already_claimed") from None
-        except ChatReplyBudgetError:
-            raise HTTPException(422, "chat_token_limit_unverifiable") from None
+        except ChatReplyBudgetError as error:
+            raise HTTPException(422, _budget_failure_code(error)) from None
         except ChatReplyUnavailableError:
             raise HTTPException(503, "chat_model_unavailable") from None
         except ChatReplyIntegrityError:
@@ -267,8 +283,8 @@ def chat_message_router(
             raise HTTPException(404, "chat_turn_not_found") from None
         except ChatTurnUnavailableError:
             raise HTTPException(409, "chat_turn_already_claimed") from None
-        except ChatReplyBudgetError:
-            raise HTTPException(422, "chat_token_limit_unverifiable") from None
+        except ChatReplyBudgetError as error:
+            raise HTTPException(422, _budget_failure_code(error)) from None
         except ChatReplyUnavailableError:
             raise HTTPException(503, "chat_model_unavailable") from None
         except ChatReplyIntegrityError:

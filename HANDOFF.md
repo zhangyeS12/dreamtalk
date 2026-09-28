@@ -2,7 +2,18 @@
 
 更新日期：2026-09-28。此文件记录当前开发现场与接续工作，不替代 [AGENTS.md](AGENTS.md)。先读 AGENTS，再读本文，最后核对实际 Git 状态和相关代码；不能把下面的基线哈希当作永远不变的当前 HEAD。
 
-## 最新接续：2026-09-28 修复原生草稿构造错误
+## 最新接续：2026-09-28 聊天未开始的额度准入修复
+
+- 从干净 `7170c0e` 接续；正式目录 `D:\LivingWorld` / `codex/chat-feedback`。用户两条“你是谁”已保存，检查状态为 pending。前序截图输入上界 1,000,000、输出 50,000、聊天额度 200,000；当前聊天源码在 claim/provider 前预留整份模型输入上界，因此该组合必定拒绝。没有把短消息估算当作可信硬界限。
+- 发现 UI 的确定冲突：聊天额度输入、应用与持久值恢复均硬限制 <=1,000,000，但模型输入可配置 1,000,000，无法留至少 1 Token 回复空间。解除该 UI 限制至 JavaScript safe integer，保留 Core 既有 int64 ceiling 和整轮 hard budget；未自动提高用户额度或调整模型参数。按上述设置，1,000,001 是首次调用的最小门槛；1,050,000 可预留一次完整 50,000 输出，不保证群聊/fallback 全轮完成。
+- 复用已有 registry/bounder/HTTP/feedback：可用性查询返回 route-wide 输入预留及输出上界，私聊和群聊在发送前给出具体额度提示。真正授权仍由原 gateway/bounder 执行；字段仅是 UI guidance。费用准入、可信上界不可得、整轮 Token 不足不再全部混成一个模糊的 422。
+- 检查状态时保留当前会话已知失败说明；通用 pending 不再提示无条件反复发送。没有新增失败持久化或新 migration；重启后不猜历史失败原因。已有两轮消息及其 ceiling 不改写、不自动重放；改好全局额度后需发送新消息。
+- 官方 DeepSeek recipe 0.1.1/MIT 与 Token 文档调查见 [本轮复用记录](docs/research/2026-09-28-chat-admission-reuse.md)。当前无 Windows wheel，逐请求编码的 hard guarantee 尚未证实，本轮未加入新依赖；更精确预留留待后续，不可声称 200,000 已能容纳 1,000,000 配置上界。
+- 本轮没有修改用户数据库、读取 API 密钥、调用付费 API、重放消息或调整已保存配置。读取本机 ready/shutdown 日志未见 llm completion；磁盘配置/DB 视图曾落后于运行实例，不能用它断言用户 DB 损坏或配置未保存。Python Ruff lint/format、ESLint/TypeScript 与代码 `git diff --check` 通过；未新增、修改或运行自动测试、smoke、GUI 验收。
+- 打包脚本两次在自动审批超时而未启动，改为新目录中的分步 PyInstaller + release 桌面编译；不覆盖旧包。Core 冻结与 Vite 195 模块 / Rust release 均完成；独立新版启动路径 `D:\LivingWorld\artifacts\portable\chat-admission-fix\dreamtalk\dreamtalk-desktop.exe`，完整 ZIP `D:\LivingWorld\artifacts\portable\chat-admission-fix\dreamtalk.zip`，40,648,147 bytes，SHA256 `383193D730D3ADC1491F01C2E86BF5F38DBDA6D0F5B49AE0B9A86A4C9C2855C5`。包内四个改动 Python 文件和原生 authoring 文件哈希均与源码一致。PyInstaller 既有 tzdata/pysqlite2/MySQLdb 缺少 hidden import 警告仍存在，未运行验收其影响。默认目录与 preview-constructor-fix 均保留旧包；必须打开本轮新路径。用户旧窗口已关闭，助手未终止其进程。
+- 用户后续操作：使用本轮新版目录的 exe，在设置把聊天额度改为 1,050,000 并点击“应用”（前提仍为截图的输入/输出设置），然后发送一条新消息。实际回复由用户验收。下面原生预览修复与旧产物记录为历史；不要误拿旧 default/preview 包验收本轮变化。
+
+## 前序切片：2026-09-28 修复原生草稿构造错误
 
 - 用户使用上轮反馈版后，预览显示“未能连接核心”。从干净 `61ee710` 接续，正式目录仍为 `D:\LivingWorld` / `codex/chat-feedback`。没有远程、发布或 push。
 - 找到确定的代码错误：`application/content_authoring.py::authored_graph` 末尾使用 `ContentDraft(contents, tuple(assets), tuple(raws))`，但 `application/content.py::ContentDraft` 是 `@dataclass(..., kw_only=True)`，只能使用命名参数。该调用会抛 TypeError，影响手动/生成创建与编辑角色卡、世界书，不是特定 AI 字段或用户模型配置导致。上轮改善反馈位置，却漏查了这个构造调用；本节补足并替代“预览根因尚未知”的结论。

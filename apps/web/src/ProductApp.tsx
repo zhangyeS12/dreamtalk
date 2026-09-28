@@ -48,7 +48,7 @@ function savedWorldId(): string | null {
 function savedTokenCeiling(): number {
   try {
     const value = Number(window.localStorage.getItem(TOKEN_CEILING_KEY));
-    if (Number.isSafeInteger(value) && value >= 1 && value <= 1_000_000) return value;
+    if (Number.isSafeInteger(value) && value >= 1) return value;
   } catch { /* Storage can be disabled; keep a safe local default. */ }
   return 50_000;
 }
@@ -81,6 +81,7 @@ export function ProductApp({ client }: { client: CoreClient }) {
   const [conversationsLoading, setConversationsLoading] = useState(false);
   const [tokenCeiling, setTokenCeiling] = useState(savedTokenCeiling);
   const [tokenCeilingInput, setTokenCeilingInput] = useState(() => String(savedTokenCeiling()));
+  const tokenCeilingValid = Number.isSafeInteger(Number(tokenCeilingInput)) && Number(tokenCeilingInput) >= 1;
 
   const refresh = useCallback(async () => {
     const items = await client.listProductWorlds();
@@ -266,8 +267,9 @@ export function ProductApp({ client }: { client: CoreClient }) {
         </section>}
         <ModelSetup client={client} turnTokenCeiling={tokenCeiling} />
         <section className="settings-section"><div className="section-heading"><h2>聊天额度</h2><p>每轮输入和输出共用上限。系统按可信上界预留，额度不足时不会开始下一次模型调用。</p></div>
-          <div className="setting-row"><label className="field"><span>每轮 Token 上限</span><input type="number" min="1" max="1000000" step="1" value={tokenCeilingInput} onChange={event => setTokenCeilingInput(event.target.value)} /></label><button type="button" className="secondary-button" disabled={!Number.isSafeInteger(Number(tokenCeilingInput)) || Number(tokenCeilingInput) < 1 || Number(tokenCeilingInput) > 1_000_000} onClick={() => { const next = Number(tokenCeilingInput); setTokenCeiling(next); try { window.localStorage.setItem(TOKEN_CEILING_KEY, String(next)); } catch { /* Session setting remains active. */ } setNotice("聊天额度已更新。"); }}>应用</button></div>
-          <p className="inline-hint" role="status">当前已应用的聊天额度：{tokenCeiling.toLocaleString("zh-CN")} Token。{Number(tokenCeilingInput) !== tokenCeiling ? "输入的新数值尚未应用，请点击应用。" : "该额度仅用于聊天，不限制角色卡或世界书生成。"}</p>
+          <div className="setting-row"><label className="field"><span>每轮 Token 上限</span><input type="number" min="1" max={Number.MAX_SAFE_INTEGER} step="1" value={tokenCeilingInput} onChange={event => setTokenCeilingInput(event.target.value)} /></label><button type="button" className="secondary-button" disabled={!tokenCeilingValid} onClick={() => { const next = Number(tokenCeilingInput); setTokenCeiling(next); try { window.localStorage.setItem(TOKEN_CEILING_KEY, String(next)); } catch { /* Session setting remains active. */ } setNotice("聊天额度已更新。"); }}>应用</button></div>
+          {!tokenCeilingValid ? <p className="app-alert" role="alert">请输入 1 至 {Number.MAX_SAFE_INTEGER.toLocaleString("zh-CN")} 之间的整数聊天额度。</p> : null}
+          <p className="inline-hint" role="status">当前已应用的聊天额度：{tokenCeiling.toLocaleString("zh-CN")} Token。{Number(tokenCeilingInput) !== tokenCeiling ? "输入的新数值尚未应用，请点击应用。" : "该额度仅用于聊天，不限制角色卡或世界书生成；额度是预留上限，实际费用以提供商报告的用量为准。"}</p>
         </section>
         {world ? <WorldImports key={world.world_id} client={client} worldId={world.world_id} onDirtyChange={setWorldContentDirty} /> : <section className="settings-section"><h2>导入内容</h2><p className="inline-hint">创建世界后即可导入。</p></section>}
       </div>}

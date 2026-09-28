@@ -151,7 +151,7 @@ export function ModelSetup({ client, turnTokenCeiling, onConfigured = () => wind
     <div className="section-heading"><h2>聊天模型</h2><p>{status === null ? "正在读取模型状态…" : statusText[status]}</p></div>
     {error ? <p className="app-alert" role="alert">{error}</p> : null}
     {managedUnsupported && status !== "unconfigured" ? <p className="inline-hint">当前配置由高级方式管理；此处不会覆盖其中的路由、定价或其他设置。</p> : null}
-    {turnTokenCeiling !== undefined && inputBound >= turnTokenCeiling && (editing || status === "unconfigured") ? <p className="compatibility-notice" role="status">当前单次输入可信上界已达到或超过每轮 {turnTokenCeiling.toLocaleString("zh-CN")} Token 额度，无法再为回复预留至少 1 Token。模型设置仍可保存；聊天前需提高下面的聊天额度，或按官方说明核对模型上界。</p> : null}
+    {turnTokenCeiling !== undefined && inputBound >= turnTokenCeiling && (editing || status === "unconfigured") ? <p className="compatibility-notice" role="status">当前每轮 {turnTokenCeiling.toLocaleString("zh-CN")} Token 额度无法容纳 {inputBound.toLocaleString("zh-CN")} Token 输入预留与回复。聊天额度至少需 {(inputBound + 1).toLocaleString("zh-CN")}；{Number.isSafeInteger(outputBound) && outputBound > 0 ? `建议设置为 ${(inputBound + outputBound).toLocaleString("zh-CN")}，预留一次完整回复。` : ""} 模型设置仍可保存。输入预留使用填写的可信上界，不代表实际发送量；请按官方说明填写，勿为通过检查虚填较低值。</p> : null}
     {isTauri() && (status === "unconfigured" || (editing && !managedUnsupported)) ? <form noValidate aria-busy={saving} onSubmit={event => void save(event)}>
       {submitAttempted && firstInvalidField ? <p className="app-alert" role="alert">尚未保存：{validationErrors[firstInvalidField]} 请修改标红的字段后再保存。</p> : null}
       <div className="model-setup-fields">

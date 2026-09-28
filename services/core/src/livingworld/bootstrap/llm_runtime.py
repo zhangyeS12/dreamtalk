@@ -109,7 +109,8 @@ def configure_group_chat_reply(
 
 
 def configure_content_builder(session: ProductionLLMSession):
-    return _chat_reply_configuration(session, "content_builder")
+    configured = _chat_reply_configuration(session, "content_builder")
+    return configured[:6] if configured is not None else None
 
 
 def _chat_reply_configuration(session: ProductionLLMSession, purpose="character_dialogue"):
@@ -168,6 +169,7 @@ def _chat_reply_configuration(session: ProductionLLMSession, purpose="character_
         min(entry.limits.max_output_tokens for entry in entries),
         available,
         selection,
+        max(entry.limits.max_billable_input_tokens for entry in entries),
     )
 
 

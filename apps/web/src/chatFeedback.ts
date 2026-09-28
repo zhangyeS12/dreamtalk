@@ -1,4 +1,4 @@
-import { CoreRequestError, type DirectTurnView } from "@dreamtalk/api-client";
+import { CoreRequestError, type ChatReplyAvailability, type DirectTurnView } from "@dreamtalk/api-client";
 
 type ChatKind = "direct" | "group";
 export type ChatRequestPhase = "saving" | "replying" | "checking" | null;
@@ -24,6 +24,8 @@ export function chatReplyFailureFeedback(failure: unknown, kind: ChatKind): stri
   const code = failure instanceof CoreRequestError ? failure.code : null;
   const prefix = kind === "group" ? "这一轮未能完整结束。已有发言仍会保留。" : "这轮回复未完成。消息已保存。";
   const noReplay = "系统不会自动重试模型调用；你可以检查回复状态，或继续发送新消息。";
+  if (code === "chat_turn_token_limit_exceeded") return "聊天额度不足，无法预留输入和回复。请提高设置中的每轮 Token 上限后发送新消息；这条消息已保存，系统不会自动重试。";
+  if (code === "chat_input_bound_unavailable") return "无法确认本次模型调用的可信 Token 上界。请核对模型及路由设置后发送新消息；这条消息已保存，系统不会自动重试。";
   if (failure instanceof CoreRequestError && failure.status === 422) return kind === "group"
     ? "这一轮未获预算授权或额度已耗尽。请在设置中核对每轮 Token 额度、模型上界与费用预算；已有发言会保留，系统不会自动重试。"
     : "这轮回复未获预算授权。请在设置中核对每轮 Token 额度、模型上界与费用预算；消息已保存，系统不会自动重试模型调用。";
@@ -42,9 +44,21 @@ export function chatReplyStateFeedback(state: DirectTurnView["state"] | null, ki
   if (state === "completed") return kind === "group"
     ? "本轮已结束，已保存的发言已更新。"
     : "角色回复已保存，聊天记录已更新。";
-  if (state === "pending") return "消息已保存，这轮尚未开始生成回复。系统不会自动重新发起生成；你可以继续发送新消息。";
+  if (state === "pending") return "消息已保存，这轮尚未开始生成回复。请先核对聊天额度和模型设置；修正后发送新消息。系统不会自动重新发起这轮生成。";
   if (state === "claimed") return kind === "group"
     ? "这轮已开始处理，尚未确认结束。已保存的发言会保留；可以稍后再次检查状态。"
     : "这轮已开始处理，尚未确认完成。可以稍后再次检查状态。";
   return "暂时无法确认回复状态。可以稍后再次检查，系统不会重新调用模型。";
+}
+
+export function chatTokenReservationFeedback(availability: ChatReplyAvailability | null, ceiling: number, kind: ChatKind): string {
+  const input = availability?.input_token_reservation;
+  if (!availability?.available || typeof input !== "number" || !Number.isSafeInteger(input) || input < 1 || ceiling > input) return "";
+  const output = availability.max_output_tokens;
+  const fullReservation = typeof output === "number" && Number.isSafeInteger(output) && output > 0 ? input + output : null;
+  const suggestion = fullReservation !== null && Number.isSafeInteger(fullReservation)
+    ? `建议先将设置中的每轮 Token 上限设为 ${fullReservation.toLocaleString("zh-CN")}，以预留一次完整回复。`
+    : `请在设置中将每轮 Token 上限提高到至少 ${(input + 1).toLocaleString("zh-CN")}。`;
+  const groupHint = kind === "group" ? "群聊的后续发言仍共享整轮额度。" : "";
+  return `当前聊天额度 ${ceiling.toLocaleString("zh-CN")} 不足：模型输入需预留 ${input.toLocaleString("zh-CN")} Token，至少还需 1 Token 回复空间。${suggestion}${groupHint}预留量不代表实际用量；按提供商实际用量计费。`;
 }

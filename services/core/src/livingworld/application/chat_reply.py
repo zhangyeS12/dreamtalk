@@ -73,12 +73,15 @@ class DirectChatReplyService:
         max_output_tokens: int,
         available: Callable[[], bool] | None = None,
         selection: ModelSelection | None = None,
+        input_token_reservation: int | None = None,
     ) -> None:
         if (
             not isinstance(model, ModelRef)
             or type(max_output_tokens) is not int
             or max_output_tokens < 1
             or not callable(getattr(token_bounder, "bound", None))
+            or input_token_reservation is not None
+            and (type(input_token_reservation) is not int or input_token_reservation < 1)
         ):
             raise ValueError("chat_generation_configuration_invalid")
         self._messages = messages
@@ -89,6 +92,16 @@ class DirectChatReplyService:
         self._max_output_tokens = max_output_tokens
         self._available = available or (lambda: True)
         self._selection = selection
+        self._input_token_reservation = input_token_reservation
+
+    @property
+    def input_token_reservation(self) -> int | None:
+        """Configured route-wide reservation for UI guidance, never admission authority."""
+        return self._input_token_reservation
+
+    @property
+    def max_output_tokens(self) -> int:
+        return self._max_output_tokens
 
     @property
     def available(self) -> bool:

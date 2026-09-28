@@ -132,6 +132,12 @@ export interface GroupTurnView {
   replies: ChatMessage[];
 }
 
+export interface ChatReplyAvailability {
+  available: boolean;
+  input_token_reservation?: number | null;
+  max_output_tokens?: number | null;
+}
+
 export class CoreClient {
   private readonly endpoint: URL;
   constructor(private readonly connection: CoreConnection, private readonly fetcher = globalThis.fetch.bind(globalThis)) {
@@ -231,7 +237,7 @@ export class CoreClient {
       body: JSON.stringify({ text, token_ceiling: tokenCeiling }),
     });
   }
-  directReplyAvailability(worldId: string): Promise<{ available: boolean }> {
+  directReplyAvailability(worldId: string): Promise<ChatReplyAvailability> {
     return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/reply-availability`);
   }
   directTurn(worldId: string, conversationId: string, turnId: string): Promise<DirectTurnView> {
@@ -240,7 +246,7 @@ export class CoreClient {
   generateDirectReply(worldId: string, conversationId: string, turnId: string): Promise<DirectTurnView> {
     return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/${encodeURIComponent(conversationId)}/turns/${encodeURIComponent(turnId)}/reply`, { method: "POST" });
   }
-  groupReplyAvailability(worldId: string): Promise<{ available: boolean }> {
+  groupReplyAvailability(worldId: string): Promise<ChatReplyAvailability> {
     return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/group-reply-availability`);
   }
   sendGroupMessage(worldId: string, conversationId: string, text: string, tokenCeiling: number, requestId: string): Promise<PendingPlayerSend> {
