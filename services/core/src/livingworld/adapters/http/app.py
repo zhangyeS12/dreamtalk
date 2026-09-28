@@ -50,6 +50,8 @@ def create_app(
     chat_messages: ChatMessageService | None = None,
     chat_reply: DirectChatReplyService | None = None,
     group_chat_reply: GroupChatReplyService | None = None,
+    content_builder=None,
+    content_repository=None,
 ) -> FastAPI:
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
@@ -106,6 +108,14 @@ def create_app(
         from livingworld.adapters.http.world_content import world_content_router
 
         app.include_router(world_content_router(world_content, authorize))
+        if content_builder is not None and content_repository is not None:
+            from livingworld.adapters.http.content_authoring import content_authoring_router
+
+            app.include_router(
+                content_authoring_router(
+                    world_content, content_repository, content_builder, authorize
+                )
+            )
 
     if chat_conversations is not None:
         from livingworld.adapters.http.chat_conversations import chat_conversation_router

@@ -15,7 +15,8 @@ WorldTruth, CharacterKnowledge, or PlayerKnowledge by themselves.
 
 ## Runtime character identity
 
-An imported CharacterDefinition is a world-scoped contact, not a runtime
+An accepted CharacterDefinition (imported, manually authored, or generated and
+confirmed) is a world-scoped contact, not a runtime
 Character. The first time a player opens a conversation with that contact, Core
 creates or reuses its runtime Character identity. Importing a card alone does
 not create a runtime Character. A character may be contacted remotely; opening

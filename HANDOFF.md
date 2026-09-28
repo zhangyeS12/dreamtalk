@@ -2,7 +2,24 @@
 
 更新日期：2026-09-28。此文件记录当前开发现场与接续工作，不替代 [AGENTS.md](AGENTS.md)。先读 AGENTS，再读本文，最后核对实际 Git 状态和相关代码；不能把下面的基线哈希当作永远不变的当前 HEAD。
 
-## 最新接续：2026-09-28 较早聊天原文召回
+## 最新接续：2026-09-28 内容编辑与联网生成
+
+- 用户要求在界面新建/编辑角色卡和世界书，并输入自然语言后调用 API 联网辅助填写。本轮从干净 `d55d31f` 接续，正式目录 `D:\LivingWorld`，沿用 `codex/chat-feedback`；未配置远程，没有发布或 push。
+- 实现前调查 SillyTavern 1.19.0 的公开表单/条目规则、DDGS 9.16.0 与独立 Character Card Generator。选择直接复用 MIT DDGS；沿用既有 Pydantic、模型配置/凭据、governed routing/账本/硬 Token 上限和 ContentDraft/Preview/Commit。未复制 AGPL 酒馆源码，也未增加另一套模型或 agent runtime。具体版本、blob、许可证和决定见[本轮复用记录](docs/research/2026-09-28-content-builder-reuse.md)。
+- 设置增加“角色卡与世界书 → 新建角色卡 / 新建世界书”，已有条目有“编辑 / 从文件更新”，原文件导入折叠在“从文件导入”。角色支持名称、描述、性格、背景、情境、说话方式、开场白、示例、标签与备注；世界书支持增删条目、主/次关键词、四种次级逻辑、常驻、启用及排序。手动填写不要求 API。
+- 原生草稿直接构造 canonical graph，不伪造文件导入；更新保留兼容扩展、未开放条件、素材和角色内嵌世界书。独立内容身份从初始 revision 开始，既有快照保留；当前编辑器支持单角色卡/单世界书，字段总量最多 256 KiB、最多 128 条，特殊/过大原文件仍可导入。
+- 联网只发送用户显式填写的需求，不读取其他世界或隐藏剧情。DDGS 固定 bing/brave/duckduckgo、单引擎 8 秒超时，最多八条去重检索摘要、每条最多 1,000 字符。没有自动请求结果页面。现有模型在一个 content_builder 请求里填入草稿、claims、冲突与待核对项；单次输出最多模型限制与 8,192 Token，物理 retry/fallback 共享用户设置的整轮硬上限。
+- 程序验证结构、kind、长度和来源编号；出处支持/冲突判断由模型提出，不能当作全文事实核验。缺少字段依据显示待核对，情境/开场白/示例标记创作建议。源摘要、链接、检索时间和原始生成稿进入 authored preview；用户编辑后明确提示依据对应原始稿。
+- 新增独立 `0023_content_builder_jobs` 迁移，兼容校验保留 0022 历史形状。World/request ID/fingerprint 有原子单次 claim，ready/failed 回执持久化。同一 ID 不再次 dispatch；重启遗留请求报告 interrupted，不自动重放。界面保留最近 request ID，“检查生成结果”只 GET；可结束等待继续手动填写。新生成是新的模型调用。
+- 保存仍需要确切哈希确认与 replacement CAS，不创建 WorldTruth/Observation/Belief/Knowledge/Memory。角色首次打开聊天才实例化；世界书仍默认隐藏，保存/更新后逐条确认公共背景。
+- 本轮静态检查：全 Core Python 源码和构建脚本 Ruff lint 通过，新模块 format check 通过；spec 仅排除 PyInstaller 执行全局名 F821；ESLint/TypeScript、`git diff --check` 通过。没有新增、修改或执行测试，没有启动应用、调用提供商或执行真实 DDGS 搜索验收。旧测试的硬编码 schema head 等预期留待用户授权维护。
+- 最终 `uv run --frozen --group packaging python scripts/build-portable.py --build-only` 成功，冻结 Core、Vite 195 模块及 Rust release 均完成。构建日志 `artifacts/content-builder-build.log`。Analysis 和包文件包含新 authoring/builder/research 模块、0023 迁移、DDGS 动态搜索引擎、primp.pyd、lxml etree/objectify；MIT/BSD 上游 notices 和 primp SBOM 随包分发。
+- 最新 ZIP `D:\LivingWorld\artifacts\portable\dreamtalk.zip`，40,643,420 bytes / 2026-09-28 10:01:39 UTC；SHA256 `758CEED6E3206AAEAD730AA3F97E0DBDB4431EF888FE801B014A0F44FCC552B3`。desktop exe 12,390,400 bytes / 2026-09-28 10:01:36 UTC；Core exe 13,723,081 bytes / 2026-09-28 10:01:08 UTC。整个目录供用户验收，编译/打包不能证明真实联网/资料质量/隔离或迁移运行验收已通过。
+- 构建仍有 jieba 三处 regex SyntaxWarning，以及 tzdata/pysqlite2/MySQLdb hidden-import 警告。当前 179 个 missing-module、2 个 excluded-module 分析项，没有以 livingworld/ddgs/primp/lxml 命名的缺失模块项；新增部分为 lxml 可选/旧兼容分支。跨盘 uv hardlink→copy 和 Git 行尾提示仍存在。原始模块警告在 `artifacts/pyinstaller-build/dreamtalk-core/warn-dreamtalk-core.txt`，未进行运行验收其影响。
+- 接下来由用户按新版入口验收：手动创建/编辑、艾莲角色卡生成、世界书条目生成、预览确认、公开范围与聊天使用、生成结果恢复；优先处理真实反馈。联网依据目前为摘要；未实现头像生成、网页全文核验、来源持续更新或创建完整运行 World 的 Builder。聊天流式输出继续是后续任务。
+- 下方较早聊天召回及其他记录保留为历史切片，旧产物信息和“仅导入/Builder 未实现”的表述以本节及实际代码为准。
+
+## 前序切片：2026-09-28 较早聊天原文召回
 
 - 接续起点 `903cf10`，正式目录 `D:\LivingWorld`，沿用 `codex/chat-feedback`；开始时工作区干净。
 - 实现前调查 SQLite FTS5、jieba、Mem0 Python 和 BM25S；选择已有 SQLite FTS5 + 固定 jieba 0.42.1。具体来源、依赖代价和排除方案见[复用记录](docs/research/2026-09-28-chat-recall-reuse.md)。jieba 字典、finalseg 资源和 MIT 许可证纳入冻结/便携包。
@@ -103,7 +120,7 @@ git diff --cached --stat
 | 开发者工具 | `?developer=1` 可选择 Inspector 页面；相关 Core 开发 API 仍需显式 developer mode。它不是普通界面或自动 Activation consumer。 |
 | 本地交付 | 已有随附冻结 Python Core 的 Windows 便携目录与 ZIP；无需使用者安装开发语言。没有签名安装包、自动更新或 GitHub 发布。 |
 
-**明确未完成：** 完整自主 Character Agent、Director 批量计划/Event Reservoir 的生产执行与主动剧情、Activation consumer、自动知识传播、长期记忆整理/语义检索、AI Research Builder、Checkpoint/Timeline Branch 产品能力、`.lworld` 运行世界包、cloud sync/marketplace、完整模型管理、普通聊天页的流式输出，以及完整酒馆世界书激活行为。不要因为 docs 说 Stage 2–5 已冻结，就推断这些产品功能也已完成。
+**明确未完成：** 完整自主 Character Agent、Director 批量计划/Event Reservoir 的生产执行与主动剧情、Activation consumer、自动知识传播、长期记忆整理/语义检索、完整 AI World Builder（当前角色卡/世界书摘要生成已实现）、Checkpoint/Timeline Branch 产品能力、`.lworld` 运行世界包、cloud sync/marketplace、完整模型管理、普通聊天页的流式输出，以及完整酒馆世界书激活行为。不要因为 docs 说 Stage 2–5 已冻结，就推断这些产品功能也已完成。
 
 ## 4. 本轮与紧邻前序工作的文件变化
 

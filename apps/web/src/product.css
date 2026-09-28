@@ -210,3 +210,35 @@
 .accepted-item summary { cursor: pointer; padding: 16px 0; }
 .accepted-item .content-details { padding: 0 0 20px; }
 .content-details pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; color: var(--muted); }
+
+.content-editor { border-block: 1px solid var(--line); margin-block: 24px; padding-block: 24px; }
+.editor-heading { display: flex; align-items: start; justify-content: space-between; gap: 16px; }
+.editor-heading h3, .editor-heading h4 { margin-block: 0 8px; }
+.editor-heading p { color: var(--muted); margin-block: 0 16px; }
+.research-request { padding: 20px; background: var(--green-soft); border-radius: 8px; margin-block: 16px 24px; }
+.editor-fields { border: 0; padding: 0; margin: 0; min-width: 0; }
+.editor-fields .field { margin-block: 0 18px; }
+.editor-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+.editor-fields textarea { resize: vertical; min-height: 72px; }
+.editable-lore-entry { border-top: 1px solid var(--line); padding-block: 24px; }
+.editable-lore-entry details { margin-block: 0 16px; }
+.editable-lore-entry details[open] summary { margin-bottom: 16px; }
+.editor-checkbox { display: flex; align-items: center; gap: 8px; }
+.editor-checkbox input { width: 18px; height: 18px; accent-color: var(--green); }
+.research-details { margin-block: 24px; border-top: 1px solid var(--line); padding-top: 16px; }
+.research-details details { margin-top: 18px; }
+.research-details summary, .file-import-options summary, .editable-lore-entry summary { cursor: pointer; color: var(--muted); padding-block: 8px; }
+.research-details a { color: var(--green); overflow-wrap: anywhere; }
+.research-sources, .research-claims { padding-left: 24px; }
+.research-sources li, .research-claims li { margin-block: 16px; overflow-wrap: anywhere; }
+.research-sources p, .research-claims p { margin-block: 8px; white-space: pre-wrap; }
+.research-details small { color: var(--muted); }
+.claim-status { margin-left: 12px; font-size: 12px; color: var(--green); }
+.claim-status.creative { color: var(--muted); }
+.claim-status.uncertain { color: oklch(.46 .10 60); }
+.file-import-options { margin-block: 20px; }
+.file-import-options[open] summary { margin-bottom: 16px; }
+.accepted-item { gap: 12px; }
+.accepted-item > details { flex: 1; min-width: 0; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+@media (max-width: 760px) { .editor-columns { grid-template-columns: 1fr; gap: 0; } .research-request { padding: 16px; } .accepted-item { flex-wrap: wrap; } }

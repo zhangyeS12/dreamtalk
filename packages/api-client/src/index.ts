@@ -59,6 +59,28 @@ export interface WorldContentItem {
   lorebooks: Array<{ id: string; name: string; description: string }>;
   entries: Array<{ id: string; title: string; keywords: string[]; secondary_keywords?: string[]; activation_summary?: string; content: string; enabled: boolean; common: boolean }>;
   warnings?: Array<{ code: string; path: string }>;
+  research?: ContentResearch | null;
+}
+
+export interface ContentEditorEntry {
+  source_entry_id: string | null; title: string; content: string; keywords: string[];
+  secondary_keywords: string[]; enabled: boolean; constant: boolean;
+  selective_logic: "AND_ANY" | "AND_ALL" | "NOT_ANY" | "NOT_ALL"; priority: number; order: number;
+}
+export interface ContentEditorDraft {
+  kind: "character" | "lorebook"; name: string; description: string; personality: string;
+  background: string; scenario: string; speech_guidance: string; first_message: string;
+  creator_notes: string; tags: string[]; example_dialogue: string[]; entries: ContentEditorEntry[];
+}
+export interface ContentResearch {
+  draft: ContentEditorDraft; query: string; user_edited: boolean;
+  sources: Array<{ id: string; title: string; url: string; excerpt: string; retrieved_at: string }>;
+  claims: Array<{ field: string; text: string; sources: string[]; status: "sourced" | "uncertain" | "creative" }>;
+  conflicts: string[]; uncertainties: string[];
+}
+export interface ContentBuilderJob {
+  request_id: string; state: "searching" | "generating" | "ready" | "failed" | "interrupted";
+  result: ContentResearch | null; error: string | null;
 }
 
 export interface ChatConversation {
@@ -242,6 +264,25 @@ export class CoreClient {
       method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: file,
     });
   }
+  contentEditor(worldId: string, importId: string): Promise<{ draft: ContentEditorDraft; research: ContentResearch | null }> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/content/editor/${encodeURIComponent(importId)}`);
+  }
+  previewEditedContent(worldId: string, draft: ContentEditorDraft, replacesImportId?: string, generationId?: string): Promise<WorldContentItem> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/content/editor/preview`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ draft, replaces_import_id: replacesImportId ?? null, generation_id: generationId ?? null }),
+    });
+  }
+  generateContent(worldId: string, draftKind: "character" | "lorebook", query: string, tokenCeiling: number, requestId: string): Promise<ContentBuilderJob> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/content/editor/research`, {
+      method: "POST", headers: { "Content-Type": "application/json", "X-Request-Id": requestId },
+      body: JSON.stringify({ kind: draftKind, query, token_ceiling: tokenCeiling }),
+    });
+  }
+  contentGenerationStatus(worldId: string, requestId: string): Promise<ContentBuilderJob> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/content/editor/research/${encodeURIComponent(requestId)}`);
+  }
+
   commitWorldContent(worldId: string, preview: WorldContentItem): Promise<WorldContentItem> {
     return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/content/${preview.import_id}/commit`, {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ reviewed_hash: preview.reviewed_hash }),

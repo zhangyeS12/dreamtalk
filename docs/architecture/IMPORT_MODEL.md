@@ -1,6 +1,6 @@
 # Import Boundary — C-004A
 
-状态：canonical 内容 Draft、raw preservation、确定性校验和 Preview → confirmed Commit 已建立。C-004B 的离线 Character Card parser 继续沿用；C-004C1 新增 ST native World Info 和 embedded CharacterBook 规范化。C-004D2 新增 `.lwcontent` secure container→canonical graph→六种三方冲突→reviewed Preview/explicit decisions→Commit。lore 运行激活、文件选择 UI、Builder、web research、LLM 和 `.lworld` runtime package 尚未实现。
+状态：canonical 内容 Draft、raw preservation、确定性校验和 Preview → confirmed Commit 已建立。C-004B 的离线 Character Card parser 继续沿用；C-004C1 新增 ST native World Info 和 embedded CharacterBook 规范化。C-004D2 新增 `.lwcontent` secure container→canonical graph→六种三方冲突→reviewed Preview/explicit decisions→Commit。后续产品切片已接通文件导入 UI、手动原生编辑、世界书基础授权激活及基于检索摘要的角色卡/世界书 Builder；完整 World Builder 与 `.lworld` runtime package 仍未实现。当前 Builder 复用 ContentDraft/Preview/Commit，原生创建不制造 RawImportEnvelope；详见[复用与实现边界](../research/2026-09-28-content-builder-reuse.md)。
 
 ```text
 external source (untrusted)

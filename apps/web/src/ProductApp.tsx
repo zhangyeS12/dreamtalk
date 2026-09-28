@@ -56,6 +56,7 @@ function savedTokenCeiling(): number {
 export function ProductApp({ client }: { client: CoreClient }) {
   const [tab, setTab] = useState<Tab>("chats");
   const [meVisited, setMeVisited] = useState(false);
+  const [worldContentDirty, setWorldContentDirty] = useState(false);
   const [worldProfileDirty, setWorldProfileDirty] = useState(false);
   const [worlds, setWorlds] = useState<WorldSettings[]>([]);
   const [worldId, setWorldId] = useState("");
@@ -165,7 +166,7 @@ export function ProductApp({ client }: { client: CoreClient }) {
     event.preventDefault();
     const name = newWorldName.trim();
     if (!name || busy) return;
-    if (worldProfileDirty && !window.confirm("当前世界的身份尚未保存，是否放弃修改并创建新世界？")) return;
+    if ((worldProfileDirty || worldContentDirty) && !window.confirm("当前世界有尚未保存的编辑，是否放弃修改并创建新世界？")) return;
     await act(async () => {
       const result = await client.createWorld(name, crypto.randomUUID());
       await refresh(); setSelectedPlayer(null); setConversationDirectory(null); setGroupDirectory(null); setSelectedConversationId(null); setSelectedGroupId(null); setGroupSetupOpen(false); setWorldId(result.world_id); setNewWorldName("");
@@ -240,11 +241,11 @@ export function ProductApp({ client }: { client: CoreClient }) {
         </div>
       </div>}
 
-      {tab === "contacts" && (world ? <WorldContacts key={world.world_id} client={client} worldId={world.world_id} onSettings={() => setTab("settings")} onIdentity={() => setTab("me")} onOpenChat={openChat} canOpenChat={!!selectedPlayer} openingChat={busy} /> : <div className="page-section"><div className="empty-state"><h2>先创建一个世界</h2><p>在设置中创建世界，然后导入角色卡。</p><button className="text-action" onClick={() => setTab("settings")}>前往设置</button></div></div>)}
+      {tab === "contacts" && (world ? <WorldContacts key={world.world_id} client={client} worldId={world.world_id} onSettings={() => setTab("settings")} onIdentity={() => setTab("me")} onOpenChat={openChat} canOpenChat={!!selectedPlayer} openingChat={busy} /> : <div className="page-section"><div className="empty-state"><h2>先创建一个世界</h2><p>在设置中创建世界，然后新建或导入角色卡。</p><button className="text-action" onClick={() => setTab("settings")}>前往设置</button></div></div>)}
 
       {<div className="settings-page" hidden={tab !== "settings"}>
         <section className="settings-section"><div className="section-heading"><h2>世界</h2><p>每个世界有独立的角色、聊天和身份。</p></div>
-          {worlds.length ? <label className="field"><span>当前世界</span><select value={worldId} disabled={busy} onChange={event => { if (worldProfileDirty && !window.confirm("当前世界的身份尚未保存，是否放弃修改并切换世界？")) return; setSelectedPlayer(null); setConversationDirectory(null); setGroupDirectory(null); setSelectedConversationId(null); setSelectedGroupId(null); setGroupSetupOpen(false); setWorldId(event.target.value); setEventsOpen(false); setNotice(""); }}>
+          {worlds.length ? <label className="field"><span>当前世界</span><select value={worldId} disabled={busy} onChange={event => { if ((worldProfileDirty || worldContentDirty) && !window.confirm("当前世界有尚未保存的编辑，是否放弃修改并切换世界？")) return; setSelectedPlayer(null); setConversationDirectory(null); setGroupDirectory(null); setSelectedConversationId(null); setSelectedGroupId(null); setGroupSetupOpen(false); setWorldId(event.target.value); setEventsOpen(false); setNotice(""); }}>
             {worlds.map(item => <option key={item.world_id} value={item.world_id}>{item.name}</option>)}
           </select></label> : <p className="inline-hint">还没有世界。创建后才能导入角色卡和世界书。</p>}
           <form className="create-world" onSubmit={event => void createWorld(event)}><label className="field"><span>创建新世界</span><input value={newWorldName} onChange={event => setNewWorldName(event.target.value)} maxLength={120} placeholder="给世界起个名字" /></label><button type="submit" className="primary-button" disabled={busy || !newWorldName.trim()}>创建世界</button></form>
@@ -267,7 +268,7 @@ export function ProductApp({ client }: { client: CoreClient }) {
         <section className="settings-section"><div className="section-heading"><h2>聊天额度</h2><p>每轮输入和输出共用上限。系统按可信上界预留，额度不足时不会开始下一次模型调用。</p></div>
           <div className="setting-row"><label className="field"><span>每轮 Token 上限</span><input type="number" min="1" max="1000000" step="1" value={tokenCeilingInput} onChange={event => setTokenCeilingInput(event.target.value)} /></label><button type="button" className="secondary-button" disabled={!Number.isSafeInteger(Number(tokenCeilingInput)) || Number(tokenCeilingInput) < 1 || Number(tokenCeilingInput) > 1_000_000} onClick={() => { const next = Number(tokenCeilingInput); setTokenCeiling(next); try { window.localStorage.setItem(TOKEN_CEILING_KEY, String(next)); } catch { /* Session setting remains active. */ } setNotice("聊天额度已更新。"); }}>应用</button></div>
         </section>
-        {world ? <WorldImports key={world.world_id} client={client} worldId={world.world_id} /> : <section className="settings-section"><h2>导入内容</h2><p className="inline-hint">创建世界后即可导入。</p></section>}
+        {world ? <WorldImports key={world.world_id} client={client} worldId={world.world_id} tokenCeiling={tokenCeiling} onDirtyChange={setWorldContentDirty} /> : <section className="settings-section"><h2>导入内容</h2><p className="inline-hint">创建世界后即可导入。</p></section>}
       </div>}
 
       {(tab === "me" || meVisited) && <div className="settings-page profile-page" hidden={tab !== "me"}><ProfileEditor client={client} /><section className="settings-section"><div className="section-heading"><h2>我在当前世界</h2><p>每个世界选择一个自己的玩家身份；世界事件按此身份的已知范围显示。</p></div>
@@ -278,6 +279,6 @@ export function ProductApp({ client }: { client: CoreClient }) {
         {selectedPlayer ? <p className="inline-hint">已绑定：{players.find(item => item.player_id === selectedPlayer)?.name ?? "当前玩家"}</p> : null}
       </section>{world && <ProfileEditor key={world.world_id} client={client} worldId={world.world_id} onDirtyChange={setWorldProfileDirty} />}</div>}
     </main>
-    <nav className="bottom-nav" aria-label="主导航">{tabs.map(item => <button key={item.id} type="button" className={tab === item.id ? "nav-item active" : "nav-item"} aria-current={tab === item.id ? "page" : undefined} onClick={() => setTab(item.id)}><TabIcon name={item.id} /><span>{item.label}</span></button>)}</nav>
+    <nav className="bottom-nav" aria-label="主导航">{tabs.map(item => <button key={item.id} type="button" className={tab === item.id ? "nav-item active" : "nav-item"} aria-current={tab === item.id ? "page" : undefined} onClick={() => { if (tab !== item.id && worldContentDirty && !window.confirm("内容编辑尚未保存，是否放弃草稿并离开？联网生成结果可在返回后检查。")) return; setTab(item.id); }}><TabIcon name={item.id} /><span>{item.label}</span></button>)}</nav>
   </div>;
 }

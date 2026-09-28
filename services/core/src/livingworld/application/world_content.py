@@ -5,7 +5,7 @@ from time import monotonic
 from typing import Literal, Protocol
 from uuid import UUID, uuid4
 
-from livingworld.application.content import ContentConflictError
+from livingworld.application.content import ContentConflictError, ContentDraft
 from livingworld.application.imports import (
     ContentImporter,
     ContentImportError,
@@ -110,6 +110,50 @@ class WorldContentService:
             preview.content.preview_hash,
             kind,
             imported.draft.contents,
+            replaces_import_id,
+        )
+        pending = PendingWorldContent(item, preview, monotonic() + 15 * 60)
+        self._pending[item.import_id] = pending
+        return pending
+
+    async def current(self, world_id: WorldId, import_id: UUID) -> AcceptedWorldContent:
+        await self.store.require_world(world_id)
+        previous = next(
+            (
+                item
+                for item in await self.store.list_imports(world_id)
+                if item.import_id == import_id
+            ),
+            None,
+        )
+        if previous is None or not await self.store.is_current(import_id):
+            raise ContentConflictError("Content replacement target is no longer current")
+        return previous
+
+    async def prepare_draft(
+        self,
+        world_id: WorldId,
+        kind: ImportKind,
+        draft: ContentDraft,
+        replaces_import_id: UUID | None = None,
+    ) -> PendingWorldContent:
+        await self.store.require_world(world_id)
+        if replaces_import_id is not None:
+            previous = await self.current(world_id, replaces_import_id)
+            if previous.kind != kind:
+                raise ContentConflictError("Content kind mismatch")
+        self._pending = {
+            key: value for key, value in self._pending.items() if value.expires > monotonic()
+        }
+        if len(self._pending) >= 2:
+            raise ContentImportError("preview_capacity_reached")
+        preview = ImportDraft(draft).preview()
+        item = AcceptedWorldContent(
+            uuid4(),
+            world_id,
+            preview.content.preview_hash,
+            kind,
+            draft.contents,
             replaces_import_id,
         )
         pending = PendingWorldContent(item, preview, monotonic() + 15 * 60)

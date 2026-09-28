@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 
 from livingworld.application.content import ContentConflictError
+from livingworld.application.content_builder import research_view
 from livingworld.application.errors import EntityNotFoundError
 from livingworld.application.imports import ContentImportError
 from livingworld.application.lore_activation import lore_activation_summary
@@ -39,6 +40,14 @@ def _view(item: AcceptedWorldContent, common_ids: set[tuple[UUID, UUID]] | None 
         "replaces_import_id": str(item.replaces_import_id) if item.replaces_import_id else None,
         "kind": item.kind,
         "reviewed_hash": item.reviewed_hash,
+        "research": next(
+            (
+                research_view(json_value(root.extensions["dreamtalk.research"]))
+                for root in item.contents
+                if "dreamtalk.research" in root.extensions
+            ),
+            None,
+        ),
         "characters": [
             {
                 "id": str(root.content_id.value),

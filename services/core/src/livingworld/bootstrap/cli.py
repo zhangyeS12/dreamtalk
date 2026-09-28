@@ -44,6 +44,7 @@ from livingworld.application.simulation_runtime import (
 from livingworld.application.world_settings import WorldSettingsService
 from livingworld.bootstrap.llm_control import HostControlListener
 from livingworld.bootstrap.llm_runtime import (
+    configure_content_builder,
     configure_direct_chat_reply,
     configure_group_chat_reply,
     start_production_llm_session,
@@ -205,6 +206,15 @@ async def run(
                 earlier_chat_recall,
             ),
         )
+        from livingworld.application.content_builder import ContentBuilder
+        from livingworld.infrastructure.content_research import DDGSContentResearch
+
+        content_builder = ContentBuilder(
+            world_content,
+            database.content_builder_store(),
+            DDGSContentResearch(),
+            configure_content_builder(llm_session),
+        )
         status = RuntimeStatus(version("dreamtalk-core"), generation, llm_health=llm_session.health)
         if desktop:
             # Read from the unbuffered OS pipe so interpreter shutdown cannot race
@@ -230,6 +240,8 @@ async def run(
             chat_messages,
             chat_reply,
             group_chat_reply,
+            content_builder,
+            database.content_repository(),
         )
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.bind((LOOPBACK_HOST, 0))

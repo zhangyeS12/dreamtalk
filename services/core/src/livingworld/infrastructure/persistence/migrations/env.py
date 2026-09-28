@@ -2,6 +2,9 @@
 
 from alembic import context
 
+from livingworld.infrastructure.persistence.content_builder import (
+    ContentBuilderJobRecord,  # noqa: F401
+)
 from livingworld.infrastructure.persistence.content_models import ContentBase
 from livingworld.infrastructure.persistence.models import Base
 

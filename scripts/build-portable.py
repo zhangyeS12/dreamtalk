@@ -66,6 +66,7 @@ def main() -> None:
     shutil.copy2(desktop, package / "dreamtalk-desktop.exe")
     shutil.copy2(root / "LICENSE", package / "LICENSE")
     shutil.copy2(root / "docs" / "licenses" / "jieba-0.42.1.txt", package / "JIEBA_LICENSE.txt")
+    shutil.copytree(root / "docs" / "licenses", package / "third-party-licenses")
     shutil.copy2(root / "docs" / "PORTABLE_WINDOWS.md", package / "README.md")
     if not args.build_only:
         environment = os.environ.copy()

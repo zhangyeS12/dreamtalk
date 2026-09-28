@@ -108,13 +108,15 @@ def configure_group_chat_reply(
     return GroupChatReplyService(messages, context, *configured)
 
 
-def _chat_reply_configuration(session: ProductionLLMSession):
+def configure_content_builder(session: ProductionLLMSession):
+    return _chat_reply_configuration(session, "content_builder")
+
+
+def _chat_reply_configuration(session: ProductionLLMSession, purpose="character_dialogue"):
     runtime = session.runtime
     if runtime is None:
         return None
-    policy = runtime.configuration.routing.policy(
-        LLMPurpose("character_dialogue"), RoutingProfile.BALANCED
-    )
+    policy = runtime.configuration.routing.policy(LLMPurpose(purpose), RoutingProfile.BALANCED)
     selection = ProfileSelection(RoutingProfile.BALANCED) if policy else None
     # Multiple enabled models need an explicit route; config order is not policy.
     candidates = (

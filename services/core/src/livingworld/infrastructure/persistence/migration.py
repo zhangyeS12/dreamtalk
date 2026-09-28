@@ -10,6 +10,9 @@ from alembic import command
 from alembic.config import Config
 from sqlalchemy import CheckConstraint, Connection, MetaData, UniqueConstraint, inspect, text
 
+from livingworld.infrastructure.persistence.content_builder import (
+    ContentBuilderJobRecord,  # noqa: F401
+)
 from livingworld.infrastructure.persistence.content_models import ContentBase
 from livingworld.infrastructure.persistence.errors import MigrationCompatibilityError
 from livingworld.infrastructure.persistence.llm_models import AccountingBase
@@ -36,7 +39,9 @@ CHAT_CONVERSATION_REVISION = "0018_chat_conversations"
 CHAT_MESSAGE_REVISION = "0019_chat_messages"
 CHAT_DISPATCH_REVISION = "0020_chat_turn_dispatch"
 CHAT_COMPLETION_REVISION = "0021_group_turn_completion"
-HEAD_REVISION = "0022_world_common_lore"
+COMMON_LORE_REVISION = "0022_world_common_lore"
+HEAD_REVISION = "0023_content_builder_jobs"
+BUILDER_JOB_TABLES = {"content_builder_jobs"}
 CHAT_IDENTITY_TABLES = {"chat_conversations", "chat_participants"}
 CHAT_MESSAGE_TABLES = {"chat_turns", "chat_messages"}
 CHAT_DISPATCH_TABLES = {"chat_turn_dispatches"}
@@ -194,10 +199,15 @@ def _current_revision(connection: Connection) -> str:
 
 
 def _validate_managed_state(connection: Connection, revision: str) -> None:
-    # 0021 adds a nullable column; 0022 adds one independent local table.
-    pre_completion_revision = revision not in {CHAT_COMPLETION_REVISION, HEAD_REVISION}
-    pre_common_lore_revision = revision != HEAD_REVISION
-    if revision in {CHAT_COMPLETION_REVISION, HEAD_REVISION}:
+    # Additive authored/job tables do not change the older runtime shapes.
+    pre_builder_revision = revision != HEAD_REVISION
+    pre_completion_revision = revision not in {
+        CHAT_COMPLETION_REVISION,
+        COMMON_LORE_REVISION,
+        HEAD_REVISION,
+    }
+    pre_common_lore_revision = revision not in {COMMON_LORE_REVISION, HEAD_REVISION}
+    if revision in {CHAT_COMPLETION_REVISION, COMMON_LORE_REVISION, HEAD_REVISION}:
         revision = CHAT_DISPATCH_REVISION
     if revision not in {
         LEGACY_REVISION,
@@ -346,6 +356,8 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         expected -= LOCAL_PROFILE_TABLES
     if revision != CHAT_DISPATCH_REVISION:
         expected -= {"world_content_imports"}
+    if pre_builder_revision:
+        expected -= BUILDER_JOB_TABLES
     if pre_common_lore_revision:
         expected -= WORLD_COMMON_LORE_TABLES
     if tables != expected:
@@ -360,6 +372,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
             pre_dispatch_revision=pre_dispatch_revision,
             pre_completion_revision=pre_completion_revision,
             pre_common_lore_revision=pre_common_lore_revision,
+            pre_builder_revision=pre_builder_revision,
         )
     if revision in {
         CONTENT_REVISION,
@@ -413,6 +426,7 @@ def _validate_domain_shape(
     pre_dispatch_revision: bool | None = None,
     pre_completion_revision: bool = True,
     pre_common_lore_revision: bool = True,
+    pre_builder_revision: bool = True,
 ) -> None:
     """Detect partial/mismatched schemas; never infer a revision from them."""
 
@@ -438,6 +452,8 @@ def _validate_domain_shape(
         "ck_command_receipt_command_result",
     }
     for table in metadata.sorted_tables:
+        if pre_builder_revision and table.name in BUILDER_JOB_TABLES:
+            continue
         if pre_common_lore_revision and table.name in WORLD_COMMON_LORE_TABLES:
             continue
         if pre_chat_revision and table.name in CHAT_IDENTITY_TABLES:

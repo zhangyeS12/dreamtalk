@@ -13,8 +13,13 @@ analysis = Analysis(
     binaries=[],
     datas=collect_data_files("livingworld", include_py_files=True)
     + copy_metadata("dreamtalk-core")
-    + copy_metadata("jieba"),
-    hiddenimports=["aiosqlite"]
+    + copy_metadata("jieba")
+    + copy_metadata("ddgs")
+    + copy_metadata("primp")
+    + copy_metadata("lxml")
+    + collect_data_files("ddgs", include_py_files=True),
+    hiddenimports=["aiosqlite", "ddgs.ddgs"]
+    + collect_submodules("ddgs.engines")
     + collect_submodules("livingworld.infrastructure.persistence.migrations.versions"),
     hookspath=[str(ROOT / "scripts" / "pyinstaller-hooks")],
     hooksconfig={},

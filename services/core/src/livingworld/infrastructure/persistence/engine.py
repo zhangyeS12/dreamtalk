@@ -189,6 +189,11 @@ class Database:
 
         return SqlAlchemyPlayerEventFeedStore(self._sessions)
 
+    def content_builder_store(self):
+        from livingworld.infrastructure.persistence.content_builder import SqlAlchemyBuilderStore
+
+        return SqlAlchemyBuilderStore(self._sessions)
+
     def world_content_service(self):
         from livingworld.application.world_content import WorldContentService
         from livingworld.infrastructure.clock import SystemWallClock
