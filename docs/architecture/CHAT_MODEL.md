@@ -216,15 +216,29 @@ composer when the governed model and credential are available.
   as common background. Only entries from current accepted imports are read;
   replacing a Lorebook requires fresh exposure review. Common entries are inert
   lower-trust authored background, never WorldTruth or privileged instructions.
-  Source-disabled entries cannot be exposed. Current prompt assembly includes up
-  to 16 enabled common entries and 12 KiB of title/content. A plain literal,
-  case-insensitive match between a public entry's primary keyword and the last
-  4096 characters of the current Player message moves that entry ahead of other
-  public entries; ties retain deterministic priority/order/ID ordering. This is
-  relevance ranking inside an already-authorized set, not permission or factual
-  activation. Secondary-key logic, source regex, recursion, probability, scripts
-  and placement metadata are not executed; conditional Lorebook activation for
-  otherwise hidden entries remains separate work.
+  Source-disabled entries cannot be exposed. Prompt assembly now activates only
+  constant entries or entries matching their literal primary keywords; enabled
+  secondary filters consume the normalized AND_ANY / AND_ALL / NOT_ANY / NOT_ALL
+  modes. Unknown modes are not guessed. Matching respects source case sensitivity
+  and whole-word settings (only escaped literal keywords are used). The default
+  scan is the last two visible messages of this Conversation, overridden by the
+  entry's scanDepth or its accepted LoreCollection's scan_depth. Depth zero does
+  not activate keywords. The scan is bounded to 32 messages and the last 16,384
+  raw characters; group replies can match earlier committed speakers' messages.
+  Participant names, other Conversations, private memories and lore contents are
+  not added to the scan. Permission always precedes matching.
+  Keyword hits precede constant entries, then retain priority descending, order
+  ascending and stable ID ordering. At most 16 entries and 12 KiB of title/content
+  enter the prompt; unmatched entries never fill the remainder. ignoreBudget
+  cannot bypass these bounds. Unsupported regex/template keys, unknown secondary
+  modes, probability/timing/recursion-only conditions, inclusion groups, Character
+  filters and additional profile scan sources do not degrade to ordinary matches:
+  affected entries are skipped, with a read-only explanation in content preview
+  and accepted details. Vector matching is not connected; vectorized entries may
+  still activate through supported literal keys. Recursive expansion, scripts,
+  automation and source placement metadata remain unexecuted. This is a bounded
+  basic activation policy, not full SillyTavern parity. Hidden entry authorization
+  remains separate work. See the [reuse decision](../research/2026-09-28-lore-activation-reuse.md).
 - Hidden WorldEvents are not supplied to the player or a Character merely
   because they exist. Any later event context must pass the relevant owner's
   knowledge boundary.

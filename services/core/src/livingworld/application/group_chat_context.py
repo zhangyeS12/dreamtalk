@@ -204,11 +204,7 @@ class GroupChatContextBuilder:
                 source.message.conversation_id.world_id
                 if isinstance(source, PlayerSend)
                 else source.conversation_id.world_id,
-                relevance_text=(
-                    source.message.text
-                    if isinstance(source, PlayerSend)
-                    else source.player_message.text
-                ),
+                transcript_texts=tuple(item.text for item in transcript),
             ),
             "transcript": [
                 {"sender_id": str(item.sender_id.value), "text": item.text} for item in transcript

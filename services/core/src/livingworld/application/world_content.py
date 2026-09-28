@@ -12,7 +12,7 @@ from livingworld.application.imports import (
     ImportDraft,
     ImportPreview,
 )
-from livingworld.domain.content.models import CanonicalContent, LoreEntry
+from livingworld.domain.content.models import CanonicalContent, LoreCollection, LoreEntry
 from livingworld.domain.identifiers import WorldId
 
 ImportKind = Literal["character", "lorebook"]
@@ -32,6 +32,7 @@ class AcceptedWorldContent:
 class CommonLoreEntry:
     import_id: UUID
     entry: LoreEntry
+    collection: LoreCollection | None = None
 
 
 class WorldContentStore(Protocol):

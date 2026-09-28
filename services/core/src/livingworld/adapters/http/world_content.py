@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from livingworld.application.content import ContentConflictError
 from livingworld.application.errors import EntityNotFoundError
 from livingworld.application.imports import ContentImportError
+from livingworld.application.lore_activation import lore_activation_summary
 from livingworld.application.world_content import (
     AcceptedWorldContent,
     ImportKind,
@@ -32,6 +33,7 @@ class LoreExposure(BaseModel):
 def _view(item: AcceptedWorldContent, common_ids: set[tuple[UUID, UUID]] | None = None) -> dict:
     characters = [root for root in item.contents if isinstance(root, CharacterDefinition)]
     collections = [root for root in item.contents if isinstance(root, LoreCollection)]
+    collection_by_id = {root.content_id: root for root in collections}
     return {
         "import_id": str(item.import_id),
         "replaces_import_id": str(item.replaces_import_id) if item.replaces_import_id else None,
@@ -62,6 +64,10 @@ def _view(item: AcceptedWorldContent, common_ids: set[tuple[UUID, UUID]] | None 
                 "id": str(root.content_id.value),
                 "title": root.title,
                 "keywords": list(root.keywords),
+                "secondary_keywords": list(root.secondary_keywords),
+                "activation_summary": lore_activation_summary(
+                    root, collection_by_id.get(root.collection_id)
+                ),
                 "content": root.content,
                 "enabled": root.enabled,
                 "common": (item.import_id, root.content_id.value) in (common_ids or set()),

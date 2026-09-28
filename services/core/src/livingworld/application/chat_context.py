@@ -16,6 +16,7 @@ from livingworld.application.chat_messages import (
 from livingworld.application.errors import EntityNotFoundError
 from livingworld.application.llm import LLMMessage, MessageRole, TextContent
 from livingworld.application.local_profile import LocalProfileStore
+from livingworld.application.lore_activation import active_common_lore
 from livingworld.application.ports import CharacterMemoryReader
 from livingworld.application.world_content import CommonLoreEntry
 from livingworld.domain.content.models import CharacterDefinition
@@ -27,7 +28,6 @@ _MAX_CHAT_TRANSCRIPT_BYTES = 96 * 1024
 _MAX_CARD_GREETING_BYTES = 8 * 1024
 _MAX_COMMON_LORE_BYTES = 12 * 1024
 _MAX_COMMON_LORE_ITEMS = 16
-_MAX_COMMON_LORE_MATCH_CHARS = 4096
 _MAX_GROUP_EXPOSURE_BYTES = 8 * 1024
 
 _SYSTEM = (
@@ -85,26 +85,24 @@ async def common_chat_lore(
     world_id: WorldId,
     *,
     relevance_text: str = "",
+    transcript_texts: tuple[str, ...] = (),
 ) -> list[dict[str, str]]:
-    """Rank only user-exposed background by literal current-message keyword relevance."""
+    """Activate only exposed background, then apply the existing prompt bounds."""
     if reader is None:
         return []
     entries = await reader(world_id)
-    recent_text = relevance_text[-_MAX_COMMON_LORE_MATCH_CHARS:].casefold()
+    active = active_common_lore(entries, transcript_texts or (relevance_text,))
 
     def rank(item: CommonLoreEntry) -> tuple[int, int, int, str]:
-        matched = bool(recent_text) and any(
-            key.strip() and key.casefold() in recent_text for key in item.entry.keywords
-        )
         return (
-            -int(matched),
+            -int(item.entry.activation_metadata.get("constant") is not True),
             -item.entry.priority,
             item.entry.order,
             str(item.entry.content_id.value),
         )
 
     ordered = sorted(
-        (item for item in entries if item.entry.enabled),
+        active,
         key=rank,
     )
     selected: list[dict[str, str]] = []
@@ -249,7 +247,7 @@ class DirectChatContextBuilder:
             "common_world_background": await common_chat_lore(
                 self._common_lore_reader,
                 conversation_id.world_id,
-                relevance_text=sent.message.text,
+                transcript_texts=tuple(item.text for item in visible),
             ),
         }
         if greeting := card_greeting_example(character):

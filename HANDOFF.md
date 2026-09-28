@@ -2,7 +2,20 @@
 
 更新日期：2026-09-28。此文件记录当前开发现场与接续工作，不替代 [AGENTS.md](AGENTS.md)。先读 AGENTS，再读本文，最后核对实际 Git 状态和相关代码；不能把下面的基线哈希当作永远不变的当前 HEAD。
 
-## 最新接续：2026-09-28 聊天状态反馈
+## 最新接续：2026-09-28 世界书基础激活
+
+- 接续起点为 `f5dce91`，正式目录 `D:\LivingWorld`，沿用 `codex/chat-feedback` 分支。开始时工作区干净；没有创建新的旧工作克隆。
+- 已完成成熟方案调查：SillyTavern 1.19.0 的公开基础规则、Character Foundry 0.5.0 的格式能力；后者没有运行时激活器。本轮复用现有权限读取、规范化字段与聊天上下文，未新增依赖、模型调用、持久字段或数据库迁移。见[复用记录](docs/research/2026-09-28-lore-activation-reuse.md)。
+- 公共世界书从“命中优先、未命中可填充”改为基础条件激活：常驻、主关键词、四种次级逻辑、大小写、完整单词及有界会话历史扫描。公开是访问权限，不等于本轮必定注入。私聊和群聊共享同一规则；群内前面的已保存台词可触发后面的角色背景。
+- 来源扫描深度通过同一 accepted 快照的 LoreCollection 读取，默认两条，最多 32 条/16,384 个原始字符。仍限制 16 条背景及 12 KiB，保留 lower-trust 数据和世界隔离。
+- 未支持的正则/模板、概率、时序、互斥组、角色筛选等条件不会被忽略后照常注入；条目详情显示具体支持范围/暂不参与原因和次级关键词。向量、完整递归、源插入位置及隐藏角色专属授权未接入。
+- 现有测试的“公共条目无条件进入提示词”预期需要在用户授权测试维护后同步；本轮没有改动或运行测试，不以旧测试证明新激活规则。构建与静态检查结果在本节补充。
+- 本轮静态检查：改动 Python 文件 Ruff lint 通过，新增激活模块/持久读取格式检查通过；`npm run lint`（ESLint + TypeScript）及 `git diff --check` 通过。没有新增、修改或运行测试，没有启动应用或调用提供商。
+- 本轮交付：`uv run --frozen --group packaging python scripts/build-portable.py --build-only` 成功，冻结 Core、Vite 生产构建与 Rust release 均完成；PyInstaller Analysis 清单含 `livingworld.application.lore_activation`。最新 ZIP `D:\LivingWorld\artifacts\portable\dreamtalk.zip`，27824584 bytes，2026-09-28 07:27:52 UTC，SHA256 `E5E264F85AB4A73359DCBCBCC09784D3E7429A4B2B6224C425978EDD8C9258A2`。整个解压目录供用户验收，构建不能替代运行效果确认。
+- 构建仍有 `tzdata`、`pysqlite2`、`MySQLdb` hidden-import 警告及 162 项平台/可选库/静态符号等 missing-module 分析项；无以 `livingworld` 命名的缺失模块项。原始记录 `artifacts/pyinstaller-build/dreamtalk-core/warn-dreamtalk-core.txt`，本轮未验证其运行影响。
+- 下方聊天状态反馈及其他旧记录是历史切片；旧产物哈希以本节后续记录为准。
+
+## 前序切片：2026-09-28 聊天状态反馈
 
 - 用户已授权自行选择技术方案并继续开发；每个新功能实现前先调查成熟项目，记录具体复用决定。规则已写入 AGENTS.md。
 - 正式工作目录为 `D:\LivingWorld`，本地分支 `codex/chat-feedback`；不再使用旧工作克隆。开始接续时仍须核对实际 Git 状态。
@@ -67,7 +80,7 @@ git diff --cached --stat
 | 私聊 | 持久 Conversation、Player Message、turn、一次性 dispatch claim、角色生成与受控持久回复；页面发送、读取和错误提示已接线。 |
 | 群聊 | 选择两个或以上角色建群；固定成员、共享持久记录、独立选人器、`@` 首位指定、逐条角色回复、整轮共享 Token 上限、完成标记。不是永久自主角色聊天。 |
 | 聊天阅读 | `react-markdown` 安全渲染、回车发送/Shift+回车换行及输入法保护、自动滚动/历史位置处理、最近消息分页和“加载更早消息”。 |
-| 世界书背景 | 世界书条目默认隐藏；当前世界逐条设为公共后，可进入角色回复上下文。最近加入有限的关键词相关性排序，详见第 5 节。 |
+| 世界书背景 | 世界书条目默认隐藏；当前世界逐条设为公共后，还须满足常驻或支持的关键词条件才进入聊天。已有次级条件及有界历史扫描，未实现完整酒馆激活。详见最新接续及第 5 节。 |
 | 群聊知情 | 群成员即使没发言，也能在之后的私聊/其他群聊上下文读取自身参与群的有界消息窗口。不是自动 Knowledge/Truth/Memory 写入。 |
 | 角色记忆 | C-007A 的 owner-scoped、Observation 证据支持的 EpisodicMemory 已存在，私聊/群聊回复读取本角色的有界记忆；尚未实现长期整理、检索或自动聊天记忆形成。 |
 | LLM 底座 | OpenAI-compatible Chat、OpenAI Responses、Anthropic Messages、Gemini Interactions 四种 adapter；非流式/流式基础契约、structured validation、retry、routing、usage/pricing、financial budget、session credentials 已有。 |
@@ -157,14 +170,14 @@ apps/web/src/main.tsx → App.tsx
 - 角色卡 `first_mes` 仅作有界语气示例（8 KiB），不是自动发出的开场消息。
 - 导入文本、背景、个人资料、消息都是 lower-trust data。世界书/角色卡中的作者指令不是新增 privileged system instruction。
 
-### 5.4 公共世界书当前是“有界排序”，不是完整激活引擎
+### 5.4 公共世界书为有界基础激活
 
-- `SqlAlchemyWorldContentStore.list_common_lore` 只查指定世界、当前 accepted 版本、明确公开的条目；disabled 条目不会用于聊天。
-- `common_chat_lore(..., relevance_text=本轮玩家消息)` 取消息末 4096 个字符并 casefold，以 primary keywords 的字面子串命中排序。
-- 命中条目优先；随后按 priority 降序、order 升序、稳定 ID 排序。最多 16 条，title/content 累计 12 KiB；超预算条目跳过。
-- **未命中但已公开的条目仍可能填入剩余额度。** 这不是“未命中不激活”；不要在后续说明中把它说成完整 ST World Info 触发。
-- 尚未执行 regex、secondary-key 条件、历史深度扫描、递归、概率、sticky/cooldown 等行为。导入保存这些元数据不等于聊天引擎消费了它们。
-- 当前公共标记按 `(world_id, import_id, entry_id)` 保存。替换导入后读新版本，旧公共标记不会自动授予新版本权限；设置需要对当前版本显式开放。不要为了便利自动把隐藏条目公开。
+- `SqlAlchemyWorldContentStore.list_common_lore` 先限定指定世界、当前 accepted 版本及明确公开的条目；匹配不能授予隐藏条目权限。`CommonLoreEntry` 可附带同快照的所属 LoreCollection 供读取扫描深度。
+- `application/lore_activation.py` 消费已规范化的常驻、主/次级关键词、大小写、完整单词和扫描深度。`common_chat_lore` 私聊使用当前可见 transcript，群聊使用包含已保存发言的当前群 transcript；不扫描另一个会话或背景正文。
+- 默认最近两条消息，条目 scanDepth 覆盖书 scan_depth，最多 32 条/16,384 个原始字符。零深度不触发普通关键词；常驻不依赖关键词。四种已识别次级模式生效，空次级列表不附加条件；未知模式不猜测。
+- 未命中条目不再填入剩余背景。关键词命中优先于常驻，其后 priority 降序、order 升序、稳定 ID 排序；最多 16 条、title/content 共 12 KiB，超预算跳过。ignoreBudget 不绕开限制。
+- 正则/模板关键词及尚未支持的概率、时序、互斥组、角色筛选等条件使条目暂不参与聊天，界面解释原因。向量检索、递归扩展、源插入位置及脚本不执行；不是完整 ST World Info 兼容。
+- 内容 GET/预览增加只读 activation_summary、secondary_keywords；无数据库迁移。公共标记仍按 `(world_id, import_id, entry_id)` 保存，替换导入后需要对新版本显式开放。
 
 ### 5.5 Token、预算和模型配置
 
@@ -218,7 +231,7 @@ apps/web/src/main.tsx → App.tsx
 ### 用户体验缺口
 
 1. **长期独立记忆尚不完整。** 有 owner-scoped EpisodicMemory 和有界历史，但普通聊天未形成长期证据记忆；长对话后较早内容不会全部进入 prompt。别将持久 Message 与完整记忆系统混为一谈。
-2. **世界书与酒馆能力仍有差距。** 当前公开背景排序不是完整条件激活/注入位置引擎；隐藏背景没有角色专属授权传播路径。不能宣称已实现 ST 的所有功能。
+2. **世界书与酒馆能力仍有差距。** 当前支持有界基础条件激活，向量、递归、概率/时序和源注入位置尚未接入；隐藏背景没有角色专属授权传播路径。不能宣称已实现 ST 的所有功能。
 3. **Director 和主动事件尚未生产接通。** 现有世界时间、scheduler 和事件账本不能自己生成丰富剧情；event feed 当前只有有限安全标题。
 4. **聊天仍是整段生成后出现。** 缺少普通界面流式输出；群聊可能有多次选人和生成耗时。
 5. **保守 bounds 配置对普通用户仍有门槛。** managed model UI 要手填核实过的上界；不能为了降低门槛随意估值，丰富 Model Registry/安全候选预设仍需推进。

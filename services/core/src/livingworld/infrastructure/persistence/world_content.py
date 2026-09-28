@@ -10,7 +10,7 @@ from livingworld.application.content import ContentConflictError
 from livingworld.application.errors import EntityNotFoundError
 from livingworld.application.imports import ImportPreview
 from livingworld.application.world_content import AcceptedWorldContent, CommonLoreEntry
-from livingworld.domain.content.models import LoreEntry
+from livingworld.domain.content.models import CanonicalContent, LoreCollection, LoreEntry
 from livingworld.domain.content.serialization import (
     deserialize_content,
     parse_json,
@@ -99,18 +99,25 @@ class SqlAlchemyWorldContentStore:
                     .order_by(WorldCommonLoreRecord.import_id, WorldCommonLoreRecord.entry_id)
                 )
             ).all()
-            decoded: dict[UUID, dict[UUID, LoreEntry]] = {}
+            decoded: dict[UUID, dict[UUID, CanonicalContent]] = {}
             results = []
             for exposure, imported in rows:
                 if imported.import_id not in decoded:
                     decoded[imported.import_id] = {
-                        item.content_id.value: item
-                        for item in _load(imported).contents
-                        if isinstance(item, LoreEntry)
+                        item.content_id.value: item for item in _load(imported).contents
                     }
                 entries = decoded[imported.import_id]
-                if entry := entries.get(exposure.entry_id):
-                    results.append(CommonLoreEntry(imported.import_id, entry))
+                if isinstance(entry := entries.get(exposure.entry_id), LoreEntry):
+                    collection = (
+                        entries.get(entry.collection_id.value) if entry.collection_id else None
+                    )
+                    results.append(
+                        CommonLoreEntry(
+                            imported.import_id,
+                            entry,
+                            collection if isinstance(collection, LoreCollection) else None,
+                        )
+                    )
             return tuple(results)
 
     async def set_common_lore(

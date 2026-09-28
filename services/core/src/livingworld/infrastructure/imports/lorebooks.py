@@ -1,4 +1,4 @@
-"""Independent World Info / CharacterBook normalization. All triggers stay inert."""
+"""World Info / CharacterBook normalization; importing never executes trigger metadata."""
 
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime
