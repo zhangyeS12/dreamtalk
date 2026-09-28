@@ -2,7 +2,19 @@
 
 更新日期：2026-09-28。此文件记录当前开发现场与接续工作，不替代 [AGENTS.md](AGENTS.md)。先读 AGENTS，再读本文，最后核对实际 Git 状态和相关代码；不能把下面的基线哈希当作永远不变的当前 HEAD。
 
-## 最新接续：2026-09-28 模型保存按钮反馈修复
+## 最新接续：2026-09-28 资料生成与聊天额度分离
+
+- 用户反馈 150,000/200,000 仍无法生成艾莲角色卡，并明确要求解决为什么资料生成关联聊天每轮额度。从干净 `c1e9730` 接续，正式目录仍为 `D:\LivingWorld`，沿用 `codex/chat-feedback`；没有远程，没有发布或 push。
+- 原链路把聊天 ceiling 传入 Builder，再减整个可信模型输入上界；当输入上界较大时，用户提高聊天额度也无法留下输出预算。截图 150,000/200,000 的状态差异来自输入值还没有应用，但这不是预留逻辑的解决方案。
+- 删除 ProductApp → WorldImports → ContentEditor → API client 的资料生成聊天额度参数。HTTP 旧 `token_ceiling` 可选/deprecated，兼容旧请求和单次 claim fingerprint，仅影响 receipt identity，不传入生成预算。新客户端只发送 kind/query 与 request ID，恢复/GET 和防重复调用不变。
+- 生成请求单次输出 cap 仍为模型限制与 8,192 的较小值；现有 hard bounder 为所有路由候选预留，独立任务容量为最大候选 input+output。继续复用现有 ChatTurnTokenBudget 算术和 governed gateway，retry/fallback 共用一个有限任务 budget；逐调用可信上界、账本/金额 guard、未知结果不重放和 Draft/Preview/Commit 均保留。没有将本地分词估值假定为可信计费上界，也没有真的向模型输入百万 Token。
+- 界面明确资料生成独立于聊天，不要求用户提高聊天额度。聊天区显示已应用值与未应用提示。旧失败回执改为明确提示点击“联网生成”开始新请求，“检查生成结果”只读旧请求，不自动付费重试。
+- 实现前核对 DeepSeek 官方输出限制协议、tiktoken 官方示例和 LiteLLM token_counter 能力；选择直接复用既有预算/账本，不增加依赖。具体证据、推断和排除方案见[复用决定](docs/research/2026-09-28-generation-budget-reuse.md)。更新原 Builder 复用记录和 PRODUCT_SPEC，同时修正模型设置默认折叠的旧文档。
+- 本轮 Python Ruff lint/format、ESLint/TypeScript 和 `git diff --check` 通过；Core/Vite 195 模块/Rust release build-only 成功，日志 `artifacts/independent-generation-budget-build.log`。没有新增/修改/执行测试、browser/desktop smoke、读取用户凭据或调用提供商/搜索。旧 Builder quota 行为与 ModelSetup disabled 行为测试预期待用户授权后同步；没有删除或弱化测试。既有 tzdata/pysqlite2/MySQLdb hidden-import 警告仍存在。
+- 最新 ZIP `D:\LivingWorld\artifacts\portable\dreamtalk.zip`，40,643,073 bytes / 2026-09-28 11:23:35 UTC，SHA256 `1AC7E4D0B58AA87F670704163C897D82C398ED7E04BD917CB99BE6A80819B0DE`。desktop exe 12,391,424 bytes / 11:23:31 UTC；Core exe 13,723,061 bytes / 11:23:05 UTC。整个目录交付，启动入口 `artifacts/portable/dreamtalk/dreamtalk-desktop.exe`。
+- 接下来用户启动新版，用新的“联网生成”请求验收实际搜索、API 响应及草稿质量；读取旧失败请求仍返回旧结果。此次资料生成修复不等于聊天自身的大上下文 Token 预留门槛已经解决；该问题仍保留后续。下方上轮关联每轮 ceiling 的描述以本节和实际代码为准。
+
+## 前序切片：2026-09-28 模型保存按钮反馈修复
 
 - 用户反馈“保存模型设置”点击无反应，截图中模型名称为 `deep seek`。从干净 `75108ac` 接续，正式目录仍为 `D:\LivingWorld`，分支 `codex/chat-feedback`；没有远程，没有发布或 push。
 - 实际原因是名称含空格未通过已有 frontend/Rust 校验，旧按钮因 `disabled={!valid || saving}` 被静默禁用。截图上方的 Token 额度警告是独立聊天 preflight 限制，本身不阻止保存；没有证据表明这次点击已经发起保存或提供商调用。

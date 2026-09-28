@@ -28,7 +28,8 @@ class ResearchRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     kind: str = Field(pattern="^(character|lorebook)$")
     query: str = Field(min_length=1, max_length=600)
-    token_ceiling: int = Field(ge=1, le=1000000)
+    # Compatibility with older desktop requests; never used as a generation quota.
+    token_ceiling: int | None = Field(default=None, ge=1, le=1000000, deprecated=True)
 
 
 def content_authoring_router(service, repository, builder, authorize):

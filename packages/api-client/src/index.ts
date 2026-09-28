@@ -273,10 +273,10 @@ export class CoreClient {
       body: JSON.stringify({ draft, replaces_import_id: replacesImportId ?? null, generation_id: generationId ?? null }),
     });
   }
-  generateContent(worldId: string, draftKind: "character" | "lorebook", query: string, tokenCeiling: number, requestId: string): Promise<ContentBuilderJob> {
+  generateContent(worldId: string, draftKind: "character" | "lorebook", query: string, requestId: string): Promise<ContentBuilderJob> {
     return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/content/editor/research`, {
       method: "POST", headers: { "Content-Type": "application/json", "X-Request-Id": requestId },
-      body: JSON.stringify({ kind: draftKind, query, token_ceiling: tokenCeiling }),
+      body: JSON.stringify({ kind: draftKind, query }),
     });
   }
   contentGenerationStatus(worldId: string, requestId: string): Promise<ContentBuilderJob> {

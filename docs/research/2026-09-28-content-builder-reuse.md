@@ -19,7 +19,7 @@ DDGS 9.16.0 依赖 click（已经存在）、primp 和 lxml；uv.lock 本次解�
 - 角色表单：名称、描述、性格、背景、情境、说话方式、开场白、示例、标签、备注。世界书：名称、简介、增删条目、正文、主/次关键词、四种次级逻辑、常驻、启用与排序。高级兼容条件仍保留，其当前支持范围由既有激活摘要解释。
 - 原生内容直接构造 canonical ContentDraft，使用 NATIVE/BUILDER provenance，不伪造文件导入时间或 RawImportEnvelope。编辑复制独立 graph，保留原导入扩展、未开放字段、素材和角色内嵌世界书；旧快照保持不变。
 - 检索只发送用户显式填写的需求；不读取其他世界、隐藏剧情、聊天或玩家资料。固定 bing/brave/duckduckgo 后端与 8 秒单引擎超时，最多八条去重摘要，每条最多 1,000 字符。仅保留 HTTP(S) 公网出处链接，不自动请求搜索结果页面或执行其中的指令。
-- 模型通过现有 runtime 的 content_builder 用途和 BALANCED/唯一可用模型配置生成一份 JSON；同一次请求的 input+output、物理 retry/fallback 共享设置中的 Token 硬上限。输出上限不超过模型限制与 8,192 Token；没有模型修稿、联网规划的额外调用。
+- 模型通过现有 runtime 的 content_builder 用途和 BALANCED/唯一可用模型配置生成一份 JSON；资料生成与聊天额度分开：同一次生成的 input+output、物理 retry/fallback 共享独立有界任务预算，容量由当前路由候选可信预留的最大值自动计算（见[修复决定](2026-09-28-generation-budget-reuse.md)）。输出上限不超过模型限制与 8,192 Token；没有模型修稿、联网规划的额外调用。
 - 本地验证字段结构、类型、长度、kind、条目身份和出处编号。缺少字段依据标记为待核对，开场白/情境/示例统一标记创作建议。冲突识别与事实支持判断由模型提出，不能当作独立事实核验。
 - 0023 新增独立 content_builder_jobs 表，原子单次 claim 与持久 ready/failed receipt。复用同一 request ID 只读取状态，World 或输入不一致拒绝。进程重启遗留 running 请求报告 interrupted；不自动重放。UI 保存最近 request ID，可重新进入编辑器检查结果；检查是 GET，不产生模型调用。
 - 搜索证据、原始生成稿、claims、冲突和待核对项进入当前 World 的 authored preview。编辑后的字段与原稿不同时明确标注。现有 reviewed hash、15 分钟预览有效期、replacement CAS 和幂等确认负责保存。

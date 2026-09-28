@@ -113,11 +113,18 @@ class ContentBuilder:
         return row
 
     async def generate(
-        self, world_id: WorldId, request_id: UUID, kind: str, query: str, token_ceiling: int
+        self,
+        world_id: WorldId,
+        request_id: UUID,
+        kind: str,
+        query: str,
+        token_ceiling: int | None = None,
     ) -> dict:
         await self.content.store.require_world(world_id)
         if kind not in ("character", "lorebook") or not query.strip() or len(query) > 600:
             raise BuilderError("builder_input_invalid")
+        # Keep the legacy field in the receipt fingerprint for old clients; it no
+        # longer supplies an operational budget or inherits a chat-turn setting.
         fingerprint = sha256(
             json.dumps([kind, query, token_ceiling], ensure_ascii=False).encode("utf-8")
         ).hexdigest()
@@ -133,7 +140,7 @@ class ContentBuilder:
             if not evidence:
                 raise BuilderError("builder_search_empty")
             await self.store.update(world_id, request_id, "generating")
-            output = await self._generate(request_id, kind, query, evidence, token_ceiling)
+            output = await self._generate(request_id, kind, query, evidence)
             result = {
                 **output.model_dump(mode="json"),
                 "sources": [x.model_dump(mode="json") for x in evidence],
@@ -156,7 +163,7 @@ class ContentBuilder:
             self._active.discard(request_id)
         return await self.status(world_id, request_id)
 
-    async def _generate(self, request_id, kind, query, evidence, ceiling):
+    async def _generate(self, request_id, kind, query, evidence):
         gateway, bounder, model, max_output, _, selection = self.configured
         instructions = (
             "你是角色卡和世界书资料编辑。只输出符合给定 JSON Schema 的 JSON，不输出代码围栏。"
@@ -198,11 +205,12 @@ class ContentBuilder:
                 x is None or x.guarantee is not BoundGuarantee.HARD_UPPER_BOUND for x in bounds
             ):
                 raise BuilderError("builder_token_bound_unavailable")
-            remaining = ceiling - max(x.input_tokens for x in bounds)
-            if remaining < 1:
-                raise BuilderError("builder_token_limit_exceeded")
-            request = replace(request, max_output_tokens=min(request.max_output_tokens, remaining))
-            budget = ChatTurnTokenBudget(ceiling)
+            # Authoring is a separate, explicitly requested operation. Give it one
+            # worst-case candidate reservation, not the player's chat-turn ceiling.
+            # Keep the trusted full input bound and the enforced <=8192 output cap;
+            # all retries/fallbacks still share this single finite operation budget.
+            operation_limit = max(x.input_tokens + x.output_tokens for x in bounds)
+            budget = ChatTurnTokenBudget(operation_limit)
             response = await gateway.generate(request, selection=selection, turn_budget=budget)
         except BuilderError:
             raise

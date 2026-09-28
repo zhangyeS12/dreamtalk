@@ -35,7 +35,7 @@ export function ContentDetails({ item, onCommonChange, changingEntry }: {
 
 const ignoreDirty = () => undefined;
 
-export function WorldImports({ client, worldId, tokenCeiling = 50000, onDirtyChange = ignoreDirty }: { client: CoreClient; worldId: string; tokenCeiling?: number; onDirtyChange?: (dirty: boolean) => void }) {
+export function WorldImports({ client, worldId, onDirtyChange = ignoreDirty }: { client: CoreClient; worldId: string; onDirtyChange?: (dirty: boolean) => void }) {
   const [editor, setEditor] = useState<{ kind: "character" | "lorebook"; item?: WorldContentItem } | null>(null);
   const active = useRef(true);
   const pendingId = useRef<string | null>(null);
@@ -105,7 +105,7 @@ export function WorldImports({ client, worldId, tokenCeiling = 50000, onDirtyCha
   };
   return <section className="settings-section import-section"><div className="section-heading"><h2>角色卡与世界书</h2><p>直接创建、联网生成，或导入已有内容。确认后加入当前世界。</p></div>
     <div className="profile-actions"><button type="button" className="secondary-button" disabled={busy || !!preview || !!editor} onClick={() => { setEditor({ kind: "character" }); setError(""); setMessage(""); }}>新建角色卡</button><button type="button" className="secondary-button" disabled={busy || !!preview || !!editor} onClick={() => { setEditor({ kind: "lorebook" }); setError(""); setMessage(""); }}>新建世界书</button></div>
-    {editor && <ContentEditor key={editor.item?.import_id ?? editor.kind} client={client} worldId={worldId} kind={editor.kind} editing={editor.item} tokenCeiling={tokenCeiling} onCancel={() => setEditor(null)} onSaved={saved => { setAccepted(items => [...items.filter(item => item.import_id !== saved.replaces_import_id && item.import_id !== saved.import_id), saved]); setEditor(null); setMessage(saved.kind === "character" ? "角色卡已保存，可在通讯录中打开会话。" : "世界书已保存，可在下方设置各条目的可见范围。"); }} />}
+    {editor && <ContentEditor key={editor.item?.import_id ?? editor.kind} client={client} worldId={worldId} kind={editor.kind} editing={editor.item} onCancel={() => setEditor(null)} onSaved={saved => { setAccepted(items => [...items.filter(item => item.import_id !== saved.replaces_import_id && item.import_id !== saved.import_id), saved]); setEditor(null); setMessage(saved.kind === "character" ? "角色卡已保存，可在通讯录中打开会话。" : "世界书已保存，可在下方设置各条目的可见范围。"); }} />}
     <details className="file-import-options"><summary>从文件导入</summary>
     {(kind === "lorebook" || accepted.some(item => item.kind === "lorebook")) && <p className="inline-hint">世界书条目默认隐藏。确认导入后，可逐条设为公共背景，供当前世界所有角色聊天时参考；暗线请保持隐藏。聊天内容不会因此变成世界事实。</p>}
     {replacement && <p className="inline-hint">正在更新：{replacement.characters[0]?.name ?? replacement.lorebooks[0]?.name} <button type="button" className="text-action" disabled={busy || !!preview} onClick={() => setReplacement(null)}>取消更新</button></p>}

@@ -24,7 +24,7 @@ const generationMessages: Record<string, string> = {
   builder_search_failed: "联网检索失败，请检查网络。可以继续手动填写。",
   builder_search_empty: "未找到可用的检索摘要，请补充作品名、角色名或换一个描述。",
   builder_token_bound_unavailable: "模型缺少可靠的 Token 预留配置，请检查模型设置。",
-  builder_token_limit_exceeded: "当前 Token 上限不足以容纳资料和生成内容，请在设置中提高上限。",
+  builder_token_limit_exceeded: "上次请求被旧版额度检查拦截。新版资料生成已独立于聊天额度，请点击联网生成开始新请求；检查结果只读取上次请求。",
   builder_model_failed: "模型调用未完成，请检查密钥、模型额度和网络；本次可能已产生费用。",
   builder_output_invalid: "模型返回的草稿不完整或格式不符，尚未保存。重新生成将发起新的模型调用。",
   builder_interrupted: "上次生成已中断，可能已产生费用。可以重新生成，也可以手动填写。",
@@ -65,9 +65,9 @@ export function ResearchDetails({ research, edited = false }: { research: Conten
   </section>;
 }
 
-export function ContentEditor({ client, worldId, kind, editing, tokenCeiling, onSaved, onCancel }: {
+export function ContentEditor({ client, worldId, kind, editing, onSaved, onCancel }: {
   client: CoreClient; worldId: string; kind: "character" | "lorebook"; editing?: WorldContentItem;
-  tokenCeiling: number; onSaved: (item: WorldContentItem) => void; onCancel: () => void;
+  onSaved: (item: WorldContentItem) => void; onCancel: () => void;
 }) {
   const [draft, setDraft] = useState(() => emptyDraft(kind));
   const [query, setQuery] = useState("");
@@ -148,7 +148,7 @@ export function ContentEditor({ client, worldId, kind, editing, tokenCeiling, on
     setJob({ request_id: id, state: "searching", result: null, error: null });
     setRecoverId(id); setError("");
     try { localStorage.setItem(storageKey, id); } catch { /* Recovery is optional. */ }
-    try { applyJob(await client.generateContent(worldId, kind, query.trim(), tokenCeiling, id)); }
+    try { applyJob(await client.generateContent(worldId, kind, query.trim(), id)); }
     catch (failure) {
       if (live.current && currentJob.current === id) setError(failure instanceof CoreRequestError && failure.status === 404
         ? "当前世界不存在，请重新选择世界。" : "未能确认生成结果。请检查结果；检查不会再次调用模型。");
@@ -205,7 +205,7 @@ export function ContentEditor({ client, worldId, kind, editing, tokenCeiling, on
         <div className="profile-actions"><button type="button" className="secondary-button" disabled={disabled || !query.trim()} onClick={() => void generate()}>{generating ? job?.state === "generating" ? "正在调用模型填写…" : "正在联网检索…" : "联网生成"}</button>
           {(recoverId || job) && <button type="button" className="text-action" disabled={checking || busy || loading} onClick={() => void check()}>{checking ? "正在检查…" : "检查生成结果"}</button>}
           {generating && <button type="button" className="text-action" onClick={() => { currentJob.current = null; setJob(null); setError("请求已保留，可以稍后检查结果。现在可以手动填写；重新生成会发起新的模型调用。"); }}>继续手动填写</button>}</div>
-        <p className="inline-hint">使用你已配置的模型，遵守当前每轮 {tokenCeiling.toLocaleString()} Token 上限。描述将发送给搜索引擎，检索摘要与描述将发送给模型；生成会产生模型用量。</p>
+        <p className="inline-hint">资料生成使用独立任务额度，与聊天的每轮 Token 上限无关，无需调整聊天额度。每次模型输出最多 8,192 Token，若模型设置更低则使用更低上限。描述将发送给搜索引擎，检索摘要与描述将发送给模型；按实际模型用量计费。</p>
         {generating && <p role="status">{job?.state === "generating" ? "已获取检索摘要，正在整理成可编辑草稿。" : "正在查找相关网页与资料。"}</p>}
       </div>
       <fieldset className="editor-fields" disabled={disabled}><legend className="visually-hidden">{kind === "character" ? "角色资料" : "世界书资料"}</legend>
