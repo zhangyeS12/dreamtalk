@@ -2,7 +2,21 @@
 
 更新日期：2026-09-28。此文件记录当前开发现场与接续工作，不替代 [AGENTS.md](AGENTS.md)。先读 AGENTS，再读本文，最后核对实际 Git 状态和相关代码；不能把下面的基线哈希当作永远不变的当前 HEAD。
 
-## 最新接续：2026-09-28 世界书基础激活
+## 最新接续：2026-09-28 较早聊天原文召回
+
+- 接续起点 `903cf10`，正式目录 `D:\LivingWorld`，沿用 `codex/chat-feedback`；开始时工作区干净。
+- 实现前调查 SQLite FTS5、jieba、Mem0 Python 和 BM25S；选择已有 SQLite FTS5 + 固定 jieba 0.42.1。具体来源、依赖代价和排除方案见[复用记录](docs/research/2026-09-28-chat-recall-reuse.md)。jieba 字典、finalseg 资源和 MIT 许可证纳入冻结/便携包。
+- 新增应用层 EarlierChatRecall 和基础设施 Fts5ChatRecallRanker，生产私聊/群聊角色回复已接线。先确认当前角色有权看到当前会话，再用已有 World/Player/Conversation SQL 分页读取更早记录；只在授权候选的临时内存索引上用 BM25 排序。
+- 当前玩家文本末尾最多 1,024 字符、24 个分词；最多扫描三页/300 条、512 KiB 原文；最多召回四条、8 KiB 原文及其消息/发送者身份类型与当前显示名/位置/时间出处。角色已有最近上下文的 turn 不重复召回。原文作为 lower-trust 数据，不写入 WorldTruth/Observation/Knowledge/EpisodicMemory。
+- 没有额外模型调用、embedding、迁移或持久检索索引；群选人器和公共世界书激活窗口不变，既有 Token 硬上限仍检查最终提示词。本轮不是完整语义检索或自动长期记忆形成。
+- 本轮静态检查：改动 Python 源码、构建脚本及 jieba hook 的 Ruff lint/format 通过，`git diff --check` 通过；spec 仅对 PyInstaller 提供的执行全局名排除 F821，实际 spec 编译/打包成功。没有新增、修改或运行测试，没有启动应用或调用提供商。此前世界书测试的历史预期仍待用户授权后维护。
+- 本轮 `uv run --frozen --group packaging python scripts/build-portable.py --build-only` 成功：冻结 Core、Vite 194 模块和 Rust release 编译完成。清单包含两个新检索模块及 HMM Python 模块；包内只包含 jieba 的 dict.txt/finalseg 数据，没有 lac_small/Paddle 数据。词典 5,071,852 bytes，附完整 MIT 许可证且其随包副本哈希与源文件一致。
+- 最新 ZIP `D:\LivingWorld\artifacts\portable\dreamtalk.zip`，30,493,996 bytes，2026-09-28 08:31:53 UTC，SHA256 `EA5A3511905B177D358C8E450A397F9CC5783E08159DB2064AEAC76CF039C9D7`。desktop exe 12,386,816 bytes / 2026-09-28 08:31:50 UTC；Core exe 13,325,902 bytes / 2026-09-28 08:31:24 UTC。整个解压目录供用户验收，构建不能替代长对话效果/延迟/隔离验收。
+- 构建警告：新增 jieba 三处正则转义 SyntaxWarning（Python 3.13）；原有 tzdata/pysqlite2/MySQLdb hidden-import 警告仍存在。Analysis 记录 166 个 missing-module、2 个 excluded-module 项，无以 livingworld 命名的缺失项。jieba 的可选 pkg_resources 在源码中有 ImportError 文件读取 fallback；本切片明确排除未使用的 lac_small/Paddle。原始记录 `artifacts/pyinstaller-build/dreamtalk-core/warn-dreamtalk-core.txt`，未运行验收其影响。依赖安装还有跨盘 hardlink→copy 性能提示，Git 有 LF→CRLF 提示，均已记录。
+- 下一步先调查并接通现有 provider stream 到聊天界面的可靠呈现，解决 terminal 校验、一次性 claim 和账本一致性；同时优先处理用户验收反馈。召回的同义表达/更远历史及自动记忆形成分别保留后续任务，不把当前词法结果宣称为完整长期记忆。
+- 下方世界书基础激活和聊天反馈保留为历史切片；产物以本节完成后的最新记录为准。
+
+## 前序切片：2026-09-28 世界书基础激活
 
 - 接续起点为 `f5dce91`，正式目录 `D:\LivingWorld`，沿用 `codex/chat-feedback` 分支。开始时工作区干净；没有创建新的旧工作克隆。
 - 已完成成熟方案调查：SillyTavern 1.19.0 的公开基础规则、Character Foundry 0.5.0 的格式能力；后者没有运行时激活器。本轮复用现有权限读取、规范化字段与聊天上下文，未新增依赖、模型调用、持久字段或数据库迁移。见[复用记录](docs/research/2026-09-28-lore-activation-reuse.md)。
@@ -82,7 +96,7 @@ git diff --cached --stat
 | 聊天阅读 | `react-markdown` 安全渲染、回车发送/Shift+回车换行及输入法保护、自动滚动/历史位置处理、最近消息分页和“加载更早消息”。 |
 | 世界书背景 | 世界书条目默认隐藏；当前世界逐条设为公共后，还须满足常驻或支持的关键词条件才进入聊天。已有次级条件及有界历史扫描，未实现完整酒馆激活。详见最新接续及第 5 节。 |
 | 群聊知情 | 群成员即使没发言，也能在之后的私聊/其他群聊上下文读取自身参与群的有界消息窗口。不是自动 Knowledge/Truth/Memory 写入。 |
-| 角色记忆 | C-007A 的 owner-scoped、Observation 证据支持的 EpisodicMemory 已存在，私聊/群聊回复读取本角色的有界记忆；尚未实现长期整理、检索或自动聊天记忆形成。 |
+| 角色记忆 | C-007A 的 owner-scoped、Observation 证据支持的 EpisodicMemory 已存在，私聊/群聊回复读取本角色的有界记忆；另有当前会话的有界较早原文词法召回；尚未实现 EpisodicMemory 长期整理、语义检索或自动聊天记忆形成。 |
 | LLM 底座 | OpenAI-compatible Chat、OpenAI Responses、Anthropic Messages、Gemini Interactions 四种 adapter；非流式/流式基础契约、structured validation、retry、routing、usage/pricing、financial budget、session credentials 已有。 |
 | 内容兼容 | Character Card V2/V3、PNG/JSON 读取，Lorebook 标准化，原始兼容数据保留，外部 JSON 导出和 `.lwcontent` authored-content package 已有。并非完整酒馆兼容。 |
 | 世界运行底座 | 确定性命令、行动、Scene、事件、Observation、tickless scheduler、sparse activation、clock reconciliation/catch-up、账本/回放和 CAS 已有；正式行动 registry 目前只有 `move_player` v1。 |
@@ -166,6 +180,7 @@ apps/web/src/main.tsx → App.tsx
 - 本地通用/世界资料都提供给角色，system 明确世界专属描述优先。没有自动语义冲突合并器。
 - `private_chat_memories` 当前最多 12 条、内容累计 8 KiB；按 Character owner 读取，不是 RAG。
 - prompt transcript 按完整 turn 截取，最多 32 条消息/96 KiB，不裁掉当前 turn；持久层有有界读取，不为 prompt 加载全部历史。
+- `application/chat_recall.py` / `infrastructure/chat_retrieval.py` 在最近窗口之外召回当前会话原文；先授权、三页/300 条/512 KiB 扫描、最多四条/8 KiB 注入。FTS5 + jieba 词法排序，带出处、无新证据记忆或持久索引，详细范围见最新接续。
 - 本角色曾参与的群消息读取默认最多 32 条，再受 8 KiB 内容预算约束；另一个群回复时排除当前群以避免重复输入。群选人器不拿任何角色私有记忆。
 - 角色卡 `first_mes` 仅作有界语气示例（8 KiB），不是自动发出的开场消息。
 - 导入文本、背景、个人资料、消息都是 lower-trust data。世界书/角色卡中的作者指令不是新增 privileged system instruction。
@@ -230,7 +245,7 @@ apps/web/src/main.tsx → App.tsx
 
 ### 用户体验缺口
 
-1. **长期独立记忆尚不完整。** 有 owner-scoped EpisodicMemory 和有界历史，但普通聊天未形成长期证据记忆；长对话后较早内容不会全部进入 prompt。别将持久 Message 与完整记忆系统混为一谈。
+1. **长期独立记忆尚不完整。** 已有 owner-scoped EpisodicMemory、有界近期窗口及当前会话较早原文词法召回；普通聊天尚未形成长期证据记忆。召回仅扫描窗口前最多三页，不支持同义/指代和无限历史；别将持久 Message 与完整记忆系统混为一谈。
 2. **世界书与酒馆能力仍有差距。** 当前支持有界基础条件激活，向量、递归、概率/时序和源注入位置尚未接入；隐藏背景没有角色专属授权传播路径。不能宣称已实现 ST 的所有功能。
 3. **Director 和主动事件尚未生产接通。** 现有世界时间、scheduler 和事件账本不能自己生成丰富剧情；event feed 当前只有有限安全标题。
 4. **聊天仍是整段生成后出现。** 缺少普通界面流式输出；群聊可能有多次选人和生成耗时。
@@ -317,15 +332,14 @@ git diff --check
 
 ## 11. 下一步优先顺序
 
-以下是基于当前缺口的接续建议，不是额外冻结的架构方案：
+以下是基于当前缺口的接续建议，不是额外冻结的架构方案；每个新功能仍先调查成熟实现：
 
-1. **保持当前聊天链路可理解。** 先核对实际 UI/APIs 的保存、pending/claimed/completed、群部分回复和 Token 停止反馈；修复确定的真实功能缺口，避免再写一个发送/生成/记忆服务。用户测试反馈到来时优先处理复现问题，不替用户运行测试。
-2. **继续世界书的实际参与能力。** 对照 ST 的已成型行为与已有 canonical/compatibility fields，列出可安全直接沿用/集成的局部能力；保持先授权再匹配。先明确排序与真正激活的差别，再增加已经明确的有界选择能力。未知 regex/递归/角色专属权限语义留记录，不猜。
-3. **改善模型和群聊配置体验。** 在现有 ModelSetup/managed config/registry 上完善说明、route 可用性与预算反馈；避免再建立一套 model identity 或预算引擎。没有可靠 bounds 的候选仍不得放行。
-4. **继续角色记忆与聊天的产品连接。** 先梳理已有 Observation-evidence、owner-scoped memory、message exposure 的边界和缺口；需要新增 chat-memory evidence/public contract 时给出具体方案供决定，不悄悄改变 C-007A 的证据要求。其间继续其他确定功能。
-5. **接通更自然的消息呈现。** 普通聊天的流式显示可复用已有 stream adapter/contracts，但须先解决终端提交、claim、未知 usage 和取消状态的一致性；不能把半截模型输出假装 durable success。不是简单前端定时打字动画。
-6. **之后再补世界话题生产。** Director 在 batch-plan/reservoir 边界内实现，借助已存在 scheduler/Kernel 提交合法事件；群选人器仍独立，hidden facts 不泄漏。不用假事件填聊天列表。
-7. **为用户验收提供最新便携产物与实际步骤。** 有业务变更且可编译时用现有 build-only 流程更新；清楚列出未验证处，等待用户自行测试。完整验收通过并获批准后，才处理 GitHub push/release。
+1. **接通聊天流式呈现。** 复用已有 provider stream adapter/contracts，先解决 terminal 校验、claim、预算账本、未知 usage 和取消的一致性；半截台词不成为 durable success。同时优先处理用户已复现的验收问题，不替用户运行测试。
+2. **完善整轮结束说明。** 目前群聊可显示已保存的逐条发言，但 completed 不能区分自然 STOP、Token 不足和安全条数上限；先形成具体有界持久/接口方案再实现，不能只凭状态猜原因。
+3. **评估召回效果和更远历史。** 当前词法原文召回已接线，用户真实长对话反馈到来后再评估噪声、同义词和三页之外历史；优先成熟可控方案，保持授权先于排序。聊天自动形成 EpisodicMemory 的 Observation 证据路径须单独给出具体设计，不改变 C-007A。
+4. **改善模型设置和世界书体验。** 复用现有 ModelSetup/registry 和基础 lore 激活；补 route/bounds 说明，未知模型上界不猜。世界书向量、递归、时序和隐藏角色授权先明确范围，不重复已实现的基础关键词能力。
+5. **之后再补世界话题生产。** Director 在 batch-plan/reservoir 边界内推进，借助已有 scheduler/Kernel 提交合法事件；群选人器仍独立，hidden facts 不泄漏。
+6. **持续提供最新便携产物。** 有可编译业务变更时使用 build-only，明确未验证处；完整验收通过并获用户明确批准后才进行 GitHub push/release。
 
 ## 12. 最容易破坏的地方
 

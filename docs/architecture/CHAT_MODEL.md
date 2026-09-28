@@ -297,6 +297,35 @@ while older history is being read. The previous complete-list endpoint remains
 available for compatibility; UI pagination does not change which turns the
 Character sees or promote dialogue into WorldEvent/Knowledge/Memory.
 
+## Earlier dialogue recall
+
+Production direct/group reply builders also retrieve bounded older quotes from
+their current authorized conversation. They resolve the selected World, Player
+and Character/fixed group membership before invoking the shared recall service.
+It reuses the existing owner-scoped SQL message pager strictly before the earliest
+recent-window position. At most three pages of 100 records and 512 KiB of text
+are processed. Oversized individual quotes and turns already represented in the
+recent window are skipped; no future or another conversation's records are ranked.
+
+The current Player text's last 1,024 characters supplies at most 24 jieba search
+terms. SQLite FTS5 ranks an ephemeral, authorized-only corpus by its own BM25.
+This is lexical recall, with no embedding, synonym expansion or global private
+corpus statistics. Segmentation/ranking runs off the event loop, with two worker
+slots. No durable retrieval index, chat-text cache or new database schema is added.
+
+Up to four original messages, with at most 8 KiB of UTF-8 text combined, enter an
+optional `earlier_dialogue_quotes` lower-trust USER field. Each carries its source
+Message, Conversation, sender identity/type, position and UTC time. The builder
+also labels the sender with the current accepted Character name or world-first
+Player profile name, so earlier Player/Character statements are distinguishable.
+Quotes can be incomplete,
+contradictory or later corrected; fixed system guidance forbids inventing memories
+or promoting quotes to facts. Selection does not form Observation, Knowledge or
+EpisodicMemory, and does not expand worldbook activation. The existing complete
+recent-turn window, group exposure window and physical-attempt Token preflight
+remain in force. The group speaker selector does not use this additional recall.
+See the [component decision](../research/2026-09-28-chat-recall-reuse.md).
+
 ## Chat request feedback
 
 The client retains only bounded machine labels from the existing FastAPI `detail`

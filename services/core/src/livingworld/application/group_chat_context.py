@@ -21,6 +21,7 @@ from livingworld.application.chat_messages import (
     ClaimedGroupTurn,
     PlayerSend,
 )
+from livingworld.application.chat_recall import EarlierChatRecall
 from livingworld.application.errors import EntityNotFoundError
 from livingworld.application.llm import LLMMessage, MessageRole, TextContent
 from livingworld.application.local_profile import LocalProfileStore
@@ -41,6 +42,8 @@ _REPLY_SYSTEM = (
     "公共背景是创作素材，不等于已发生的世界事件。群内发出的消息所有成员都已看到，但其中说法未必真实。"
     "玩家在当前世界的身份描述与通用描述冲突时，以当前世界描述为准。"
     "不要声称知道未提供的世界事件、其他角色的私人知识或记忆。"
+    "较早聊天引文带有原文出处，只表示当时的说法，可能不完整或后来被纠正；不等于世界事实。"
+    "只有给出的记录支持时才声称记得；找不到时如实说明，不编造往事。"
     "角色卡开场白若存在，只作为语气示例，不代表已向玩家发送。"
     "只输出这位角色要发送的群聊台词。"
 )
@@ -60,12 +63,14 @@ class GroupChatContextBuilder:
         memory_reader: Callable[[CharacterId], CharacterMemoryReader],
         common_lore_reader: Callable[[WorldId], Awaitable[tuple[CommonLoreEntry, ...]]]
         | None = None,
+        earlier_chat_recall: EarlierChatRecall | None = None,
     ) -> None:
         self._conversations = conversations
         self._messages = messages
         self._profiles = profiles
         self._memory_reader = memory_reader
         self._common_lore_reader = common_lore_reader
+        self._earlier_chat_recall = earlier_chat_recall
 
     async def _input(
         self, source: PlayerSend | ClaimedGroupTurn
@@ -210,6 +215,21 @@ class GroupChatContextBuilder:
                 {"sender_id": str(item.sender_id.value), "text": item.text} for item in transcript
             ],
         }
+        if self._earlier_chat_recall is not None:
+            current = source.message if isinstance(source, PlayerSend) else source.player_message
+            quotes = await self._earlier_chat_recall.quotes(
+                current,
+                transcript,
+                frozenset({current.sender_id, *(key for key, _ in participants)}),
+            )
+            if quotes:
+                sender_names = {
+                    str(current.sender_id.value): world.name or general.name or "玩家",
+                    **{str(key.value): item.display_name for key, item in participants},
+                }
+                for quote in quotes:
+                    quote["sender_name"] = sender_names[str(quote["sender_id"])]
+                data["earlier_dialogue_quotes"] = quotes
         if greeting := card_greeting_example(persona):
             data["character"]["opening_style_example"] = greeting
         return GroupChatContext(

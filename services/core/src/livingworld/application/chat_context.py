@@ -13,6 +13,7 @@ from livingworld.application.chat_messages import (
     ChatMessageService,
     PlayerSend,
 )
+from livingworld.application.chat_recall import EarlierChatRecall
 from livingworld.application.errors import EntityNotFoundError
 from livingworld.application.llm import LLMMessage, MessageRole, TextContent
 from livingworld.application.local_profile import LocalProfileStore
@@ -36,6 +37,8 @@ _SYSTEM = (
     "公共背景是创作素材，不等于已发生的世界事件。"
     "玩家在当前世界的身份描述与通用描述冲突时，以当前世界描述为准。"
     "不要声称知道未提供的世界事件、其他角色的私人知识或记忆。"
+    "较早聊天引文带有原文出处，只表示当时的说法，可能不完整或后来被纠正；不等于世界事实。"
+    "只有给出的记录支持时才声称记得；找不到时如实说明，不编造往事。"
     "角色卡开场白若存在，只作为语气示例，不代表已向玩家发送。"
     "只输出这位角色要发给玩家的聊天台词。"
 )
@@ -197,12 +200,14 @@ class DirectChatContextBuilder:
         memory_reader: Callable[[CharacterId], CharacterMemoryReader],
         common_lore_reader: Callable[[WorldId], Awaitable[tuple[CommonLoreEntry, ...]]]
         | None = None,
+        earlier_chat_recall: EarlierChatRecall | None = None,
     ) -> None:
         self._conversations = conversations
         self._messages = messages
         self._profiles = profiles
         self._memory_reader = memory_reader
         self._common_lore_reader = common_lore_reader
+        self._earlier_chat_recall = earlier_chat_recall
 
     async def build(self, sent: PlayerSend) -> DirectChatContext:
         conversation_id = sent.message.conversation_id
@@ -225,6 +230,9 @@ class DirectChatContextBuilder:
         if sent.message not in transcript:
             raise EntityNotFoundError("chat_message_not_found")
         visible = self._recent_transcript(transcript, sent.message)
+        allowed_senders = frozenset({conversation.player_id, conversation.character_id})
+        if any(item.sender_id not in allowed_senders for item in visible):
+            raise EntityNotFoundError("chat_sender_invalid")
         memories = await private_chat_memories(self._memory_reader, conversation.character_id)
         persona = {
             "character": {
@@ -250,6 +258,16 @@ class DirectChatContextBuilder:
                 transcript_texts=tuple(item.text for item in visible),
             ),
         }
+        if self._earlier_chat_recall is not None:
+            quotes = await self._earlier_chat_recall.quotes(sent.message, visible, allowed_senders)
+            if quotes:
+                sender_names = {
+                    str(conversation.player_id.value): world.name or general.name or "玩家",
+                    str(conversation.character_id.value): character.display_name,
+                }
+                for quote in quotes:
+                    quote["sender_name"] = sender_names[str(quote["sender_id"])]
+                persona["earlier_dialogue_quotes"] = quotes
         if greeting := card_greeting_example(character):
             persona["character"]["opening_style_example"] = greeting
         result = [

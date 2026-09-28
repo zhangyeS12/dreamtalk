@@ -12,13 +12,14 @@ analysis = Analysis(
     pathex=[str(PACKAGE)],
     binaries=[],
     datas=collect_data_files("livingworld", include_py_files=True)
-    + copy_metadata("dreamtalk-core"),
+    + copy_metadata("dreamtalk-core")
+    + copy_metadata("jieba"),
     hiddenimports=["aiosqlite"]
     + collect_submodules("livingworld.infrastructure.persistence.migrations.versions"),
-    hookspath=[],
+    hookspath=[str(ROOT / "scripts" / "pyinstaller-hooks")],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=["jieba.lac_small", "paddle"],
     noarchive=False,
 )
 pyz = PYZ(analysis.pure)

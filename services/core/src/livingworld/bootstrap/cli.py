@@ -15,6 +15,7 @@ from livingworld.adapters.http.app import create_app
 from livingworld.application.chat_context import DirectChatContextBuilder
 from livingworld.application.chat_conversations import ChatConversationService
 from livingworld.application.chat_messages import ChatMessageService
+from livingworld.application.chat_recall import EarlierChatRecall
 from livingworld.application.command_handler import CommandHandler
 from livingworld.application.developer_inspector import (
     INSPECTOR_TRIGGER_KIND,
@@ -49,6 +50,7 @@ from livingworld.bootstrap.llm_runtime import (
 )
 from livingworld.bootstrap.reader import derive_session, read_bootstrap
 from livingworld.domain.contracts import API_PROTOCOL, LOOPBACK_HOST
+from livingworld.infrastructure.chat_retrieval import Fts5ChatRecallRanker
 from livingworld.infrastructure.clock import SystemWallClock
 from livingworld.infrastructure.database import bootstrap_database
 from livingworld.infrastructure.logging import StructuredLogger
@@ -159,6 +161,7 @@ async def run(
             database.chat_conversation_store(), world_content, player_event_feed, command_handler
         )
         chat_messages = ChatMessageService(database.chat_message_store(), player_event_feed)
+        earlier_chat_recall = EarlierChatRecall(chat_messages, Fts5ChatRecallRanker())
         developer_inspector = None
         if developer_tools:
             developer_inspector = DeveloperInspectorService(
@@ -187,6 +190,7 @@ async def run(
                 database.local_profile_store(),
                 database.character_memory_reader,
                 world_content.list_common_lore,
+                earlier_chat_recall,
             ),
         )
         group_chat_reply = configure_group_chat_reply(
@@ -198,6 +202,7 @@ async def run(
                 database.local_profile_store(),
                 database.character_memory_reader,
                 world_content.list_common_lore,
+                earlier_chat_recall,
             ),
         )
         status = RuntimeStatus(version("dreamtalk-core"), generation, llm_health=llm_session.health)
