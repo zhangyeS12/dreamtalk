@@ -32,6 +32,7 @@ const generationMessages: Record<string, string> = {
 };
 function previewFailureMessage(failure: unknown): string {
   if (!(failure instanceof CoreRequestError)) return "未能连接核心，请检查连接后重试预览。当前草稿仍保留，不需要重新生成。";
+  if (failure.code === "editor_preview_failed") return "核心处理草稿预览时发生内部错误，内容尚未保存。当前草稿仍保留，不需要重新生成。";
   if (failure.code === "preview_capacity_reached") return "已有两份预览等待确认。请先确认或返回编辑关闭其他预览，再试一次。当前草稿仍保留。";
   if (failure.code === "builder_result_unavailable") return "暂时无法关联上次生成依据，请先点击检查生成结果，再重新预览。不要重新调用模型。";
   if (failure.status === 404) return "当前世界或关联内容已不存在，请重新选择正确世界。当前草稿仍保留。";

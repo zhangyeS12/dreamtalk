@@ -113,7 +113,7 @@ def create_app(
 
             app.include_router(
                 content_authoring_router(
-                    world_content, content_repository, content_builder, authorize
+                    world_content, content_repository, content_builder, authorize, logger
                 )
             )
 

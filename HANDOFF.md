@@ -2,7 +2,18 @@
 
 更新日期：2026-09-28。此文件记录当前开发现场与接续工作，不替代 [AGENTS.md](AGENTS.md)。先读 AGENTS，再读本文，最后核对实际 Git 状态和相关代码；不能把下面的基线哈希当作永远不变的当前 HEAD。
 
-## 最新接续：2026-09-28 预览与保存的可见反馈
+## 最新接续：2026-09-28 修复原生草稿构造错误
+
+- 用户使用上轮反馈版后，预览显示“未能连接核心”。从干净 `61ee710` 接续，正式目录仍为 `D:\LivingWorld` / `codex/chat-feedback`。没有远程、发布或 push。
+- 找到确定的代码错误：`application/content_authoring.py::authored_graph` 末尾使用 `ContentDraft(contents, tuple(assets), tuple(raws))`，但 `application/content.py::ContentDraft` 是 `@dataclass(..., kw_only=True)`，只能使用命名参数。该调用会抛 TypeError，影响手动/生成创建与编辑角色卡、世界书，不是特定 AI 字段或用户模型配置导致。上轮改善反馈位置，却漏查了这个构造调用；本节补足并替代“预览根因尚未知”的结论。
+- 新调用为 `ContentDraft(contents=contents, assets=tuple(assets), raw_imports=tuple(raws))`。静态 AST 核对生产代码全部六个 ContentDraft 构造点，均为零位置参数；其他现有导入/包服务本来使用命名参数。
+- 当前 Core 在日志 12:30:13 UTC ready、凭据同步完成，仍在运行。原 TypeError 未由 authoring route 处理；检查已安装 Starlette middleware 顺序可见 ServerErrorMiddleware 位于用户 CORS middleware 外层，异常 500 返回路径绕过 CORS，浏览器可把它表现为 fetch 失败。前端此前把非 CoreRequestError 都称为连接失败。这里的浏览器原因是基于源码和界面推断，未捕获用户原始网络响应或执行浏览器验收。
+- 复用现有 HTTPException/CORS 与 StructuredLogger：authoring preview 未预期异常返回固定 `editor_preview_failed` / 500，并写入固定 `content_editor / preview_failed` ERROR 事件；不回传异常文本、草稿、用户输入或模型数据。Core composition 传入已有 logger；前端明确显示核心处理预览的内部错误。已知字段/版本/生成依据错误保持原分类；Draft → Preview → 明确哈希确认 → Commit 和 CAS 未改变。
+- 本轮没有读取/操作用户数据库、读取 API 凭据、重复生成或修改 API 设置。未新增、修改或执行自动测试、GUI/browser smoke、真实搜索/模型调用；同类构造调用检查为源代码 AST 分析。Python Ruff lint/format、ESLint/TypeScript 及 `git diff --check` 通过。
+- 用户旧包仍运行，未由助手终止或替换其目录。本轮复用既有 PyInstaller + release 桌面构建与随包许可步骤，跳过所有 smoke；Core 冻结、Vite 195 模块、Rust release 完成，日志 `artifacts/preview-constructor-fix-build.log`。独立新版 ZIP `D:\LivingWorld\artifacts\portable\preview-constructor-fix\dreamtalk.zip`，40,645,038 bytes / 2026-09-28 12:37:05 UTC，SHA256 `F9E7671819D089B0A0FF96E1B0F09102CCEAD4F5D1896134A1A34D0F7B518814`。desktop exe 12,391,936 bytes / 12:37:01 UTC；Core exe 13,723,248 bytes / 12:36:34 UTC。包内三个改动 Python 源文件哈希均与本轮源码一致。既有 tzdata/pysqlite2/MySQLdb hidden-import 警告仍存在，未验收其运行影响。启动新版 `artifacts/portable/preview-constructor-fix/dreamtalk/dreamtalk-desktop.exe`，需要整个目录；默认 `artifacts/portable/dreamtalk/` 保留上轮旧包，不可拿其启动验证此修复。
+- 用户接续：关闭旧窗口，再启动上述独立目录的新 exe；进入新建角色卡，使用“检查生成结果”恢复艾莲已有回执，再预览并明确确认保存。实际 UI/保存效果仍由用户验收；不需要重做付费生成。之后处理用户具体反馈，聊天大输入的整轮预留门槛仍未解决。
+
+## 前序切片：2026-09-28 预览与保存的可见反馈
 
 - 用户确认改用正确模型 ID 后实际生成成功，随后反馈长草稿底部“预览并保存”点击无反应。从干净 `5b35137` 接续，正式目录 `D:\LivingWorld`，沿用 `codex/chat-feedback`；没有远程、发布或 push。
 - 核对点击 handler、API client、authoring router、authored graph、现有预览容量/哈希确认/CAS 保存。按钮本来已连接 POST preview；错误仅显示编辑器顶部，预览也在顶部展开，没有滚动定位，长生成依据会掩盖结果。现有前端还会因缺少必填字段静默禁用。日志在 11:55:10 UTC 记录 `chat_completed`，没有记录用户本次 preview 的具体 HTTP 状态，不能将某个接口错误臆断为已复现根因。

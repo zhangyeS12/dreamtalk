@@ -32,7 +32,7 @@ class ResearchRequest(BaseModel):
     token_ceiling: int | None = Field(default=None, ge=1, le=1000000, deprecated=True)
 
 
-def content_authoring_router(service, repository, builder, authorize):
+def content_authoring_router(service, repository, builder, authorize, logger=None):
     router = APIRouter(
         prefix=f"/api/v{API_PROTOCOL}/worlds/{{world_id}}/content/editor",
         dependencies=[Depends(authorize)],
@@ -97,6 +97,12 @@ def content_authoring_router(service, repository, builder, authorize):
             raise HTTPException(422, "builder_result_unavailable") from None
         except (DomainInvariantError, ValueError):
             raise HTTPException(422, "editor_draft_invalid") from None
+        except Exception:
+            # Keep this response inside the normal HTTP/CORS path. Never return
+            # exception text, authored fields or provider data to the browser.
+            if logger is not None:
+                logger.emit("content_editor", "preview_failed", level="ERROR")
+            raise HTTPException(500, "editor_preview_failed") from None
 
     @router.post("/research")
     async def research(world_id: UUID, body: ResearchRequest, request: Request):

@@ -281,4 +281,4 @@ async def authored_graph(fields: EditorDraft, previous, repository, research=Non
         if envelope is None:
             raise ContentImportError("editor_source_missing")
         raws.append(envelope)
-    return ContentDraft(contents, tuple(assets), tuple(raws))
+    return ContentDraft(contents=contents, assets=tuple(assets), raw_imports=tuple(raws))
