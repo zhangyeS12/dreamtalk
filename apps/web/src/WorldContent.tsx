@@ -51,6 +51,13 @@ export function WorldImports({ client, worldId, onDirtyChange = ignoreDirty }: {
   const [preview, setPreview] = useState<WorldContentItem | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const savedNotice = useRef<HTMLParagraphElement>(null);
+  useEffect(() => {
+    if (message && savedNotice.current) {
+      savedNotice.current.scrollIntoView({ block: "center" });
+      savedNotice.current.focus({ preventScroll: true });
+    }
+  }, [message]);
   const [error, setError] = useState("");
   const [accepted, setAccepted] = useState<WorldContentItem[]>([]);
   const [changingEntry, setChangingEntry] = useState<string | null>(null);
@@ -111,7 +118,7 @@ export function WorldImports({ client, worldId, onDirtyChange = ignoreDirty }: {
     {replacement && <p className="inline-hint">正在更新：{replacement.characters[0]?.name ?? replacement.lorebooks[0]?.name} <button type="button" className="text-action" disabled={busy || !!preview} onClick={() => setReplacement(null)}>取消更新</button></p>}
     <label className="field"><span>内容类型</span><select value={kind} disabled={busy || !!preview || !!replacement || !!editor} onChange={event => setKind(event.target.value as typeof kind)}><option value="character">角色卡（PNG / JSON）</option><option value="lorebook">世界书（JSON）</option></select></label>
     <label className="field import-file"><span>选择文件</span><input type="file" disabled={busy || !!editor} accept={kind === "character" ? ".png,.json" : ".json"} onChange={event => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void upload(file); }} /></label>
-    </details>{busy && <p role="status">正在处理…</p>}{error && <p role="alert" className="app-alert">{error}</p>}{message && <p role="status" className="app-notice">{message}</p>}
+    </details>{busy && <p role="status">正在处理…</p>}{error && <p role="alert" className="app-alert">{error}</p>}{message && <p ref={savedNotice} tabIndex={-1} role="status" className="app-notice editor-feedback">{message}</p>}
     {preview && <div className="import-preview"><h3>导入预览</h3><ContentDetails item={preview} />
       {!!preview.warnings?.length && <div className="compatibility-notice"><p>部分来源内容无法完整映射，原始数据仍会保留。确认前请检查以下提示。</p><ul>{preview.warnings.map((warning, index) => <li key={index}>{warning.code === "lore_activation_metadata_preserved_inert" ? "导入不会执行触发设定；聊天支持范围见各条目说明。" : warning.code.includes("blank_tags") ? "空白标签已从角色标签中省略。" : warning.code.includes("empty_content") ? "空白条目已从世界书中省略。" : warning.code.includes("secondary_keys") ? "存在含义不明确的次级关键词，未作猜测转换。" : "存在兼容性差异，请核对预览内容。"}</li>)}</ul></div>}
       <div className="profile-actions"><button className="primary-button" type="button" disabled={busy} onClick={() => void commit()}>{replacement ? "确认更新当前世界" : "确认加入当前世界"}</button><button className="secondary-button" type="button" disabled={busy} onClick={() => { pendingId.current = null; void client.discardWorldContent(worldId, preview.import_id).catch(() => undefined); setPreview(null); }}>取消</button></div>

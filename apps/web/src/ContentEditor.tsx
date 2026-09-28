@@ -30,6 +30,16 @@ const generationMessages: Record<string, string> = {
   builder_interrupted: "上次生成已中断，可能已产生费用。可以重新生成，也可以手动填写。",
   builder_capacity_reached: "已有生成正在处理，请稍后再试。",
 };
+function previewFailureMessage(failure: unknown): string {
+  if (!(failure instanceof CoreRequestError)) return "未能连接核心，请检查连接后重试预览。当前草稿仍保留，不需要重新生成。";
+  if (failure.code === "preview_capacity_reached") return "已有两份预览等待确认。请先确认或返回编辑关闭其他预览，再试一次。当前草稿仍保留。";
+  if (failure.code === "builder_result_unavailable") return "暂时无法关联上次生成依据，请先点击检查生成结果，再重新预览。不要重新调用模型。";
+  if (failure.status === 404) return "当前世界或关联内容已不存在，请重新选择正确世界。当前草稿仍保留。";
+  if (failure.status === 409) return "该内容已有更新，请重新选择最新版本。当前草稿仍保留。";
+  if (failure.status === 401 || failure.status === 403) return "核心连接已失效，请重新连接后重试预览。当前草稿仍保留。";
+  if (failure.status === 422) return "草稿字段未通过校验，请检查名称、文字长度、条目正文和关键词。当前草稿仍保留，不需要重新生成。";
+  return `核心未能完成预览（HTTP ${failure.status}）。当前草稿仍保留，不需要重新生成。`;
+}
 const fieldNames: Record<string, string> = { name: "名称", description: "描述", personality: "性格",
   background: "背景", scenario: "情境", speech_guidance: "说话方式", first_message: "开场白",
   creator_notes: "创作者备注", tags: "标签", example_dialogue: "对话示例" };
@@ -82,6 +92,15 @@ export function ContentEditor({ client, worldId, kind, editing, onSaved, onCance
   const [error, setError] = useState("");
   const [checking, setChecking] = useState(false);
   const live = useRef(true);
+  const errorNotice = useRef<HTMLParagraphElement>(null);
+  const previewHeading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    const target = error ? errorNotice.current : preview ? previewHeading.current : null;
+    if (target) {
+      target.scrollIntoView({ block: "start" });
+      target.focus({ preventScroll: true });
+    }
+  }, [error, preview]);
   const pending = useRef<string | null>(null);
   const appliedJob = useRef<string | null>(null);
   const currentJob = useRef<string | null>(null);
@@ -164,13 +183,21 @@ export function ContentEditor({ client, worldId, kind, editing, onSaved, onCance
     finally { if (live.current) setChecking(false); }
   };
   const review = async () => {
+    if (busy || generating || loading || loadFailed || preview) return;
+    if (!draft.name.trim()) { setError(kind === "character" ? "请填写角色名称后再预览。" : "请填写世界书名称后再预览。"); return; }
+    if (kind === "lorebook") {
+      if (!draft.entries.length) { setError("请至少添加一条世界书正文后再预览。"); return; }
+      const invalid = draft.entries.findIndex(entry => !entry.content.trim() || entry.secondary_keywords.length > 0 && !entry.keywords.length);
+      if (invalid >= 0) { setError(`请检查条目 ${invalid + 1}：正文不能为空，使用次级关键词时需要填写主关键词。`); return; }
+    }
     setBusy(true); setError("");
     try {
       const result = await client.previewEditedContent(worldId, draft, editing?.import_id, generationId);
       if (!live.current) { await client.discardWorldContent(worldId, result.import_id); return; }
       pending.current = result.import_id; setPreview(result);
-    } catch (failure) { if (live.current) setError(failure instanceof CoreRequestError && failure.status === 409
-      ? "该内容已有更新，请重新选择最新版本。" : "无法预览，请检查名称、条目正文和关键词。草稿尚未保存。"); }
+    } catch (failure) {
+      if (live.current) setError(previewFailureMessage(failure));
+    }
     finally { if (live.current) setBusy(false); }
   };
   const save = async () => {
@@ -188,18 +215,22 @@ export function ContentEditor({ client, worldId, kind, editing, onSaved, onCance
   const update = (key: keyof ContentEditorDraft, value: string | string[]) => setDraft(old => ({ ...old, [key]: value }));
   const updateEntry = (index: number, change: Partial<ContentEditorEntry>) => setDraft(old => ({ ...old,
     entries: old.entries.map((entry, i) => i === index ? { ...entry, ...change } : entry) }));
-  const fieldsValid = draft.name.trim() && (kind === "character" || draft.entries.length > 0 &&
-    draft.entries.every(entry => entry.content.trim() && (!entry.secondary_keywords.length || entry.keywords.length)));
   const disabled = busy || generating || loading || loadFailed;
+  const reviewActions = preview && (
+      <div className="profile-actions"><button type="button" className="primary-button" disabled={busy} onClick={() => void save()}>{busy ? "正在保存…" : editing ? "确认更新当前世界" : "确认加入当前世界"}</button>
+        <button type="button" className="secondary-button" disabled={busy} onClick={() => { pending.current = null; void client.discardWorldContent(worldId, preview.import_id).catch(() => undefined); setPreview(null); }}>返回编辑</button></div>
+  );
   return <div className="content-editor">
     <div className="editor-heading"><div><h3>{editing ? "编辑" : "新建"}{kind === "character" ? "角色卡" : "世界书"}</h3><p>在当前世界保存前，可以自由修改。</p></div>
       <button className="text-action" type="button" disabled={busy} onClick={() => { if (!draft.name.trim() || window.confirm("当前草稿尚未保存，是否放弃编辑？")) onCancel(); }}>关闭编辑</button></div>
     {loading && <p role="status">正在读取编辑稿…</p>}
-    {error && <p className="app-alert" role="alert">{error}</p>}
-    {preview ? <div className="editor-review"><h3>保存预览</h3><ContentDetails item={preview} />
+    {error && <p ref={errorNotice} tabIndex={-1} className="app-alert editor-feedback" role="alert">{error}</p>}
+    {preview ? <div className="editor-review"><h3 ref={previewHeading} tabIndex={-1} className="editor-feedback">保存预览</h3>
+      <p className="app-notice" role="status">预览已准备好，内容尚未保存。请核对下方内容，再点击“确认{editing ? "更新" : "加入"}当前世界”。</p>
       <p className="inline-hint">{kind === "character" ? "确认后将在当前世界的通讯录中显示。" : "世界书条目默认隐藏，保存后可逐条设为公共背景。"}{editing && "更新后，请重新确认世界书的可见范围。"}</p>
-      <div className="profile-actions"><button type="button" className="primary-button" disabled={busy} onClick={() => void save()}>{busy ? "正在保存…" : editing ? "确认更新当前世界" : "确认加入当前世界"}</button>
-        <button type="button" className="secondary-button" disabled={busy} onClick={() => { pending.current = null; void client.discardWorldContent(worldId, preview.import_id).catch(() => undefined); setPreview(null); }}>返回编辑</button></div>
+      {reviewActions}
+      <ContentDetails item={preview} />
+      {reviewActions}
     </div> : <>
       <div className="research-request"><label className="field"><span>用一句话描述，联网生成初稿</span><textarea rows={2} maxLength={600} value={query} disabled={disabled} onChange={event => setQuery(event.target.value)} placeholder={kind === "character" ? "生成一个绝区零里艾莲的角色卡" : "生成绝区零的世界书，包含新艾利都、空洞和主要势力"} /></label>
         <div className="profile-actions"><button type="button" className="secondary-button" disabled={disabled || !query.trim()} onClick={() => void generate()}>{generating ? job?.state === "generating" ? "正在调用模型填写…" : "正在联网检索…" : "联网生成"}</button>
@@ -233,7 +264,7 @@ export function ContentEditor({ client, worldId, kind, editing, onSaved, onCance
         {editing && <p className="inline-hint">附带素材、角色内嵌世界书和未开放的兼容字段会保留。高级触发条件的支持范围以保存预览为准。</p>}
       </fieldset>
       {research && <ResearchDetails research={research} edited={!sameDraft(draft, research.draft)} />}
-      <div className="profile-actions"><button type="button" className="primary-button" disabled={disabled || !fieldsValid} onClick={() => void review()}>{busy ? "正在准备预览…" : "预览并保存"}</button><span className="inline-hint">确认前不会加入当前世界。</span></div>
+      <div className="profile-actions"><button type="button" className="primary-button" disabled={disabled} onClick={() => void review()}>{busy ? "正在准备预览…" : "预览并保存"}</button><span className="inline-hint" role="status">{busy ? "正在创建保存预览，请稍候。此步骤不会调用模型。" : "先打开保存预览，再确认加入当前世界。"}</span></div>
     </>}
   </div>;
 }

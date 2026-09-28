@@ -218,6 +218,8 @@
 .content-editor { border-block: 1px solid var(--line); margin-block: 24px; padding-block: 24px; }
 .editor-heading { display: flex; align-items: start; justify-content: space-between; gap: 16px; }
 .editor-heading h3, .editor-heading h4 { margin-block: 0 8px; }
+.editor-feedback { scroll-margin-block: 24px; }
+.editor-feedback:focus { outline: 2px solid var(--green); outline-offset: 4px; }
 .editor-heading p { color: var(--muted); margin-block: 0 16px; }
 .research-request { padding: 20px; background: var(--green-soft); border-radius: 8px; margin-block: 16px 24px; }
 .editor-fields { border: 0; padding: 0; margin: 0; min-width: 0; }

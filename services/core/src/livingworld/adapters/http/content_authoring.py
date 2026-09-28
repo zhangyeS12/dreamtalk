@@ -93,6 +93,8 @@ def content_authoring_router(service, repository, builder, authorize):
             raise HTTPException(409, "replacement_target_conflict") from None
         except ContentImportError as error:
             raise HTTPException(422, error.code) from None
+        except BuilderError:
+            raise HTTPException(422, "builder_result_unavailable") from None
         except (DomainInvariantError, ValueError):
             raise HTTPException(422, "editor_draft_invalid") from None
 
