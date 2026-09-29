@@ -238,6 +238,16 @@ class PreflightUsageBounder(Protocol):
     def bound(self, request: LLMRequest) -> UsageUpperBound | None: ...
 
 
+async def prepare_usage_bound(
+    bounder: PreflightUsageBounder, request: LLMRequest
+) -> UsageUpperBound | None:
+    """Optional I/O occurs before claims/reservations, never in a DB transaction."""
+    prepare = getattr(bounder, "prepare", None)
+    if callable(prepare):
+        await prepare(request)
+    return bounder.bound(request)
+
+
 @dataclass(frozen=True, slots=True)
 class ModelUsageLimits:
     max_billable_input_tokens: int

@@ -1,11 +1,13 @@
 """Provider-specific conservative request bounds through audited upstream framing."""
 
+import asyncio
 import hashlib
 import json
 import os
 import subprocess
 import sys
 from pathlib import Path
+from time import monotonic
 
 from livingworld.application.llm import AdapterKind, LLMContractError, LLMError
 from livingworld.application.llm_budget import UsageUpperBound
@@ -34,9 +36,16 @@ class ProviderRequestUsageBounder:
         self._helper = _helper_path()
         self._profiles = {}
         self._cache: dict[bytes, int] = {}
+        self._count_gateways = {}
+        self._counts: dict[bytes, tuple[float, int | None]] = {}
         for model, gateway in gateways.items():
             configured = configuration.models[model]
             provider = configuration.providers[model.provider_id].config
+            if configured.adapter_kind is AdapterKind.OPENAI_RESPONSES and getattr(
+                gateway, "supports_input_count", False
+            ):
+                self._count_gateways[model] = gateway
+                continue
             if (
                 configured.adapter_kind is not AdapterKind.OPENAI_COMPATIBLE
                 or provider.endpoint is None
@@ -59,12 +68,57 @@ class ProviderRequestUsageBounder:
                 self._profiles[model] = (preset["bound_encoding"], gateway)
 
     def supports_request_bound(self, model) -> bool:
-        return model in self._profiles and self._helper.is_file()
+        return model in self._count_gateways or (model in self._profiles and self._helper.is_file())
+
+    def _count_payload(self, request):
+        gateway = self._count_gateways.get(request.model)
+        if gateway is None:
+            return None
+        try:
+            payload = gateway.token_reservation_payload(request)
+            if payload is None:
+                return None
+            data = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+            if len(data) > 4 * 1024 * 1024:
+                return None
+            return gateway, payload, hashlib.sha256(data).digest()
+        except (ValueError, TypeError, LLMContractError, LLMError):
+            return None
+
+    async def prepare(self, request) -> None:
+        """Count outside accounting transactions; sync bound() reads facts only."""
+        if self._fallback.bound(request) is None:
+            return
+        prepared = self._count_payload(request)
+        if prepared is None:
+            return
+        gateway, payload, key = prepared
+        cached = self._counts.get(key)
+        if cached is not None and cached[0] > monotonic():
+            return
+        try:
+            async with asyncio.timeout(5):
+                count = await gateway.count_input_tokens(request, payload)
+        except (TimeoutError, OSError, ValueError, LLMContractError, LLMError):
+            count = None
+        if type(count) is not int or not 0 <= count <= 2**63 - 1:
+            count = None
+        if len(self._counts) >= 64:
+            self._counts.clear()
+        # Include failures briefly to avoid repeating count requests when output
+        # is clipped or the same physical request proceeds to its budget guard.
+        self._counts[key] = (monotonic() + 30, count)
 
     def bound(self, request):
         fallback = self._fallback.bound(request)
         if fallback is None or not self.supports_request_bound(request.model):
             return fallback
+        if request.model in self._count_gateways:
+            prepared = self._count_payload(request)
+            cached = self._counts.get(prepared[2]) if prepared is not None else None
+            if cached is None or cached[0] <= monotonic() or cached[1] is None:
+                return fallback
+            return UsageUpperBound(min(fallback.input_tokens, cached[1]), fallback.output_tokens)
         encoding, gateway = self._profiles[request.model]
         try:
             payload = gateway.token_reservation_payload(request)

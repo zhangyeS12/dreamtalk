@@ -89,6 +89,7 @@ export function ModelSetup({ client, turnTokenCeiling, onConfigured = () => wind
 
   const preset = findModelPreset(providerKind, modelId, baseUrl);
   const inputBound = preset && !manualLimits ? preset.input_tokens : Number(inputLimit);
+  const requestBoundAvailable = providerKind === "openai-responses" || Boolean(preset?.bound_encoding);
   const outputBound = Number(replyLength === "custom" ? outputLimit : replyLength);
   const outputMaximum = preset?.output_tokens ?? 1_000_000;
   const resetCapacity = () => { setManualLimits(false); setInputLimit(""); };
@@ -169,7 +170,7 @@ export function ModelSetup({ client, turnTokenCeiling, onConfigured = () => wind
     <div className="section-heading"><h2>聊天模型</h2><p>{status === null ? "正在读取模型状态…" : statusText[status]}</p></div>
     {error ? <p className="app-alert" role="alert">{error}</p> : null}
     {managedUnsupported && status !== "unconfigured" ? <p className="inline-hint">当前配置由高级方式管理；此处不会覆盖其中的路由、定价或其他设置。</p> : null}
-    {turnTokenCeiling !== undefined && !preset?.bound_encoding && inputBound >= turnTokenCeiling && (editing || status === "unconfigured") ? <p className="compatibility-notice" role="status">当前每轮 {turnTokenCeiling.toLocaleString("zh-CN")} Token 额度无法容纳 {inputBound.toLocaleString("zh-CN")} Token 输入预留与回复。聊天额度至少需 {(inputBound + 1).toLocaleString("zh-CN")}；{Number.isSafeInteger(outputBound) && outputBound > 0 ? `建议设置为 ${(inputBound + outputBound).toLocaleString("zh-CN")}，预留一次完整回复。` : ""} 模型设置仍可保存。输入预留使用填写的可信上界，不代表实际发送量；请按官方说明填写，勿为通过检查虚填较低值。</p> : null}
+    {turnTokenCeiling !== undefined && !requestBoundAvailable && inputBound >= turnTokenCeiling && (editing || status === "unconfigured") ? <p className="compatibility-notice" role="status">当前每轮 {turnTokenCeiling.toLocaleString("zh-CN")} Token 额度无法容纳 {inputBound.toLocaleString("zh-CN")} Token 输入预留与回复。聊天额度至少需 {(inputBound + 1).toLocaleString("zh-CN")}；{Number.isSafeInteger(outputBound) && outputBound > 0 ? `建议设置为 ${(inputBound + outputBound).toLocaleString("zh-CN")}，预留一次完整回复。` : ""} 模型设置仍可保存。输入预留使用填写的可信上界，不代表实际发送量；请按官方说明填写，勿为通过检查虚填较低值。</p> : null}
     {isTauri() && (status === "unconfigured" || (editing && !managedUnsupported)) ? <form noValidate aria-busy={saving} onSubmit={event => void save(event)}>
       {submitAttempted && firstInvalidField ? <p className="app-alert" role="alert">尚未保存：{validationErrors[firstInvalidField]} 请修改标红的字段后再保存。</p> : null}
       <div className="model-setup-fields">
@@ -198,7 +199,7 @@ export function ModelSetup({ client, turnTokenCeiling, onConfigured = () => wind
           <option value="2048">简短 · 2,048 Token</option><option value="8192">标准 · 8,192 Token</option><option value="16384">较长 · 16,384 Token</option><option value="custom">自定义</option>
         </select></label>
         <p className="inline-hint">这是回复可用的最多 Token，不是每次固定用量。推理模型的思考也会占用此额度；聊天仍受每轮总额度约束。</p>
-        {preset ? <p className="inline-hint">已匹配模型容量：上下文 {preset.context_tokens.toLocaleString("zh-CN")} Token，模型输出最多 {preset.output_tokens.toLocaleString("zh-CN")} Token。资料核对日期：{presetsReviewedAt}。{preset.bound_encoding ? "聊天按当前上下文预留输入额度。" : "此服务暂按模型输入容量保守预留聊天额度。"}</p> : <p className="compatibility-notice">尚未匹配此服务与模型，请在高级设置按提供商文档填写输入容量。模型 ID 相同的第三方服务也需要单独核对。</p>}
+        {preset ? <p className="inline-hint">已匹配模型容量：上下文 {preset.context_tokens.toLocaleString("zh-CN")} Token，模型输出最多 {preset.output_tokens.toLocaleString("zh-CN")} Token。资料核对日期：{presetsReviewedAt}。{requestBoundAvailable ? "聊天按当前对话预留输入额度；无法核对时采用模型容量保守预留。" : "此服务暂按模型输入容量保守预留聊天额度。"}</p> : <p className="compatibility-notice">尚未匹配此服务与模型，请在高级设置按提供商文档填写输入容量。模型 ID 相同的第三方服务也需要单独核对。</p>}
         <details open={advancedOpen} onToggle={event => setAdvancedOpen(event.currentTarget.open)}>
           <summary>高级设置：模型容量与自定义回复长度</summary>
           {preset ? <label className="field"><span>输入容量来源</span><select disabled={saving} value={manualLimits ? "manual" : "auto"} onChange={event => { setManualLimits(event.target.value === "manual"); if (!inputLimit) setInputLimit(String(preset.input_tokens)); }}><option value="auto">自动匹配</option><option value="manual">手动指定（保留自定义值）</option></select></label> : null}

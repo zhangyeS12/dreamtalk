@@ -24,6 +24,7 @@ from livingworld.application.llm_budget import (
     BudgetAdmissionError,
     BudgetIntegrityError,
     PreflightUsageBounder,
+    prepare_usage_bound,
 )
 from livingworld.application.llm_chat_turn_budget import ChatTurnTokenBudget, TurnTokenBudgetError
 from livingworld.application.llm_execution import ExecutionDeadlineError
@@ -124,9 +125,10 @@ class DirectChatReplyService:
             plan = self._gateway.plan(request, selection=self._selection)
         except RoutingError:
             raise ChatReplyUnavailableError("chat_model_unavailable") from None
-        bounds = tuple(
-            self._token_bounder.bound(replace(request, model=model)) for model in plan.candidates
-        )
+        bounds = [
+            await prepare_usage_bound(self._token_bounder, replace(request, model=model))
+            for model in plan.candidates
+        ]
         if not bounds or any(
             bound is None or bound.guarantee is not BoundGuarantee.HARD_UPPER_BOUND
             for bound in bounds
@@ -137,10 +139,10 @@ class DirectChatReplyService:
             raise ChatReplyBudgetError("turn_token_limit_exceeded")
         if request.max_output_tokens > remaining_for_output:
             request = replace(request, max_output_tokens=remaining_for_output)
-            bounds = tuple(
-                self._token_bounder.bound(replace(request, model=model))
+            bounds = [
+                await prepare_usage_bound(self._token_bounder, replace(request, model=model))
                 for model in plan.candidates
-            )
+            ]
         if any(
             bound is None
             or bound.guarantee is not BoundGuarantee.HARD_UPPER_BOUND

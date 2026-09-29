@@ -1,8 +1,19 @@
 # dreamtalk 工作交接
 
-更新日期：2026-09-28。此文件记录当前开发现场与接续工作，不替代 [AGENTS.md](AGENTS.md)。先读 AGENTS，再读本文，最后核对实际 Git 状态和相关代码；不能把下面的基线哈希当作永远不变的当前 HEAD。
+更新日期：2026-09-29。此文件记录当前开发现场与接续工作，不替代 [AGENTS.md](AGENTS.md)。先读 AGENTS，再读本文，最后核对实际 Git 状态和相关代码；不能把下面的基线哈希当作永远不变的当前 HEAD。
 
-## 最新接续：2026-09-28 群聊自动选人修复
+## 最新接续：2026-09-29 群聊验收与 OpenAI 请求预检
+
+- 从干净 `2e3ba85` 接续，正式仓库 `D:\LivingWorld` / `codex/chat-feedback`；用户确认无 @ 群聊现在有人回复。连同前序角色卡/世界书 API 生成、单聊、群聊 @，核心交流流程已有用户实际反馈；不据此声称自然结束、多提供商、长期记忆或整个产品最终验收已完成。
+- 复用 OpenAI 官方完整输入计数接口，增加可选 async prepare，再供既有 sync bound/Token 和 financial guard 读取同一结果。接线覆盖私聊、群聊首次/后续选人与角色回复、内容生成、governed 每次物理 retry/fallback。首个准备在 claim 前；物理准备在预留/accounting START 前，并再次检查原 deadline。DB transaction 内不联网；真实 model dispatch/未知 usage/不重放规则保留。
+- 仅原生 Responses adapter 的 exact official endpoint/default base、无 structured/streaming/continuation 的文本请求支持。复用 actual payload 的 model/input/truncation；五秒、4 MiB/4 KiB、30秒最多64条 digest/数值缓存，失败也短暂缓存。失败/不支持继续完整模型可信预留，不借用估算。简化 OpenAI UI 提示与实际准入同步。DeepSeek framing、Claude/Gemini/代理原有保守路径不改。
+- 已调查 OpenAI SDK/接口、Claude estimate、Gemini countTokens/Interactions；无新依赖、无模板独立重写或许可变化。具体来源/版本/许可/适用条件见 [复用记录](docs/research/2026-09-29-provider-input-preflight.md)。Claude 的估计不能直接当 HARD；Gemini 仍需证明 complete Interactions mapping，不为此扩大本轮切片。
+- Ruff lint/format、ESLint/TypeScript 和 diff 检查通过；Core PyInstaller 编译成功，Vite 197 模块及 Rust release（24.85秒）成功。七个修改 Python 源与包内源码 SHA256 一致，DeepSeek helper 与既有 release 一致。保留 `tzdata`、`pysqlite2`、`MySQLdb` 可选 hidden-import 警告；构建不能代替运行验收。
+- 独立新版 `D:\LivingWorld\artifacts\portable\provider-preflight\dreamtalk\dreamtalk-desktop.exe`；ZIP `D:\LivingWorld\artifacts\portable\provider-preflight\dreamtalk.zip`，42,578,201 bytes / SHA256 `D6CF145CD171EACFC168BB7FB9ECA60C8258B38F0829D0307A4C6FB20436E68E`。日志 `artifacts/provider-preflight-core-build.log`、`artifacts/provider-preflight-desktop-build.log`，核对清单 `artifacts/provider-preflight-package.json`。旧包不覆盖，不终止用户进程。
+- 本轮没有 schema/migration、用户 DB/配置/密钥变动、旧消息 replay、测试/CI 变动、自动测试/smoke/付费调用或应用启停。真实 OpenAI 行为待用户使用自己的 API 验收；现有 provider/key 可继续使用，无需为了本轮切换服务；没有 push/release。
+- 项目阶段：可体验的基础沉浸聊天/内容创作已打通；完整长期独立记忆、普通 Token streaming、Director 批量计划消费/主动事件、完整 AI World Builder 仍未完成。接下来优先流式聊天体验，之后推进记忆/世界活动的确定切片；未确认 memory evidence/隐藏授权语义不能伪造实现。
+
+## 前序切片：2026-09-28 群聊自动选人修复
 
 - 从干净 `a9ae5e8` 接续，正式目录 `D:\LivingWorld` / `codex/chat-feedback`。用户实际确认：API 生成角色卡/世界书、单人对话、群聊 @ 指定下一位均有效；无 @ 群聊没有回复，截图显示 generic validation failure。上述为用户验收反馈，不是助手自动测试；整个产品尚未完成最终验收。
 - 源码发现自动选人的首轮/后续调用都固定 `max_output_tokens=64`，推理模型可在产生角色 ID 前耗尽；@ 跳过首次 selector，但后续 selector 仍失败，符合截图的 incomplete 提示。首轮与后续原有两份 UUID 解析也都拒绝完整 JSON/引号/code-block 包装。未捕获用户原始模型响应，因此不把截断/包装作为已直接观察的唯一根因。只读 mode=ro 数据读取失败，immutable view 没有近期 character_dialogue facts；该磁盘视图可能陈旧，不能据此断言未调用 API。未读密钥或写用户 DB。
@@ -160,7 +171,7 @@
 - 世界书如何真正参与聊天，同时排除默认隐藏的暗线；群聊中所有参与角色应能参考已经发出的消息。
 - 不重复造轮子。已取消“必须独立实现”的限制，允许评估成熟项目/组件；现有适配器没有因此被删除，也没有引入 SillyTavern 运行依赖。
 
-本轮是**文档交接任务**，只更新 AGENTS.md 并创建 HANDOFF.md，没有修改业务代码。完成后新对话应继续产品开发，不再向用户索取已明确的四标签布局、群聊 Token 规则或世界隔离要求。
+原始交接轮是**文档交接任务**，只更新 AGENTS.md 并创建 HANDOFF.md，没有修改业务代码；之后的业务进展以顶部最新切片为准。完成后新对话应继续产品开发，不再向用户索取已明确的四标签布局、群聊 Token 规则或世界隔离要求。
 
 ## 2. 仓库与代码基线
 
@@ -258,7 +269,7 @@ apps/web/src/main.tsx → App.tsx
 - 桌面连接通过 Tauri `core_connection` 返回 endpoint/token/generation，浏览器开发连接通过 `virtual:core-connection`；UI 不硬编码 Core 端口。
 - `App.tsx` health 成功后调用 `report_ui_ready`。Tauri 主窗口初始隐藏，不能把 Core ready 与 UI ready 混为一谈。
 - API 协议从 `domain/api_contract.json` 集中读取，目前 `api_protocol = 1`。Tauri 的 dev UI 端口 1420 不是 Core 端口。
-- `ProductApp.tsx` 默认整轮额度为 50,000，可设置 1–1,000,000；沿用 `livingworld.chat.turnTokenCeiling` 和 `livingworld.lastWorldId` localStorage 键。
+- `ProductApp.tsx` 默认整轮额度为 50,000，可设置至 JavaScript safe integer（Core 仍校验 int64）；沿用 `livingworld.chat.turnTokenCeiling` 和 `livingworld.lastWorldId` localStorage 键。
 - 模型配置 UI 在 `ModelSetup.tsx`；Rust IPC/config/credential 操作在 `src-tauri/src/lib.rs`、`llm_config.rs`、`credentials.rs`、`supervisor.rs`，不存在独立 `model_setup.rs`。
 
 ### 5.2 消息、claim 与角色生成
@@ -279,7 +290,7 @@ apps/web/src/main.tsx → App.tsx
 - UI 使用 `GET /{conversation_id}/messages/page`，默认 50、最大 100，游标 `before_position`；旧的完整消息读接口仍保留，不能让普通页面退回每次读全部历史。
 - claim **不可重新领取**。模型失败、HTTP timeout 或重启后的 claimed turn 不自动 replay。UI 可查询一次状态，不自动再次生成。部分群回复已经持久提交时保留它们。
 - 私聊及角色群回复只接受匹配 invocation 的非空、有界文本，finish 为 STOP 或 REFUSAL；截断不是成功回复。群选择器只接受合法成员 ID，已有回复后可返回 STOP。
-- 群回复当前另外有 32 条安全上限；选择请求输出上限为 64 Token。`@` 只绕过首次选人调用，不禁止本轮随后选择其他人。
+- 群回复当前另外有 32 条安全上限；选择请求输出最多 8,192 Token，受模型设置和整轮剩余额度约束。`@` 只绕过首次选人调用，不禁止本轮随后选择其他人。
 - 当前回复服务用 **`generate()`**，不是 `stream()`。基础 SSE adapters 已有，不代表 UI 已逐字流式显示。接通流式时不能破坏一次性 claim、终端校验、账本和未知用量处理。
 
 ### 5.3 聊天上下文
@@ -307,7 +318,7 @@ apps/web/src/main.tsx → App.tsx
 ### 5.5 Token、预算和模型配置
 
 - `ChatTurnTokenBudget` 是本轮串行使用的内存预留对象；玩家 Message/turn 保存原始额度、claim 防止重启重新开始。同一群轮中的选人和回复共享一个对象，并传入底层物理 retry/fallback。
-- 必须有 `HARD_UPPER_BOUND`。当前按配置的整个模型输入上界保守预留，不是按短 prompt 猜输入长度；额度小于可信输入上界时，即使一句话也可能不能发。
+- 必须有 `HARD_UPPER_BOUND`。已核对 DeepSeek 官方文本 framing 与 OpenAI 原生 Responses 完整输入计数可逐请求预留；其他形状/提供商及计数失败按模型输入上界预留，不是按短 prompt 猜输入长度。
 - usage 不完整时保守消耗预留并关闭本轮；超过上界时报告完整性问题，不把事实用量改小。
 - `bootstrap/llm_runtime.py::_chat_reply_configuration` 只选唯一合格模型或显式 `character_dialogue` 的 BALANCED route；多模型无路由时不猜。每个候选都需可信 limits；可用性还依 route policy 检查 session credential。
 - 桌面简化模型设置面向 managed single configuration，可创建/更新并通过 supervisor 重启 Core；不会在保存配置时测试 key 或生成回复。高级配置不能被简化表单默默覆盖。
@@ -359,7 +370,7 @@ apps/web/src/main.tsx → App.tsx
 2. **世界书与酒馆能力仍有差距。** 当前支持有界基础条件激活，向量、递归、概率/时序和源注入位置尚未接入；隐藏背景没有角色专属授权传播路径。不能宣称已实现 ST 的所有功能。
 3. **Director 和主动事件尚未生产接通。** 现有世界时间、scheduler 和事件账本不能自己生成丰富剧情；event feed 当前只有有限安全标题。
 4. **聊天仍是整段生成后出现。** 缺少普通界面流式输出；群聊可能有多次选人和生成耗时。
-5. **保守 bounds 配置对普通用户仍有门槛。** managed model UI 要手填核实过的上界；不能为了降低门槛随意估值，丰富 Model Registry/安全候选预设仍需推进。
+5. **保守 bounds 配置对普通用户仍有门槛。** 常见型号已复用容量预设，未知型号/服务仍需高级手动核对；逐请求预留目前只覆盖已核对 DeepSeek/OpenAI 直连文本子集，其他模型/形状仍有门槛。
 6. **未知结果/claimed turn 缺少完整恢复 UX。** 当前不重放可防重复付费，但用户可能看到已存玩家消息却没回复；完善明确状态说明，不能偷偷清除 claim。
 7. **模型设置仅有简化管理。** 多 provider/route 高级管理、tools、真实代理兼容验收、云端/多用户身份不完整。
 

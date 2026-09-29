@@ -1,5 +1,6 @@
 """Native OpenAI Responses transport; one HTTP attempt, no SDK or provider state."""
 
+import asyncio
 import hashlib
 import json
 import re
@@ -809,6 +810,56 @@ class OpenAIResponsesGateway:
         if self._profile.supports_reasoning_continuation:
             payload["include"] = ["reasoning.encrypted_content"]
         return payload
+
+    @property
+    def supports_input_count(self) -> bool:
+        # Same-named proxy models cannot inherit the direct service guarantee.
+        return str(self._endpoint) == "https://api.openai.com/v1/responses"
+
+    def token_reservation_payload(self, request: LLMRequest) -> dict | None:
+        """Use the actual stateless text input; no approximate local template."""
+        if (
+            not self.supports_input_count
+            or request.streaming
+            or request.structured_output is not None
+            or any(message.continuation is not None for message in request.messages)
+        ):
+            return None
+        payload = self._payload(request)
+        return {key: payload[key] for key in ("model", "input", "truncation")}
+
+    async def count_input_tokens(self, request: LLMRequest, payload: dict) -> int | None:
+        """One bounded count request, never generation, retries or arbitrary URLs."""
+        if payload != self.token_reservation_payload(request):
+            return None
+        secret = None
+        try:
+            async with asyncio.timeout(5):
+                secret = await self._secret(request)
+                wire = self._client.build_request(
+                    "POST",
+                    "https://api.openai.com/v1/responses/input_tokens",
+                    headers=self._headers(secret),
+                    json=payload,
+                )
+                response = await self._client.send(wire, stream=True, follow_redirects=False)
+                try:
+                    if response.status_code != 200:
+                        return None
+                    body = await bounded_body(response, 4096)
+                    data = _json(body) if body is not None else None
+                    if type(data) is not dict or data.get("object") != "response.input_tokens":
+                        return None
+                    count = data.get("input_tokens")
+                    return count if type(count) is int and 0 <= count <= 2**63 - 1 else None
+                finally:
+                    await response.aclose()
+        except (TimeoutError, httpx.HTTPError, LLMError, LLMContractError, _InvalidResponse):
+            return None
+        finally:
+            # Neither the body, raw errors, cookies nor the credential are cached.
+            self._client.cookies.clear()
+            del secret
 
     def _headers(self, secret, *, streaming=False):
         headers = {"Authorization": f"Bearer {secret}", "content-type": "application/json"}

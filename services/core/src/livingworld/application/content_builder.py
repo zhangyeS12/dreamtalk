@@ -20,7 +20,7 @@ from livingworld.application.llm import (
     MessageRole,
     TextContent,
 )
-from livingworld.application.llm_budget import BoundGuarantee
+from livingworld.application.llm_budget import BoundGuarantee, prepare_usage_bound
 from livingworld.application.llm_chat_turn_budget import ChatTurnTokenBudget
 from livingworld.domain.identifiers import WorldId
 
@@ -200,7 +200,10 @@ class ContentBuilder:
         )
         try:
             plan = gateway.plan(request, selection=selection)
-            bounds = [bounder.bound(replace(request, model=x)) for x in plan.candidates]
+            bounds = [
+                await prepare_usage_bound(bounder, replace(request, model=x))
+                for x in plan.candidates
+            ]
             if not bounds or any(
                 x is None or x.guarantee is not BoundGuarantee.HARD_UPPER_BOUND for x in bounds
             ):

@@ -43,6 +43,7 @@ from livingworld.application.llm_budget import (
     BudgetedAttemptAccountingSink,
     BudgetIntegrityError,
     PreflightUsageBounder,
+    prepare_usage_bound,
 )
 from livingworld.application.llm_chat_turn_budget import (
     ChatTurnTokenBudget,
@@ -337,6 +338,12 @@ class ExecutingModelGateway:
             pass
 
     async def _begin_attempt(self, request, ordinal, execution):
+        if self._clock() >= execution.deadline:
+            raise ExecutionDeadlineError()
+        if self._token_bounder is not None:
+            await prepare_usage_bound(self._token_bounder, request)
+        # Preflight I/O consumes the existing invocation deadline; it never grants
+        # a fresh retry/fallback deadline or writes an accounting START.
         if self._clock() >= execution.deadline:
             raise ExecutionDeadlineError()
         self._reserve_turn_tokens(request, execution)
