@@ -84,3 +84,8 @@ C-007A 采用 episodic record、explicit evidence、temporal coordinates、optio
 上方“延后”的清单记录 C007A 当时的切片范围，不代表当前全部代码。现有 DeveloperInspectorService 已能在开发者模式中按 owner 查看/记录 episodic memory；聊天上下文已消费该角色自己的记忆。release 普通界面不能因此读取其私有内容。
 
 本日新增的普通“聊天回忆”只检索当前玩家有权访问的共同 Conversation/Message 原文，并允许查看前后文与追加草稿。[实现边界](../research/2026-09-29-chat-recall-view-reuse.md)。未增加 Memory provenance、自动聊天摘要、写入/合并/遗忘/修正或新的 WorldTruth/Knowledge；Observation-only 证据约束仍有效。
+
+
+## 2026-09-29 已确认会话摘要的独立存储
+
+前段记录的是聊天回忆切片当时的范围。本次新增独立 `conversation_memory_revisions` / `conversation_memory_drafts` 交互表（0024），不是 `character_memories` 的新 kind/provenance；Observation-only EpisodicMemory 约束仍未改变。普通玩家只预览、确认、修正自己当前绑定身份在本会话内的共同聊天摘要。确认版本及 Conversation/Message 来源形成递增链，8KiB摘要与32条新增来源有界；角色仅在该会话授权后读取已确认摘要。没有更改 Knowledge、WorldTruth、Reflection、Consolidated 或遗忘语义。详见 [CHAT_MODEL.md](CHAT_MODEL.md) 与 [复用记录](../research/2026-09-29-conversation-summary-reuse.md)。

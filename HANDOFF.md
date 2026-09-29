@@ -2,7 +2,23 @@
 
 更新日期：2026-09-29。此文件记录当前开发现场与接续工作，不替代 [AGENTS.md](AGENTS.md)。先读 AGENTS，再读本文，最后核对实际 Git 状态和相关代码；不能把下面的基线哈希当作永远不变的当前 HEAD。
 
-## 最新接续：2026-09-29 聊天回忆检索与原文查看
+## 最新接续：2026-09-29 可确认会话记忆摘要
+
+- 从干净 `848e628` / `codex/chat-feedback` 接续。用户接受建议继续推进，并在中断后要求从现场继续；中断前静态检查与 Core/desktop 编译已完成，中断后只核对、打包、文档与本地提交，没有重跑编译或进入其他功能。
+- 调查 SillyTavern 官方 Summarize（release/AGPL-3.0）和 LangMem 当日 main/pyproject 0.0.30/MIT。采用上一确认摘要＋后续原文的增量模式，复用已有 governed gateway、可信计数/预算/账本、SQLite/SQLAlchemy/Alembic 与 React/native dialog，不安装第二套 agent runtime 或复制酒馆源码。[调查与选择](docs/research/2026-09-29-conversation-summary-reuse.md)。
+- 单聊/群聊顶部新增“记忆摘要”：用户点击生成，核对/编辑，预览摘要和本批原文，确认保存；只有确认版本进入本会话后续角色回复。长历史从最早未处理原文按批继续，最多32条/96KiB正文；整条保留不跳过，摘要≤8KiB。生成复用现有模型，无联网搜索，独立任务有限额度，不继承聊天每轮 Token 额度；所有物理 retry/fallback 仍受原治理。没有自动生成/遗忘。
+- 手动修正不调用模型，确认形成新版本；旧内容、原文 ID、基础版本与覆盖位置保留。每版只有本批最多32条新增来源，基础链可逐版追溯。源模型发言人标签来自当前运行角色/Player名称（≤160字符），不是历史名称快照，稳定身份仍是原 Message/Turn/Conversation/sender ID。来源表示输入依据，不保证摘要每句话正确。
+- 新 authenticated memory snapshot/draft/preview/commit/revision/source routes 复用本地 session；所有操作先验证 World＋当前绑定Player＋Conversation；角色 prompt 另校验固定成员，且只读覆盖位置早于当前玩家消息的确认版本。只在该会话作用：单聊该角色，群聊固定成员；selector不变，不跨会话传播、不读别人的私有记忆。
+- 新 additive `0024_conversation_memory`：两张交互表与owner索引；历史 schema校验显式识别新旧revision。BEGIN IMMEDIATE CAS；UUIDclaim先落库，一次dispatch；hash绑定内容/基础版/来源/世界/身份/会话。同一hash确认幂等返回原版本，旧基础草稿不能覆盖较新确认版。它是Conversation summary，不是旧Observation-only EpisodicMemory的扩展；没有WorldTruth/Knowledge/ledger写入。
+- 关闭/断线后读取最新状态不会重放模型；生成中关闭只取消前端等待，服务端可能继续，不能承诺取消费用。UI恢复最新草稿，已确认版本可逐个查看；不提供旧草稿历史浏览。已预览的编辑可重开，未预览的本地修改关闭后不保留；读取最新状态保留同一草稿尚未预览的修改。预览源码核对来源后才开放确认，修改使预览失效；繁忙期禁用变更，错误与成功均有明确提示。
+- 补充CHAT_MODEL/PRODUCT_SURFACE/EPISODIC_MEMORY/PRODUCT_SPEC当前状态。前序文档“自动摘要/修正未完成”是当时切片范围；现在已实现手动确认的独立会话摘要，仍未实现自动私有记忆、跨会话摘要传播、遗忘和Director世界活动。
+- 初次静态检查发现长行/格式、Header默认表达式，已修正；源码审查也修正前端错误码字段，补齐模型发言人名称和草稿owner索引。最终Ruff lint/format与ESLint/TypeScript通过，diff检查通过。Core PyInstaller成功（约25秒），Vite204模块、Rust release22.88秒成功。12个修改Python源与包内哈希一致；helper、desktop及13份许可文件字节一致。保留既有tzdata/pysqlite2/MySQLdb可选hidden-import warnings，无新desktop警告。
+- 独立新版 `D:\LivingWorld\artifacts\portable\conversation-summary\dreamtalk\dreamtalk-desktop.exe`；ZIP `D:\LivingWorld\artifacts\portable\conversation-summary\dreamtalk.zip`，42,642,878 bytes / SHA256 `DE6B408978934487304F78EA419F3CD5D04530A82B3A8519F70B6882C935D2BA`。日志 `artifacts/conversation-summary-core-build.log` / `artifacts/conversation-summary-desktop-build.log`，清单 `artifacts/conversation-summary-package.json`；随包README/MEMORY以及前序RECALL/STREAMING。旧包未覆盖。
+- 按AGENTS§20未新增/修改/执行测试、CI、GUI smoke、provider/credential probes或应用启停。没有真实用户DB/配置/密钥写入，没有运行迁移、旧消息replay、终止用户进程或push/release。现有流式mock未适配问题保留；不能声称测试套件通过。构建/哈希只证明编译与包一致，真实摘要、迁移、断线恢复、并发保存、权限隔离仍待用户验收。
+- 用户入口：关闭旧窗口，打开上述exe；首次启动按既有流程自动增量迁移，旧版不认识新schema，不要再用旧程序打开升级后的存档。顶部“记忆摘要”→生成→编辑→预览来源→确认，再聊以核对记忆；手动修正/版本浏览与长历史分批继续可体验。详情随包MEMORY.md。
+- 接下来先根据用户实际反馈修正本切片；后续优先调查并推进Director计划消费与可获知世界活动，把角色话题与持续世界连接起来。主动联系episode、隐私和费用语义仍需在各自确定切片中处理，不能用后台随机LLM循环替代。没有需要本轮重新确认的选择；整个持久世界产品尚未完成。
+
+## 前序切片：2026-09-29 聊天回忆检索与原文查看
 
 - 从干净 `3203dac` 接续，正式仓库仍为 `D:\LivingWorld` / `codex/chat-feedback`。用户授权继续推进。本轮交付可查看的共同聊天回忆；独立长期记忆/自动摘要仍未完成，前序流式切片仍待用户运行验收。
 - 先核对 AGENTS/HANDOFF、实际记忆/知识/对话实现，调查 Mem0 v2.2.1、Letta memory blocks、SQLite FTS5、jieba、原生 dialog。选择复用既有 SQLite 3.50.4 + 固定 jieba 0.42.1 + 授权分页 + WebView dialog，不新增依赖/模型调用/agent runtime，不复制框架或酒馆源码。[选型与详细契约](docs/research/2026-09-29-chat-recall-view-reuse.md)。

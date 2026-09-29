@@ -189,6 +189,13 @@ class Database:
 
         return SqlAlchemyPlayerEventFeedStore(self._sessions)
 
+    def conversation_memory_store(self):
+        from livingworld.infrastructure.persistence.conversation_memory import (
+            SqlAlchemyConversationMemoryStore,
+        )
+
+        return SqlAlchemyConversationMemoryStore(self._sessions)
+
     def content_builder_store(self):
         from livingworld.infrastructure.persistence.content_builder import SqlAlchemyBuilderStore
 

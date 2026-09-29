@@ -272,3 +272,7 @@
 .history-error { color: oklch(.45 .15 25); }
 .history-footnote { margin: 24px 0 0; border-top: 1px solid var(--line); padding-top: 12px; color: var(--muted); line-height: 1.6; font-size: .8rem; }
 @media (max-width: 640px) { .chat-history-dialog { padding: 16px; } .thread-heading { flex-wrap: wrap; gap: 8px 12px; } }
+
+.memory-current, .memory-draft { margin: 20px 0; padding: 18px 0; border-top: 1px solid var(--line); }
+.memory-draft textarea { display: block; width: 100%; resize: vertical; min-height: 180px; margin: 12px 0; }
+.conversation-memory-dialog > .history-actions { margin-top: 16px; }

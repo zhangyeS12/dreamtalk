@@ -54,6 +54,7 @@ def create_app(
     content_builder=None,
     content_repository=None,
     chat_recall: EarlierChatRecall | None = None,
+    conversation_memory=None,
 ) -> FastAPI:
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
@@ -130,6 +131,11 @@ def create_app(
         app.include_router(
             chat_message_router(chat_messages, authorize, chat_reply, group_chat_reply, chat_recall)
         )
+
+    if conversation_memory is not None:
+        from livingworld.adapters.http.conversation_memory import conversation_memory_router
+
+        app.include_router(conversation_memory_router(conversation_memory, authorize))
 
     @app.get("/system/live")
     async def live() -> dict[str, bool]:

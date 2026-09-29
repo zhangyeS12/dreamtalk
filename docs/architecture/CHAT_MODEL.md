@@ -415,3 +415,31 @@ older pages, keeping at most 64 results. This is a bounded keyword recall browse
 not a trace of the last model's context or automatic episodic-memory formation.
 Existing prompt recall limits, private owner binding, write semantics and financial
 controls remain unchanged. See [sources, limits and acceptance](../research/2026-09-29-chat-recall-view-reuse.md).
+
+
+## 2026-09-29 reviewed conversation summary
+
+Direct/group chat has a separate, persistent conversation summary. It is a
+Player-owned interaction record for the same fixed shared conversation, not a
+Character's private EpisodicMemory or new Knowledge/WorldTruth. Summary prompts
+use only the previous confirmed revision and the next contiguous source batch
+(up to32 whole messages/96KiB body). Generation reuses the governed authoring
+operation and existing configured model, independent of the chat-turn ceiling.
+
+Manual Draft → editable Preview → hash-bound Commit uses durable single-dispatch
+UUID claims and BEGIN IMMEDIATE CAS. Repeated acceptance returns its existing
+revision; stale bases cannot overwrite current memory. Each new version keeps
+its base and up to32 new source IDs. User corrections append versions without
+model calls; raw dialogue and previous versions remain. Draft recovery reads
+state without replay. Only the latest draft is shown by the ordinary UI; older
+draft receipts are retained, not browsable as a draft history in this slice.
+
+Only confirmed summaries whose covered position is strictly before the current
+player message enter a character reply's lower-trust USER data. World, current
+Player, Conversation and fixed membership are checked before reading summary
+content. Group selection remains unchanged. Summary content is not proof of a
+source claim; current dialogue/corrections take precedence. Context includes
+8KiB at most for this summary in addition to existing bounded inputs, within the
+same governed reply reservations. No cross-conversation propagation, automatic
+memory formation/forgetting, private memory expansion or canonical writes.
+See [reuse decision and acceptance limits](../research/2026-09-29-conversation-summary-reuse.md).

@@ -54,6 +54,22 @@ export interface InspectorSnapshot {
   memories: Array<{ memory_id: string; owner_character_id: string; content: string; experienced_from: string; experienced_to: string; formed_at: string; salience: number | null; evidence: Array<{ observation_id: string; observed_at: string }> }>;
 }
 
+export interface ConversationMemoryContent {
+  base_revision: number; through_position: number; source_ids: string[];
+  content: string | null; user_edited: boolean; created_at_utc: string;
+}
+export interface ConversationMemoryRevision extends ConversationMemoryContent { revision: number; content: string }
+export interface ConversationMemoryDraft extends ConversationMemoryContent {
+  draft_id: string; mode: "summarize" | "correct";
+  state: "generating" | "ready" | "previewed" | "committed" | "failed" | "interrupted";
+  reviewed_hash: string | null; committed_revision: number | null; error: string | null;
+}
+export interface ConversationMemorySnapshot {
+  current: ConversationMemoryRevision | null; draft: ConversationMemoryDraft | null;
+  latest_position: number; model_available: boolean;
+}
+export interface ConversationMemorySources { memory: ConversationMemoryRevision; sources: ChatMessage[] }
+
 export interface WorldContentItem {
   import_id: string; replaces_import_id: string | null; kind: "character" | "lorebook"; reviewed_hash: string;
   characters: Array<{ id: string; name: string; description: string; personality: string; background: string; scenario: string; speech_guidance: string; creator_notes: string; tags: string[]; example_dialogue: string[]; authored_instructions: Record<string, unknown> }>;
@@ -350,6 +366,31 @@ export class CoreClient {
   chatMessageContext(worldId: string, conversationId: string, position: number, signal?: AbortSignal): Promise<ChatMessagePage> {
     if (!Number.isSafeInteger(position) || position < 1 || !Number.isSafeInteger(position + 4)) throw new Error("chat_position_invalid");
     return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/${encodeURIComponent(conversationId)}/messages/page?limit=7&before_position=${position + 4}`, { signal });
+  }
+  conversationMemory(worldId: string, conversationId: string, signal?: AbortSignal): Promise<ConversationMemorySnapshot> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/${encodeURIComponent(conversationId)}/memory`, { signal });
+  }
+  draftConversationMemory(worldId: string, conversationId: string, baseRevision: number, mode: "summarize" | "correct", requestId: string, signal?: AbortSignal): Promise<ConversationMemoryDraft> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/${encodeURIComponent(conversationId)}/memory/drafts`, {
+      method: "POST", headers: { "Content-Type": "application/json", "X-Request-Id": requestId },
+      body: JSON.stringify({ base_revision: baseRevision, mode }), signal,
+    });
+  }
+  previewConversationMemory(worldId: string, conversationId: string, draftId: string, content: string, signal?: AbortSignal): Promise<ConversationMemoryDraft> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/${encodeURIComponent(conversationId)}/memory/preview`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ draft_id: draftId, content }), signal,
+    });
+  }
+  commitConversationMemory(worldId: string, conversationId: string, draftId: string, reviewedHash: string, signal?: AbortSignal): Promise<ConversationMemoryRevision> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/${encodeURIComponent(conversationId)}/memory/commit`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ draft_id: draftId, reviewed_hash: reviewedHash }), signal,
+    });
+  }
+  conversationMemoryRevision(worldId: string, conversationId: string, revision: number, signal?: AbortSignal): Promise<ConversationMemorySources> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/${encodeURIComponent(conversationId)}/memory/revisions/${revision}`, { signal });
+  }
+  conversationMemoryDraftSources(worldId: string, conversationId: string, draftId: string, signal?: AbortSignal): Promise<{ items: ChatMessage[] }> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/${encodeURIComponent(conversationId)}/memory/drafts/${encodeURIComponent(draftId)}/sources`, { signal });
   }
   sendPlayerMessage(worldId: string, conversationId: string, text: string, tokenCeiling: number, requestId: string): Promise<PendingPlayerSend> {
     return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/${encodeURIComponent(conversationId)}/messages`, {

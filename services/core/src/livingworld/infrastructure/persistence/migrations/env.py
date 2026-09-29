@@ -6,6 +6,10 @@ from livingworld.infrastructure.persistence.content_builder import (
     ContentBuilderJobRecord,  # noqa: F401
 )
 from livingworld.infrastructure.persistence.content_models import ContentBase
+from livingworld.infrastructure.persistence.conversation_memory import (
+    ConversationMemoryDraftRecord,  # noqa: F401
+    ConversationMemoryRevisionRecord,  # noqa: F401
+)
 from livingworld.infrastructure.persistence.models import Base
 
 connection = context.config.attributes.get("connection")

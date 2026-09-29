@@ -182,6 +182,12 @@ async def run(
                 database.unit_of_work,
             )
         llm_session = await start_production_llm_session(config.llm_config_path, database, logger)
+        from livingworld.application.conversation_memory import ConversationMemoryService
+
+        conversation_memory_store = database.conversation_memory_store()
+        conversation_memory = ConversationMemoryService(
+            conversation_memory_store, player_event_feed, configure_content_builder(llm_session)
+        )
         chat_reply = configure_direct_chat_reply(
             llm_session,
             chat_messages,
@@ -192,6 +198,7 @@ async def run(
                 database.character_memory_reader,
                 world_content.list_common_lore,
                 earlier_chat_recall,
+                conversation_memory_store,
             ),
         )
         group_chat_reply = configure_group_chat_reply(
@@ -204,6 +211,7 @@ async def run(
                 database.character_memory_reader,
                 world_content.list_common_lore,
                 earlier_chat_recall,
+                conversation_memory_store,
             ),
         )
         from livingworld.application.content_builder import ContentBuilder
@@ -243,6 +251,7 @@ async def run(
             content_builder,
             database.content_repository(),
             chat_recall=earlier_chat_recall,
+            conversation_memory=conversation_memory,
         )
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.bind((LOOPBACK_HOST, 0))
