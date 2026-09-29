@@ -1,3 +1,4 @@
+import { createParser } from "eventsource-parser";
 import contract from "../../../services/core/src/livingworld/domain/api_contract.json";
 
 export const API_PROTOCOL = contract.api_protocol;
@@ -107,6 +108,12 @@ export interface ChatMessage {
   text: string;
   created_at_utc: string;
 }
+export type ChatReplyProgress =
+  | { kind: "preparing" | "selecting" }
+  | { kind: "replying"; speaker_id: string }
+  | { kind: "delta"; speaker_id: string; text: string }
+  | { kind: "message"; message: ChatMessage };
+
 export interface ChatMessagePage {
   items: ChatMessage[];
   next_before_position: number | null;
@@ -202,6 +209,103 @@ export class CoreClient {
       throw new CoreRequestError(response.status, code);
     }
     return await response.json() as T;
+  }
+
+  async streamChatReply(
+    worldId: string, conversationId: string, turnId: string, kind: "direct" | "group",
+    onProgress: (event: ChatReplyProgress) => void, signal: AbortSignal,
+  ): Promise<void> {
+    const segment = kind === "group" ? "group-turns" : "turns";
+    const path = `/worlds/${encodeURIComponent(worldId)}/conversations/${encodeURIComponent(conversationId)}/${segment}/${encodeURIComponent(turnId)}/reply/stream`;
+    // One authenticated POST. Parsing never reconnects or repeats generation.
+    const response = await this.fetcher(new URL(`/api/v${API_PROTOCOL}${path}`, this.endpoint), {
+      method: "POST", headers: { Authorization: `Bearer ${this.connection.token}`, Accept: "text/event-stream" },
+      signal, credentials: "omit", cache: "no-store",
+    });
+    if (!response.ok) {
+      const body: unknown = await response.json().catch(() => null);
+      const code = typeof body === "object" && body !== null && "detail" in body
+        && typeof body.detail === "string" && /^[a-z][a-z0-9_]{0,95}$/.test(body.detail) ? body.detail : null;
+      throw new CoreRequestError(response.status, code);
+    }
+    const invalid = () => new CoreRequestError(502, "chat_reply_invalid");
+    if (!response.body || !response.headers.get("Content-Type")?.startsWith("text/event-stream")) {
+      await response.body?.cancel();
+      throw invalid();
+    }
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder("utf-8", { fatal: true });
+    let completed = false;
+    let bytes = 0;
+    let eventCount = 0;
+    let speaker: string | null = null;
+    let textBytes = 0;
+    let messageCount = 0;
+    const encoder = new TextEncoder();
+    const validId = (value: unknown): value is string => typeof value === "string" && /^[0-9a-f-]{36}$/i.test(value);
+    const parser = createParser({
+      maxBufferSize: 512 * 1024,
+      onError: () => { throw invalid(); },
+      onRetry: () => { throw invalid(); },
+      onEvent: event => {
+        if (completed || ++eventCount > 600_000) throw invalid();
+        const frame: unknown = JSON.parse(event.data);
+        if (typeof frame !== "object" || frame === null || !("turn_id" in frame) || frame.turn_id !== turnId || !("kind" in frame)) throw invalid();
+        if (frame.kind === "error") {
+          if (!("status" in frame) || typeof frame.status !== "number" || !Number.isInteger(frame.status) || frame.status < 400 || frame.status > 599
+            || !("code" in frame) || typeof frame.code !== "string" || !/^[a-z][a-z0-9_]{0,95}$/.test(frame.code)) throw invalid();
+          throw new CoreRequestError(frame.status, frame.code);
+        }
+        if (frame.kind === "completed") { completed = true; return; }
+        if (frame.kind === "preparing" || frame.kind === "selecting") {
+          if (speaker !== null) throw invalid();
+          onProgress({ kind: frame.kind }); return;
+        }
+        if (frame.kind === "replying") {
+          if (speaker !== null || !("speaker_id" in frame) || !validId(frame.speaker_id)) throw invalid();
+          speaker = frame.speaker_id; textBytes = 0;
+          onProgress({ kind: "replying", speaker_id: speaker }); return;
+        }
+        if (frame.kind === "delta") {
+          if (!("speaker_id" in frame) || frame.speaker_id !== speaker || !("text" in frame) || typeof frame.text !== "string" || speaker === null) throw invalid();
+          textBytes += encoder.encode(frame.text).length;
+          if (textBytes > 65536) throw invalid();
+          onProgress({ kind: "delta", speaker_id: speaker, text: frame.text }); return;
+        }
+        if (frame.kind === "message" && "message" in frame && typeof frame.message === "object" && frame.message !== null) {
+          const message = frame.message;
+          if (!("message_id" in message) || !validId(message.message_id) || !("turn_id" in message) || message.turn_id !== turnId
+            || !("conversation_id" in message) || message.conversation_id !== conversationId || !("sender_kind" in message) || message.sender_kind !== "character"
+            || !("sender_id" in message) || !validId(message.sender_id) || (speaker !== null && message.sender_id !== speaker)
+            || !("text" in message) || typeof message.text !== "string" || !message.text.trim() || encoder.encode(message.text).length > 65536
+            || !("position" in message) || typeof message.position !== "number" || !Number.isSafeInteger(message.position) || message.position < 1
+            || !("created_at_utc" in message) || typeof message.created_at_utc !== "string" || message.created_at_utc.length > 64 || !Number.isFinite(Date.parse(message.created_at_utc))
+            || ++messageCount > (kind === "direct" ? 1 : 32)) throw invalid();
+          speaker = null; textBytes = 0;
+          onProgress({ kind: "message", message: message as ChatMessage }); return;
+        }
+        throw invalid();
+      },
+    });
+    try {
+      while (!completed) {
+        const part = await reader.read();
+        if (part.done) break;
+        bytes += part.value.byteLength;
+        if (bytes > 64 * 1024 * 1024) throw invalid();
+        parser.feed(decoder.decode(part.value, { stream: true }));
+      }
+      if (!completed) {
+        parser.feed(decoder.decode());
+        parser.reset({ consume: true });
+      }
+      if (!completed || speaker !== null || (kind === "direct" && messageCount !== 1)) {
+        throw new CoreRequestError(502, "chat_stream_interrupted");
+      }
+    } finally {
+      await reader.cancel().catch(() => undefined);
+      reader.releaseLock();
+    }
   }
 
   worldContent(worldId: string): Promise<WorldContentItem[]> {

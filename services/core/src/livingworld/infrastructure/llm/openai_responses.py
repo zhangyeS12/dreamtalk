@@ -820,12 +820,11 @@ class OpenAIResponsesGateway:
         """Use the actual stateless text input; no approximate local template."""
         if (
             not self.supports_input_count
-            or request.streaming
             or request.structured_output is not None
             or any(message.continuation is not None for message in request.messages)
         ):
             return None
-        payload = self._payload(request)
+        payload = self._payload(request, streaming=request.streaming)
         return {key: payload[key] for key in ("model", "input", "truncation")}
 
     async def count_input_tokens(self, request: LLMRequest, payload: dict) -> int | None:

@@ -4,13 +4,14 @@ import { CoreClient, type ChatMessage } from "@dreamtalk/api-client";
 interface TranscriptState {
   key: string;
   messages: ChatMessage[] | null;
+  latestLoaded: boolean;
   beforePosition: number | null;
   loadingOlder: boolean;
   failed: boolean;
 }
 
 const initial = (key: string): TranscriptState => ({
-  key, messages: null, beforePosition: null, loadingOlder: false, failed: false,
+  key, messages: null, latestLoaded: false, beforePosition: null, loadingOlder: false, failed: false,
 });
 
 function mergeMessages(current: ChatMessage[], incoming: ChatMessage[]): ChatMessage[] {
@@ -38,8 +39,8 @@ export function useTranscriptPages(client: CoreClient, worldId: string, conversa
         setState(current => {
           if (current.key !== key) return current;
           const previous = current.messages;
-          if (previous === null || previous.length === 0) {
-            return { ...current, messages: page.items, beforePosition: page.next_before_position, failed: false };
+          if (!current.latestLoaded || previous === null || previous.length === 0) {
+            return { ...current, latestLoaded: true, messages: mergeMessages(previous ?? [], page.items), beforePosition: page.next_before_position, failed: false };
           }
           // A large concurrent append may leave a gap. Restart at the latest page.
           if (page.items.length > 0 && page.items[0].position > previous[previous.length - 1].position + 1) {
@@ -76,7 +77,15 @@ export function useTranscriptPages(client: CoreClient, worldId: string, conversa
     }
   };
 
+  const acceptMessage = (message: ChatMessage) => {
+    if (message.conversation_id !== conversationId || currentKey.current !== key) return;
+    setState(current => current.key === key
+      ? { ...current, messages: mergeMessages(current.messages ?? [], [message]) }
+      : current);
+  };
+
   return {
+    acceptMessage,
     messages: state.key === key ? state.messages : null,
     hasOlder: state.key === key && state.beforePosition !== null,
     loadingOlder: state.key === key && state.loadingOlder,

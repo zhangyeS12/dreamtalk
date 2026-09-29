@@ -15,11 +15,15 @@ from livingworld.application.chat_messages import (
 )
 from livingworld.application.chat_reply import (
     ChatGateway,
+    ChatProgress,
+    ChatProgressSink,
     ChatReplyBudgetError,
     ChatReplyGenerationError,
     ChatReplyIntegrityError,
     ChatReplyUnavailableError,
     ChatReplyValidationError,
+    dialogue_request,
+    dialogue_text,
 )
 from livingworld.application.group_chat_context import GroupChatContextBuilder
 from livingworld.application.llm import (
@@ -226,25 +230,30 @@ class GroupChatReplyService:
         budget: ChatTurnTokenBudget,
         *,
         prepared: LLMRequest | None = None,
+        progress: ChatProgressSink | None = None,
     ) -> str:
         if budget.closed or budget.remaining < 1:
             raise ChatReplyBudgetError("turn_token_limit_exceeded")
         if prepared is None:
             context = await self._context.build_reply(source, speaker)
             prepared = await self._preflight(
-                self._request(context.messages, min(self._max_output_tokens, budget.remaining)),
+                dialogue_request(
+                    self._gateway,
+                    self._request(context.messages, min(self._max_output_tokens, budget.remaining)),
+                    self._selection,
+                    progress,
+                ),
                 budget.remaining,
             )
-        response = await self._generate(prepared, budget)
-        if (
-            response.finish_reason not in {FinishReason.STOP, FinishReason.REFUSAL}
-            or not response.text.strip()
-            or len(response.text.encode("utf-8")) > 65536
-        ):
-            raise ChatReplyValidationError("chat_reply_invalid")
-        return response.text
+        if progress is not None:
+            await progress(ChatProgress("replying", speaker))
+        return await dialogue_text(
+            self._gateway, prepared, budget, self._selection, progress, speaker
+        )
 
-    async def reply(self, sent: PlayerSend) -> GroupTurnView:
+    async def reply(
+        self, sent: PlayerSend, *, progress: ChatProgressSink | None = None
+    ) -> GroupTurnView:
         if not isinstance(sent, PlayerSend):
             raise ValueError("chat_send_required")
         if not self.available:
@@ -258,7 +267,12 @@ class GroupChatReplyService:
         if mentioned is not None:
             context = await self._context.build_reply(sent, mentioned)
             first_request = await self._preflight(
-                self._request(context.messages, min(self._max_output_tokens, budget.remaining)),
+                dialogue_request(
+                    self._gateway,
+                    self._request(context.messages, min(self._max_output_tokens, budget.remaining)),
+                    self._selection,
+                    progress,
+                ),
                 budget.remaining,
             )
         else:
@@ -270,6 +284,8 @@ class GroupChatReplyService:
             raise ChatReplyValidationError("chat_send_changed")
         if mentioned is None:
             assert first_request is not None
+            if progress is not None:
+                await progress(ChatProgress("selecting"))
             choice = await self._generate(first_request, budget)
             speaker = self._selection_result(choice, claim, allow_stop=False)
             assert speaker is not None
@@ -283,16 +299,24 @@ class GroupChatReplyService:
         for ordinal in range(_MAX_GROUP_REPLIES):
             try:
                 text = await self._reply(
-                    claim, speaker, budget, prepared=first_request if ordinal == 0 else None
+                    claim,
+                    speaker,
+                    budget,
+                    prepared=first_request if ordinal == 0 else None,
+                    progress=progress,
                 )
             except ChatReplyBudgetError:
                 if ordinal:
                     return await self._messages.finish_group(claim)
                 raise
-            await self._messages.complete_group_reply(claim, speaker, ordinal, text)
+            message = await self._messages.complete_group_reply(claim, speaker, ordinal, text)
+            if progress is not None:
+                await progress(ChatProgress("message", message=message))
             if budget.closed or budget.remaining < 1 or ordinal + 1 == _MAX_GROUP_REPLIES:
                 return await self._messages.finish_group(claim)
             try:
+                if progress is not None:
+                    await progress(ChatProgress("selecting"))
                 next_speaker = await self._select(claim, budget)
             except ChatReplyBudgetError:
                 return await self._messages.finish_group(claim)

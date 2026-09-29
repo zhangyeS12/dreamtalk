@@ -9,6 +9,7 @@ type ChatModelSetup = {
   base_url: string | null;
   max_billable_input_tokens: number;
   max_output_tokens: number;
+  streaming?: boolean;
 };
 type ModelUpdateOutcome = { old_credential_cleanup_incomplete: boolean };
 const cleanupWarningKey = "dreamtalk-model-cleanup-warning";
@@ -50,6 +51,7 @@ export function ModelSetup({ client, turnTokenCeiling, onConfigured = () => wind
   const [replyLength, setReplyLength] = useState("8192");
   const [manualLimits, setManualLimits] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [streaming, setStreaming] = useState(true);
   const [saving, setSaving] = useState(false);
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const formId = useId();
@@ -72,6 +74,7 @@ export function ModelSetup({ client, turnTokenCeiling, onConfigured = () => wind
         const existing = await invoke<ChatModelSetup | null>("managed_chat_model_setup");
         if (!active || !existing) return;
         setManaged(existing);
+        setStreaming(existing.streaming ?? false);
         setProviderKind(existing.provider_kind);
         setModelId(existing.model_id);
         setBaseUrl(existing.base_url ?? "");
@@ -150,6 +153,7 @@ export function ModelSetup({ client, turnTokenCeiling, onConfigured = () => wind
           max_output_tokens: outputBound,
         },
         secret,
+        streaming,
       });
       setSecret("");
       if (outcome?.old_credential_cleanup_incomplete) {
@@ -194,6 +198,8 @@ export function ModelSetup({ client, turnTokenCeiling, onConfigured = () => wind
         </div>
       </div>
       <div className="model-limits">
+        <label className="streaming-setting"><input type="checkbox" checked={streaming} disabled={saving} onChange={event => setStreaming(event.target.checked)} />逐步显示回复</label>
+        <p className="inline-hint">启用后，角色回答会逐步显示，可以停止生成。兼容服务需支持流式输出及用量返回；若服务不支持，可关闭后保存。失败不会自动重新调用模型。</p>
         <h3>回复长度</h3>
         <label className="field"><span>单次回复上限</span><select name="reply_length" value={replyLength} disabled={saving} onChange={event => { setReplyLength(event.target.value); if (event.target.value === "custom") setAdvancedOpen(true); }}>
           <option value="2048">简短 · 2,048 Token</option><option value="8192">标准 · 8,192 Token</option><option value="16384">较长 · 16,384 Token</option><option value="custom">自定义</option>

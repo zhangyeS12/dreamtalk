@@ -1,5 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { CoreClient, CoreRequestError, type ChatReplyAvailability, type ChatConversation } from "@dreamtalk/api-client";
+import { useReplyStream } from "./useReplyStream";
+import { StreamingReplyBubble } from "./StreamingReplyBubble";
 import { useChatScroll } from "./useChatScroll";
 import { useTranscriptPages } from "./useTranscriptPages";
 import { ChatMessageBody } from "./ChatMessageBody";
@@ -28,8 +30,9 @@ export function ChatTranscript({ client, worldId, playerId, conversation, tokenC
   const sending = phase !== null;
   const [feedback, setFeedback] = useState("");
   const [replyFailure, setReplyFailure] = useState<{ turnId: string; message: string } | null>(null);
-  const { messages, failed, hasOlder, loadingOlder, loadOlder } = useTranscriptPages(client, worldId, conversation.conversation_id, refresh);
-  const { thread, beforePrepend } = useChatScroll(messages);
+  const stream = useReplyStream();
+  const { messages, failed, hasOlder, loadingOlder, loadOlder, acceptMessage } = useTranscriptPages(client, worldId, conversation.conversation_id, refresh);
+  const { thread, beforePrepend } = useChatScroll(messages, stream.draft?.text);
 
   useEffect(() => {
     if (suggestedDraft) {
@@ -47,6 +50,7 @@ export function ChatTranscript({ client, worldId, playerId, conversation, tokenC
     return () => { active = false; };
   }, [client, worldId]);
 
+  const visibleStreamDraft = stream.draft && (messages?.filter(message => message.turn_id === stream.draft?.turnId && message.sender_kind === "character").length ?? 0) <= stream.draft.index ? stream.draft : null;
   const latestPlayerMessage = messages?.filter(message => message.sender_kind === "player" && message.sender_id === playerId).at(-1);
   const checkReply = async () => {
     if (sending || pendingSend || !latestPlayerMessage) return;
@@ -73,21 +77,25 @@ export function ChatTranscript({ client, worldId, playerId, conversation, tokenC
     try {
       const sent = await client.sendPlayerMessage(worldId, conversation.conversation_id, current.text, current.ceiling, current.requestId);
       setPendingSend(null);
+      if (!stream.isMounted()) return;
       setDraft("");
       setReplyFailure(null);
       setRefresh(value => value + 1);
       setPhase("replying");
       try {
-        await client.generateDirectReply(worldId, conversation.conversation_id, sent.turn_id);
+        await stream.run(client, worldId, conversation.conversation_id, sent.turn_id, "direct", [conversation.character_id], acceptMessage);
         setRefresh(value => value + 1);
       } catch (failure) {
+        if (!stream.isMounted()) return;
         // Query once for a completed reply; never replay an uncertain model call.
         setPhase("checking");
         const turn = await client.directTurn(worldId, conversation.conversation_id, sent.turn_id).catch(() => null);
         setRefresh(value => value + 1);
         const message = turn?.state === "completed"
           ? chatReplyStateFeedback(turn.state, "direct")
-          : chatReplyFailureFeedback(failure, "direct");
+          : stream.wasStopped()
+            ? "已请求停止生成。已保存的发言会保留；可检查回复状态，系统不会自动重新调用模型。"
+            : chatReplyFailureFeedback(failure, "direct");
         setFeedback(message);
         if (turn?.state !== "completed") setReplyFailure({ turnId: sent.turn_id, message });
       }
@@ -121,14 +129,14 @@ export function ChatTranscript({ client, worldId, playerId, conversation, tokenC
                 <time dateTime={message.created_at_utc}>{new Date(message.created_at_utc).toLocaleString("zh-CN")}</time>
               </div>
             </li>;
-          })}</ol></>}
+          })}{visibleStreamDraft ? <StreamingReplyBubble name={conversation.character_name} text={visibleStreamDraft.text} /> : null}</ol></>}
     <form className="chat-composer" onSubmit={event => void send(event)}>
-      {phase || feedback ? <p role="status" aria-live="polite" className="chat-feedback">{chatPhaseFeedback(phase, "direct") || feedback}</p> : null}
+      {phase || feedback ? <p role="status" aria-live="polite" className="chat-feedback">{(phase === "replying" && stream.stage === "preparing" ? "消息已保存，正在准备角色回复…" : chatPhaseFeedback(phase, "direct")) || feedback}</p> : null}
       {budgetFeedback ? <p className="chat-feedback" role="alert">{budgetFeedback}</p> : null}
       {!available ? <p className="chat-feedback">尚未配置可用的聊天模型或路由及可信 Token 上限，暂时无法发送。</p> : null}
       <label htmlFor="direct-chat-draft" className="sr-only">发送给{conversation.character_name}的消息</label>
       <textarea id="direct-chat-draft" value={draft} onChange={event => setDraft(event.target.value)} onKeyDown={submitChatOnEnter} disabled={!available || sending || !!pendingSend} maxLength={65536} placeholder="输入消息…" rows={3} />
-      <div className="chat-composer-actions"><small>回车发送 · Shift+回车换行 · 本轮输入与输出共用 {tokenCeiling.toLocaleString("zh-CN")} Token 上限</small>{latestPlayerMessage ? <button type="button" className="text-action" disabled={sending || !!pendingSend} onClick={() => void checkReply()}>检查回复状态</button> : null}<button type="submit" className="primary-button" disabled={!available || sending || (!!budgetFeedback && !pendingSend) || (!draft.trim() && !pendingSend)}>{phase === "saving" ? "正在保存…" : phase === "replying" ? "等待回复…" : phase === "checking" ? "检查中…" : pendingSend ? "重试保存" : "发送"}</button></div>
+      <div className="chat-composer-actions"><small>回车发送 · Shift+回车换行 · 本轮输入与输出共用 {tokenCeiling.toLocaleString("zh-CN")} Token 上限</small>{latestPlayerMessage ? <button type="button" className="text-action" disabled={sending || !!pendingSend} onClick={() => void checkReply()}>检查回复状态</button> : null}{phase === "replying" ? <button type="button" className="text-action" disabled={stream.stopping} onClick={stream.stop}>{stream.stopping ? "正在停止…" : "停止生成"}</button> : null}<button type="submit" className="primary-button" disabled={!available || sending || (!!budgetFeedback && !pendingSend) || (!draft.trim() && !pendingSend)}>{phase === "saving" ? "正在保存…" : phase === "replying" ? "等待回复…" : phase === "checking" ? "检查中…" : pendingSend ? "重试保存" : "发送"}</button></div>
     </form>
   </section>;
 }

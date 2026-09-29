@@ -52,6 +52,7 @@ pub struct ChatModelSetup {
 
 pub struct ManagedChatConfiguration {
     pub setup: ChatModelSetup,
+    pub streaming: bool,
     pub secret_ref: String,
 }
 
@@ -94,12 +95,22 @@ pub fn managed_chat_configuration(bytes: &[u8]) -> Result<ManagedChatConfigurati
         max_output_tokens: get_u64(&model["limits"], "max_output_tokens")?,
     };
     let secret_ref = get_string(provider, "secret_ref")?;
-    let canonical = build_single_chat_document(&setup, &secret_ref, false)
+    let streaming = match model["capabilities"].get("streaming") {
+        None => false,
+        Some(value) => value
+            .as_bool()
+            .ok_or("model_edit_requires_managed_single_chat_configuration")?,
+    };
+    let canonical = single_chat_document_streaming_inner(&setup, &secret_ref, false, streaming)
         .map_err(|_| "model_edit_requires_managed_single_chat_configuration")?;
     if canonical != bytes {
         return Err("model_edit_requires_managed_single_chat_configuration");
     }
-    Ok(ManagedChatConfiguration { setup, secret_ref })
+    Ok(ManagedChatConfiguration {
+        setup,
+        secret_ref,
+        streaming,
+    })
 }
 
 pub fn is_empty_configuration(bytes: &[u8]) -> bool {
@@ -127,6 +138,37 @@ pub fn single_chat_document(
     secret_ref: &str,
 ) -> Result<Vec<u8>, &'static str> {
     build_single_chat_document(setup, secret_ref, true)
+}
+
+/// Streaming is an explicit setting, independent of provider/model names.
+pub fn single_chat_document_streaming(
+    setup: &ChatModelSetup,
+    secret_ref: &str,
+    streaming: bool,
+) -> Result<Vec<u8>, &'static str> {
+    single_chat_document_streaming_inner(setup, secret_ref, true, streaming)
+}
+
+fn single_chat_document_streaming_inner(
+    setup: &ChatModelSetup,
+    secret_ref: &str,
+    validate_presets: bool,
+    streaming: bool,
+) -> Result<Vec<u8>, &'static str> {
+    let bytes = build_single_chat_document(setup, secret_ref, validate_presets)?;
+    if !streaming {
+        return Ok(bytes);
+    }
+    let mut document: serde_json::Value =
+        serde_json::from_slice(&bytes).map_err(|_| "model_setup_invalid")?;
+    document["models"][0]["capabilities"]["streaming"] = serde_json::json!(true);
+    document["models"][0]["adapter_profile"]["supports_streaming"] = serde_json::json!(true);
+    if setup.provider_kind == "openai-compatible" {
+        // Enabling Chat Completions streaming also declares the usage extension.
+        // Missing terminal usage keeps the governed conservative reservation.
+        document["models"][0]["adapter_profile"]["supports_stream_usage"] = serde_json::json!(true);
+    }
+    serde_json::to_vec(&document).map_err(|_| "model_setup_invalid")
 }
 
 fn build_single_chat_document(

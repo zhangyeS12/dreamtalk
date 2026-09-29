@@ -248,3 +248,8 @@
 .accepted-item > details { flex: 1; min-width: 0; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 @media (max-width: 760px) { .editor-columns { grid-template-columns: 1fr; gap: 0; } .research-request { padding: 16px; } .accepted-item { flex-wrap: wrap; } }
+
+.streaming-text { white-space: pre-wrap; margin: 8px 0; }
+.streaming-label { color: var(--muted); font-size: .72rem; }
+.streaming-setting { display: flex; align-items: center; gap: 10px; }
+.streaming-setting input { width: auto; }

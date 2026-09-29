@@ -2,7 +2,23 @@
 
 更新日期：2026-09-29。此文件记录当前开发现场与接续工作，不替代 [AGENTS.md](AGENTS.md)。先读 AGENTS，再读本文，最后核对实际 Git 状态和相关代码；不能把下面的基线哈希当作永远不变的当前 HEAD。
 
-## 最新接续：2026-09-29 群聊验收与 OpenAI 请求预检
+## 最新接续：2026-09-29 单聊与群聊流式回复
+
+- 从干净 `4303e68` 接续，正式仓库 `D:\LivingWorld` / `codex/chat-feedback`。用户授权继续推进；前序用户已确认内容 API 生成、单聊、群聊 @ / 无 @ 回复。本轮完成流式交付切片，不将编译当作 API 或整个产品验收。
+- 复用既有 governed stream、Starlette 1.6.0 与 MIT eventsource-parser 4.1.1（exact pin/lock/原始许可），没有重新实现 provider 流协议、引入 agent 框架或复制酒馆 AGPL 源码。[来源/许可/契约记录](docs/research/2026-09-29-chat-streaming-reuse.md)。
+- direct/group 服务沿用单次 claim、权限过滤、hard input/output turn ceiling、financial accounting 与消息提交。角色回复可走既有 stream，selector 保持内部 nonstream；仅显示正文 TextDelta，不泄露选人输出/推理/原始错误。终态结算与校验后才提交，临时文字不写记录/知识/记忆。后续失败保留此前群聊发言。
+- 新 authenticated POST direct/group reply/stream 路由与旧 JSON 路由并存。owner 查询在 headers 前；claimed 409，completed 仅交付 durable 消息。8 帧队列、10 秒 heartbeat、固定安全错误；断开时显式关闭迭代器与 shielded producer 清理。仅在 dispatch 前能力规划不支持时采用原 complete delivery，失败后不会转 nonstream 重跑。
+- 前端共用 SSE parser/hook，临时气泡、当前发言者、选人阶段、停止生成、near-bottom 自动跟随与 durable-ID 消息合并接通。手动刷新不重复当前气泡，初始历史读取竞态保留新提交。关闭会话会取消请求；保存消息期间关闭视图不会晚启动模型。取消不保证退款或 completed，历史 claimed 不重置；单次 GET/手动状态核对不重新调用模型。
+- 模型设置新增“逐步显示回复”开关，复用原保存/restart/rollback/凭据流程。首次设置默认选中；旧配置保持原 false，需用户勾选保存启用，API 密钥可留空沿用。所有既有 native adapter 使用一致 capability/profile；兼容 Chat Completions 开启 include_usage，未知服务不保证支持，可关闭。未改任何真实用户配置/密钥/存档。
+- actual payload 的 DeepSeek 官方 framing 与原生 OpenAI count projection 扩至 streaming；不再因 stream flag 退回全模型输入预留。OpenAI exact endpoint/structured/continuation 排除、计数缓存/失败 fallback 不变，DeepSeek helper 不变；Claude/Gemini/代理原可信模型容量路径不变。整轮额度没有自动提高。
+- Ruff lint/format、ESLint/TypeScript、source/diff 检查通过；Core PyInstaller 编译成功，Vite 202 模块和 Rust desktop release（20.67 秒）成功。5 个修改 Python 源与包内 SHA256 一致；helper 和 parser 原始许可也一致。初次许可哈希差异仅因换行转换，已按上游 bytes 复制后通过。保留既有可选 tzdata/pysqlite2/MySQLdb hidden-import warnings；desktop 无新 warning。
+- 新包 `D:\LivingWorld\artifacts\portable\chat-streaming\dreamtalk\dreamtalk-desktop.exe`；ZIP `D:\LivingWorld\artifacts\portable\chat-streaming\dreamtalk.zip`，42,600,226 bytes / SHA256 `F6F33E96069174C7DE49ECFC75541D936743976B4B708D1CAF33B9678F10F721`。日志 `artifacts/chat-streaming-core-build.log` / `artifacts/chat-streaming-desktop-build.log`，清单 `artifacts/chat-streaming-package.json`，随包 `STREAMING.md` 与第三方 notices。旧包未覆盖，用户进程未终止。
+- 源码核对发现既有 ChatTranscript/GroupChat 测试 mock 仍期待 generateDirectReply/generateGroupReply，尚未适配新 streaming POST 客户端；按当前约定未修改或运行，不能声称现有测试套件通过，后续需用户授权维护。
+- 按 AGENTS section 20 未新增/修改/执行自动测试、CI、browser/desktop smoke、provider/credential probes 或应用启停。没有 schema/migration、旧消息 replay、用户 DB/配置/密钥写入。一次文档写入自动审批超时，授权范围内重试一次成功；没有遗留审批阻塞。无 push/release。
+- 待用户验收：关闭旧窗口、打开新版，在设置勾选开关保存，发送新的单聊/无 @ 群聊/@ 群聊，检查逐步显示、正常保存、停止后已保存发言保留、重新打开历史。不同 native/provider/proxy 的真实 terminal usage、自然群聊 STOP 和桌面取消行为尚未验证；已有用户非流式反馈不证明它们。
+- 项目仍处基础聊天/内容创作可体验阶段。本轮 streaming 已实现但运行验收待用户；长期独立记忆/语义检索、Director 计划消费/主动事件、完整 AI World Builder 未完成。下一切片先调查成熟记忆方案，再做可检查的角色记忆界面与权限来源链，避免把群聊可见记录直接升为世界事实。
+
+## 前序切片：2026-09-29 群聊验收与 OpenAI 请求预检
 
 - 从干净 `2e3ba85` 接续，正式仓库 `D:\LivingWorld` / `codex/chat-feedback`；用户确认无 @ 群聊现在有人回复。连同前序角色卡/世界书 API 生成、单聊、群聊 @，核心交流流程已有用户实际反馈；不据此声称自然结束、多提供商、长期记忆或整个产品最终验收已完成。
 - 复用 OpenAI 官方完整输入计数接口，增加可选 async prepare，再供既有 sync bound/Token 和 financial guard 读取同一结果。接线覆盖私聊、群聊首次/后续选人与角色回复、内容生成、governed 每次物理 retry/fallback。首个准备在 claim 前；物理准备在预留/accounting START 前，并再次检查原 deadline。DB transaction 内不联网；真实 model dispatch/未知 usage/不重放规则保留。

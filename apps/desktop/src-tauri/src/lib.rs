@@ -155,6 +155,7 @@ async fn rollback_chat_model_setup(
 async fn configure_chat_model(
     setup: llm_config::ChatModelSetup,
     mut secret: String,
+    streaming: Option<bool>,
     config: State<'_, LaunchConfig>,
     credentials: State<'_, SharedCredentialStore>,
     supervisor: State<'_, SharedSupervisor>,
@@ -163,7 +164,9 @@ async fn configure_chat_model(
         return Err("model_setup_invalid".to_owned());
     }
     let reference = Uuid::new_v4().to_string();
-    let document = llm_config::single_chat_document(&setup, &reference).map_err(str::to_owned)?;
+    let document =
+        llm_config::single_chat_document_streaming(&setup, &reference, streaming.unwrap_or(false))
+            .map_err(str::to_owned)?;
     let mut supervisor = supervisor.lock().await;
     if supervisor
         .authenticated_health()
@@ -215,18 +218,18 @@ async fn configure_chat_model(
 #[tauri::command]
 async fn managed_chat_model_setup(
     config: State<'_, LaunchConfig>,
-) -> Result<Option<llm_config::ChatModelSetup>, String> {
+) -> Result<Option<serde_json::Value>, String> {
     let bytes = tokio::fs::read(&config.llm_config_path)
         .await
         .map_err(|_| "llm_config_read_failed".to_owned())?;
     if llm_config::is_empty_configuration(&bytes) {
         return Ok(None);
     }
-    Ok(Some(
-        llm_config::managed_chat_configuration(&bytes)
-            .map_err(str::to_owned)?
-            .setup,
-    ))
+    let managed = llm_config::managed_chat_configuration(&bytes).map_err(str::to_owned)?;
+    let mut setup =
+        serde_json::to_value(managed.setup).map_err(|_| "model_setup_invalid".to_owned())?;
+    setup["streaming"] = serde_json::json!(managed.streaming);
+    Ok(Some(setup))
 }
 
 #[derive(Serialize)]
@@ -238,14 +241,16 @@ struct ModelUpdateOutcome {
 async fn update_chat_model(
     setup: llm_config::ChatModelSetup,
     secret: String,
+    streaming: Option<bool>,
     config: State<'_, LaunchConfig>,
     credentials: State<'_, SharedCredentialStore>,
     supervisor: State<'_, SharedSupervisor>,
 ) -> Result<ModelUpdateOutcome, String> {
     let mut supervisor = supervisor.lock().await;
-    update_chat_model_with(
+    update_chat_model_streaming_with(
         setup,
         secret,
+        streaming,
         &config,
         credentials.inner().as_ref(),
         &mut supervisor,
@@ -253,9 +258,21 @@ async fn update_chat_model(
     .await
 }
 
+#[cfg(test)]
 async fn update_chat_model_with(
     setup: llm_config::ChatModelSetup,
+    secret: String,
+    config: &LaunchConfig,
+    credentials: &dyn CredentialStore,
+    supervisor: &mut CoreSupervisor,
+) -> Result<ModelUpdateOutcome, String> {
+    update_chat_model_streaming_with(setup, secret, None, config, credentials, supervisor).await
+}
+
+async fn update_chat_model_streaming_with(
+    setup: llm_config::ChatModelSetup,
     mut secret: String,
+    streaming: Option<bool>,
     config: &LaunchConfig,
     credentials: &dyn CredentialStore,
     supervisor: &mut CoreSupervisor,
@@ -281,7 +298,12 @@ async fn update_chat_model_with(
     }
     let new_reference = (!secret.is_empty()).then(|| Uuid::new_v4().to_string());
     let reference = new_reference.as_deref().unwrap_or(&managed.secret_ref);
-    let document = llm_config::single_chat_document(&setup, reference).map_err(str::to_owned)?;
+    let document = llm_config::single_chat_document_streaming(
+        &setup,
+        reference,
+        streaming.unwrap_or(managed.streaming),
+    )
+    .map_err(str::to_owned)?;
     if let Some(reference) = new_reference.as_deref() {
         credentials
             .put(reference, &secret)

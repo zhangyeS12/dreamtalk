@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef } from "react";
 import type { ChatMessage } from "@dreamtalk/api-client";
 
 /** Follow new messages only while the reader remains near the bottom. */
-export function useChatScroll(messages: ChatMessage[] | null) {
+export function useChatScroll(messages: ChatMessage[] | null, progressText?: string) {
   const thread = useRef<HTMLElement>(null);
   const followLatest = useRef(true);
   const prependAnchor = useRef<{ height: number; top: number } | null>(null);
@@ -32,7 +32,7 @@ export function useChatScroll(messages: ChatMessage[] | null) {
       scroller.scrollTop = prependAnchor.current.top + scroller.scrollHeight - prependAnchor.current.height;
       prependAnchor.current = null;
     } else if (followLatest.current) scroller.scrollTop = scroller.scrollHeight;
-  }, [messages]);
+  }, [messages, progressText]);
 
   return { thread, beforePrepend };
 }

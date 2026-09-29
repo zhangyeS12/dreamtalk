@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from dataclasses import replace
+from collections.abc import AsyncIterator, Awaitable, Callable
+from contextlib import aclosing
+from dataclasses import dataclass, field, replace
 from typing import Protocol
 from uuid import uuid4
 
@@ -12,11 +13,16 @@ from livingworld.application.chat_messages import ChatMessage, ChatMessageServic
 from livingworld.application.llm import (
     FinishReason,
     InvocationId,
+    LLMContractError,
     LLMError,
     LLMPurpose,
     LLMRequest,
     LLMResponse,
+    LLMStreamEvent,
     ModelRef,
+    StreamCompleted,
+    StreamFailed,
+    TextDelta,
 )
 from livingworld.application.llm_accounting import AccountingInfrastructureError
 from livingworld.application.llm_budget import (
@@ -29,6 +35,7 @@ from livingworld.application.llm_budget import (
 from livingworld.application.llm_chat_turn_budget import ChatTurnTokenBudget, TurnTokenBudgetError
 from livingworld.application.llm_execution import ExecutionDeadlineError
 from livingworld.application.llm_routing import ModelSelection, RoutingError
+from livingworld.domain.identifiers import CharacterId
 
 
 class ChatReplyValidationError(ValueError):
@@ -61,6 +68,111 @@ class ChatGateway(Protocol):
         selection: ModelSelection | None = None,
         turn_budget: ChatTurnTokenBudget,
     ) -> LLMResponse: ...
+
+    def stream(
+        self,
+        request: LLMRequest,
+        *,
+        selection: ModelSelection | None = None,
+        turn_budget: ChatTurnTokenBudget,
+    ) -> AsyncIterator[LLMStreamEvent]: ...
+
+
+@dataclass(frozen=True, slots=True)
+class ChatProgress:
+    """Ephemeral player-facing progress; never a message or knowledge exposure."""
+
+    kind: str
+    speaker: CharacterId | None = None
+    text: str = field(default="", repr=False)
+    message: ChatMessage | None = field(default=None, repr=False)
+
+
+type ChatProgressSink = Callable[[ChatProgress], Awaitable[None]]
+
+
+def dialogue_request(gateway, request, selection, progress) -> LLMRequest:
+    """Choose transport before dispatch; never replay a failed stream as generate."""
+    if progress is None:
+        return request
+    streamed = replace(request, streaming=True)
+    try:
+        gateway.plan(streamed, selection=selection)
+    except RoutingError:
+        return request
+    return streamed
+
+
+async def dialogue_text(
+    gateway: ChatGateway,
+    request: LLMRequest,
+    budget: ChatTurnTokenBudget,
+    selection: ModelSelection | None,
+    progress: ChatProgressSink | None,
+    speaker: CharacterId,
+) -> str:
+    """Reuse governed execution; stream deltas stay provisional until settlement."""
+    try:
+        if request.streaming:
+            pieces: list[str] = []
+            size = 0
+            completion = None
+            async with aclosing(
+                gateway.stream(request, selection=selection, turn_budget=budget)
+            ) as events:
+                async for event in events:
+                    identity = (
+                        event.completion.invocation_id
+                        if isinstance(event, StreamCompleted)
+                        else event.failure.invocation_id
+                        if isinstance(event, StreamFailed)
+                        else event.invocation_id
+                    )
+                    if identity != request.invocation_id:
+                        raise ChatReplyValidationError("chat_reply_invalid")
+                    if isinstance(event, StreamFailed):
+                        raise ChatReplyGenerationError("chat_generation_failed")
+                    if isinstance(event, TextDelta):
+                        size += len(event.text.encode("utf-8"))
+                        if size > 65536:
+                            raise ChatReplyValidationError("chat_reply_invalid")
+                        if event.text:
+                            pieces.append(event.text)
+                            if progress is not None:
+                                await progress(ChatProgress("delta", speaker, event.text))
+                    elif isinstance(event, StreamCompleted):
+                        # Governed streaming settles usage before yielding completion.
+                        completion = event.completion
+                        break
+            if completion is None:
+                raise ChatReplyValidationError("chat_reply_invalid")
+            text, finish = "".join(pieces), completion.finish_reason
+        else:
+            response = await gateway.generate(request, selection=selection, turn_budget=budget)
+            if response.invocation_id != request.invocation_id:
+                raise ChatReplyValidationError("chat_reply_invalid")
+            text, finish = response.text, response.finish_reason
+    except (BudgetAdmissionError, TurnTokenBudgetError):
+        raise ChatReplyBudgetError("chat_admission_denied") from None
+    except (BudgetIntegrityError, AccountingInfrastructureError):
+        raise ChatReplyIntegrityError("chat_accounting_unavailable") from None
+    except RoutingError:
+        raise ChatReplyUnavailableError("chat_model_unavailable") from None
+    except ExecutionDeadlineError:
+        raise ChatReplyUnavailableError("chat_route_deadline_exhausted") from None
+    except LLMError:
+        raise ChatReplyGenerationError("chat_generation_failed") from None
+    except LLMContractError:
+        raise ChatReplyValidationError("chat_reply_invalid") from None
+    if budget.bound_violated:
+        raise ChatReplyValidationError("chat_token_bound_violated")
+    if (
+        finish not in {FinishReason.STOP, FinishReason.REFUSAL}
+        or not text.strip()
+        or len(text.encode("utf-8")) > 65536
+    ):
+        raise ChatReplyValidationError("chat_reply_invalid")
+    return text
 
 
 class DirectChatReplyService:
@@ -108,7 +220,9 @@ class DirectChatReplyService:
     def available(self) -> bool:
         return self._available()
 
-    async def reply(self, sent: PlayerSend) -> ChatMessage:
+    async def reply(
+        self, sent: PlayerSend, *, progress: ChatProgressSink | None = None
+    ) -> ChatMessage:
         if not isinstance(sent, PlayerSend):
             raise ValueError("chat_send_required")
         if not self.available:
@@ -121,6 +235,7 @@ class DirectChatReplyService:
             messages=context.messages,
             max_output_tokens=min(sent.token_ceiling, self._max_output_tokens),
         )
+        request = dialogue_request(self._gateway, request, self._selection, progress)
         try:
             plan = self._gateway.plan(request, selection=self._selection)
         except RoutingError:
@@ -154,27 +269,12 @@ class DirectChatReplyService:
         if claim.player_message != sent.message or claim.token_ceiling != sent.token_ceiling:
             raise ChatReplyValidationError("chat_send_changed")
         budget = ChatTurnTokenBudget(claim.token_ceiling)
-        try:
-            response = await self._gateway.generate(
-                request, selection=self._selection, turn_budget=budget
-            )
-        except (BudgetAdmissionError, TurnTokenBudgetError):
-            raise ChatReplyBudgetError("chat_admission_denied") from None
-        except (BudgetIntegrityError, AccountingInfrastructureError):
-            raise ChatReplyIntegrityError("chat_accounting_unavailable") from None
-        except RoutingError:
-            raise ChatReplyUnavailableError("chat_model_unavailable") from None
-        except ExecutionDeadlineError:
-            raise ChatReplyUnavailableError("chat_route_deadline_exhausted") from None
-        except LLMError:
-            raise ChatReplyGenerationError("chat_generation_failed") from None
-        if budget.bound_violated:
-            raise ChatReplyValidationError("chat_token_bound_violated")
-        if (
-            response.invocation_id != request.invocation_id
-            or response.finish_reason not in {FinishReason.STOP, FinishReason.REFUSAL}
-            or not response.text.strip()
-            or len(response.text.encode("utf-8")) > 65536
-        ):
-            raise ChatReplyValidationError("chat_reply_invalid")
-        return await self._messages.complete_direct(claim, response.text)
+        if progress is not None:
+            await progress(ChatProgress("replying", claim.character_id))
+        text = await dialogue_text(
+            self._gateway, request, budget, self._selection, progress, claim.character_id
+        )
+        message = await self._messages.complete_direct(claim, text)
+        if progress is not None:
+            await progress(ChatProgress("message", message=message))
+        return message

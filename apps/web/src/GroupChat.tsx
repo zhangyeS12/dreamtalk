@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { CoreClient, CoreRequestError, type ChatReplyAvailability, type GroupChatConversation, type WorldContentItem } from "@dreamtalk/api-client";
+import { useReplyStream } from "./useReplyStream";
+import { StreamingReplyBubble } from "./StreamingReplyBubble";
 import { useChatScroll } from "./useChatScroll";
 import { useTranscriptPages } from "./useTranscriptPages";
 import { ChatMessageBody } from "./ChatMessageBody";
@@ -76,8 +78,9 @@ export function GroupChatDetails({ client, worldId, playerId, group, tokenCeilin
   const sending = phase !== null;
   const [feedback, setFeedback] = useState("");
   const [replyFailure, setReplyFailure] = useState<{ turnId: string; message: string } | null>(null);
-  const { messages, failed, hasOlder, loadingOlder, loadOlder } = useTranscriptPages(client, worldId, group.conversation_id, refresh, phase === "replying");
-  const { thread, beforePrepend } = useChatScroll(messages);
+  const stream = useReplyStream();
+  const { messages, failed, hasOlder, loadingOlder, loadOlder, acceptMessage } = useTranscriptPages(client, worldId, group.conversation_id, refresh);
+  const { thread, beforePrepend } = useChatScroll(messages, stream.draft?.text);
 
   useEffect(() => {
     if (suggestedDraft) {
@@ -95,6 +98,7 @@ export function GroupChatDetails({ client, worldId, playerId, group, tokenCeilin
     return () => { active = false; };
   }, [client, worldId]);
 
+  const visibleStreamDraft = stream.draft && (messages?.filter(message => message.turn_id === stream.draft?.turnId && message.sender_kind === "character").length ?? 0) <= stream.draft.index ? stream.draft : null;
   const latestPlayerMessage = messages?.filter(message => message.sender_kind === "player" && message.sender_id === playerId).at(-1);
   const checkReply = async () => {
     if (sending || pending || !latestPlayerMessage) return;
@@ -121,20 +125,24 @@ export function GroupChatDetails({ client, worldId, playerId, group, tokenCeilin
     try {
       const sent = await client.sendGroupMessage(worldId, group.conversation_id, current.text, current.ceiling, current.requestId);
       setPending(null);
+      if (!stream.isMounted()) return;
       setDraft("");
       setReplyFailure(null);
       setRefresh(value => value + 1);
       setPhase("replying");
       try {
-        await client.generateGroupReply(worldId, group.conversation_id, sent.turn_id);
+        await stream.run(client, worldId, group.conversation_id, sent.turn_id, "group", group.participants.map(item => item.character_id), acceptMessage);
         setRefresh(value => value + 1);
       } catch (failure) {
+        if (!stream.isMounted()) return;
         setPhase("checking");
         const turn = await client.groupTurn(worldId, group.conversation_id, sent.turn_id).catch(() => null);
         setRefresh(value => value + 1);
         const message = turn?.state === "completed"
           ? chatReplyStateFeedback(turn.state, "group")
-          : chatReplyFailureFeedback(failure, "group");
+          : stream.wasStopped()
+            ? "已请求停止生成。已保存的发言会保留；可检查回复状态，系统不会自动重新调用模型。"
+            : chatReplyFailureFeedback(failure, "group");
         setFeedback(message);
         if (turn?.state !== "completed") setReplyFailure({ turnId: sent.turn_id, message });
       }
@@ -172,15 +180,15 @@ export function GroupChatDetails({ client, worldId, playerId, group, tokenCeilin
     {messages === null ? failed ? null : <p className="thread-hint">正在读取消息…</p> : messages.length === 0 ? <div className="conversation-placeholder"><h2>还没有消息</h2><p>发一条消息，开始群聊。</p></div> : <>{hasOlder ? <div className="transcript-history"><button type="button" className="text-action" disabled={loadingOlder} onClick={() => void loadOlder(beforePrepend)}>{loadingOlder ? "正在加载…" : "加载更早消息"}</button></div> : null}<ol className="message-list">{messages.map(message => {
       const own = message.sender_kind === "player" && message.sender_id === playerId;
       return <li key={message.message_id} className={`message-row ${own ? "own" : ""}`}><div className="message-bubble"><span className="message-sender">{own ? "我" : names.get(message.sender_id) ?? "角色"}</span><ChatMessageBody text={message.text} /><time dateTime={message.created_at_utc}>{new Date(message.created_at_utc).toLocaleString("zh-CN")}</time></div></li>;
-    })}</ol></>}
+    })}{visibleStreamDraft ? <StreamingReplyBubble name={names.get(visibleStreamDraft.speakerId) ?? "角色"} text={visibleStreamDraft.text} /> : null}</ol></>}
     <form className="chat-composer" onSubmit={event => void send(event)}>
-      {phase || feedback ? <p role="status" aria-live="polite" className="chat-feedback">{chatPhaseFeedback(phase, "group") || feedback}</p> : null}
+      {phase || feedback ? <p role="status" aria-live="polite" className="chat-feedback">{(phase === "replying" && stream.stage === "selecting" ? "正在选择下一位发言者…" : chatPhaseFeedback(phase, "group")) || feedback}</p> : null}
       {budgetFeedback ? <p className="chat-feedback" role="alert">{budgetFeedback}</p> : null}
       {!available ? <p className="chat-feedback">尚未配置可用的聊天模型或可信 Token 上限，暂时无法发送。</p> : null}
       <label htmlFor="group-chat-draft" className="sr-only">发送群聊消息</label>
       <textarea ref={draftInput} id="group-chat-draft" value={draft} onChange={event => setDraft(event.target.value)} onKeyDown={submitChatOnEnter} disabled={!available || sending || !!pending} maxLength={65536} placeholder="输入消息，或用 @角色名 指定下一位发言者…" rows={3} />
       {mentionable.length > 0 ? <div className="chat-mention-actions"><span>指定下一位</span>{mentionable.map(item => <button key={item.character_id} type="button" disabled={!available || sending || !!pending} onClick={() => insertMention(item.character_name)}>@{item.character_name}</button>)}</div> : null}
-      <div className="chat-composer-actions"><small>回车发送 · Shift+回车换行 · 本轮所有发言共用 {tokenCeiling.toLocaleString("zh-CN")} Token 上限</small>{latestPlayerMessage ? <button type="button" className="text-action" disabled={sending || !!pending} onClick={() => void checkReply()}>检查回复状态</button> : null}<button type="submit" className="primary-button" disabled={!available || sending || (!!budgetFeedback && !pending) || (!draft.trim() && !pending)}>{phase === "saving" ? "正在保存…" : phase === "replying" ? "等待回复…" : phase === "checking" ? "检查中…" : pending ? "重试保存" : "发送"}</button></div>
+      <div className="chat-composer-actions"><small>回车发送 · Shift+回车换行 · 本轮所有发言共用 {tokenCeiling.toLocaleString("zh-CN")} Token 上限</small>{latestPlayerMessage ? <button type="button" className="text-action" disabled={sending || !!pending} onClick={() => void checkReply()}>检查回复状态</button> : null}{phase === "replying" ? <button type="button" className="text-action" disabled={stream.stopping} onClick={stream.stop}>{stream.stopping ? "正在停止…" : "停止生成"}</button> : null}<button type="submit" className="primary-button" disabled={!available || sending || (!!budgetFeedback && !pending) || (!draft.trim() && !pending)}>{phase === "saving" ? "正在保存…" : phase === "replying" ? "等待回复…" : phase === "checking" ? "检查中…" : pending ? "重试保存" : "发送"}</button></div>
     </form>
   </section>;
 }

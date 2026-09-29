@@ -339,16 +339,16 @@ The player may check the recent player message's direct/group turn through the
 existing owner-scoped GET, including after reopening the conversation. `pending`
 means generation has not been claimed, `claimed` means completion is unconfirmed,
 and `completed` reflects the durable outcome. These checks do not claim work or
-replay an uncertain provider request. Group chat reads the existing bounded
-transcript two seconds after each read completes while its generation request is
-pending, so committed replies can appear before the whole turn ends. Two consecutive
-read failures pause polling until explicit refresh. Reads stop when the request
-finishes or the component unmounts; this is not token streaming.
+replay an uncertain provider request. Direct/group UI now uses one streaming POST:
+temporary deltas display immediately and committed message events merge by durable
+identity into paged history. It does not poll or reconnect to regenerate. Refresh
+and status checks remain owner-scoped reads. Leaving the conversation aborts the
+current request; previously saved messages remain.
 
 Group completion currently does not persist why a turn ended. Budget exhaustion,
 the reply safety cap and natural speaker STOP can all produce `completed`. The UI
 therefore reports only that the turn ended, without inventing a natural stop reason.
-Durable termination reasons and token streaming remain subsequent work.
+Durable termination reasons remain subsequent work; incremental delivery is implemented below.
 
 ## Persistence boundary
 
@@ -388,3 +388,18 @@ The group selector now uses up to 8,192 generated tokens, limited by the configu
 ## 2026-09-29 native OpenAI input counts
 
 Direct OpenAI Responses text requests can now reuse the official complete-input count endpoint before claiming/generating, instead of reserving the full model context for short messages. Optional async preparation precedes every governed physical attempt and stays outside the accounting transaction; synchronous budget/turn reservations share the prepared count. Existing invocation deadlines and unknown-dispatch handling are retained. Unsupported shapes/endpoints, count failure or stale cache revert to trusted model limits. Claude's estimated counter and Gemini Interactions mapping are not yet authorized hard bounds. See the [provider review](../research/2026-09-29-provider-input-preflight.md) for scope, privacy, continuity assumptions and verification limits.
+
+
+## 2026-09-29 incremental dialogue delivery
+
+Authenticated reply/stream POST routes supplement existing JSON generation. Temporary
+speaker text is not persisted or exposed to other characters/memory. Governed terminal
+settlement and dialogue validation precede commit. Internal group selection and every
+reply share the same hard ceiling and financial guard. Failed streams never replay as
+nonstream calls. Stop/unmount propagates cancellation with shielded iterator cleanup;
+claimed interrupted turns stay unresolved, with read-only status reconciliation.
+
+An explicit managed-model setting declares streaming capability/profile consistently;
+old settings remain unchanged until saved. Actual DeepSeek framing and native OpenAI
+input-count projection now include streaming. Other provider bounds retain fallback.
+See [sources, event contract, limits and pending acceptance](../research/2026-09-29-chat-streaming-reuse.md).

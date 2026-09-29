@@ -25,3 +25,8 @@ The ordinary OpenAI settings hint now reflects request-based admission, with con
 ## Verification
 
 Source review, Ruff lint/format and TypeScript/ESLint are performed. Core/desktop compilation and a new separate portable artifact are recorded in HANDOFF.md when completed. Under AGENTS.md section 20 no automated tests, smoke checks, provider/credential probes or user data writes are performed. User acceptance of this OpenAI path remains pending; prior DeepSeek acceptance does not establish it. Existing tests are preserved; maintenance of newly async preflight expectations requires later explicit testing authorization.
+
+
+## Later same-day extension
+
+The original streaming exclusion above is historical. The subsequent [incremental dialogue slice](2026-09-29-chat-streaming-reuse.md) extends the unchanged model/input/truncation projection to streaming. Structured output, continuation and proxy exclusions remain; live-provider acceptance is still pending.
