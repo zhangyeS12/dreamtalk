@@ -2,10 +2,43 @@
 
 import re
 from collections.abc import Mapping
+from dataclasses import dataclass
+from uuid import UUID
 
 from livingworld.application.imports import LOREBOOK_METADATA_KEY
 from livingworld.application.world_content import CommonLoreEntry
+from livingworld.domain.content.identifiers import LoreEntryId
 from livingworld.domain.content.models import LoreCollection, LoreEntry
+
+
+@dataclass(frozen=True, slots=True)
+class BackgroundEntry:
+    """Authorized read projection, never an editable canonical content snapshot."""
+
+    content_id: LoreEntryId
+    title: str
+    content: str
+    keywords: tuple[str, ...]
+    secondary_keywords: tuple[str, ...]
+    enabled: bool
+    priority: int
+    order: int
+    group: str | None
+    activation_metadata: Mapping
+    extensions: Mapping
+
+
+@dataclass(frozen=True, slots=True)
+class BackgroundCollection:
+    activation_metadata: Mapping
+
+
+@dataclass(frozen=True, slots=True)
+class BackgroundItem:
+    import_id: UUID
+    entry: BackgroundEntry
+    collection: BackgroundCollection | None = None
+
 
 _DEFAULT_SCAN_DEPTH = 2
 _MAX_SCAN_MESSAGES = 32
@@ -18,7 +51,9 @@ _LOGIC_NAMES = {
 }
 
 
-def _scan_depth(entry: LoreEntry, collection: LoreCollection | None) -> int | None:
+def _scan_depth(
+    entry: LoreEntry | BackgroundEntry, collection: LoreCollection | BackgroundCollection | None
+) -> int | None:
     default = (
         collection.activation_metadata.get("scan_depth", _DEFAULT_SCAN_DEPTH)
         if collection is not None
@@ -30,7 +65,11 @@ def _scan_depth(entry: LoreEntry, collection: LoreCollection | None) -> int | No
     return min(depth, _MAX_SCAN_MESSAGES) if type(depth) is int and depth >= 0 else None
 
 
-def _unsupported_reason(entry: LoreEntry, collection: LoreCollection | None) -> str | None:
+def _unsupported_reason(
+    entry: LoreEntry | BackgroundEntry,
+    collection: LoreCollection | BackgroundCollection | None,
+    generation_kind: str = "normal",
+) -> str | None:
     meta = entry.activation_metadata
     if _scan_depth(entry, collection) is None:
         return "扫描范围无效。"
@@ -66,8 +105,12 @@ def _unsupported_reason(entry: LoreEntry, collection: LoreCollection | None) -> 
     ):
         return "角色筛选条件尚未支持。"
     triggers = meta.get("triggers")
-    if triggers and (not isinstance(triggers, (tuple, list)) or "normal" not in triggers):
-        return "来源未启用普通聊天触发。"
+    if triggers and (not isinstance(triggers, (tuple, list)) or generation_kind not in triggers):
+        return (
+            "来源未启用普通聊天触发。"
+            if generation_kind == "normal"
+            else "来源未启用后台生成触发。"
+        )
     if any(
         meta.get(key) is True
         for key in (
@@ -96,21 +139,30 @@ def _unsupported_reason(entry: LoreEntry, collection: LoreCollection | None) -> 
     return None
 
 
-def lore_activation_summary(entry: LoreEntry, collection: LoreCollection | None) -> str:
-    """One shared policy explains exactly what normal chat can consume."""
+def lore_activation_summary(
+    entry: LoreEntry, collection: LoreCollection | None, *, generation_kind: str = "normal"
+) -> str:
+    """Explain the same policy used by chat and world planning, without dispatch."""
+    if generation_kind not in ("normal", "quiet"):
+        raise ValueError("unsupported_lore_generation_kind")
+    target = "聊天" if generation_kind == "normal" else "日常规划"
     if not entry.enabled:
-        return "来源中已禁用，不参与聊天。"
-    if reason := _unsupported_reason(entry, collection):
-        return "暂不参与聊天：" + reason
+        return f"来源中已禁用，不参与{target}。"
+    if reason := _unsupported_reason(entry, collection, generation_kind):
+        return f"暂不参与{target}：" + reason
     if entry.activation_metadata.get("constant") is True:
-        return "公开后始终提供，受聊天背景容量限制。"
+        return f"公开后始终提供，受{target}背景容量限制。"
     if not entry.keywords:
-        return "没有关键词且未设常驻，暂不参与聊天。"
+        return f"没有关键词且未设常驻，暂不参与{target}。"
     depth = _scan_depth(entry, collection)
     if depth == 0:
         return "扫描范围为零，关键词不会触发。"
     meta = entry.activation_metadata
-    summary = f"公开后匹配最近 {depth} 条会话消息中的关键词。"
+    summary = (
+        f"公开后匹配最近 {depth} 条会话消息中的关键词。"
+        if generation_kind == "normal"
+        else "公开且已开启自动活动时，匹配角色名称和各自当前地点名称；下一批规划生效。"
+    )
     if meta.get("case_sensitive", meta.get("caseSensitive")) is True:
         summary += "区分大小写。"
     if meta.get("matchWholeWords") is True:
@@ -132,9 +184,14 @@ def _matches(key: str, buffer: str, sensitive: bool, whole: bool) -> bool:
 
 
 def active_common_lore(
-    entries: tuple[CommonLoreEntry, ...], texts: tuple[str, ...]
-) -> tuple[CommonLoreEntry, ...]:
+    entries: tuple[CommonLoreEntry | BackgroundItem, ...],
+    texts: tuple[str, ...],
+    *,
+    generation_kind: str = "normal",
+) -> tuple[CommonLoreEntry | BackgroundItem, ...]:
     """No hidden text, card fields, templates, regexes or recursive scans are read."""
+    if generation_kind not in ("normal", "quiet"):
+        raise ValueError("unsupported_lore_generation_kind")
     messages = texts[-_MAX_SCAN_MESSAGES:]
     buffers: dict[tuple[int, bool], str] = {}
 
@@ -156,7 +213,7 @@ def active_common_lore(
     selected = []
     for item in entries:
         entry, meta = item.entry, item.entry.activation_metadata
-        if not entry.enabled or _unsupported_reason(entry, item.collection):
+        if not entry.enabled or _unsupported_reason(entry, item.collection, generation_kind):
             continue
         if meta.get("constant") is True:
             selected.append(item)
@@ -183,3 +240,41 @@ def active_common_lore(
                 continue
         selected.append(item)
     return tuple(selected)
+
+
+MAX_COMMON_LORE_BYTES = 12 * 1024
+MAX_COMMON_LORE_ITEMS = 16
+
+
+def select_common_background(
+    entries: tuple[CommonLoreEntry | BackgroundItem, ...],
+    texts: tuple[str, ...],
+    *,
+    generation_kind: str = "normal",
+    include_references: bool = False,
+) -> list[dict[str, str]]:
+    """One activation/ranking/budget policy for chat and consented world planning."""
+    active = active_common_lore(entries, texts, generation_kind=generation_kind)
+    ordered = sorted(
+        active,
+        key=lambda item: (
+            -int(item.entry.activation_metadata.get("constant") is not True),
+            -item.entry.priority,
+            item.entry.order,
+            str(item.entry.content_id.value),
+        ),
+    )
+    selected = []
+    used = 0
+    for item in ordered:
+        size = len(item.entry.content.encode("utf-8")) + len(item.entry.title.encode("utf-8"))
+        if size > MAX_COMMON_LORE_BYTES - used:
+            continue
+        value = {"title": item.entry.title, "content": item.entry.content}
+        if include_references:
+            value.update(import_id=str(item.import_id), entry_id=str(item.entry.content_id.value))
+        selected.append(value)
+        used += size
+        if len(selected) == MAX_COMMON_LORE_ITEMS:
+            break
+    return selected

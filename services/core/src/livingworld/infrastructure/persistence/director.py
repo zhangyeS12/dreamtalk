@@ -8,7 +8,12 @@ from sqlalchemy import LargeBinary, case, cast, func, select, true, update
 
 from livingworld.application.director import MAX_CHARACTERS, MAX_LOCATIONS, WINDOW_US, DirectorError
 from livingworld.application.errors import EntityNotFoundError
+from livingworld.application.lore_activation import select_common_background
 from livingworld.domain.actions import ActionRejectionReason
+from livingworld.infrastructure.persistence.director_background import (
+    background_is_current,
+    read_director_background,
+)
 from livingworld.infrastructure.persistence.director_models import (
     DirectorCandidateRecord as Candidate,
 )
@@ -399,6 +404,19 @@ class SqlAlchemyDirectorStore:
                 {"location_id": str(loc.location_id), "name": loc.name} for loc in locations
             ],
         }
+        location_names = {str(loc.location_id): loc.name for loc in locations}
+        # One synthetic planning context, not private chat or an omniscient history.
+        # Include every character's name and own current place, not all destinations.
+        planning_text = "\n".join(
+            character["name"] + " " + location_names.get(character["location_id"], "")
+            for character in characters
+        )
+        snapshot["common_world_background"] = select_common_background(
+            await read_director_background(session, world),
+            (planning_text,),
+            generation_kind="quiet",
+            include_references=True,
+        )
         if len(json.dumps(snapshot, ensure_ascii=False).encode("utf-8")) > 64 * 1024:
             raise DirectorError("director_world_capacity")
         return snapshot
@@ -406,14 +424,21 @@ class SqlAlchemyDirectorStore:
     async def can_dispatch(self, world, request_id, generation):
         async with self.sessions() as session:
             config = await session.get(Settings, world.value)
-            return bool(
+            if not (
                 config
                 and config.enabled
                 and config.state == "planning"
                 and config.revision == generation
                 and config.plan_id == request_id
                 and config.player_id == await _binding(session, world)
-            )
+            ):
+                return False
+            plan = await session.get(Plan, (world.value, request_id))
+            if not plan or plan.state != "planning":
+                return False
+            if not await background_is_current(session, world, plan.input_json):
+                raise DirectorError("director_background_changed")
+            return True
 
     async def finish(self, world, request_id, generation, candidates):
         async with self.sessions() as session:
@@ -430,6 +455,11 @@ class SqlAlchemyDirectorStore:
                 or config.player_id != await _binding(session, world)
             ):
                 plan.state = "superseded"
+                await session.commit()
+                return
+            if not await background_is_current(session, world, plan.input_json):
+                plan.state, plan.error = "failed", "director_background_changed"
+                config.state, config.error = "attention", plan.error
                 await session.commit()
                 return
             await _pending_cancel(session, world)

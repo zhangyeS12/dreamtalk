@@ -2,7 +2,22 @@
 
 更新日期：2026-09-29。此文件记录当前开发现场与接续工作，不替代 [AGENTS.md](AGENTS.md)。先读 AGENTS，再读本文，最后核对实际 Git 状态和相关代码；不能把下面的基线哈希当作永远不变的当前 HEAD。
 
-## 最新接续：2026-09-29 已授权 Director 批量规划与基础日常
+## 最新接续：2026-09-29 公共世界书参与日常规划
+
+- 从干净2a44262 / codex/chat-feedback接续，实际仓库仍为D:\LivingWorld。核对AGENTS/HANDOFF/Director与公共世界书实现后，选择补齐日常规划背景输入。上一轮编译完成不代表用户已验收Director；当前用户只要求继续推进，没有提供本版测试结果。
+- 实现前核对[SillyTavern官方World Info](https://docs.sillytavern.app/usage/core-concepts/worldinfo/)、1.19.0/package/AGPL-3.0与Generative Agents当日main plan.py/Apache-2.0。复用项目已有字面激活器、排序/容量、SQLite JSON1/SQLAlchemy和受控模型网关；不复制酒馆源码、不装框架/依赖/另一套RAG或调度器。详见[调查记录](docs/research/2026-09-29-director-background-reuse.md)。
+- 自动审批最初两次拒绝新背景外发路径，要求具体数据授权；用户随后明确回复“授权，按上述范围继续（推荐）”，同意本世界已确认、逐条公共的世界书title/content发给其配置模型服务用于已开启Director，隐藏条目/私聊/私人记忆不发送。之后接入获准。另一次审批拒绝将授权追加AGENTS治理指令；采用安全替代，AGENTS.md未改，仅在普通功能/交接文档记录事实，没有绕过拒绝。
+- 新director_background reader在SQL先限定World/current accepted/lorebook/逐条Exposure/enabled，再投影title/content、关键词/排序/激活元数据和同书scan_depth；不材料化整本snapshot/source_book/原始来源副本/creator notes/未知extensions。单书展开再索引查公开条目，避免每个Exposure重展开同书；保留未知selectiveLogic的存在标记，不读原始source_entry。只读模型不是可编辑CanonicalContent。
+- 把聊天已有激活/排序/最多16条、title/content共12KiB抽到select_common_background共享函数；聊天normal默认和排序保持。后台规划quiet，明确triggers时须允许quiet；planner只扫描一段角色名称＋各自当前地点名称，scanDepth零不触发关键词，其他已支持/未支持条件沿用现有实现。扫描仍有16,384字符硬限，不扫描私聊、persona文本、隐藏正文、递归或向量。最多512条公开启用条目、每条关键词/条件投影16KiB，超量明确停attention且不claim/dispatch模型；单项超12KiB背景按已有预算跳过，必要角色/地点不被省略，完整输入仍64KiB。
+- claim持久输入增加lower-trust common_world_background及来源IDs；在开始模型任务前和接纳返回计划前复核选入来源仍公开/当前，变化则停attention，返回计划不接纳，不自动重放。已admitted请求可能计费；已提交事实保留，已接纳旧批不会因后来背景编辑重写。新公开资料等下次常规批次，不额外触发付费replan。无新表/迁移；旧无背景输入的计划兼容。
+- 普通界面保留原世界书公开入口、默认隐藏。条目详情与预览新增planning_activation_summary，说明能否参与日常规划，避免normal-only来源误导；API字段可选additive，聊天说明保留。自动活动初次开启提示当前模型服务接收角色资料/公共背景，新增背景容量/格式/版本变化安全错误反馈。没有未来候选或他人私有状态面板。
+- **范围：** 本轮只让现有rest/work/leisure及已有地点选择参考公开设定；不创建背景地点，不把素材变WorldTruth/Knowledge，不增加新活动成果、主动联系、Episode、关系或完整离线重建。现有6小时/至少2且50%失效、默认off、费用治理、Kernel/Observation规则不变。
+- Ruff lint/format（6份Python）、ESLint/TypeScript与diff检查通过。Core冻结27.00秒；Vite205模块、Rust release22.89秒成功。保留已有tzdata/pysqlite2/MySQLdb可选hidden-import警告，desktop未新增warning；Git文档LF/CRLF提示是已有换行配置，没有改配置。本轮没有新增/修改/运行测试、CI、GUI smoke、迁移、应用启停、真实API、凭据探测或用户DB/配置/密钥操作；源码/编译/哈希不是运行或隔离验收。
+- 新包：D:\LivingWorld\artifacts\portable\director-background\dreamtalk\dreamtalk-desktop.exe；desktop 12,423,168 bytes / SHA256 `CC2824EE63FD336C8D4AB916C5341F0EFCB5B150F2B6F3954A49C71A8F9D4AFD`。ZIP 42,724,881 bytes / SHA256 `62B277689CF5BA2843105F602ABDCA6B4F60F7001804207CA6B4BAF1C8FF22FD`；Core SHA256 `DA2C27C7D69BEA7CB7CFF54143D4FB6E92069C4E14211446CC24F5574ABCFE4D`；helper `264DF8990752ABB179A3773ACE934F546C69AF99F4C9834EA1286D0D9886FDEA`。6份源码、desktop/Core/helper和13份许可核对一致。清单artifacts/director-background-package.json；日志director-background-core-build.log/director-background-desktop-build.log。随包DIRECTOR、EVENTS及原MEMORY/RECALL/STREAMING说明；旧包未覆盖，未发布或push。
+- 当前说明已补充DIRECTOR_MODEL/PRODUCT_SURFACE/PRODUCT_SPEC/DIRECTOR_ACTIVITIES；上轮“公共背景未接入”是历史范围，当前以代码和本条为准。DIRECTOR_MODEL底部旧状态明确标为当时亲历事件切片，不能误读为当前Director仍未实现。
+- **接下来：** 优先用户真实反馈；下一块建议增加普通地点配置入口及更有辨识度的活动，先核对冻结地点/动作契约和成熟实现，再做清晰切片。离线计划重建仍待补齐；主动联系需先给出统一目的/episode/同理由一次的具体方案，不能隐式放开。建议用简短常驻公共背景体验本版，不声称素材一定出现在活动里；实际质量与授权隔离仍由用户验收。
+
+## 前序切片：2026-09-29 已授权 Director 批量规划与基础日常
 
 - 从干净 `bd50a3c` / `codex/chat-feedback` 接续，实际仓库 `D:\LivingWorld`。用户报告上一轮测试无问题（未列分项）；本轮先调查成熟实现、形成[具体方案](docs/proposals/2026-09-29-director-runtime.md)，用户明确批准“一次开启后自动运行（推荐）”。授权记录覆盖每世界默认关闭、首次后台模型用量、6小时 WorldTime、至少2条且达原批50%失效才提前续批、typed角色日常/move、Kernel权限与不移动Player；没有再索取重复许可。
 - 调查 Generative Agents main/Apache-2.0、LangGraph main pyproject1.2.12/MIT、沿用前轮Concordia职责分工。复用现有受控多供应商网关、预算/账本、SQLAlchemy/SQLite/Alembic/Pydantic和单World scheduler/Kernel/Observation；没有安装第二个agent runtime、复制第三方源码或为每个角色建轮询任务。[复用记录](docs/research/2026-09-29-director-plan-reuse.md)。

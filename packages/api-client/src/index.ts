@@ -80,7 +80,7 @@ export interface WorldContentItem {
   import_id: string; replaces_import_id: string | null; kind: "character" | "lorebook"; reviewed_hash: string;
   characters: Array<{ id: string; name: string; description: string; personality: string; background: string; scenario: string; speech_guidance: string; creator_notes: string; tags: string[]; example_dialogue: string[]; authored_instructions: Record<string, unknown> }>;
   lorebooks: Array<{ id: string; name: string; description: string }>;
-  entries: Array<{ id: string; title: string; keywords: string[]; secondary_keywords?: string[]; activation_summary?: string; content: string; enabled: boolean; common: boolean }>;
+  entries: Array<{ id: string; title: string; keywords: string[]; secondary_keywords?: string[]; activation_summary?: string; planning_activation_summary?: string; content: string; enabled: boolean; common: boolean }>;
   warnings?: Array<{ code: string; path: string }>;
   research?: ContentResearch | null;
 }

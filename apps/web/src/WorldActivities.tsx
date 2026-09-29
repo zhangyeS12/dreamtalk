@@ -8,6 +8,9 @@ const errors: Record<string, string> = {
   director_consent_required: "首次开启需要确认后台模型用量。",
   director_characters_required: "请先在通讯录打开角色的聊天，让角色加入当前世界。",
   director_world_capacity: "当前资料超过规划容量（16位角色、32个地点、64 KiB资料），请精简后再规划。",
+  director_background_capacity: "公共背景超过规划读取容量（512条启用条目，每条关键词和条件16 KiB），请精简公开范围或触发条件后再规划。",
+  director_background_invalid: "公共背景资料格式异常，暂时不能规划，请检查或重新确认世界书。",
+  director_background_changed: "本批采用的公共背景已隐藏或更新，计划未接纳，已开始的请求可能产生用量。不会自动重试；重新规划是新的模型任务。",
   director_plan_invalid: "模型未给出有效的活动计划。不会自动重试；重新规划会产生新的模型用量。",
   director_character_mapping_invalid: "当前角色资料关联不完整，暂时不能规划。",
   director_model_failed: "本批规划未完成。可能已产生模型用量；系统不会自动重试。",
@@ -67,6 +70,7 @@ export function WorldActivities({ client, worldId, visible, paused }: {
     <div className="section-heading"><h2>世界自动活动</h2><p>角色可以休息、工作或自由活动，并在已有地点之间移动。实际活动可以成为聊天话题。</p></div>
     <p role="status">{label}</p>
     <p className="inline-hint">每批覆盖6小时世界时间，采用当前模型{status?.model ? `「${status.model}」` : ""}，独立于聊天额度，后台规划会产生模型用量。应用关闭后不调用模型。</p>
+    <p className="inline-hint">日常规划也会参考你在“角色卡与世界书”中公开的背景：条目按来源条件和背景容量参与，关键词匹配角色名和当前地点名。修改在下一批规划时生效。</p>
     {status?.error && <p className="error-banner" role="alert">{errors[status.error] ?? "自动活动暂时无法继续，请查看模型设置或重新读取状态。"}</p>}
     <div className="setting-row">
       <button type="button" disabled={!status || busy} onClick={() => {
@@ -84,7 +88,7 @@ export function WorldActivities({ client, worldId, visible, paused }: {
     </div>
     {consentOpen && <div className="editor-panel" role="group" aria-label="授权后台规划">
       <p>开启后授权此世界自动调用当前模型规划活动，无需逐批确认。规划遵循现有模型预算；你可以随时关闭。</p>
-      <p className="inline-hint">只安排已有角色的日常与移动，不移动你的玩家身份。主动消息与关系变化将在后续版本提供。</p>
+      <p className="inline-hint">将已有角色资料与本世界公开背景发送给当前模型服务，安排日常与移动；不发送隐藏条目、私聊或私人记忆，不移动你的玩家身份。</p>
       <button type="button" className="primary-button" disabled={busy} onClick={() => void configure(true, true)}>同意后台模型用量并开启</button>
       <button type="button" disabled={busy} onClick={() => setConsentOpen(false)}>暂不开启</button>
     </div>}

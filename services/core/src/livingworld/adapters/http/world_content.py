@@ -77,6 +77,9 @@ def _view(item: AcceptedWorldContent, common_ids: set[tuple[UUID, UUID]] | None 
                 "activation_summary": lore_activation_summary(
                     root, collection_by_id.get(root.collection_id)
                 ),
+                "planning_activation_summary": lore_activation_summary(
+                    root, collection_by_id.get(root.collection_id), generation_kind="quiet"
+                ),
                 "content": root.content,
                 "enabled": root.enabled,
                 "common": (item.import_id, root.content_id.value) in (common_ids or set()),

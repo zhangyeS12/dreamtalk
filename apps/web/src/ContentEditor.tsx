@@ -249,7 +249,7 @@ export function ContentEditor({ client, worldId, kind, editing, onSaved, onCance
           <label className="field"><span>对话示例（每段以空行分隔）</span><ListInput multiline value={draft.example_dialogue} onChange={value => update("example_dialogue", value)} /></label>
           <label className="field"><span>标签（用逗号分隔）</span><ListInput value={draft.tags} onChange={value => update("tags", value)} /></label>
           <label className="field"><span>创作者备注</span><textarea rows={2} maxLength={16000} value={draft.creator_notes} onChange={event => update("creator_notes", event.target.value)} /></label>
-        </> : <div className="lore-entry-editor"><h4>世界书条目</h4><p className="inline-hint">正文写清独立设定。公开后，常驻条目持续提供；关键词条目在会话中命中时提供。</p>
+        </> : <div className="lore-entry-editor"><h4>世界书条目</h4><p className="inline-hint">正文写清独立设定。公开后，常驻条目持续提供；关键词条目在会话中命中时提供。已开启的自动活动规划也会匹配角色名和当前地点名。</p>
           {draft.entries.map((entry, index) => <section className="editable-lore-entry" key={entry.source_entry_id ?? index}>
             <div className="editor-heading"><h4>条目 {index + 1}</h4><button type="button" className="text-action" onClick={() => setDraft(old => ({ ...old, entries: old.entries.filter((_, i) => i !== index) }))}>删除条目</button></div>
             <label className="field"><span>标题</span><input maxLength={300} value={entry.title} onChange={event => updateEntry(index, { title: event.target.value })} /></label>

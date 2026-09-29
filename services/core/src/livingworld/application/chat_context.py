@@ -18,7 +18,7 @@ from livingworld.application.conversation_memory import ConversationSummaryReade
 from livingworld.application.errors import EntityNotFoundError
 from livingworld.application.llm import LLMMessage, MessageRole, TextContent
 from livingworld.application.local_profile import LocalProfileStore
-from livingworld.application.lore_activation import active_common_lore
+from livingworld.application.lore_activation import select_common_background
 from livingworld.application.observed_events import (
     CharacterObservedEventReader,
     character_observed_events,
@@ -32,8 +32,6 @@ _MAX_CHAT_MEMORY_ITEMS = 12
 _MAX_CHAT_MEMORY_CONTENT_BYTES = 8 * 1024
 _MAX_CHAT_TRANSCRIPT_BYTES = 96 * 1024
 _MAX_CARD_GREETING_BYTES = 8 * 1024
-_MAX_COMMON_LORE_BYTES = 12 * 1024
-_MAX_COMMON_LORE_ITEMS = 16
 _MAX_GROUP_EXPOSURE_BYTES = 8 * 1024
 
 _SYSTEM = (
@@ -103,31 +101,7 @@ async def common_chat_lore(
     if reader is None:
         return []
     entries = await reader(world_id)
-    active = active_common_lore(entries, transcript_texts or (relevance_text,))
-
-    def rank(item: CommonLoreEntry) -> tuple[int, int, int, str]:
-        return (
-            -int(item.entry.activation_metadata.get("constant") is not True),
-            -item.entry.priority,
-            item.entry.order,
-            str(item.entry.content_id.value),
-        )
-
-    ordered = sorted(
-        active,
-        key=rank,
-    )
-    selected: list[dict[str, str]] = []
-    used = 0
-    for item in ordered:
-        size = len(item.entry.content.encode("utf-8")) + len(item.entry.title.encode("utf-8"))
-        if size > _MAX_COMMON_LORE_BYTES - used:
-            continue
-        selected.append({"title": item.entry.title, "content": item.entry.content})
-        used += size
-        if len(selected) == _MAX_COMMON_LORE_ITEMS:
-            break
-    return selected
+    return select_common_background(entries, transcript_texts or (relevance_text,))
 
 
 async def recent_seen_group_messages(
