@@ -71,6 +71,10 @@ Character `WORLD_EVENT` activation 必须已有同世界该 WorldEvent 的 `EVEN
 0012 本身没有新增 Knowledge 或 Memory table。当前 Alembic head 0014 的 Memory tables 属于后续 C-007A，未改变本页的 event-time audience 规则；消息、对话、Director 与 Agent 状态仍未实现。
 
 
-## 2026-09-29 当前接入状态
+## 2026-09-29 亲历事件接入（历史切片）
 
-上方0014/未实现聊天的描述属于C-007A历史切片；当前迁移head是0024，会话与聊天已接入。event-target Observation仍保留为历史访问记录，不从当前地点重新推导观众。本轮玩家时间线和角色回复只读各自已授权记录；中文详情额外要求 witnessed + event_occurrence，白名单v1主体/地点字段和辅助字段均受同一授权条件限制。没有改变感知、Knowledge或Memory写入规则，没有自动执行Activation或Director计划。
+上方0014/未实现聊天的描述属于C-007A历史切片；本节记录亲历事件接入时的0024阶段，当时会话与聊天已接入，还没有后续Director runtime。event-target Observation保留为历史访问记录，不从当前地点重新推导观众。玩家时间线和角色回复只读各自已授权记录；中文详情额外要求 witnessed + event_occurrence，白名单v1主体/地点字段和辅助字段均受同一授权条件限制。
+
+## 当前补充状态
+
+0025已接入默认关闭、首次授权费用的批量Director及Kernel角色日常/移动，0026增加本地手动地点目录。上述event-time audience规则保持；新增地点不自动给任何主体获知事件，也不改变玩家位置。前面的0024说明不能用作当前Director尚未实现的结论。见[Director活动](../DIRECTOR_ACTIVITIES.md)及[手动地点](../ACTIVITY_LOCATIONS.md)。

@@ -47,6 +47,7 @@ class Command:
                 require_type(self.clock_state, ClockState, "clock_state")
             case CreateLocation():
                 require_type(self.location_id, LocationId, "location_id")
+                require_type(self.list_locally, bool, "list_locally")
                 same_world(self.world_id, self.location_id)
             case CreatePlayer():
                 require_type(self.player_id, PlayerId, "player_id")
@@ -150,6 +151,7 @@ class CreateWorld(Command):
 class CreateLocation(Command):
     location_id: LocationId
     name: str
+    list_locally: bool = False
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

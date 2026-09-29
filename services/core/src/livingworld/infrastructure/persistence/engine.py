@@ -187,6 +187,13 @@ class Database:
 
         return SqlAlchemyDeveloperInspectorStore(self._sessions)
 
+    def local_location_directory(self):
+        from livingworld.infrastructure.persistence.world_locations import (
+            SqlAlchemyLocalLocationDirectory,
+        )
+
+        return SqlAlchemyLocalLocationDirectory(self._sessions)
+
     def world_directory(self):
         """Read-only catalog for the ordinary local-user surface."""
         from livingworld.infrastructure.persistence.world_directory import (

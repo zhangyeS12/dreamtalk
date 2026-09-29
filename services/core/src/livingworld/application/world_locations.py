@@ -1,0 +1,75 @@
+"""Local authored location directory; never a view of character whereabouts."""
+
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Protocol
+from unicodedata import category, normalize
+from uuid import uuid5
+
+from livingworld.application.commands import CreateLocation
+from livingworld.domain.contracts import RequestId
+from livingworld.domain.errors import DomainInvariantError
+from livingworld.domain.identifiers import LocationId, WorldId
+
+if TYPE_CHECKING:
+    from livingworld.application.command_handler import CommandHandler
+
+
+class LocationCatalogError(DomainInvariantError):
+    pass
+
+
+def location_name_key(name: str) -> str:
+    if (
+        not isinstance(name, str)
+        or not name.strip()
+        or len(name) > 120
+        or any(category(char) in {"Cc", "Cs"} for char in name)
+    ):
+        raise LocationCatalogError("invalid_location_name")
+    key = normalize("NFKC", name).casefold().strip()
+    if not key or len(key.encode("utf-8")) > 4096:
+        raise LocationCatalogError("invalid_location_name")
+    if key == "家":
+        raise LocationCatalogError("location_home_reserved")
+    return key
+
+
+@dataclass(frozen=True, slots=True)
+class LocalLocation:
+    location_id: LocationId
+    name: str
+    is_home: bool = False
+
+
+class LocalLocationDirectory(Protocol):
+    async def list_locations(self, world_id: WorldId) -> tuple[LocalLocation, ...]: ...
+
+
+class LocalLocationCatalog(Protocol):
+    async def check_new(self, world_id: WorldId, name: str) -> None: ...
+    async def add(self, location_id: LocationId, name: str) -> None: ...
+
+
+class WorldLocationsService:
+    def __init__(self, directory: LocalLocationDirectory, commands: "CommandHandler") -> None:
+        self._directory, self._commands = directory, commands
+
+    async def list_locations(self, world_id: WorldId) -> tuple[LocalLocation, ...]:
+        return await self._directory.list_locations(world_id)
+
+    async def create(self, world_id: WorldId, name: str, request_id: RequestId) -> LocalLocation:
+        name = name.strip()
+        location_name_key(name)
+        identity = LocationId(
+            world_id, uuid5(world_id.value, f"livingworld:local-location:v1:{request_id.value}")
+        )
+        await self._commands.execute(
+            CreateLocation(
+                request_id=request_id,
+                world_id=world_id,
+                location_id=identity,
+                name=name,
+                list_locally=True,
+            )
+        )
+        return LocalLocation(identity, name)

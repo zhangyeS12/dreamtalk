@@ -277,3 +277,7 @@
 .memory-current, .memory-draft { margin: 20px 0; padding: 18px 0; border-top: 1px solid var(--line); }
 .memory-draft textarea { display: block; width: 100%; resize: vertical; min-height: 180px; margin: 12px 0; }
 .conversation-memory-dialog > .history-actions { margin-top: 16px; }
+
+.activity-location-list { list-style: none; padding: 0; margin: 0 0 1.25rem; }
+.activity-location-list li { display: flex; align-items: baseline; gap: 1rem; padding: .75rem 0; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+.activity-location-list small { color: var(--muted); white-space: nowrap; }

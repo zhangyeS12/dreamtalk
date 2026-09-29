@@ -295,6 +295,8 @@ class CommandHandler:
                 location = Location(world.world_id, command.location_id, command.name)
                 if await uow.locations.get(location.location_id) is not None:
                     raise EntityAlreadyExistsError("Location already exists")
+                if command.list_locally:
+                    await uow.local_locations.check_new(command.world_id, command.name)
                 events = [
                     (
                         "LocationCreated",
@@ -309,6 +311,8 @@ class CommandHandler:
 
                 async def apply() -> None:
                     await uow.locations.add(location)
+                    if command.list_locally:
+                        await uow.local_locations.add(location.location_id, command.name)
 
             case CreatePlayer():
                 player = Player(world.world_id, command.player_id, command.name)

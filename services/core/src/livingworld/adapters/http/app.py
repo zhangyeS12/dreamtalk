@@ -56,6 +56,7 @@ def create_app(
     chat_recall: EarlierChatRecall | None = None,
     conversation_memory=None,
     director=None,
+    world_locations=None,
 ) -> FastAPI:
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
@@ -92,6 +93,11 @@ def create_app(
         from livingworld.adapters.http.developer import developer_router
 
         app.include_router(developer_router(developer_inspector, authorize))
+
+    if world_locations is not None:
+        from livingworld.adapters.http.world_locations import world_locations_router
+
+        app.include_router(world_locations_router(world_locations, authorize))
 
     if world_settings is not None:
         from livingworld.adapters.http.worlds import world_router

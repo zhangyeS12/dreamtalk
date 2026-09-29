@@ -772,8 +772,12 @@ class SqlAlchemyUnitOfWork:
             await self._session.close()
             raise
         from livingworld.infrastructure.persistence.director import DirectorKernelRepository
+        from livingworld.infrastructure.persistence.world_locations import (
+            SqlAlchemyLocalLocationCatalog,
+        )
 
         self.director = DirectorKernelRepository(self._session)
+        self.local_locations = SqlAlchemyLocalLocationCatalog(self._session)
         self.worlds = WorldRepository(self._session)
         self.locations = LocationRepository(self._session)
         self.players = PlayerRepository(self._session)

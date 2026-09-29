@@ -41,6 +41,7 @@ from livingworld.application.simulation_runtime import (
     WorldClockService,
     WorldSimulationRuntime,
 )
+from livingworld.application.world_locations import WorldLocationsService
 from livingworld.application.world_settings import WorldSettingsService
 from livingworld.bootstrap.llm_control import HostControlListener
 from livingworld.bootstrap.llm_runtime import (
@@ -280,6 +281,9 @@ async def run(
             chat_recall=earlier_chat_recall,
             conversation_memory=conversation_memory,
             director=director,
+            world_locations=WorldLocationsService(
+                database.local_location_directory(), command_handler
+            ),
         )
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.bind((LOOPBACK_HOST, 0))

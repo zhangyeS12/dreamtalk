@@ -12,6 +12,7 @@ export interface CoreHealth {
   llm_status: LLMRuntimeStatus;
 }
 export interface WorldSummary { world_id: string; name: string }
+export interface ActivityLocation { location_id: string; name: string; is_home: boolean }
 export interface WorldSettings extends WorldSummary {
   world_time: string;
   clock_state: "running" | "paused";
@@ -465,6 +466,15 @@ export class CoreClient {
     return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/content/${importId}/discard`, { method: "POST" });
   }
 
+  listActivityLocations(worldId: string): Promise<ActivityLocation[]> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/activity-locations`);
+  }
+  createActivityLocation(worldId: string, name: string, requestId: string): Promise<ActivityLocation> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/activity-locations`, {
+      method: "POST", headers: { "Content-Type": "application/json", "X-Request-Id": requestId },
+      body: JSON.stringify({ name }),
+    });
+  }
   listProductWorlds(): Promise<WorldSettings[]> { return this.productRequest("/worlds"); }
   createWorld(name: string, requestId: string): Promise<{ world_id: string }> {
     return this.productRequest("/worlds", {

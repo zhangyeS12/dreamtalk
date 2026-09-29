@@ -6,6 +6,7 @@ from typing import Protocol, Self
 from livingworld.application.ledger import CanonicalEvent
 from livingworld.application.projections import ProjectionSnapshot
 from livingworld.application.results import ActionResult, CommandResult, MemoryResult, SceneResult
+from livingworld.application.world_locations import LocalLocationCatalog
 from livingworld.domain.commands import CommandReceipt
 from livingworld.domain.contracts import RequestId
 from livingworld.domain.events import WorldEvent
@@ -222,6 +223,7 @@ class UnitOfWork(Protocol):
     director: DirectorRoutineAuthority
     worlds: WorldRepository
     locations: LocationRepository
+    local_locations: LocalLocationCatalog
     players: PlayerRepository
     characters: CharacterRepository
     relationships: RelationshipRepository

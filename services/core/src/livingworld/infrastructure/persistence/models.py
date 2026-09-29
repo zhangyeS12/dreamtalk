@@ -73,6 +73,27 @@ class LocationRecord(Base):
     revision: Mapped[int] = mapped_column(Integer, nullable=False)
 
 
+class LocalLocationCatalogRecord(Base):
+    """Local creator metadata, kept outside canonical/replayed location state."""
+
+    __tablename__ = "local_location_catalog"
+    world_id: Mapped[UUID] = mapped_column(
+        UUIDStorage(), ForeignKey("worlds.world_id"), primary_key=True
+    )
+    location_id: Mapped[UUID] = mapped_column(UUIDStorage(), primary_key=True)
+    name_key: Mapped[str] = mapped_column(Text, nullable=False)
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["world_id", "location_id"], ["locations.world_id", "locations.location_id"]
+        ),
+        UniqueConstraint("world_id", "name_key", name="uq_local_location_name"),
+        CheckConstraint(
+            "length(CAST(name_key AS BLOB)) BETWEEN 1 AND 4096",
+            name="ck_local_location_name",
+        ),
+    )
+
+
 class LocationConnectionRecord(Base):
     __tablename__ = "location_connections"
     world_id: Mapped[UUID] = mapped_column(

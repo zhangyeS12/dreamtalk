@@ -76,6 +76,9 @@ def semantic_input(command: WorldCommand) -> dict:
             }
         case CreateLocation():
             details = {"location_id": id_input(command.location_id), "name": command.name}
+            # Keep previously committed setup/onboarding fingerprints byte-compatible.
+            if command.list_locally:
+                details["list_locally"] = True
         case CreatePlayer():
             details = {
                 "player_id": id_input(command.player_id),

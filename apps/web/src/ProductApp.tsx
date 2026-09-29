@@ -5,6 +5,7 @@ import { GroupChatDetails, GroupChatSetup } from "./GroupChat";
 import { ModelSetup } from "./ModelSetup";
 import { WorldImports, WorldContacts } from "./WorldContent";
 import { WorldActivities } from "./WorldActivities";
+import { WorldLocations } from "./WorldLocations";
 import { ProfileEditor } from "./ProfileEditor";
 import "./product.css";
 
@@ -58,6 +59,7 @@ export function ProductApp({ client }: { client: CoreClient }) {
   const [tab, setTab] = useState<Tab>("chats");
   const [meVisited, setMeVisited] = useState(false);
   const [worldContentDirty, setWorldContentDirty] = useState(false);
+  const [worldLocationsDirty, setWorldLocationsDirty] = useState(false);
   const [worldProfileDirty, setWorldProfileDirty] = useState(false);
   const [worlds, setWorlds] = useState<WorldSettings[]>([]);
   const [worldId, setWorldId] = useState("");
@@ -168,7 +170,7 @@ export function ProductApp({ client }: { client: CoreClient }) {
     event.preventDefault();
     const name = newWorldName.trim();
     if (!name || busy) return;
-    if ((worldProfileDirty || worldContentDirty) && !window.confirm("当前世界有尚未保存的编辑，是否放弃修改并创建新世界？")) return;
+    if ((worldProfileDirty || worldContentDirty || worldLocationsDirty) && !window.confirm("当前世界有尚未保存的编辑，是否放弃修改并创建新世界？")) return;
     await act(async () => {
       const result = await client.createWorld(name, crypto.randomUUID());
       await refresh(); setSelectedPlayer(null); setConversationDirectory(null); setGroupDirectory(null); setSelectedConversationId(null); setSelectedGroupId(null); setGroupSetupOpen(false); setWorldId(result.world_id); setNewWorldName("");
@@ -247,7 +249,7 @@ export function ProductApp({ client }: { client: CoreClient }) {
 
       {<div className="settings-page" hidden={tab !== "settings"}>
         <section className="settings-section"><div className="section-heading"><h2>世界</h2><p>每个世界有独立的角色、聊天和身份。</p></div>
-          {worlds.length ? <label className="field"><span>当前世界</span><select value={worldId} disabled={busy} onChange={event => { if ((worldProfileDirty || worldContentDirty) && !window.confirm("当前世界有尚未保存的编辑，是否放弃修改并切换世界？")) return; setSelectedPlayer(null); setConversationDirectory(null); setGroupDirectory(null); setSelectedConversationId(null); setSelectedGroupId(null); setGroupSetupOpen(false); setWorldId(event.target.value); setEventsOpen(false); setNotice(""); }}>
+          {worlds.length ? <label className="field"><span>当前世界</span><select value={worldId} disabled={busy} onChange={event => { if ((worldProfileDirty || worldContentDirty || worldLocationsDirty) && !window.confirm("当前世界有尚未保存的编辑，是否放弃修改并切换世界？")) return; setSelectedPlayer(null); setConversationDirectory(null); setGroupDirectory(null); setSelectedConversationId(null); setSelectedGroupId(null); setGroupSetupOpen(false); setWorldId(event.target.value); setEventsOpen(false); setNotice(""); }}>
             {worlds.map(item => <option key={item.world_id} value={item.world_id}>{item.name}</option>)}
           </select></label> : <p className="inline-hint">还没有世界。创建后才能导入角色卡和世界书。</p>}
           <form className="create-world" onSubmit={event => void createWorld(event)}><label className="field"><span>创建新世界</span><input value={newWorldName} onChange={event => setNewWorldName(event.target.value)} maxLength={120} placeholder="给世界起个名字" /></label><button type="submit" className="primary-button" disabled={busy || !newWorldName.trim()}>创建世界</button></form>
@@ -266,6 +268,7 @@ export function ProductApp({ client }: { client: CoreClient }) {
             }, next === "available" ? "当前状态已设为可用。" : "当前状态已设为忙碌。");
           }}>{selectedPlayerState.availability === "available" ? "设为忙碌" : "设为可用"}</button></div>
         </section>}
+        {world && <WorldLocations key={world.world_id} client={client} worldId={world.world_id} visible={tab === "settings"} onDirtyChange={setWorldLocationsDirty} />}
         <ModelSetup client={client} turnTokenCeiling={tokenCeiling} />
         {world && selectedPlayer && <WorldActivities key={`${world.world_id}:${selectedPlayer}`} client={client} worldId={world.world_id} visible={tab === "settings"} paused={world.clock_state === "paused"} />}
         <section className="settings-section"><div className="section-heading"><h2>聊天额度</h2><p>每轮输入和输出共用上限。系统按可信上界预留，额度不足时不会开始下一次模型调用。</p></div>

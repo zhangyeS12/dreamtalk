@@ -2,7 +2,21 @@
 
 更新日期：2026-09-29。此文件记录当前开发现场与接续工作，不替代 [AGENTS.md](AGENTS.md)。先读 AGENTS，再读本文，最后核对实际 Git 状态和相关代码；不能把下面的基线哈希当作永远不变的当前 HEAD。
 
-## 最新接续：2026-09-29 公共世界书参与日常规划
+## 最新接续：2026-09-29 普通设置手动活动地点
+
+- 从干净78b7055 / codex/chat-feedback接续，实际仓库D:\LivingWorld。核对AGENTS、HANDOFF、产品P-07/地点/Kernel动作契约与源码后，选择上一轮建议的普通地点配置切片；玩家移动过程/层级仍未定，未擅自实现前往、地图或耗时路径。当前“继续”不视为上一轮Director运行验收。
+- 实现前查[SillyTavern官方World Info](https://docs.sillytavern.app/usage/core-concepts/worldinfo/)、release package1.19.0/AGPL-3.0与Generative Agents当日main plan.py/Apache-2.0。复用现有CreateLocation/Kernel、SQLAlchemy/SQLite事务、Alembic、请求回执、React和客户端，无新依赖、第三方源码复制、另一套模拟/地图/调度器。[调查与范围](docs/research/2026-09-29-location-catalog-reuse.md)。
+- 新WorldLocationsService与鉴权GET/POST /api/v1/worlds/{world_id}/activity-locations，仅ID/name/is_home。SQL按本世界本地创建目录先授权再投影名称，额外仅读取既有启动流程确定ID且名为家的初始地点；不枚举其他后台Location、角色位置/状态/未来候选/事件/私人资料。目录属于单本地用户app-data创作配置，不是Player Knowledge或多人权限模型。
+- 复用CreateLocation，新增list_locally默认false，true才加入指纹；旧setup/家创建指纹和LocationCreated v1事件payload不变。Kernel同一writer-reserved UOW检查规范同名/实际地点容量，创建canonical事件、Location投影、目录与CommandReceipt。request UUID按World派生地点ID，旧回执重放不写；跨World或不同参数复用request冲突。NFKC/casefold键防同世界规范重名；家名称保留。最多沿用Director32实际地点，尚无家时留一个名额；不读取隐藏地点名称做重名检查。
+- 新0026_local_location_catalog additive表带World/Location FK、同世界名称唯一；没有回填、公开旧后台地点或修改canonical重放输入。迁移shape验证区分0025及更早，显式排除后续目录。既有projection rebuild延迟FK且恢复Location，目录不删除/重建。没有运行任何DB迁移，此说明是静态实现审阅，不是迁移验收。
+- 普通设置新增活动地点表单/有限目录/刷新/保存中/附近错误和成功通知。立即锁定防双击；失败保留名称，网络/5xx未决保留原request ID可手动重试；GET仅核对，不自动提交。同名只作提示，同request回执确认本次保存。读请求序号防旧GET覆盖新保存，切世界/创建新世界前提示草稿；名称和未决请求在当前编辑会话内保留，关应用后读目录核对，同名限制避免重复。沿用现有product样式，CoreRequestError兼容可空code。
+- 新地点只是已有场所集合：不移动玩家/角色、不从世界书自动创建场所、不授予事件知情、不编写最终台词/关系/主动联系/活动成果。添加和读取不调模型，不触发额外付费replan或重写旧批；已开启Director下一次常规批才会考虑，不能保证模型每批选择所有地点。名称入现有规划输入范围，表单明确说明。背景仍通过已有逐条公共世界书。
+- 修正SCENES_AND_PERCEPTION把0024/Director未执行写成“当前”的过时段落，标注历史阶段并补当前0025/0026状态；感知规则未变。PRODUCT_SURFACE/PRODUCT_SPEC/DIRECTOR_ACTIVITIES及新ACTIVITY_LOCATIONS说明与本轮范围一致。AGENTS未修改；无新授权/审批阻塞。
+- Ruff lint/format14份Python、ESLint/TypeScript及diff检查通过。Core冻结25.67秒；Vite206模块、Rust release22.55秒成功。沿用tzdata/pysqlite2/MySQLdb三个可选hidden-import警告，desktop未新增warning；Git原换行配置继续提示LF/CRLF，未改配置。按AGENTS未新增/修改/运行测试、CI、GUI smoke、应用启停、真实API、凭据探测、用户DB/配置/密钥操作；静态/编译/哈希不代表运行或权限验收。
+- 新包D:\LivingWorld\artifacts\portable\location-catalog\dreamtalk\dreamtalk-desktop.exe；desktop12,424,192 bytes / SHA256 `B7E16F1EBCC69C0486640EB08BF328F6660D016D63CE8C3C21C92255AC244A90`；ZIP42,744,075 bytes / `91D0432F129F7722094A0B44E8A717531A4161968A0379519C2EA6A7B3E4B5DC`；Core `7F0A817CC2B534AFD15DD40A244970B733BE1A758FCDA4555C9CE20EF1D0CD6B`；现有helper `264DF8990752ABB179A3773ACE934F546C69AF99F4C9834EA1286D0D9886FDEA`。14份源码、13份许可、desktop/Core/helper核对一致，清单artifacts/location-catalog-package.json，两个build日志同prefix。随包新增ACTIVITY_LOCATIONS及当前DIRECTOR，原EVENTS/MEMORY/RECALL/STREAMING保留。组包曾因猜错helper路径中断，查实际产物后完成核对/ZIP，没有删除旧包或宣称未核对产物完成。没有发布/push。
+- **接下来：** 优先用户真实反馈。建议先明确Player前往地点的普通交互，最小方案为显式点击即时切换、沿用已有MovePlayer/Kernel CAS/Scene退出/Observation，聊天不移动；P-07移动过程尚待产品结论，本轮没有该入口。再扩展更有辨识度的活动、离线恢复与主动联系；后者必须先明确P-03/P-04，不能由“继续”隐式放开。建议先配置2–3个有区分度的场所及简短常驻公共背景，观察下一常规规划；不为每个地点新建模型任务。
+
+## 前序切片：2026-09-29 公共世界书参与日常规划
 
 - 从干净2a44262 / codex/chat-feedback接续，实际仓库仍为D:\LivingWorld。核对AGENTS/HANDOFF/Director与公共世界书实现后，选择补齐日常规划背景输入。上一轮编译完成不代表用户已验收Director；当前用户只要求继续推进，没有提供本版测试结果。
 - 实现前核对[SillyTavern官方World Info](https://docs.sillytavern.app/usage/core-concepts/worldinfo/)、1.19.0/package/AGPL-3.0与Generative Agents当日main plan.py/Apache-2.0。复用项目已有字面激活器、排序/容量、SQLite JSON1/SQLAlchemy和受控模型网关；不复制酒馆源码、不装框架/依赖/另一套RAG或调度器。详见[调查记录](docs/research/2026-09-29-director-background-reuse.md)。
