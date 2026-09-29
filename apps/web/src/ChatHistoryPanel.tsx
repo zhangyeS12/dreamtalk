@@ -1,3 +1,4 @@
+import { MessageTime } from "./MessageTime";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { CoreClient, CoreRequestError, type ChatMessage } from "@dreamtalk/api-client";
 import { ChatMessageBody } from "./ChatMessageBody";
@@ -76,10 +77,10 @@ export function ChatHistoryPanel({ client, worldId, conversationId, senderName, 
     } catch { if (!request.signal.aborted) setContextError("原文暂时无法读取，请重试。"); }
   };
   const quote = (message: ChatMessage) => {
-    const text = `我们之前聊到过这段（${new Date(message.created_at_utc).toLocaleString("zh-CN")}）：\n${senderName(message)}说：“${message.text}”\n现在你怎么看？`;
+    const text = `我们之前聊到过这段（${new Date(message.story_sent_at_utc ?? message.created_at_utc).toLocaleString("zh-CN")}）：\n${senderName(message)}说：“${message.text}”\n现在你怎么看？`;
     if (!onQuote(text)) setQuoteError("当前草稿加上这段原文会过长，请先缩短草稿再试。");
   };
-  const source = (message: ChatMessage) => <><strong>{senderName(message)}</strong><time dateTime={message.created_at_utc}>{new Date(message.created_at_utc).toLocaleString("zh-CN")}</time><small>第 {message.position} 条消息</small></>;
+  const source = (message: ChatMessage) => <><strong>{senderName(message)}</strong><MessageTime message={message} /><small>第 {message.position} 条消息</small></>;
   return <dialog ref={dialog} className="chat-history-dialog" aria-labelledby="chat-history-title" onCancel={event => { event.preventDefault(); onClose(); }}>
     <div className="history-heading"><h2 id="chat-history-title">聊天回忆</h2><button type="button" className="text-action" onClick={onClose}>关闭回忆</button></div>
     <p className="inline-hint">搜索这段共同对话，查看当时的原文，再接着聊。</p>

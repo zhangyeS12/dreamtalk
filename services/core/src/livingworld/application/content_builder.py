@@ -29,7 +29,7 @@ class BuilderError(ValueError):
     """Fixed machine code, never a provider/library exception or rejected output."""
 
 
-async def generate_bounded_text(configured, request):
+async def generate_bounded_text(configured, request, *, include_bound=False):
     """Shared governed, finite authorized operation; never a chat-turn ceiling."""
     gateway, bounder, _, _, _, selection = configured
     try:
@@ -59,7 +59,7 @@ async def generate_bounded_text(configured, request):
         or len(response.text.encode("utf-8")) > 128 * 1024
     ):
         raise BuilderError("builder_output_invalid")
-    return response
+    return (response, operation_limit) if include_bound else response
 
 
 generate_authoring_text = generate_bounded_text

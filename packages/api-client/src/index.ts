@@ -19,6 +19,12 @@ export interface WorldSettings extends WorldSummary {
   time_scale: string;
   runtime_state: string;
 }
+export interface OfflineContactStatus {
+  enabled: boolean; consented: boolean; revision: number; hours: number;
+  state: "off" | "idle" | "waiting" | "planning" | "writing" | "delivered" | "skipped" | "attention";
+  error: string | null; last_online_at: string | null; model_available: boolean;
+  unread: Array<{ message_id: string; conversation_id: string }>;
+}
 export interface DirectorStatus {
   enabled: boolean; revision: number; state: "off" | "idle" | "planning" | "ready" | "attention";
   error: string | null; consented: boolean; model_available: boolean; model: string | null;
@@ -130,6 +136,7 @@ export interface ChatMessage {
   sender_id: string;
   text: string;
   created_at_utc: string;
+  story_sent_at_utc?: string | null;
 }
 export type ChatReplyProgress =
   | { kind: "preparing" | "selecting" }
@@ -527,6 +534,18 @@ export class CoreClient {
     });
   }
 
+  offlineContactStatus(worldId: string): Promise<OfflineContactStatus> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/offline-contact`);
+  }
+  configureOfflineContact(worldId: string, status: OfflineContactStatus, enabled: boolean, hours: number, consent = false): Promise<OfflineContactStatus> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/offline-contact`, { method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled, hours, consent_background_usage: consent, expected_revision: status.revision }),
+    });
+  }
+  markOfflineMessageRead(worldId: string, messageId: string): Promise<{ read: boolean }> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/offline-contact/messages/${encodeURIComponent(messageId)}/read`, { method: "POST" });
+  }
   directorStatus(worldId: string): Promise<DirectorStatus> {
     return this.productRequest(`/worlds/${worldId}/director`);
   }

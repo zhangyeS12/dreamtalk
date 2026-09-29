@@ -258,7 +258,7 @@ class SqlAlchemyDirectorStore:
             if clock is None or clock.state == "paused":
                 return None
             try:
-                snapshot = await self._input(session, world, now)
+                snapshot = await self.planning_input(session, world, now)
             except DirectorError as error:
                 config.state, config.error = "attention", str(error)
                 await session.commit()
@@ -284,7 +284,7 @@ class SqlAlchemyDirectorStore:
             await session.commit()
             return request_id, generation, snapshot
 
-    async def _input(self, session, world, now):
+    async def planning_input(self, session, world, now):
         rows = (
             await session.execute(
                 select(CharacterStateRecord, CharacterRecord.name)
@@ -395,6 +395,7 @@ class SqlAlchemyDirectorStore:
                 if any(not isinstance(value, str) for value in cards[0]):
                     raise DirectorError("director_world_capacity")
                 character["persona"] = dict(zip(fields, cards[0], strict=True))
+                character["accepted_import_id"] = str(current)
             characters.append(character)
         snapshot = {
             "window_start": now,

@@ -1,6 +1,7 @@
 """SQLAlchemy capabilities sharing exactly one command transaction/session."""
 
 import json
+from datetime import UTC, datetime
 from sqlite3 import SQLITE_CONSTRAINT_PRIMARYKEY, SQLITE_CONSTRAINT_UNIQUE
 from uuid import UUID
 
@@ -56,6 +57,7 @@ from livingworld.infrastructure.persistence.models import (
     CharacterStateRecord,
     CommandReceiptRecord,
     KnowledgeAssertionRecord,
+    LocalPlayerBindingRecord,
     LocationRecord,
     ObservationRecord,
     PlayerPresenceRecord,
@@ -66,6 +68,9 @@ from livingworld.infrastructure.persistence.models import (
     WorldEventRecord,
     WorldLedgerCursorRecord,
     WorldRecord,
+)
+from livingworld.infrastructure.persistence.offline_contact_models import (
+    LocalSessionVisibilityRecord,
 )
 
 
@@ -193,6 +198,17 @@ class PlayerRepository:
                 .order_by(PlayerPresenceRecord.player_id)
             )
         ).all()
+        visibility = await self._session.get(LocalSessionVisibilityRecord, 1)
+        binding = await self._session.get(LocalPlayerBindingRecord, location_id.world_id.value)
+        if (
+            visibility is not None
+            and binding is not None
+            and (
+                visibility.world_id != location_id.world_id.value
+                or visibility.visible_until <= datetime.now(UTC)
+            )
+        ):
+            values = [value for value in values if value != binding.player_id]
         return tuple(PlayerId(location_id.world_id, value) for value in values)
 
 

@@ -1,3 +1,5 @@
+import { invoke, isTauri } from "@tauri-apps/api/core";
+import { MessageTime } from "./MessageTime";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { CoreClient, CoreRequestError, type ChatReplyAvailability, type ChatConversation } from "@dreamtalk/api-client";
 import { useReplyStream } from "./useReplyStream";
@@ -36,8 +38,34 @@ export function ChatTranscript({ client, worldId, playerId, conversation, tokenC
   const [feedback, setFeedback] = useState("");
   const [replyFailure, setReplyFailure] = useState<{ turnId: string; message: string } | null>(null);
   const stream = useReplyStream();
-  const { messages, failed, hasOlder, loadingOlder, loadOlder, acceptMessage } = useTranscriptPages(client, worldId, conversation.conversation_id, refresh);
+  const { messages, failed, hasOlder, loadingOlder, loadOlder, acceptMessage } = useTranscriptPages(client, worldId, conversation.conversation_id, refresh, true);
   const { thread, beforePrepend } = useChatScroll(messages, stream.draft?.text);
+
+  const readAttempts = useRef(new Map<string, number>());
+  useEffect(() => {
+    let active = true;
+    let reading = false;
+    async function markRead() {
+      if (reading || !active || document.visibilityState !== "visible" || !document.hasFocus()) return;
+      const incoming = messages?.filter(message => message.story_sent_at_utc && (readAttempts.current.get(message.message_id) ?? 0) < 2) ?? [];
+      if (!incoming.length) return;
+      reading = true;
+      try {
+        if (isTauri() && !await invoke<boolean>("report_desktop_presence", { worldId, visible: true })) return;
+        if (!active || !document.hasFocus()) return;
+        for (const message of incoming) {
+          readAttempts.current.set(message.message_id, (readAttempts.current.get(message.message_id) ?? 0) + 1);
+          try { await client.markOfflineMessageRead(worldId, message.message_id);
+            readAttempts.current.set(message.message_id, 2);
+          } catch { /* One further visible-page read may retry acknowledgement; never model work. */ }
+        }
+      } catch { /* Hidden or disconnected UI never marks messages read. */ }
+      finally { reading = false; }
+    }
+    const focused = () => { void markRead(); };
+    window.addEventListener("focus", focused); void markRead();
+    return () => { active = false; window.removeEventListener("focus", focused); };
+  }, [client, worldId, messages]);
 
   useEffect(() => {
     if (suggestedDraft) {
@@ -140,7 +168,7 @@ export function ChatTranscript({ client, worldId, playerId, conversation, tokenC
               <div className="message-bubble">
                 <span className="message-sender">{own ? "我" : conversation.character_name}</span>
                 <ChatMessageBody text={message.text} />
-                <time dateTime={message.created_at_utc}>{new Date(message.created_at_utc).toLocaleString("zh-CN")}</time>
+                <MessageTime message={message} />
               </div>
             </li>;
           })}{visibleStreamDraft ? <StreamingReplyBubble name={conversation.character_name} text={visibleStreamDraft.text} /> : null}</ol></>}

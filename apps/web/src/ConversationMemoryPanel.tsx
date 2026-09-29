@@ -1,3 +1,4 @@
+import { MessageTime } from "./MessageTime";
 import { useEffect, useRef, useState } from "react";
 import { CoreClient, CoreRequestError, type ChatMessage, type ConversationMemoryDraft, type ConversationMemorySnapshot, type ConversationMemorySources } from "@dreamtalk/api-client";
 import { ChatMessageBody } from "./ChatMessageBody";
@@ -96,7 +97,7 @@ export function ConversationMemoryPanel({ client, worldId, conversationId, sende
     if (!signal.aborted) setHistory(result);
   });
   const sourceList = (messages: ChatMessage[]) => <ol className="history-results">{messages.map(message => <li key={message.message_id}>
-    <div className="history-source"><strong>{senderName(message)}</strong><time dateTime={message.created_at_utc}>{new Date(message.created_at_utc).toLocaleString("zh-CN")}</time><small>第 {message.position} 条消息</small></div><ChatMessageBody text={message.text} />
+    <div className="history-source"><strong>{senderName(message)}</strong><MessageTime message={message} /><small>第 {message.position} 条消息</small></div><ChatMessageBody text={message.text} />
   </li>)}</ol>;
   const editable = draft && ["ready", "previewed"].includes(draft.state);
   const stale = !!draft && draft.base_revision !== (view?.current?.revision ?? 0);

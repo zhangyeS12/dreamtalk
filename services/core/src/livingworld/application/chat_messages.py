@@ -31,6 +31,7 @@ class ChatMessage:
     sender_id: PlayerId | CharacterId
     text: str = field(repr=False)
     created_at_utc: datetime
+    story_sent_at_utc: datetime | None = None
 
 
 @dataclass(frozen=True, slots=True)

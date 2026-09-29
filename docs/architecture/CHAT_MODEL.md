@@ -461,3 +461,7 @@ Memory, Truth, or proof that the Character already told the player. Snapshot is
 read at prompt assembly, not reconstructed as-of a historical message. Normal
 reply reservations/financial governance include this input; no extra model call.
 See [reuse and limits](../research/2026-09-29-observed-events-reuse.md).
+
+## 离线主动消息
+
+0027增加ChatTurn.kind（旧数据默认player，主动消息为outreach）和可空ChatMessage.story_sent_at_utc。outreach没有伪造的Player消息，也不能由玩家reply/turn入口重新派发；独立恢复receipt控制一次生成，消息/完成记录原子提交。turn.token_ceiling记录两次有限任务的可信上界之和，实际费用仍来自独立LLMledger。created_at_utc永远真实，story字段仅呈现离线剧情时间。持久position和旧历史不重排；普通回复字段为空，兼容旧客户端。已读只改变恢复回执，不赋予WorldTruth/Knowledge。

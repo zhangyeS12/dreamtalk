@@ -49,6 +49,7 @@ from livingworld.bootstrap.llm_runtime import (
     configure_direct_chat_reply,
     configure_director,
     configure_group_chat_reply,
+    configure_offline_dialogue,
     start_production_llm_session,
 )
 from livingworld.bootstrap.reader import derive_session, read_bootstrap
@@ -111,6 +112,7 @@ async def run(
     scheduler_runtime = None
     simulation_runtime = None
     director = None
+    offline_contact = None
     try:
         trigger_registry = TriggerKindRegistry(
             {(INSPECTOR_TRIGGER_KIND, 1): lambda _payload: None} if developer_tools else None
@@ -144,6 +146,8 @@ async def run(
             monotonic_clock,
             diagnostics=StructuredCatchUpDiagnosticSink(logger),
         )
+        if desktop:
+            await database.offline_contact_store().reset_visibility()
         await simulation_runtime.start_all()
         command_handler = CommandHandler(
             database.unit_of_work,
@@ -204,6 +208,16 @@ async def run(
         )
         scheduler_runtime.set_world_work(director.tick)
         await director.start()
+        from livingworld.application.offline_contact import OfflineContactService
+
+        offline_contact = OfflineContactService(
+            database.offline_contact_store(),
+            player_event_feed,
+            configure_director(llm_session),
+            configure_offline_dialogue(llm_session),
+            credentials_ready=lambda: not desktop or llm_session.credentials.sync_complete,
+        )
+        await offline_contact.start()
         conversation_memory_store = database.conversation_memory_store()
         conversation_memory = ConversationMemoryService(
             conversation_memory_store, player_event_feed, configure_content_builder(llm_session)
@@ -255,7 +269,7 @@ async def run(
                 llm_session.credentials,
                 logger,
                 on_credentials_changed=lambda: control_loop.call_soon_threadsafe(
-                    director.credentials_changed
+                    lambda: (director.credentials_changed(), offline_contact.credentials_changed())
                 ),
             )
             control_listener.start()
@@ -281,6 +295,7 @@ async def run(
             chat_recall=earlier_chat_recall,
             conversation_memory=conversation_memory,
             director=director,
+            offline_contact=offline_contact,
             world_locations=WorldLocationsService(
                 database.local_location_directory(), command_handler
             ),
@@ -340,6 +355,8 @@ async def run(
     finally:
         shutdown_error = None
         try:
+            if offline_contact is not None:
+                await offline_contact.aclose()
             if director is not None:
                 await director.aclose()
             if simulation_runtime is not None:

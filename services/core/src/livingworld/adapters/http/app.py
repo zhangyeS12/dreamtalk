@@ -56,6 +56,7 @@ def create_app(
     chat_recall: EarlierChatRecall | None = None,
     conversation_memory=None,
     director=None,
+    offline_contact=None,
     world_locations=None,
 ) -> FastAPI:
     @asynccontextmanager
@@ -138,6 +139,15 @@ def create_app(
         app.include_router(
             chat_message_router(chat_messages, authorize, chat_reply, group_chat_reply, chat_recall)
         )
+
+    if offline_contact is not None:
+        from livingworld.adapters.http.offline_contact import (
+            offline_contact_router,
+            session_visibility_router,
+        )
+
+        app.include_router(offline_contact_router(offline_contact, authorize))
+        app.include_router(session_visibility_router(offline_contact, authorize))
 
     if director is not None:
         from livingworld.adapters.http.director import director_router

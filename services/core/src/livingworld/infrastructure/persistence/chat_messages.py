@@ -57,6 +57,7 @@ def _message(row: ChatMessageRecord) -> ChatMessage:
         sender,
         row.text,
         row.created_at_utc,
+        row.story_sent_at_utc,
     )
 
 
@@ -369,7 +370,11 @@ class SqlAlchemyChatMessageStore:
             turn = await session.get(
                 ChatTurnRecord, (conversation_id.world_id.value, turn_id.value)
             )
-            if turn is None or turn.conversation_id != conversation_id.value:
+            if (
+                turn is None
+                or turn.kind != "player"
+                or turn.conversation_id != conversation_id.value
+            ):
                 raise EntityNotFoundError("chat_turn_not_found")
             rows = (
                 await session.scalars(
@@ -405,7 +410,11 @@ class SqlAlchemyChatMessageStore:
             turn = await session.get(
                 ChatTurnRecord, (conversation_id.world_id.value, turn_id.value)
             )
-            if turn is None or turn.conversation_id != conversation_id.value:
+            if (
+                turn is None
+                or turn.kind != "player"
+                or turn.conversation_id != conversation_id.value
+            ):
                 raise EntityNotFoundError("chat_turn_not_found")
             rows = (
                 await session.scalars(
@@ -465,7 +474,11 @@ class SqlAlchemyChatMessageStore:
             turn = await session.get(
                 ChatTurnRecord, (conversation_id.world_id.value, turn_id.value)
             )
-            if turn is None or turn.conversation_id != conversation_id.value:
+            if (
+                turn is None
+                or turn.kind != "player"
+                or turn.conversation_id != conversation_id.value
+            ):
                 raise EntityNotFoundError("chat_turn_not_found")
             if turn.status != "pending":
                 raise ChatTurnUnavailableError("chat_turn_state_invalid")
@@ -599,7 +612,11 @@ class SqlAlchemyChatMessageStore:
             turn = await session.get(
                 ChatTurnRecord, (conversation_id.world_id.value, turn_id.value)
             )
-            if turn is None or turn.conversation_id != conversation_id.value:
+            if (
+                turn is None
+                or turn.kind != "player"
+                or turn.conversation_id != conversation_id.value
+            ):
                 raise EntityNotFoundError("chat_turn_not_found")
             if turn.status != "pending":
                 raise ChatTurnUnavailableError("chat_turn_state_invalid")

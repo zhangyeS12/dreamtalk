@@ -78,3 +78,7 @@ Character `WORLD_EVENT` activation 必须已有同世界该 WorldEvent 的 `EVEN
 ## 当前补充状态
 
 0025已接入默认关闭、首次授权费用的批量Director及Kernel角色日常/移动，0026增加本地手动地点目录。上述event-time audience规则保持；新增地点不自动给任何主体获知事件，也不改变玩家位置。前面的0024说明不能用作当前Director尚未实现的结论。见[Director活动](../DIRECTOR_ACTIVITIES.md)及[手动地点](../ACTIVITY_LOCATIONS.md)。
+
+## 后台界面可见性
+
+0027桌面启动先清空操作性local_session_visibility。Native窗口可见且聚焦、UI当前世界/身份的短期在线心跳才允许本地绑定Player被at_location选为现场见证者；失焦/隐藏立即撤回，到期也失效。序号阻止迟到旧请求覆盖新状态。其他世界的绑定Player不因为保存的位置而成为见证者。未绑定Player和角色规则保持；显式玩家行为的结果、既有Observation不重写。操作性界面状态不移动Player、不改availability、不造WorldEvent。

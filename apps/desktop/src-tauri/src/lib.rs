@@ -1,3 +1,4 @@
+pub mod background;
 pub mod credentials;
 pub mod host_control;
 pub mod llm_config;
@@ -356,6 +357,30 @@ pub fn run() {
     )));
     let stopping = Arc::new(AtomicBool::new(false));
     let app = tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            if !args.iter().any(|arg| arg == "--background") {
+                background::show_main(app);
+            }
+        }))
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            Some(vec!["--background"]),
+        ))
+        .on_window_event(|window, event| {
+            if matches!(event, tauri::WindowEvent::Focused(false)) {
+                background::hide_presence(window.app_handle());
+            }
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                if window
+                    .try_state::<background::BackgroundState>()
+                    .is_some_and(|state| state.closes_to_tray())
+                {
+                    api.prevent_close();
+                    let _ = window.hide();
+                    background::hide_presence(window.app_handle());
+                }
+            }
+        })
         .manage(supervisor.clone())
         .manage(credentials)
         .invoke_handler(tauri::generate_handler![
@@ -366,7 +391,10 @@ pub fn run() {
             credential_status,
             configure_chat_model,
             managed_chat_model_setup,
-            update_chat_model
+            update_chat_model,
+            background::desktop_background_status,
+            background::configure_desktop_background,
+            background::report_desktop_presence
         ])
         .setup(|app| {
             let mut app_data = app.path().app_data_dir()?;
@@ -375,6 +403,8 @@ pub fn run() {
                     app_data = isolated.into();
                 }
             }
+            app.manage(background::BackgroundState::load(&app_data));
+            background::install_tray(app)?;
             let executable_dir = std::env::current_exe()?
                 .parent()
                 .ok_or("desktop_executable_directory_missing")?
@@ -403,8 +433,10 @@ pub fn run() {
             tauri::async_runtime::spawn(async move {
                 let _ = supervisor.lock().await.start(&config).await;
             });
-            if let Some(window) = app.get_webview_window("main") {
-                window.show()?;
+            if !std::env::args().any(|arg| arg == "--background") {
+                if let Some(window) = app.get_webview_window("main") {
+                    window.show()?;
+                }
             }
             Ok(())
         })
@@ -412,7 +444,7 @@ pub fn run() {
         .expect("desktop_bootstrap_failed");
     app.run(move |handle, event_kind| {
         if let RunEvent::ExitRequested { api, code, .. } = event_kind {
-            if code.is_none() {
+            if code.is_none() || !stopping.load(Ordering::SeqCst) {
                 api.prevent_exit();
                 if !stopping.swap(true, Ordering::SeqCst) {
                     let supervisor = supervisor.clone();

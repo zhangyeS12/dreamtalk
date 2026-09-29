@@ -118,6 +118,13 @@ class Database:
 
         return FileContentAssetStore(self.data_dir)
 
+    def offline_contact_store(self):
+        from livingworld.infrastructure.persistence.offline_contact import (
+            SqlAlchemyOfflineContactStore,
+        )
+
+        return SqlAlchemyOfflineContactStore(self._sessions, self.director_store())
+
     def director_store(self):
         from livingworld.infrastructure.persistence.director import SqlAlchemyDirectorStore
 

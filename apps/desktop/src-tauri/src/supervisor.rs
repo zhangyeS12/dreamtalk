@@ -60,6 +60,13 @@ pub struct CoreConnection {
     pub generation: String,
 }
 
+impl CoreConnection {
+    /// Host-internal loopback authentication; never formatted or logged.
+    pub(crate) fn bearer_token(&self) -> &str {
+        &self.token
+    }
+}
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ReadyRecord {

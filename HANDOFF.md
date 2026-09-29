@@ -2,7 +2,21 @@
 
 更新日期：2026-09-29。此文件记录当前开发现场与接续工作，不替代 [AGENTS.md](AGENTS.md)。先读 AGENTS，再读本文，最后核对实际 Git 状态和相关代码；不能把下面的基线哈希当作永远不变的当前 HEAD。
 
-## 最新接续：2026-09-29 地点重复界面修复与离线说明
+## 最新接续：2026-09-29 后台启动与有限离线主动消息
+
+- 从干净 `83cdd3171820ce488fd00b0a15272c1155daad48` / `codex/chat-feedback` 接续，实际仓库仍是 `D:\LivingWorld`。用户明确批准“按你的建议，开始实现”，中断后要求继续；本轮完成这个有限切片，不把“继续”当作上一版运行验收或自动启用用户配置。
+- 实施前调查官方 Tauri autostart/single-instance/system tray。直接复用 autostart2.6.0、single-instance2.5.0、解析后的Tauri2.12.0、tray-icon0.25.1及MIT auto-launch0.5.0；不自写注册表/服务/托盘或引入另一个Agent框架。来源、许可与决定见[复用记录](docs/research/2026-09-29-offline-contact-reuse.md)，具体切片见[方案](docs/proposals/2026-09-29-offline-contact.md)。新增组件原始许可随包保留；项目仍Apache-2.0。
+- 桌面设置新增“登录电脑后自动启动，保持窗口隐藏”“关闭窗口后继续在托盘运行”，默认关闭，只有用户显式保存才变更启动注册。官方单实例复用已有进程，普通重复打开唤起窗口，`--background`不弹窗。托盘双击打开，右键明确退出并停owned Core；后台仍运行既有Core/Director，关机时不会执行AI。便携包换路径后需关闭再开启自启动以注册新位置；没有替用户改注册表、应用配置、存档或凭据。
+- 新OfflineContactService/store以真实UTC每分钟轻量checkpoint、正常退出补记录。默认6真实小时，1–168可配置；首次开启/修改只建立基线。设置只绑定一个World/Player，与每轮聊天Token和Director6小时WorldTime分开。睡眠/重开时超过阈值才记录一次恢复，最多一个现有已打开私聊角色/一条问候或邀请；模型可不联系。Available/RUNNING、绑定/accepted版本/公共背景/current Player message标识均复核，Busy/暂停/不合适/上下文改变则停，同一理由唯一回执及上次主动私聊未回复守卫防催促。queued/planning/writing重启转interrupted，失败/中断不自动付费重放。
+- Director只生成有限角色/目的/时段计划，Character单独生成最终台词；复用现有各提供商配置、governed gateway、可信输入预留、Token/金额预算和真实用量账本，最多两个有限模型任务，每次输出最多8192或更低模型上限。输入采用离线前冻结的已接受persona、逐条公共世界书和已有活动意图，计划不当已执行事实。自动审批拒绝新增私聊正文外发；安全替代已落地：不读取或发送私聊正文/摘要/私人记忆/隐藏设定，本地消息ID和位置仅用于去重，不发给模型。所有剩余工作获准完成，无待授权阻塞。
+- 新0027_offline_contact为additive：三张操作性表、ChatTurn.kind默认player和ChatMessage可空story_sent_at_utc。正式历史位置/真实created_at不改；独立outreach turn不伪造玩家Message，原玩家reply/claim入口不接受此kind。投递原子保存message/dispatch/episode；剧情时间严格在离线区间内，真实生成/用量在恢复之后。普通消息仍显示真实时间，离线消息可展开“时间详情”；隐藏窗口不清未读，实际可见会话标已读。迁移旧版本shape排除新增表/列，未执行任何数据库迁移或运行验收。
+- 新本地UI短租约在desktop启动前清为不可见，Rust核对主窗口visible+focused，前端定期续约、失焦/隐藏撤销。PlayerRepository现场见证查询排除不可见/其他世界的本地绑定玩家，位置/availability不动；已知事件与角色规则保留，不把后台隐藏启动当玩家亲历，也不制造过去WorldEvent、活动成果或知识。
+- Ruff lint/format17份Python、ESLint/TypeScript、cargo fmt及diff检查通过；Core PyInstaller30.521秒成功，Vite209模块/Rust正式release24.04秒成功。首次Rust编译的两个实际Tauri接口错误已修正后重新成功。Core沿用tzdata/pysqlite2/MySQLdb三个可选hidden-import警告；Tauri升级后出现STATIC_VCRUNTIME弃用提示，保留原静态runtime策略，后续工具链升级处理。新依赖文件旧时间戳导致首次ZIP失败，改为只对ZIP头钳制1980边界，文件字节哈希不变。193份冻结Python、22份许可、8份说明和desktop/Core/helper核对一致。
+- 新包 `D:\LivingWorld\artifacts\portable\offline-contact\dreamtalk\dreamtalk-desktop.exe`，desktop13,184,000 bytes / SHA256 `4CF48EE3F61A8DE550450968E5157AC9D5D6E1B5E22AD7AD2D55E9C73FBAE379`；ZIP43,037,135 bytes / `9205D36D96DAC357707FB6451EB5411E10180B7AC5289D82F74CB73B8CE6189D`；Core13,862,986 bytes / `99112B8B6EDE3CBF9915E62A00B798735881621BCBA6B2F2212B13A65B7038E1`；helper保持 `264DF8990752ABB179A3773ACE934F546C69AF99F4C9834EA1286D0D9886FDEA`。清单 `artifacts/offline-contact-package.json`，两个build日志同prefix；随包新增OFFLINE_MESSAGES、同步README/DIRECTOR，原活动地点/事件/记忆/召回/流式说明保留，旧包不覆盖。没有push/发布。
+- 按AGENTS section20未新增/修改/运行测试、CI、GUI smoke、应用启停、live API或用户存档迁移。源码、编译、哈希不是自启动/休眠/取消/权限隔离/实际模型质量验收。台词的格式、长度、来源和投递边界有校验，不把提示词中的语义禁止宣称为确定性事实验证。当前仅单角色离线消息；多人共同目的Episode、在线持续主动消息、关系推进和完整离线世界/成果重建仍未完成。
+- **接下来：** 用户打开完整新包，在“后台运行”和“离线期间的消息”分别开启并确认用量，实际验收登录隐藏、托盘退出、睡眠/重开阈值、Busy/暂停/未回复跳过、剧情/真实时间和未读。默认6h，可先1h体验；没有立即付费测试/强行补发按钮。后续优先修复反馈，再讨论更丰富但有证据的主动话题及有限离线生活重建；新功能仍先查成熟实现。本轮没有必需用户回答的新问题。
+
+## 前序切片：2026-09-29 地点重复界面修复与离线说明
 
 - 从干净c3727c8 / codex/chat-feedback接续。用户截图出现上下两个活动地点，上方不响应输入，下方可用，并问程序是否需一直打开/关机后停止。实际仓库D:\LivingWorld；先核对AGENTS、HANDOFF、相关源码与Git。用户反馈不等于Director整体运行验收。
 - ProductApp JSX只有一个WorldLocations入口，但它与同级WorldImports都用world.world_id作key。核对本地React/react-dom19.3.0开发源码及[React官方key规则](https://react.dev/learn/rendering-lists#rules-of-keys)、[ReactChildFiber官方源码](https://github.com/facebook/react/blob/main/packages/react-reconciler/src/ReactChildFiber.js)：同级key须唯一，重复key可能重复/遗漏节点。此明确代码缺陷与截图旧无状态表单/新有效表单符合；未通过GUI重现，不能把静态判断写成运行验收。

@@ -214,3 +214,7 @@ WorldPlan、EventReservoir、候选批量消费、自动角色活动与 Outreach
 ## 当前日常候选（2026-09-29）
 
 早期“Director/候选未实现”的状态只指当时切片。当前新增独立 operational director_plans/director_candidates 和 `CharacterRoutineStarted` v1，经已批准权限的 typed Kernel action 变成真实事件。未来候选不会进入普通事件 UI 或角色亲历；开始事件不证明任务成果或完成。本轮仍没有相遇剧情、主动联系或关系变化消费者。
+
+## 离线消息与事实时间
+
+离线补生成的私聊属于通信记录，不是历史WorldEvent。剧情显示时间不覆盖真实created_at_utc，不改变世界账本顺序，不补造活动成果或知情。该时间严格位于持久离线区间，来自离线前受限输入；迟到资料/新玩家消息使结果失效。

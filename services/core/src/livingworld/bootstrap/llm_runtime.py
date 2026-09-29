@@ -111,6 +111,11 @@ def configure_group_chat_reply(
     return GroupChatReplyService(messages, context, *configured)
 
 
+def configure_offline_dialogue(session: ProductionLLMSession):
+    configured = _chat_reply_configuration(session)
+    return configured[:6] if configured is not None else None
+
+
 def configure_director(session: ProductionLLMSession):
     configured = _chat_reply_configuration(session, "director_plan")
     return configured[:6] if configured is not None else None

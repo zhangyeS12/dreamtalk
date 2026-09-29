@@ -63,6 +63,9 @@ def _view(message: ChatMessage) -> dict:
         "sender_id": str(message.sender_id.value),
         "text": message.text,
         "created_at_utc": message.created_at_utc.astimezone(UTC).isoformat(),
+        "story_sent_at_utc": message.story_sent_at_utc.astimezone(UTC).isoformat()
+        if message.story_sent_at_utc is not None
+        else None,
     }
 
 

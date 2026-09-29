@@ -1109,6 +1109,9 @@ class ChatTurnRecord(Base):
     token_ceiling: Mapped[int] = mapped_column(BigInteger, nullable=False)
     status: Mapped[str] = mapped_column(String(24), nullable=False)
     created_at_utc: Mapped[datetime] = mapped_column(UTCTimestampStorage(), nullable=False)
+    kind: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="player", server_default="player"
+    )
     __table_args__ = (
         ForeignKeyConstraint(
             ["world_id", "conversation_id"],
@@ -1149,6 +1152,7 @@ class ChatMessageRecord(Base):
     sender_character_id: Mapped[UUID | None] = mapped_column(UUIDStorage(), nullable=True)
     text: Mapped[str] = mapped_column(Text, nullable=False)
     created_at_utc: Mapped[datetime] = mapped_column(UTCTimestampStorage(), nullable=False)
+    story_sent_at_utc: Mapped[datetime | None] = mapped_column(UTCTimestampStorage())
     __table_args__ = (
         ForeignKeyConstraint(
             ["world_id", "conversation_id"],

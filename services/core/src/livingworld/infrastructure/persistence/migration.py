@@ -24,6 +24,9 @@ from livingworld.infrastructure.persistence.director_models import (
 from livingworld.infrastructure.persistence.errors import MigrationCompatibilityError
 from livingworld.infrastructure.persistence.llm_models import AccountingBase
 from livingworld.infrastructure.persistence.models import Base
+from livingworld.infrastructure.persistence.offline_contact_models import (
+    OfflineContactSettingsRecord,  # noqa: F401
+)
 
 LEGACY_REVISION = "0001_legacy_runtime_foundation"
 DOMAIN_BASELINE_REVISION = "0002_world_domain_persistence"
@@ -50,7 +53,13 @@ COMMON_LORE_REVISION = "0022_world_common_lore"
 BUILDER_REVISION = "0023_content_builder_jobs"
 CONVERSATION_MEMORY_REVISION = "0024_conversation_memory"
 DIRECTOR_REVISION = "0025_director_runtime"
-HEAD_REVISION = "0026_local_location_catalog"
+LOCAL_LOCATION_REVISION = "0026_local_location_catalog"
+HEAD_REVISION = "0027_offline_contact"
+OFFLINE_CONTACT_TABLES = {
+    "offline_contact_settings",
+    "offline_contact_episodes",
+    "local_session_visibility",
+}
 LOCAL_LOCATION_TABLES = {"local_location_catalog"}
 DIRECTOR_TABLES = {"director_settings", "director_plans", "director_candidates"}
 CONVERSATION_MEMORY_TABLES = {"conversation_memory_revisions", "conversation_memory_drafts"}
@@ -213,17 +222,24 @@ def _current_revision(connection: Connection) -> str:
 
 def _validate_managed_state(connection: Connection, revision: str) -> None:
     # Additive authored/job tables do not change the older runtime shapes.
-    pre_local_location_revision = revision != HEAD_REVISION
-    pre_director_revision = revision not in {DIRECTOR_REVISION, HEAD_REVISION}
+    pre_offline_contact_revision = revision != HEAD_REVISION
+    pre_local_location_revision = revision not in {LOCAL_LOCATION_REVISION, HEAD_REVISION}
+    pre_director_revision = revision not in {
+        DIRECTOR_REVISION,
+        LOCAL_LOCATION_REVISION,
+        HEAD_REVISION,
+    }
     pre_conversation_memory_revision = revision not in {
         CONVERSATION_MEMORY_REVISION,
         DIRECTOR_REVISION,
+        LOCAL_LOCATION_REVISION,
         HEAD_REVISION,
     }
     pre_builder_revision = revision not in {
         BUILDER_REVISION,
         CONVERSATION_MEMORY_REVISION,
         DIRECTOR_REVISION,
+        LOCAL_LOCATION_REVISION,
         HEAD_REVISION,
     }
     pre_completion_revision = revision not in {
@@ -232,6 +248,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         BUILDER_REVISION,
         CONVERSATION_MEMORY_REVISION,
         DIRECTOR_REVISION,
+        LOCAL_LOCATION_REVISION,
         HEAD_REVISION,
     }
     pre_common_lore_revision = revision not in {
@@ -239,6 +256,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         BUILDER_REVISION,
         CONVERSATION_MEMORY_REVISION,
         DIRECTOR_REVISION,
+        LOCAL_LOCATION_REVISION,
         HEAD_REVISION,
     }
     if revision in {
@@ -247,6 +265,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         BUILDER_REVISION,
         CONVERSATION_MEMORY_REVISION,
         DIRECTOR_REVISION,
+        LOCAL_LOCATION_REVISION,
         HEAD_REVISION,
     }:
         revision = CHAT_DISPATCH_REVISION
@@ -397,6 +416,8 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         expected -= LOCAL_PROFILE_TABLES
     if revision != CHAT_DISPATCH_REVISION:
         expected -= {"world_content_imports"}
+    if pre_offline_contact_revision:
+        expected -= OFFLINE_CONTACT_TABLES
     if pre_local_location_revision:
         expected -= LOCAL_LOCATION_TABLES
     if pre_director_revision:
@@ -423,6 +444,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
             pre_conversation_memory_revision=pre_conversation_memory_revision,
             pre_director_revision=pre_director_revision,
             pre_local_location_revision=pre_local_location_revision,
+            pre_offline_contact_revision=pre_offline_contact_revision,
         )
     if revision in {
         CONTENT_REVISION,
@@ -480,6 +502,7 @@ def _validate_domain_shape(
     pre_conversation_memory_revision: bool = True,
     pre_director_revision: bool = True,
     pre_local_location_revision: bool = True,
+    pre_offline_contact_revision: bool = True,
 ) -> None:
     """Detect partial/mismatched schemas; never infer a revision from them."""
 
@@ -505,6 +528,8 @@ def _validate_domain_shape(
         "ck_command_receipt_command_result",
     }
     for table in metadata.sorted_tables:
+        if pre_offline_contact_revision and table.name in OFFLINE_CONTACT_TABLES:
+            continue
         if pre_local_location_revision and table.name in LOCAL_LOCATION_TABLES:
             continue
         if pre_director_revision and table.name in DIRECTOR_TABLES:
@@ -643,6 +668,15 @@ def _validate_domain_shape(
                 else column.nullable,
             )
             for column in table.columns
+            if not (
+                pre_offline_contact_revision
+                and (
+                    table.name == "chat_turns"
+                    and column.name == "kind"
+                    or table.name == "chat_messages"
+                    and column.name == "story_sent_at_utc"
+                )
+            )
             if not (
                 pre_completion_revision
                 and table.name == "chat_turn_dispatches"
