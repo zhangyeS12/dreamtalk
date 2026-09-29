@@ -18,6 +18,10 @@ export interface WorldSettings extends WorldSummary {
   time_scale: string;
   runtime_state: string;
 }
+export interface DirectorStatus {
+  enabled: boolean; revision: number; state: "off" | "idle" | "planning" | "ready" | "attention";
+  error: string | null; consented: boolean; model_available: boolean; model: string | null;
+}
 export interface SelectablePlayer { player_id: string; name: string }
 export type PlayerAvailability = "busy" | "available";
 export interface SelectedPlayerState {
@@ -513,6 +517,15 @@ export class CoreClient {
     });
   }
 
+  directorStatus(worldId: string): Promise<DirectorStatus> {
+    return this.productRequest(`/worlds/${worldId}/director`);
+  }
+  configureDirector(worldId: string, status: DirectorStatus, enabled: boolean, consent = false, retry = false): Promise<DirectorStatus> {
+    return this.productRequest(`/worlds/${worldId}/director`, { method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled, consent_background_usage: consent, expected_revision: status.revision, retry }),
+    });
+  }
   listWorlds(): Promise<WorldSummary[]> { return this.developerRequest("/developer/worlds"); }
   createDemoWorld(): Promise<{ world_id: string }> {
     return this.developerRequest("/developer/demo-world", { method: "POST" });

@@ -1,6 +1,6 @@
 # Deterministic Action Resolution
 
-状态：C-006B 建立 Stage 5 的第一条正式行动结算路径。当前生产 action 只有 `move_player` v1；没有 LLM、Director、Character cognition、对话、Memory、战斗或任意脚本执行。
+状态：C-006B 建立 Stage 5 的第一条正式行动结算路径。历史首个生产 action 为 `move_player` v1。2026-09-29 新增已授权 `character_routine` v1；Kernel 本身不调用模型。Director 只能提交已接受候选，不能直接写状态/台词/知识。
 
 ## 1. Kernel pipeline
 
@@ -34,7 +34,7 @@ ActionProposal
 | PLAYER_INPUT | 只能为与 proposer identity 相同的 Player 提案 |
 | CHARACTER_RUNTIME | 保留给未来角色运行时，只能控制自身 Character；C-006B 不实现角色动作 |
 | SYSTEM | 不能创作有意义的 Player 选择或冒充角色 |
-| DIRECTOR | 仅保留身份边界，不能替 Player/Character 做决定；C-006B 不实现 Director |
+| DIRECTOR | 用户已批准已有、已放置 Character 的 `character_routine` v1；必须匹配当前 consent/generation/plan/candidate、角色状态 revision、地点与占用，不移动 Player |
 
 payload 中出现 ActorId 不会自动授予权限。角色运行时、System 或 Director 试图移动 Player，以及一个 Character 冒充另一个 Character，均得到 `unauthorized_actor`，没有 canonical 副作用。
 
@@ -73,3 +73,9 @@ accepted action 先解析 bounded wake targets，再在同一 UoW 中写 project
 Action occurrence time 由共享 monotonic `WorldTimeSource` 读取，不直接使用可能较旧的 persisted logical anchor，也不按每个 action 重算 wall UTC delta。所有同一 action 产生的 projection transition、WorldEvent、Observation 和 activation 使用同一个 captured WorldTime。
 
 当 per-world runtime 为 `CATCHING_UP`，外部 ActionResolution 在打开 command transaction 前返回 typed `WORLD_CATCHING_UP`；不写 rejection receipt、WorldEvent、Observation 或 projection。catch-up 达到 fixed target 并进入 READY/PAUSED 后，同一合法 request 才可执行。详见 [Clock Reconciliation](CLOCK_RECONCILIATION.md)。
+
+## 已授权日常动作（2026-09-29）
+
+固定 activity enum：rest/work/leisure；payload 只含目标地点、预期 CharacterState revision、activity 和稳定 candidate UUID。Kernel writer lock 内校验当前世界绑定身份的费用授权、ready plan/generation、due/end/window 和未执行候选，拒绝不合法 principal/source/scene。角色移动时离开旧 Scene；同一事务提交 CharacterState CAS、CharacterRoutineStarted v1、真实发生时 actor＋origin/destination 在场观众的 Observation、候选 active 和既有 Action receipt。稳定 request/event UUID 支持恢复；授权关闭或暂停不会绕过验证。暂停期间请求 defer，不形成永久拒绝回执。
+
+开始事件不是任务完成；planned_until 是操作性占用截止，不作为已发生的完成事实展示。Replay 新增严格版本 handler 来重建角色位置/revision；Observation 继续由既有重建范围保存。本轮没有新增 canonical 活动完成、关系、Knowledge 或 Memory 事实。

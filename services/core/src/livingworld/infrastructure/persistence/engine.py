@@ -118,6 +118,11 @@ class Database:
 
         return FileContentAssetStore(self.data_dir)
 
+    def director_store(self):
+        from livingworld.infrastructure.persistence.director import SqlAlchemyDirectorStore
+
+        return SqlAlchemyDirectorStore(self._sessions, self.world_clock_store())
+
     def unit_of_work(self) -> SqlAlchemyUnitOfWork:
         return SqlAlchemyUnitOfWork(self._sessions)
 

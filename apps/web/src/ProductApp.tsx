@@ -4,6 +4,7 @@ import { ChatTranscript } from "./ChatTranscript";
 import { GroupChatDetails, GroupChatSetup } from "./GroupChat";
 import { ModelSetup } from "./ModelSetup";
 import { WorldImports, WorldContacts } from "./WorldContent";
+import { WorldActivities } from "./WorldActivities";
 import { ProfileEditor } from "./ProfileEditor";
 import "./product.css";
 
@@ -266,6 +267,7 @@ export function ProductApp({ client }: { client: CoreClient }) {
           }}>{selectedPlayerState.availability === "available" ? "设为忙碌" : "设为可用"}</button></div>
         </section>}
         <ModelSetup client={client} turnTokenCeiling={tokenCeiling} />
+        {world && selectedPlayer && <WorldActivities key={`${world.world_id}:${selectedPlayer}`} client={client} worldId={world.world_id} visible={tab === "settings"} paused={world.clock_state === "paused"} />}
         <section className="settings-section"><div className="section-heading"><h2>聊天额度</h2><p>每轮输入和输出共用上限。系统按可信上界预留，额度不足时不会开始下一次模型调用。</p></div>
           <div className="setting-row"><label className="field"><span>每轮 Token 上限</span><input type="number" min="1" max={Number.MAX_SAFE_INTEGER} step="1" value={tokenCeilingInput} onChange={event => setTokenCeilingInput(event.target.value)} /></label><button type="button" className="secondary-button" disabled={!tokenCeilingValid} onClick={() => { const next = Number(tokenCeilingInput); setTokenCeiling(next); try { window.localStorage.setItem(TOKEN_CEILING_KEY, String(next)); } catch { /* Session setting remains active. */ } setNotice("聊天额度已更新。"); }}>应用</button></div>
           {!tokenCeilingValid ? <p className="app-alert" role="alert">请输入 1 至 {Number.MAX_SAFE_INTEGER.toLocaleString("zh-CN")} 之间的整数聊天额度。</p> : null}

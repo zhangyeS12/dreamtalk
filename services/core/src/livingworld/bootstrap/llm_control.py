@@ -114,10 +114,13 @@ class HostControlListener:
         stream: BinaryIO,
         credentials: SessionCredentialProvider,
         logger: StructuredLogger,
+        *,
+        on_credentials_changed=None,
     ):
         self._stream = stream
         self._credentials = credentials
         self._logger = logger
+        self._on_credentials_changed = on_credentials_changed
         self._thread = threading.Thread(
             target=self._run,
             name="livingworld-host-control",
@@ -136,6 +139,8 @@ class HostControlListener:
         try:
             while (message := decode_frame(self._stream)) is not None:
                 apply_message(message, self._credentials)
+                if self._on_credentials_changed is not None:
+                    self._on_credentials_changed()
                 self._logger.emit("host_control", f"{message.message_type}_accepted")
         except (ControlProtocolError, OSError, ValueError):
             self._credentials.mark_degraded()

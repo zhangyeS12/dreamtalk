@@ -207,7 +207,19 @@ class CommandReceiptRepository(Protocol):
     ) -> None: ...
 
 
+class RoutineCandidate(Protocol):
+    end_at: int
+
+
+class DirectorRoutineAuthority(Protocol):
+    async def candidate(self, proposal, occurred_at: WorldTime) -> RoutineCandidate | None: ...
+    async def occupied(self, character: CharacterId, now: WorldTime) -> bool: ...
+    def invalidate(self, row: RoutineCandidate, reason=...) -> None: ...
+    def start(self, row: RoutineCandidate) -> None: ...
+
+
 class UnitOfWork(Protocol):
+    director: DirectorRoutineAuthority
     worlds: WorldRepository
     locations: LocationRepository
     players: PlayerRepository

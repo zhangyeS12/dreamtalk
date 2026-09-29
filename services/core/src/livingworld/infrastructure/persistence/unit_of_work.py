@@ -771,6 +771,9 @@ class SqlAlchemyUnitOfWork:
         except BaseException:
             await self._session.close()
             raise
+        from livingworld.infrastructure.persistence.director import DirectorKernelRepository
+
+        self.director = DirectorKernelRepository(self._session)
         self.worlds = WorldRepository(self._session)
         self.locations = LocationRepository(self._session)
         self.players = PlayerRepository(self._session)

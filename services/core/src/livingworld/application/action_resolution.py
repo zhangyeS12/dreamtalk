@@ -10,6 +10,7 @@ from livingworld.application.errors import (
     ActivationFanoutTooLargeError,
     EntityNotFoundError,
     IdempotencyConflictError,
+    WorldRuntimeUnavailableError,
 )
 from livingworld.application.fingerprints import canonical_json, id_input
 from livingworld.application.player_movement import (
@@ -31,6 +32,7 @@ from livingworld.domain.actions import (
     ActionResolutionStatus,
     AudienceSelector,
     AudienceSelectorKind,
+    CharacterRoutinePayload,
     MovePlayerPayload,
     PerceptionAudience,
     ProposerKind,
@@ -39,6 +41,7 @@ from livingworld.domain.commands import CommandReceipt
 from livingworld.domain.contracts import RequestId
 from livingworld.domain.events import WorldEvent
 from livingworld.domain.identifiers import (
+    CharacterId,
     CorrelationId,
     EventId,
     ObservationId,
@@ -46,10 +49,11 @@ from livingworld.domain.identifiers import (
     PrincipalId,
 )
 from livingworld.domain.knowledge import Observation, ObservationBasis, ObservationChannel
-from livingworld.domain.participants import PlayerPresence
+from livingworld.domain.participants import CharacterState, PlayerPresence
 from livingworld.domain.scenes import SceneStatus
 from livingworld.domain.simulation import EventWakeKind, EventWakeSpec, TriggerPriority
-from livingworld.domain.values import utc_timestamp
+from livingworld.domain.values import WorldTime, utc_timestamp
+from livingworld.domain.world import ClockState
 
 EVENT_PAYLOAD_VERSION = 1
 
@@ -82,6 +86,10 @@ def action_fingerprint(proposal: ActionProposal) -> str:
             "expected_presence_revision": payload.expected_presence_revision.value,
         },
     }
+    if isinstance(payload, CharacterRoutinePayload):
+        semantic["payload"].update(
+            activity=payload.activity.value, candidate_id=str(payload.candidate_id)
+        )
     return sha256(canonical_json(semantic).encode()).hexdigest()
 
 
@@ -91,6 +99,15 @@ class _AcceptedMove:
     after: PlayerPresence
     audience: PerceptionAudience
     wake: EventWakeSpec
+
+
+@dataclass(frozen=True, slots=True)
+class _AcceptedRoutine:
+    before: CharacterState
+    after: CharacterState
+    audience: PerceptionAudience
+    wake: EventWakeSpec
+    candidate: object
 
 
 class AudienceResolver:
@@ -147,8 +164,8 @@ class AudienceResolver:
         return tuple(sorted(resolved, key=lambda value: (type(value).__name__, value.value.hex)))
 
 
-type ResolverResult = tuple[ActionRejectionReason | None, _AcceptedMove | None]
-type Resolver = Callable[[UnitOfWork, ActionProposal], Awaitable[ResolverResult]]
+type ResolverResult = tuple[ActionRejectionReason | None, _AcceptedMove | _AcceptedRoutine | None]
+type Resolver = Callable[[UnitOfWork, ActionProposal, WorldTime], Awaitable[ResolverResult]]
 
 
 class ActionKindRegistry:
@@ -179,7 +196,12 @@ class ActionResolutionService:
         self._wake_signal = wake_signal
         self._audiences = AudienceResolver()
         self._activations = activation_planner or ActivationPlanner()
-        self._registry = ActionKindRegistry({(ActionKind.MOVE_PLAYER, 1): self._resolve_move})
+        self._registry = ActionKindRegistry(
+            {
+                (ActionKind.MOVE_PLAYER, 1): self._resolve_move,
+                (ActionKind.CHARACTER_ROUTINE, 1): self._resolve_routine,
+            }
+        )
 
     async def execute(self, request_id: RequestId, proposal: ActionProposal) -> ActionResult:
         if self._mutation_barrier is not None:
@@ -205,12 +227,17 @@ class ActionResolutionService:
             world = await uow.worlds.get(proposal.world_id)
             if world is None:
                 raise EntityNotFoundError("World does not exist")
+            if (
+                proposal.kind is ActionKind.CHARACTER_ROUTINE
+                and world.clock.state is ClockState.PAUSED
+            ):
+                raise WorldRuntimeUnavailableError("director_world_paused")
             occurred_at = self._world_time_source.read(world.clock)
             resolver = self._registry.get(proposal.kind, proposal.schema_version)
             rejected, accepted = (
                 (ActionRejectionReason.UNSUPPORTED_ACTION, None)
                 if resolver is None
-                else await resolver(uow, proposal)
+                else await resolver(uow, proposal, occurred_at)
             )
             if rejected is not None:
                 return await self._commit_rejection(
@@ -222,7 +249,20 @@ class ActionResolutionService:
                 proposal.world_id,
                 uuid5(request_id.value, f"livingworld:action:{proposal.world_id.value}:0"),
             )
-            payload = player_moved_payload(accepted.before, accepted.after)
+            if isinstance(accepted, _AcceptedRoutine):
+                payload = {
+                    "character_id": str(accepted.after.character_id.value),
+                    "before_location_id": str(accepted.before.location_id.value),
+                    "location_id": str(accepted.after.location_id.value),
+                    "activity": proposal.payload.activity.value,
+                    "revision": accepted.after.revision.value,
+                    "candidate_id": str(proposal.payload.candidate_id),
+                    "planned_until": accepted.candidate.end_at,
+                }
+                event_type = "CharacterRoutineStarted"
+            else:
+                payload = player_moved_payload(accepted.before, accepted.after)
+                event_type = "PlayerMoved"
             payload["source_activation_id"] = (
                 str(proposal.source_activation_id.value)
                 if proposal.source_activation_id is not None
@@ -231,7 +271,7 @@ class ActionResolutionService:
             event = WorldEvent(
                 event_id,
                 proposal.world_id,
-                "PlayerMoved",
+                event_type,
                 occurred_at,
                 payload,
                 EVENT_PAYLOAD_VERSION,
@@ -263,13 +303,21 @@ class ActionResolutionService:
                     now,
                 )
             await uow.events.append(event)
-            await apply_player_movement(
-                uow,
-                accepted.before,
-                accepted.after,
-                accepted.before.revision,
-                occurred_at,
-            )
+            if isinstance(accepted, _AcceptedRoutine):
+                await uow.characters.put_state(accepted.after, accepted.before.revision)
+                if accepted.before.location_id != accepted.after.location_id:
+                    await uow.scenes.leave_active_for_principal(
+                        accepted.after.character_id, occurred_at
+                    )
+                uow.director.start(accepted.candidate)
+            else:
+                await apply_player_movement(
+                    uow,
+                    accepted.before,
+                    accepted.after,
+                    accepted.before.revision,
+                    occurred_at,
+                )
             for observer in observers:
                 await uow.observations.add(
                     Observation(
@@ -344,8 +392,48 @@ class ActionResolutionService:
         await uow.commit()
         return result
 
+    async def _resolve_routine(self, uow, proposal, occurred_at):
+        if not isinstance(proposal.payload, CharacterRoutinePayload):
+            return ActionRejectionReason.UNSUPPORTED_ACTION, None
+        if proposal.proposer.kind is not ProposerKind.DIRECTOR or not isinstance(
+            proposal.actor_id, CharacterId
+        ):
+            return ActionRejectionReason.UNAUTHORIZED_ACTOR, None
+        if proposal.scene_id is not None or proposal.source_activation_id is not None:
+            return ActionRejectionReason.INVALID_SCENE, None
+        candidate = await uow.director.candidate(proposal, occurred_at)
+        if candidate is None:
+            return ActionRejectionReason.UNAUTHORIZED_ACTOR, None
+        before = await uow.characters.state(proposal.actor_id)
+        if before is None or before.revision != proposal.payload.expected_presence_revision:
+            uow.director.invalidate(candidate)
+            return ActionRejectionReason.PRECONDITION_FAILED, None
+        if await uow.director.occupied(proposal.actor_id, occurred_at):
+            uow.director.invalidate(candidate, ActionRejectionReason.CONFLICT)
+            return ActionRejectionReason.CONFLICT, None
+        if await uow.locations.get(proposal.payload.destination_id) is None:
+            uow.director.invalidate(candidate, ActionRejectionReason.INVALID_DESTINATION)
+            return ActionRejectionReason.INVALID_DESTINATION, None
+        after = replace(
+            before,
+            location_id=proposal.payload.destination_id,
+            revision=before.revision.advance(before.revision),
+        )
+        audience = PerceptionAudience(
+            (
+                AudienceSelector(AudienceSelectorKind.ACTOR_ONLY),
+                AudienceSelector(
+                    AudienceSelectorKind.LOCATION_PRESENT, location_id=before.location_id
+                ),
+                AudienceSelector(
+                    AudienceSelectorKind.LOCATION_PRESENT, location_id=after.location_id
+                ),
+            )
+        )
+        return None, _AcceptedRoutine(before, after, audience, EventWakeSpec(), candidate)
+
     async def _resolve_move(
-        self, uow: UnitOfWork, proposal: ActionProposal
+        self, uow: UnitOfWork, proposal: ActionProposal, occurred_at: WorldTime | None = None
     ) -> tuple[ActionRejectionReason | None, _AcceptedMove | None]:
         if not isinstance(proposal.payload, MovePlayerPayload):
             return ActionRejectionReason.UNSUPPORTED_ACTION, None

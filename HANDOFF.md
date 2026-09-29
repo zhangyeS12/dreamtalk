@@ -2,7 +2,25 @@
 
 更新日期：2026-09-29。此文件记录当前开发现场与接续工作，不替代 [AGENTS.md](AGENTS.md)。先读 AGENTS，再读本文，最后核对实际 Git 状态和相关代码；不能把下面的基线哈希当作永远不变的当前 HEAD。
 
-## 最新接续：2026-09-29 已获知事件与角色对话连接
+## 最新接续：2026-09-29 已授权 Director 批量规划与基础日常
+
+- 从干净 `bd50a3c` / `codex/chat-feedback` 接续，实际仓库 `D:\LivingWorld`。用户报告上一轮测试无问题（未列分项）；本轮先调查成熟实现、形成[具体方案](docs/proposals/2026-09-29-director-runtime.md)，用户明确批准“一次开启后自动运行（推荐）”。授权记录覆盖每世界默认关闭、首次后台模型用量、6小时 WorldTime、至少2条且达原批50%失效才提前续批、typed角色日常/move、Kernel权限与不移动Player；没有再索取重复许可。
+- 调查 Generative Agents main/Apache-2.0、LangGraph main pyproject1.2.12/MIT、沿用前轮Concordia职责分工。复用现有受控多供应商网关、预算/账本、SQLAlchemy/SQLite/Alembic/Pydantic和单World scheduler/Kernel/Observation；没有安装第二个agent runtime、复制第三方源码或为每个角色建轮询任务。[复用记录](docs/research/2026-09-29-director-plan-reuse.md)。
+- 设置新增“世界自动活动”：每世界默认关闭，当前绑定身份首次启用明确授权后台模型用量；同身份关闭/重开保留授权，换绑定不能沿用另一身份授权。safe status只返回enabled/revision/state/error/current-model，不展示未来候选、隐藏地点/私人资料。GET刷新只读；保存CAS，前端请求序号防止旧刷新覆盖刚保存状态，错误保留。失败/空计划/中断不自动重放；显式新规划是新有费用任务。
+- 新additive `0025_director_runtime`（settings/plans/candidates），完整旧0024及更早schema形状识别；UUID/Timestamp用String(32)与ORM一致。BEGIN IMMEDIATE一向claim先落库；新计划接受与旧pending取消同事务，当前consent/generation/plan/binding检查拒绝迟到结果重新启用。重启遗留planning标interrupted＋attention，ready候选与已有receipt恢复不重派模型。22个修改/新增Python文件被最终包逐个SHA核对。
+- 输入先同World＋已放置角色及必要位置/revision；已接受角色卡通过root replacement链解析，SQL仅白名单抽取description/personality/background，不加载整个snapshot/内嵌世界书/notes/extensions。没有读取角色私聊/记忆/信念或世界书暗线，公共背景尚未作为planner输入。完整覆盖最多16角色/32地点/64候选/64KiB输入，超容量明确停止而非截断。Pydantic严格结构、已有IDs、非重叠、窗口/可用时间/覆盖每角色校验；模型自由文本不成为action。
+- 采用当前模型 `director_plan` purpose，输出为8192与模型更低cap；复用已有通用有界操作helper `generate_bounded_text`，保留authoring旧名兼容。单批有限预算独立于聊天额度，可信Token/金额预留、物理retry/fallback/ambiguity与原账本规则不变。没有针对DeepSeek单独实现Director或实际调用提供商。
+- 日常新增 `character_routine` v1与固定rest/work/leisure enum，正式注册Kernel。DIRECTOR只能提案匹配accepted candidate的Character动作；writer事务校验授权/世界/身份/时段/revision/占用/地点，不冒充CHARACTER_RUNTIME、不移动Player、不写关系/知识/最终台词。CharacterState CAS、可选旧Scene离开、CharacterRoutineStarted v1、真实观众Observation、candidate active、稳定Action receipt同事务。新event replay handler重建位置/revision，原Observation重建策略保留。本轮有真实开始事件，没有任务成果/完成事件。
+- 复用既有每World一个orchestration task，合并queue和Director下一due/占用结束/window_end deadline；最多两个有限模型I/O task。普通候选消费不调用模型，到窗口末或至少2/50%原批invalid才续批；候选提前完成不续批。PAUSED不消费/开启新批；关闭阻止新工作，已admitted模型可能计费。新批保留已开始活动占用直到end，操作性结束不是canonical工作完成。关闭后迟到结果不启用。
+- 开始事件接现有owner＋witnessed/event_occurrence白名单投影；仅注册activity枚举与角色/地点ID，未材料化整个事件body。玩家只见自己亲历；单/群聊角色只读自己的亲历。台词提示开始记录不等于仍在活动/已有成果。已有“聊聊这件事”继续由用户发送，没有主动发消息。正常普通存档只有“家”，先体验原地活动；已有多个地点时支持角色移动，不虚构新地点。
+- **当前交付边界：** 批量规划＋基础日常开始/位置变化；没有主动联系、Episode、相遇剧情、关系推进、世界书公共背景规划输入、新地点编辑、完整离线活动重建。重开只执行还在有效时段的候选，按当前WorldTime开始；已经错过end的pending expire，不伪造过去观察/成果。窗口外不追补多天计划。这不是完整自主世界交付。
+- 源码复核修复初次off及换身份的费用授权绕过、关闭中claim/dispatch竞态、设置刷新覆盖反馈，并收窄角色资料SQL投影。打包后最终启动流程核对发现Director可能早于Host密钥同步；现已等待sync_complete，再由HostControl线程经call_soon_threadsafe唤醒既有World任务，新规划claim/dispatch不早于同步。本轮未探测真实凭据。原中间包director-activities未作为最终交付，最终使用director-activities-final。Ruff lint/format、ESLint/TypeScript、diff检查通过；首版Core冻结22.70秒，凭据同步时序修复后最终Core20.93秒，Vite205模块/Rust release20.76秒成功。保留已有tzdata/pysqlite2/MySQLdb可选hidden-import提示，npm升级notice未处理；未新增desktop编译warning。
+- 独立启动入口 `D:\LivingWorld\artifacts\portable\director-activities-final\dreamtalk\dreamtalk-desktop.exe`，desktop12,422,144 bytes / SHA256 `AECF29D89D33B64EE4897B263493BAA36FFFF8B7AECF2E46085E550AB5FD7E17`；ZIP42,696,380 bytes / SHA256 `77771633B45A9E6BD7F8AC106DE2137ABF7430514F9BF510853A23B77FE18B13`。Core SHA256 `CA987F8C9ADCC45329F27ABFCE83FA24C94E3FF6CA73669C040CEE8098AD4D45`；helper保持 `264DF8990752ABB179A3773ACE934F546C69AF99F4C9834EA1286D0D9886FDEA`。22份源码、desktop/Core/helper及13份许可一致；清单 `artifacts/director-package.json`，最终日志director-final-core-build/director-desktop-build.log，随包DIRECTOR及前序回忆/摘要/流式说明。旧包未覆盖。
+- 按AGENTS§20未新增/修改/运行测试、CI、GUI smoke、应用启停、provider调用、凭据探测或用户DB/配置/密钥操作；没有运行迁移、历史replay、离线恢复验收。编译/哈希不证明真实模型规划、迁移、事件隔离和生命周期已通过。既有旧mock/schema测试未维护；本地提交，无push/release。
+- **交接冲突已明确更新：** DIRECTOR_MODEL旧“全部未实现/阈值无默认/WorldPlan确认未定”、ACTION_RESOLUTION旧“只有move_player/禁止Director角色动作”是旧切片描述，当前以已批准方案和正式Kernel代码为准。更新AGENTS§24、PRODUCT_SPEC P-05/P-16及架构/事件/调度/UI文档；P-17仅本切片已定，P-03/P-04的Outreach仍未定。
+- **接下来：** 先由用户打开本版并验收设置开启→规划→亲历事件→角色近况；优先处理真实反馈，再补公共背景/地点与活动丰富度及离线计划衔接，按具体联系目的/episode去重方案接自然主动联系。本轮无需重新确认已批准选择，未来新功能仍先调查成熟实现。
+
+## 前序切片：2026-09-29 已获知事件与角色对话连接
 
 - 从干净 `edc6736` / `codex/chat-feedback` 接续，实际仓库 `D:\LivingWorld`。用户授权继续项目；本轮补齐事件详情和角色自己的事件输入，复用已有“世界事件 → 聊聊这件事”，没有再造入口。
 - 调查 Concordia 当日 main README/Apache-2.0 与 SillyTavern 官方 World Info/release AGPL-3.0。采用角色观察与世界执行分工，复用既有 SQLAlchemy/SQLite/Observation/受控聊天网关；不引入另一套 simulation loop、memory/embedding、provider runtime 或复制酒馆源码。[调查与范围](docs/research/2026-09-29-observed-events-reuse.md)。

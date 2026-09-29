@@ -210,3 +210,7 @@ C-003E2 再次审计 PlayerMoved、CharacterPlaced、RelationshipChanged：此�
 上方 Stage 0 概念范围不是当前代码的完整能力清单。ActionResolution 已有确定性 PlayerMoved 与原子 event-time Observation；scheduler/activation 与 Scene 的实现见各自架构文档。本轮只新增已授权观察的有限中文展示和角色回复输入，沿用现有时间线及聊天话题入口，没有提交新事件或消费 Activation/CandidateEvent。PlayerPlaced/CharacterPlaced 的详情模板只有存在合法亲历记录时才使用；setup 不自动创建这种记录。
 
 WorldPlan、EventReservoir、候选批量消费、自动角色活动与 Outreach 尚未实现。事件展示不意味着这些能力已经完成，也不改变窗口/失效/重规划和主动联系计数待确认的规则。
+
+## 当前日常候选（2026-09-29）
+
+早期“Director/候选未实现”的状态只指当时切片。当前新增独立 operational director_plans/director_candidates 和 `CharacterRoutineStarted` v1，经已批准权限的 typed Kernel action 变成真实事件。未来候选不会进入普通事件 UI 或角色亲历；开始事件不证明任务成果或完成。本轮仍没有相遇剧情、主动联系或关系变化消费者。

@@ -18,6 +18,9 @@ from livingworld.infrastructure.persistence.conversation_memory import (
     ConversationMemoryDraftRecord,  # noqa: F401
     ConversationMemoryRevisionRecord,  # noqa: F401
 )
+from livingworld.infrastructure.persistence.director_models import (
+    DirectorSettingsRecord,  # noqa: F401
+)
 from livingworld.infrastructure.persistence.errors import MigrationCompatibilityError
 from livingworld.infrastructure.persistence.llm_models import AccountingBase
 from livingworld.infrastructure.persistence.models import Base
@@ -45,7 +48,9 @@ CHAT_DISPATCH_REVISION = "0020_chat_turn_dispatch"
 CHAT_COMPLETION_REVISION = "0021_group_turn_completion"
 COMMON_LORE_REVISION = "0022_world_common_lore"
 BUILDER_REVISION = "0023_content_builder_jobs"
-HEAD_REVISION = "0024_conversation_memory"
+CONVERSATION_MEMORY_REVISION = "0024_conversation_memory"
+HEAD_REVISION = "0025_director_runtime"
+DIRECTOR_TABLES = {"director_settings", "director_plans", "director_candidates"}
 CONVERSATION_MEMORY_TABLES = {"conversation_memory_revisions", "conversation_memory_drafts"}
 BUILDER_JOB_TABLES = {"content_builder_jobs"}
 CHAT_IDENTITY_TABLES = {"chat_conversations", "chat_participants"}
@@ -206,23 +211,31 @@ def _current_revision(connection: Connection) -> str:
 
 def _validate_managed_state(connection: Connection, revision: str) -> None:
     # Additive authored/job tables do not change the older runtime shapes.
-    pre_conversation_memory_revision = revision != HEAD_REVISION
-    pre_builder_revision = revision not in {BUILDER_REVISION, HEAD_REVISION}
+    pre_director_revision = revision != HEAD_REVISION
+    pre_conversation_memory_revision = revision not in {CONVERSATION_MEMORY_REVISION, HEAD_REVISION}
+    pre_builder_revision = revision not in {
+        BUILDER_REVISION,
+        CONVERSATION_MEMORY_REVISION,
+        HEAD_REVISION,
+    }
     pre_completion_revision = revision not in {
         CHAT_COMPLETION_REVISION,
         COMMON_LORE_REVISION,
         BUILDER_REVISION,
+        CONVERSATION_MEMORY_REVISION,
         HEAD_REVISION,
     }
     pre_common_lore_revision = revision not in {
         COMMON_LORE_REVISION,
         BUILDER_REVISION,
+        CONVERSATION_MEMORY_REVISION,
         HEAD_REVISION,
     }
     if revision in {
         CHAT_COMPLETION_REVISION,
         COMMON_LORE_REVISION,
         BUILDER_REVISION,
+        CONVERSATION_MEMORY_REVISION,
         HEAD_REVISION,
     }:
         revision = CHAT_DISPATCH_REVISION
@@ -373,6 +386,8 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         expected -= LOCAL_PROFILE_TABLES
     if revision != CHAT_DISPATCH_REVISION:
         expected -= {"world_content_imports"}
+    if pre_director_revision:
+        expected -= DIRECTOR_TABLES
     if pre_conversation_memory_revision:
         expected -= CONVERSATION_MEMORY_TABLES
     if pre_builder_revision:
@@ -393,6 +408,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
             pre_common_lore_revision=pre_common_lore_revision,
             pre_builder_revision=pre_builder_revision,
             pre_conversation_memory_revision=pre_conversation_memory_revision,
+            pre_director_revision=pre_director_revision,
         )
     if revision in {
         CONTENT_REVISION,
@@ -448,6 +464,7 @@ def _validate_domain_shape(
     pre_common_lore_revision: bool = True,
     pre_builder_revision: bool = True,
     pre_conversation_memory_revision: bool = True,
+    pre_director_revision: bool = True,
 ) -> None:
     """Detect partial/mismatched schemas; never infer a revision from them."""
 
@@ -473,6 +490,8 @@ def _validate_domain_shape(
         "ck_command_receipt_command_result",
     }
     for table in metadata.sorted_tables:
+        if pre_director_revision and table.name in DIRECTOR_TABLES:
+            continue
         if pre_conversation_memory_revision and table.name in CONVERSATION_MEMORY_TABLES:
             continue
         if pre_builder_revision and table.name in BUILDER_JOB_TABLES:

@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from enum import StrEnum
+from uuid import UUID
 
 from livingworld.domain.errors import DomainInvariantError
 from livingworld.domain.identifiers import (
@@ -20,6 +21,7 @@ from livingworld.domain.values import Revision, require_type, same_world
 
 class ActionKind(StrEnum):
     MOVE_PLAYER = "move_player"
+    CHARACTER_ROUTINE = "character_routine"
 
 
 class ProposerKind(StrEnum):
@@ -56,7 +58,27 @@ class MovePlayerPayload:
         require_type(self.expected_presence_revision, Revision, "expected_presence_revision")
 
 
-type ActionPayload = MovePlayerPayload
+class RoutineActivity(StrEnum):
+    REST = "rest"
+    WORK = "work"
+    LEISURE = "leisure"
+
+
+@dataclass(frozen=True, slots=True)
+class CharacterRoutinePayload:
+    destination_id: LocationId
+    expected_presence_revision: Revision
+    activity: RoutineActivity
+    candidate_id: UUID
+
+    def __post_init__(self):
+        require_type(self.destination_id, LocationId, "destination_id")
+        require_type(self.expected_presence_revision, Revision, "expected_presence_revision")
+        require_type(self.activity, RoutineActivity, "routine activity")
+        require_type(self.candidate_id, UUID, "candidate_id")
+
+
+type ActionPayload = MovePlayerPayload | CharacterRoutinePayload
 
 
 @dataclass(frozen=True, slots=True)
@@ -77,7 +99,8 @@ class ActionProposal:
         if type(self.schema_version) is not int or self.schema_version < 1:
             raise DomainInvariantError("Action schema_version requires a positive integer")
         require_type(self.proposer, ActionProposer, "proposer")
-        require_type(self.payload, MovePlayerPayload, "action payload")
+        if not isinstance(self.payload, (MovePlayerPayload, CharacterRoutinePayload)):
+            raise DomainInvariantError("Unsupported action payload")
         if self.actor_id is not None:
             same_world(self.world_id, self.actor_id)
         same_world(self.world_id, self.payload.destination_id)

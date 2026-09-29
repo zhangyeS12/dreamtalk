@@ -18,7 +18,8 @@ from livingworld.infrastructure.persistence.models import (
     WorldEventRecord,
 )
 
-_SUPPORTED_TYPES = ("PlayerMoved", "PlayerPlaced", "CharacterPlaced")
+_CHARACTER_TYPES = ("CharacterPlaced", "CharacterRoutineStarted")
+_SUPPORTED_TYPES = ("PlayerMoved", "PlayerPlaced", *_CHARACTER_TYPES)
 
 
 def witnessed_occurrence():
@@ -73,28 +74,39 @@ async def project_observed_events(
             event.ledger_position,
             seen.c.observed_at,
             reference("$.player_id", ("PlayerMoved", "PlayerPlaced")).label("player_id"),
-            reference("$.character_id", ("CharacterPlaced",)).label("character_id"),
+            reference("$.character_id", _CHARACTER_TYPES).label("character_id"),
             case(
                 (
                     event.event_type == "PlayerMoved",
                     reference("$.to_location_id", ("PlayerMoved",)),
                 ),
-                else_=reference("$.location_id", ("PlayerPlaced", "CharacterPlaced")),
+                else_=reference("$.location_id", ("PlayerPlaced", *_CHARACTER_TYPES)),
             ).label("destination"),
             case(
                 (
                     event.event_type == "PlayerMoved",
                     reference("$.from_location_id", ("PlayerMoved",)),
                 ),
-                else_=reference("$.before_location_id", ("CharacterPlaced",)),
+                else_=reference("$.before_location_id", _CHARACTER_TYPES),
             ).label("origin"),
             case(
                 (
-                    and_(eligible, event.event_type == "CharacterPlaced"),
+                    and_(eligible, event.event_type.in_(_CHARACTER_TYPES)),
                     func.json_type(safe_body, "$.before_location_id") != "null",
                 ),
                 else_=and_(eligible, event.event_type == "PlayerMoved"),
             ).label("origin_required"),
+            case(
+                (
+                    and_(
+                        eligible,
+                        event.event_type == "CharacterRoutineStarted",
+                        func.json_extract(safe_body, "$.activity").in_(("rest", "work", "leisure")),
+                    ),
+                    func.json_extract(safe_body, "$.activity"),
+                ),
+                else_=None,
+            ).label("routine_activity"),
         )
         .join(seen, and_(event.event_id == seen.c.event_id, event.world_id == world_id.value))
         .where(event.world_id == world_id.value)
@@ -130,8 +142,8 @@ async def project_observed_events(
     location_names = await names(LocationRecord, LocationRecord.location_id, locations)
 
     def description(row) -> str | None:
-        actor = _uuid(row.character_id if row.event_type == "CharacterPlaced" else row.player_id)
-        actor_names = character_names if row.event_type == "CharacterPlaced" else player_names
+        actor = _uuid(row.character_id if row.event_type in _CHARACTER_TYPES else row.player_id)
+        actor_names = character_names if row.event_type in _CHARACTER_TYPES else player_names
         destination = _uuid(row.destination)
         origin = _uuid(row.origin)
         if actor not in actor_names or destination not in location_names:
@@ -141,9 +153,17 @@ async def project_observed_events(
             return None
         if (row.origin_required or row.origin is not None) and origin not in location_names:
             return None
-        who = "角色" if row.event_type == "CharacterPlaced" else "玩家"
+        who = "角色" if row.event_type in _CHARACTER_TYPES else "玩家"
         subject = f"{who}「{actor_names[actor] or who}」"
         target = location_names[destination] or "未命名地点"
+        if row.event_type == "CharacterRoutineStarted":
+            activity = {"rest": "休息", "work": "工作", "leisure": "自由活动"}.get(
+                row.routine_activity
+            )
+            if activity is None:
+                return None
+            movement = f"来到「{target}」，" if origin != destination else f"在「{target}」"
+            return f"{subject}{movement}开始{activity}。"
         if origin is not None:
             source = location_names[origin] or "未命名地点"
             return f"{subject}从「{source}」到了「{target}」。"

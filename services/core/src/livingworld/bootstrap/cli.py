@@ -46,6 +46,7 @@ from livingworld.bootstrap.llm_control import HostControlListener
 from livingworld.bootstrap.llm_runtime import (
     configure_content_builder,
     configure_direct_chat_reply,
+    configure_director,
     configure_group_chat_reply,
     start_production_llm_session,
 )
@@ -108,6 +109,7 @@ async def run(
     control_listener = None
     scheduler_runtime = None
     simulation_runtime = None
+    director = None
     try:
         trigger_registry = TriggerKindRegistry(
             {(INSPECTOR_TRIGGER_KIND, 1): lambda _payload: None} if developer_tools else None
@@ -182,8 +184,25 @@ async def run(
                 database.unit_of_work,
             )
         llm_session = await start_production_llm_session(config.llm_config_path, database, logger)
+        from livingworld.application.action_resolution import ActionResolutionService
         from livingworld.application.conversation_memory import ConversationMemoryService
+        from livingworld.application.director import DirectorService
 
+        director = DirectorService(
+            database.director_store(),
+            player_event_feed,
+            configure_director(llm_session),
+            ActionResolutionService(
+                database.unit_of_work,
+                wall_clock,
+                world_time_source=time_source,
+                mutation_barrier=simulation_runtime,
+            ),
+            wake_signal,
+            credentials_ready=lambda: not desktop or llm_session.credentials.sync_complete,
+        )
+        scheduler_runtime.set_world_work(director.tick)
+        await director.start()
         conversation_memory_store = database.conversation_memory_store()
         conversation_memory = ConversationMemoryService(
             conversation_memory_store, player_event_feed, configure_content_builder(llm_session)
@@ -229,8 +248,14 @@ async def run(
         if desktop:
             # Read from the unbuffered OS pipe so interpreter shutdown cannot race
             # a BufferedReader lock held by the control thread.
+            control_loop = asyncio.get_running_loop()
             control_listener = HostControlListener(
-                sys.stdin.buffer.raw, llm_session.credentials, logger
+                sys.stdin.buffer.raw,
+                llm_session.credentials,
+                logger,
+                on_credentials_changed=lambda: control_loop.call_soon_threadsafe(
+                    director.credentials_changed
+                ),
             )
             control_listener.start()
         app = create_app(
@@ -254,6 +279,7 @@ async def run(
             database.content_repository(),
             chat_recall=earlier_chat_recall,
             conversation_memory=conversation_memory,
+            director=director,
         )
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.bind((LOOPBACK_HOST, 0))
@@ -310,6 +336,8 @@ async def run(
     finally:
         shutdown_error = None
         try:
+            if director is not None:
+                await director.aclose()
             if simulation_runtime is not None:
                 await simulation_runtime.aclose()
             elif scheduler_runtime is not None:

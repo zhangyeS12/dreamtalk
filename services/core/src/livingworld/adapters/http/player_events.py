@@ -31,6 +31,7 @@ _EVENT_TITLES = {
     "PlayerMoved": "有人移动了位置",
     "PlayerPlaced": "有人来到了一个地点",
     "CharacterPlaced": "有角色来到了一个地点",
+    "CharacterRoutineStarted": "有角色开始了日常活动",
 }
 
 

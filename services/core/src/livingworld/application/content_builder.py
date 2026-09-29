@@ -29,8 +29,8 @@ class BuilderError(ValueError):
     """Fixed machine code, never a provider/library exception or rejected output."""
 
 
-async def generate_authoring_text(configured, request):
-    """Shared governed, finite authoring operation; never a chat-turn ceiling."""
+async def generate_bounded_text(configured, request):
+    """Shared governed, finite authorized operation; never a chat-turn ceiling."""
     gateway, bounder, _, _, _, selection = configured
     try:
         plan = gateway.plan(request, selection=selection)
@@ -41,8 +41,8 @@ async def generate_authoring_text(configured, request):
             x is None or x.guarantee is not BoundGuarantee.HARD_UPPER_BOUND for x in bounds
         ):
             raise BuilderError("builder_token_bound_unavailable")
-        # Authoring is a separate, explicitly requested operation. Give it one
-        # worst-case candidate reservation, not the player's chat-turn ceiling.
+        # One authorized finite operation (authoring or consented Director plan).
+        # Reserve a worst-case candidate independently of the chat-turn ceiling.
         # Keep the trusted full input bound and the enforced <=8192 output cap;
         # all retries/fallbacks still share this single finite operation budget.
         operation_limit = max(x.input_tokens + x.output_tokens for x in bounds)
@@ -60,6 +60,9 @@ async def generate_authoring_text(configured, request):
     ):
         raise BuilderError("builder_output_invalid")
     return response
+
+
+generate_authoring_text = generate_bounded_text
 
 
 class Evidence(BaseModel):

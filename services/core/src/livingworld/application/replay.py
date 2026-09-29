@@ -93,6 +93,7 @@ class _EventFold:
             ("PlayerAvailabilityChanged", 1): self._player_availability_changed,
             ("CharacterCreated", 1): self._character_created,
             ("CharacterPlaced", 1): self._character_placed,
+            ("CharacterRoutineStarted", 1): self._character_routine_started,
             ("RelationshipChanged", 1): self._relationship_changed,
             ("WorldTruthAsserted", 1): self._truth_asserted,
             ("CharacterBeliefFormed", 1): self._character_belief_formed,
@@ -283,6 +284,20 @@ class _EventFold:
         self.character_states[identity] = CharacterState(
             self.world_id, identity, location, revision
         )
+
+    def _character_routine_started(self, event):
+        from livingworld.domain.actions import RoutineActivity
+
+        value = event.payload
+        RoutineActivity(value["activity"])
+        identity = self._id(CharacterId, value["character_id"])
+        _check(identity in self.character_states, "Routine requires placed character")
+        _check(
+            _integer(value["planned_until"]) > event.occurred_at.microseconds,
+            "Invalid routine window",
+        )
+        UUID(value["candidate_id"])
+        self._character_placed(event)
 
     def _relationship_changed(self, event):
         value = event.payload

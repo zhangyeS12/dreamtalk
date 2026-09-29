@@ -91,3 +91,9 @@ due query 使用 `(world_id,status,due_at,priority,enqueue_position)` 索引；�
 typed diagnostics 只允许 world ID、trigger kind、due WorldTime、WorldTime lag、batch size、activation count 和 scheduler state。`StructuredLogger.emit_scheduler` 没有 payload 参数；普通日志不使用 `repr(payload)`。测试植入 private payload canary 并验证日志中不存在。
 
 测试覆盖精确/暂停/缩放时间、UTC rollback monotonic guard、排序和 10,000 queue sanity、世界隔离、schedule/cancel 幂等、due boundary、bounded drain、flush 后 commit 前 crash rollback、commit/retry uniqueness、双 drainer、cancel race、早期插入 wake、pause/resume/scale revision wake、graceful shutdown、无 LLM 及无世界知识/关系/事件副作用。未来 activation kind 可增加 `director_wakeup`、`character_wakeup`、`scheduled_activity_due` 或 `scene_deadline`，不修改 scheduler 排序；C-006A 不注册或实现这些行为。
+
+## Director 日常工作源（2026-09-29）
+
+既有单 World task 在 drain Trigger→Activation 后消费日常候选，并从队首与 Director 的下一候选/占用结束/window_end 取最早 deadline，继续既有 monotonic WorldTime→wall delay/wake。没有另一个世界轮询循环或每角色 task。模型 I/O 是最多两个有限规划 task；持久 claim 先于调用，失败/重启不重放。候选来自独立 typed plan，不伪装成已消费的其他 Activation；此前 Trigger materialization 行为不变。
+
+恢复时从 durable plan/candidate/receipt 恢复：已经原子提交的 active 不再执行；未执行但已过 end 的候选 expire，仍有效者只在当前逻辑时间执行。当前不重建关闭期间已经错过的活动历史，不把“到期”当作发生事实。窗口结束才续批，不反复追补离线多个窗口。暂停/关闭按已批准方案抑制新工作。

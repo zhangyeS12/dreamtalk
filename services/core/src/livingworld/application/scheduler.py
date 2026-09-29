@@ -276,7 +276,11 @@ class SimulationSchedulerRuntime:
         self._diagnostics = diagnostics or NullSchedulerDiagnosticSink()
         self._tasks: dict[WorldId, asyncio.Task[None]] = {}
         self._closing = False
+        self._world_work = None
         wake_signal.bind_activator(self.activate_world)
+
+    def set_world_work(self, work):
+        self._world_work = work
 
     @property
     def active_task_count(self) -> int:
@@ -334,15 +338,27 @@ class SimulationSchedulerRuntime:
                     if result.more_due:
                         await asyncio.sleep(0)
                         continue
+                work_due = await self._world_work(world, now) if self._world_work else None
                 next_trigger = await self._scheduler.peek_next(world_id)
+                next_due = min(
+                    (
+                        value
+                        for value in (
+                            next_trigger.due_at if next_trigger is not None else None,
+                            work_due,
+                        )
+                        if value is not None
+                    ),
+                    default=None,
+                )
                 if (
-                    next_trigger is None
+                    next_due is None
                     or world.clock.state is ClockState.PAUSED
                     or world.clock.time_scale == 0
                 ):
                     await wake.wait()
                     continue
-                delay = wall_delay_seconds(now, next_trigger.due_at, world.clock.time_scale)
+                delay = wall_delay_seconds(now, next_due, world.clock.time_scale)
                 if delay is None:
                     await wake.wait()
                     continue

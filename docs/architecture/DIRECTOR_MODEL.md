@@ -1,6 +1,10 @@
 # Director Model
 
-> 状态：Stage 0 概念定义。本文整理已冻结规则及职责边界，不定义数据库字段、API、运行算法或实现技术；所有能力均为产品要求，尚未实现。
+> 当前状态（2026-09-29）：用户已批准一次开启后自动运行的日常 Director；代码新增默认关闭授权、持久批量计划/候选和 Kernel 日常消费者。下文 Stage 0 尚未定义阈值/运行计划确认的段落是历史描述，由本段及[已批准方案](../proposals/2026-09-29-director-runtime.md)替代。主动联系、相遇剧情、关系推进仍未实现。
+
+当前窗口6小时 WorldTime；到窗口结束，或原批候选至少2条且达到50%因状态前提失效，才准许新的批量规划。每批独立有限预算，所有供应商复用既有网关；用户首次开启后无需逐批预览。新批原子替换旧的 pending，已开始活动的占用先到期。普通 UI 只显示安全运行状态。输入只含同世界必要位置/revision及已接受角色卡的description/personality/background；没有读取世界书暗线、私聊或私人记忆，公共世界书背景尚未接入本轮 planner。
+
+首版只提交 `CharacterRoutineStarted`：休息/工作/自由活动的开始与可选地点变化。计划 duration 用于防重叠占用，到期只释放操作性占用，不宣称完成了工作、取得物品或改变关系。晚到但仍在计划时段的候选按当前真实 WorldTime 开始；已经结束的未执行候选标 expired，不补造离线亲历或过去成果。完整离线活动重建尚待后续，旧窗口以外没有伪造的未规划生活。
 
 规则来源：[PRODUCT_SPEC.md](../product/PRODUCT_SPEC.md) 中的 FR-01 至 FR-24。相关概念见 [DOMAIN_MODEL.md](DOMAIN_MODEL.md)，候选事件与事实边界见 [EVENT_MODEL.md](EVENT_MODEL.md)。
 
