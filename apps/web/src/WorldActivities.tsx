@@ -70,6 +70,7 @@ export function WorldActivities({ client, worldId, visible, paused }: {
     <div className="section-heading"><h2>世界自动活动</h2><p>角色可以休息、工作或自由活动，并在已有地点之间移动。实际活动可以成为聊天话题。</p></div>
     <p role="status">{label}</p>
     <p className="inline-hint">每批覆盖6小时世界时间，采用当前模型{status?.model ? `「${status.model}」` : ""}，独立于聊天额度，后台规划会产生模型用量。应用关闭后不调用模型。</p>
+    <p className="inline-hint">自动活动需要电脑保持开机且程序未退出，窗口最小化可继续运行。退出或关机后停止；重开会推进未暂停的世界时间，但目前不会完整补演错过的活动。角色主动发消息尚未开放。</p>
     <p className="inline-hint">日常规划也会参考你在“角色卡与世界书”中公开的背景：条目按来源条件和背景容量参与，关键词匹配角色名和当前地点名。修改在下一批规划时生效。</p>
     {status?.error && <p className="error-banner" role="alert">{errors[status.error] ?? "自动活动暂时无法继续，请查看模型设置或重新读取状态。"}</p>}
     <div className="setting-row">

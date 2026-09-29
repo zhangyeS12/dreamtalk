@@ -2,7 +2,18 @@
 
 更新日期：2026-09-29。此文件记录当前开发现场与接续工作，不替代 [AGENTS.md](AGENTS.md)。先读 AGENTS，再读本文，最后核对实际 Git 状态和相关代码；不能把下面的基线哈希当作永远不变的当前 HEAD。
 
-## 最新接续：2026-09-29 普通设置手动活动地点
+## 最新接续：2026-09-29 地点重复界面修复与离线说明
+
+- 从干净c3727c8 / codex/chat-feedback接续。用户截图出现上下两个活动地点，上方不响应输入，下方可用，并问程序是否需一直打开/关机后停止。实际仓库D:\LivingWorld；先核对AGENTS、HANDOFF、相关源码与Git。用户反馈不等于Director整体运行验收。
+- ProductApp JSX只有一个WorldLocations入口，但它与同级WorldImports都用world.world_id作key。核对本地React/react-dom19.3.0开发源码及[React官方key规则](https://react.dev/learn/rendering-lists#rules-of-keys)、[ReactChildFiber官方源码](https://github.com/facebook/react/blob/main/packages/react-reconciler/src/ReactChildFiber.js)：同级key须唯一，重复key可能重复/遗漏节点。此明确代码缺陷与截图旧无状态表单/新有效表单符合；未通过GUI重现，不能把静态判断写成运行验收。
+- 修正settings同级组件为locations:<World>、content:<World>、activities:<World>:<Player>，原World/Player变化重挂载边界保留；没有第二个地点入口、没有改请求/数据库/迁移/Kernel。用户需退出旧版再开修复版，清除旧页面残留；本轮未替用户操作应用。
+- 核对desktop ExitRequested → supervisor.stop、Director closing/fail/interrupted、候选end_at过期及window_end续批、startup UTC bridge。当前本地自动活动要求进程仍运行，可最小化/切其他页；退出/关机/系统睡眠不继续AI执行。重开时RUNNING world按离线elapsed/scale推进时间，PAUSED不推进；有效旧候选可当前时间开始，错过end过期，不完整补造离线生活/成果/亲历历史。中断模型任务不自动重放；主动联系尚未实现，普通玩家消息触发的单聊/群聊回复不等于主动发消息。
+- UI自动活动/交流状态直接说明本地运行、最小化、退出/关机及主动消息未开放，避免可用状态被误解为已经自动联系。DIRECTOR_ACTIVITIES去掉过时硬编码0025升级提示，增加当前开关/恢复说明；ACTIVITY_LOCATIONS记录重复key修复。仅澄清现有行为，没有新增离线策略、后台服务、云服务器或主动联系。
+- ESLint/TypeScript、diff检查通过；Vite206模块、Rust release22.95秒构建成功且无新增warning。没有Python变更，复用上轮Core，不做无意义重编译；原Core的tzdata/pysqlite2/MySQLdb可选警告属于上轮冻结记录。按AGENTS未新增/修改/运行测试、GUI smoke、应用启停、模型/凭据探测、用户DB/配置/密钥或迁移；静态/编译/哈希不是GUI行为与生命周期验收。
+- 新包D:\LivingWorld\artifacts\portable\location-catalog-fix\dreamtalk\dreamtalk-desktop.exe，desktop12,424,192 bytes / SHA256 `7A9310CCAA118FF8EDA36B8C9C2FF3768F1CC2E2245D87B3BCB01BCC7563A65B`；ZIP42,745,007 bytes / `80954EF9CE5B9FBF3FA16CFE9A05A97FF21479590348F8628173BAA8EFAEC5F0`；Core `7F0A817CC2B534AFD15DD40A244970B733BE1A758FCDA4555C9CE20EF1D0CD6B`及helper `264DF8990752ABB179A3773ACE934F546C69AF99F4C9834EA1286D0D9886FDEA`与原包一致，14份冻结Python源、13份许可与desktop/Core/helper核对。说明同步随包DIRECTOR/ACTIVITY_LOCATIONS，其他说明保留。清单artifacts/location-catalog-fix-package.json，日志location-catalog-fix-desktop-build.log。旧包保留，无push/发布。
+- **接下来：** 优先用户验证重复界面消失及地点保存。建议下一块讨论/补齐有限离线恢复，沿用AGENTS第7节catch-up方向而非要求长期挂机；仍先查成熟实现，不擅自回填旧世界事件或放开主动联系。玩家前往地点与Outreach理由/episode决策仍待明确；此轮没有新增问题要求用户授权。
+
+## 前序切片：2026-09-29 普通设置手动活动地点
 
 - 从干净78b7055 / codex/chat-feedback接续，实际仓库D:\LivingWorld。核对AGENTS、HANDOFF、产品P-07/地点/Kernel动作契约与源码后，选择上一轮建议的普通地点配置切片；玩家移动过程/层级仍未定，未擅自实现前往、地图或耗时路径。当前“继续”不视为上一轮Director运行验收。
 - 实现前查[SillyTavern官方World Info](https://docs.sillytavern.app/usage/core-concepts/worldinfo/)、release package1.19.0/AGPL-3.0与Generative Agents当日main plan.py/Apache-2.0。复用现有CreateLocation/Kernel、SQLAlchemy/SQLite事务、Alembic、请求回执、React和客户端，无新依赖、第三方源码复制、另一套模拟/地图/调度器。[调查与范围](docs/research/2026-09-29-location-catalog-reuse.md)。
