@@ -108,3 +108,8 @@ Developer Mode 能查看 Director、Agent、Memory、LLM 使用等决策 Trace�
 | Director 风格 | 可配置维度、默认风格，以及变更对现有计划的影响。 |
 | Checkpoint 与分支 | 计划、联系去重、关系、知识和记忆的继承范围，以及恢复与回滚语义。 |
 | Trace 与预算 | Trace 的访问边界和保留范围；Token、Latency、Cost 的统计口径、预算范围与路由约束。 |
+
+
+## 2026-09-29 实现状态核对
+
+Director 仍未接入运行时。独立群聊 selector、聊天回忆、可确认会话摘要以及本轮的 owner-scoped 亲历事件上下文，均不是 WorldPlan/EventReservoir。会话摘要已按后续用户确认实现，不能因此推定运行世界计划也免于预览确认。P-05/P-16/P-17 中计划窗口、失效门槛、候选消费与确认边界仍需要形成具体契约后再实现；本轮没有隐式决定默认时长、阈值或新增自动模型触发。

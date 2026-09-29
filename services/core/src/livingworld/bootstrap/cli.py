@@ -199,6 +199,7 @@ async def run(
                 world_content.list_common_lore,
                 earlier_chat_recall,
                 conversation_memory_store,
+                database.character_observed_event_reader,
             ),
         )
         group_chat_reply = configure_group_chat_reply(
@@ -212,6 +213,7 @@ async def run(
                 world_content.list_common_lore,
                 earlier_chat_recall,
                 conversation_memory_store,
+                database.character_observed_event_reader,
             ),
         )
         from livingworld.application.content_builder import ContentBuilder

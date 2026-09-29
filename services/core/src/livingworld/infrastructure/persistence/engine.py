@@ -166,6 +166,14 @@ class Database:
 
         return SqlAlchemyCharacterMemoryReader(self._sessions, character_id)
 
+    def character_observed_event_reader(self, character_id: CharacterId):
+        """Bind event-time access to the verified speaker; no global truth reader."""
+        from livingworld.infrastructure.persistence.observed_events import (
+            SqlAlchemyCharacterObservedEventReader,
+        )
+
+        return SqlAlchemyCharacterObservedEventReader(self._sessions, character_id)
+
     def developer_inspector_store(self):
         """Developer-only read projection; it has no mutation capability."""
         from livingworld.infrastructure.persistence.developer_inspector import (

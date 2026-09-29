@@ -203,3 +203,10 @@ C-003E2 再次审计 PlayerMoved、CharacterPlaced、RelationshipChanged：此�
 | 事实影响与更正 | 事件影响、关系变化如何对应；错误激活、回滚或更正的产品语义。 |
 | Checkpoint / Timeline | 候选、已发生事件、知识、记忆和联系去重记录的继承与恢复范围。 |
 | 可观察性 | Trace 中可查看哪些事实和决策，开发者信息怎样与普通玩家可见内容保持边界。 |
+
+
+## 2026-09-29 当前实现核对
+
+上方 Stage 0 概念范围不是当前代码的完整能力清单。ActionResolution 已有确定性 PlayerMoved 与原子 event-time Observation；scheduler/activation 与 Scene 的实现见各自架构文档。本轮只新增已授权观察的有限中文展示和角色回复输入，沿用现有时间线及聊天话题入口，没有提交新事件或消费 Activation/CandidateEvent。PlayerPlaced/CharacterPlaced 的详情模板只有存在合法亲历记录时才使用；setup 不自动创建这种记录。
+
+WorldPlan、EventReservoir、候选批量消费、自动角色活动与 Outreach 尚未实现。事件展示不意味着这些能力已经完成，也不改变窗口/失效/重规划和主动联系计数待确认的规则。

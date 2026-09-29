@@ -1,6 +1,6 @@
 """SQL filters the local Player's Observations before selecting WorldEvents."""
 
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, case, func, select
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
 from livingworld.application.player_event_feed import (
@@ -8,7 +8,7 @@ from livingworld.application.player_event_feed import (
     LocalPlayerPresence,
     SelectablePlayer,
 )
-from livingworld.domain.identifiers import EventId, PlayerId, WorldId
+from livingworld.domain.identifiers import PlayerId, WorldId
 from livingworld.domain.participants import PlayerAvailability
 from livingworld.domain.values import Revision
 from livingworld.infrastructure.persistence.models import (
@@ -16,7 +16,10 @@ from livingworld.infrastructure.persistence.models import (
     ObservationRecord,
     PlayerPresenceRecord,
     PlayerRecord,
-    WorldEventRecord,
+)
+from livingworld.infrastructure.persistence.observed_events import (
+    project_observed_events,
+    witnessed_occurrence,
 )
 
 
@@ -88,11 +91,14 @@ class SqlAlchemyPlayerEventFeedStore:
             )
 
     async def known_events(self, world_id: WorldId, limit: int) -> tuple[KnownWorldEvent, ...]:
+        if type(limit) is not int or not 1 <= limit <= 100:
+            raise ValueError("player_event_limit_invalid")
         async with self._sessions() as session:
             seen = (
                 select(
                     ObservationRecord.target_event_id.label("event_id"),
                     func.min(ObservationRecord.observed_at).label("observed_at"),
+                    func.max(case((witnessed_occurrence(), 1), else_=0)).label("witnessed"),
                 )
                 .join(
                     LocalPlayerBindingRecord,
@@ -110,32 +116,4 @@ class SqlAlchemyPlayerEventFeedStore:
                 .group_by(ObservationRecord.target_event_id)
                 .subquery()
             )
-            rows = (
-                await session.execute(
-                    select(
-                        WorldEventRecord.event_id,
-                        WorldEventRecord.event_type,
-                        WorldEventRecord.occurred_at,
-                        WorldEventRecord.ledger_position,
-                        seen.c.observed_at,
-                    )
-                    .join(
-                        seen,
-                        and_(
-                            WorldEventRecord.event_id == seen.c.event_id,
-                            WorldEventRecord.world_id == world_id.value,
-                        ),
-                    )
-                    .order_by(
-                        WorldEventRecord.occurred_at.desc(),
-                        WorldEventRecord.ledger_position.desc(),
-                    )
-                    .limit(limit)
-                )
-            ).all()
-            return tuple(
-                KnownWorldEvent(
-                    EventId(world_id, event_id), event_type, occurred_at, observed_at, position
-                )
-                for event_id, event_type, occurred_at, position, observed_at in reversed(rows)
-            )
+            return await project_observed_events(session, world_id, seen, limit=limit)

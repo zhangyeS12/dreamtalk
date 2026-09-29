@@ -27,7 +27,11 @@ class AvailabilityRequest(BaseModel):
     expected_presence_revision: int = Field(ge=0, strict=True)
 
 
-_EVENT_TITLES = {"PlayerMoved": "有人移动了位置"}
+_EVENT_TITLES = {
+    "PlayerMoved": "有人移动了位置",
+    "PlayerPlaced": "有人来到了一个地点",
+    "CharacterPlaced": "有角色来到了一个地点",
+}
 
 
 def player_events_router(
@@ -103,7 +107,7 @@ def player_events_router(
             return {"availability": body.availability.value, "presence_revision": revision.value}
 
     @router.get("/worlds/{world_id}/known-events")
-    async def known_events(world_id: UUID) -> list[dict[str, str | int]]:
+    async def known_events(world_id: UUID) -> list[dict[str, str | int | None]]:
         return [
             {
                 "event_id": str(event.event_id.value),
@@ -111,6 +115,8 @@ def player_events_router(
                 "occurred_at": str(event.occurred_at.microseconds),
                 "observed_at": str(event.observed_at.microseconds),
                 "ledger_position": event.ledger_position,
+                "description": event.description,
+                "observation_channel": event.observation_channel,
             }
             for event in await service.known_events(WorldId(world_id))
         ]

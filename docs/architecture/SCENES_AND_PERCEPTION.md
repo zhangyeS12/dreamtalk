@@ -69,3 +69,8 @@ Character `WORLD_EVENT` activation 必须已有同世界该 WorldEvent 的 `EVEN
 [0012_action_scenes_perception](../../services/core/src/livingworld/infrastructure/persistence/migrations/versions/0012_action_scenes_perception.py) 新增 `scenes`、`scene_participants`、active/history/status/current-location 索引，为 observations 增加可空 basis、EVENT_OCCURRENCE event/principal unique 与 principal history 索引，并扩展现有 command receipt CHECK 以保存无 WorldEvent 的 typed rejected action/Scene result。Alembic 仍是唯一迁移权威；0011 rows、events、receipts 与 legacy audit 原样保留，旧 Observation 的 basis 为 NULL。
 
 0012 本身没有新增 Knowledge 或 Memory table。当前 Alembic head 0014 的 Memory tables 属于后续 C-007A，未改变本页的 event-time audience 规则；消息、对话、Director 与 Agent 状态仍未实现。
+
+
+## 2026-09-29 当前接入状态
+
+上方0014/未实现聊天的描述属于C-007A历史切片；当前迁移head是0024，会话与聊天已接入。event-target Observation仍保留为历史访问记录，不从当前地点重新推导观众。本轮玩家时间线和角色回复只读各自已授权记录；中文详情额外要求 witnessed + event_occurrence，白名单v1主体/地点字段和辅助字段均受同一授权条件限制。没有改变感知、Knowledge或Memory写入规则，没有自动执行Activation或Director计划。

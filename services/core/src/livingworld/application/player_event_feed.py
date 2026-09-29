@@ -30,6 +30,8 @@ class KnownWorldEvent:
     occurred_at: WorldTime
     observed_at: WorldTime
     ledger_position: int
+    description: str | None = None
+    observation_channel: str | None = None
 
 
 class PlayerEventFeedStore(Protocol):

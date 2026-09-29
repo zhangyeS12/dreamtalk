@@ -443,3 +443,21 @@ source claim; current dialogue/corrections take precedence. Context includes
 same governed reply reservations. No cross-conversation propagation, automatic
 memory formation/forgetting, private memory expansion or canonical writes.
 See [reuse decision and acceptance limits](../research/2026-09-29-conversation-summary-reuse.md).
+
+
+## 2026-09-29 character-owned event observations
+
+Direct/group replies additionally read the speaking Character's own witnessed,
+event_occurrence event-target Observations. SQL binds World + Character before
+selecting supported v1 event references. Up to12 recent supported events/8KiB
+serialized data enter lower-trust USER context; current world entity names are
+bounded readable labels, not historic snapshots. No player's event feed or
+other member's private observations enter this input. Group selection is unchanged.
+
+Only PlayerMoved, PlayerPlaced and CharacterPlaced have deterministic templates;
+unknown versions, invalid references and ordinary/legacy observations do not
+supply descriptions. This is event-time access, not automatic KnowledgeAssertion,
+Memory, Truth, or proof that the Character already told the player. Snapshot is
+read at prompt assembly, not reconstructed as-of a historical message. Normal
+reply reservations/financial governance include this input; no extra model call.
+See [reuse and limits](../research/2026-09-29-observed-events-reuse.md).

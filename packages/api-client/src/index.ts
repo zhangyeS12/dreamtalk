@@ -38,6 +38,8 @@ export interface KnownWorldEvent {
   occurred_at: string;
   observed_at: string;
   ledger_position: number;
+  description?: string | null;
+  observation_channel?: "witnessed" | null;
 }
 export interface InspectorSnapshot {
   world: WorldSummary;

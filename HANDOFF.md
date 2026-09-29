@@ -2,7 +2,22 @@
 
 更新日期：2026-09-29。此文件记录当前开发现场与接续工作，不替代 [AGENTS.md](AGENTS.md)。先读 AGENTS，再读本文，最后核对实际 Git 状态和相关代码；不能把下面的基线哈希当作永远不变的当前 HEAD。
 
-## 最新接续：2026-09-29 可确认会话记忆摘要
+## 最新接续：2026-09-29 已获知事件与角色对话连接
+
+- 从干净 `edc6736` / `codex/chat-feedback` 接续，实际仓库 `D:\LivingWorld`。用户授权继续项目；本轮补齐事件详情和角色自己的事件输入，复用已有“世界事件 → 聊聊这件事”，没有再造入口。
+- 调查 Concordia 当日 main README/Apache-2.0 与 SillyTavern 官方 World Info/release AGPL-3.0。采用角色观察与世界执行分工，复用既有 SQLAlchemy/SQLite/Observation/受控聊天网关；不引入另一套 simulation loop、memory/embedding、provider runtime 或复制酒馆源码。[调查与范围](docs/research/2026-09-29-observed-events-reuse.md)。
+- 玩家时间线最多100条，SQL先限定 World＋当前绑定Player的 event-target Observation，保留最早获知时间；详情额外要求同owner witnessed＋event_occurrence。仅投影 PlayerMoved/PlayerPlaced/CharacterPlaced v1 的主体/地点白名单 ID，不材料化整个 payload；辅助字段也由同一授权/版本谓词限制。仅有旧普通观察、未知类型/版本、格式错误或缺失引用的事件只保留通用标题，不展示私人信念、关系数值、activity/availability/revision/activation。
+- 中文模板和同世界引用名称用于展示，当前名字限160字符并清理控制字符，不是历史名称快照。PlayerPlaced/CharacterPlaced 初始放置仍不自动创建 Observation；没有记录的存档可能继续空时间线，普通 UI 尚无移动操作。本轮没有回填授权或伪造活动。
+- 单聊与群聊回复分别从已验证发言Character绑定reader读取自己的亲历事件，最多12条/8KiB序列化数据，作为lower-trust USER内容；先World＋Character＋channel/basis过滤，再白名单/排序/有限读取。group selector不读这些私有事件，不从玩家列表或其他成员复制；读于当前prompt组装，不声称历史消息时点快照。
+- 现有“聊聊这件事”草稿优先引用详情，仍由玩家核对发送。事件观察不自动写KnowledgeAssertion、EpisodicMemory或WorldTruth，也不表示已告知玩家。没有额外模型调用/迁移/事件或Activation消费；新增输入仍受原回复硬Token/金额治理。API详情/亲历标记为additive nullable字段，旧标题兼容。
+- 初次Ruff因只读缓存路径失败，改用--no-cache；随后修正导入/长行/格式。最终Ruff lint/format、ESLint/TypeScript和diff检查通过。源码复核修正缺失origin及辅助字段授权边界，最终Core编译24.15秒，Vite204模块/Rust release25.80秒成功。保留既有tzdata/pysqlite2/MySQLdb可选hidden-import提示，无新desktop警告。
+- 独立包 `D:\LivingWorld\artifacts\portable\observed-events\dreamtalk\dreamtalk-desktop.exe`；ZIP `D:\LivingWorld\artifacts\portable\observed-events\dreamtalk.zip`，42,658,639 bytes / SHA256 `5B09E1A57EBAD1DF5FC4E1C595ACEE8BAB72DD56F19113AD6F8208BFB4C65A0D`。9个修改/新增Python源与包内哈希一致；最终Core exe、desktop/helper及13份许可核对一致。日志 `artifacts/observed-events-final-core-build.log` / `artifacts/observed-events-desktop-build.log`，清单 `artifacts/observed-events-package.json`；随包README/EVENTS和前序MEMORY/RECALL/STREAMING，旧体验包未覆盖。
+- 按AGENTS§20，没有新增/修改/执行测试、CI、GUI smoke、真实API/凭据探测、应用启停或用户DB/配置/密钥操作。没有运行迁移/历史replay；编译和哈希不是运行/隔离验收。旧流式测试mock未适配的问题仍保留。本地提交，无push/release。
+- 用户入口：[本版说明](docs/OBSERVED_EVENTS.md)。关闭旧窗口打开新版 → 世界事件 → 已有亲历详情/话题草稿 → 用户发送；分别核对玩家/角色访问范围、换世界/身份和未亲历角色。无记录时空列表是预期，不能以此声称Director失效或完整世界活动已完成。
+- **交接与代码核对：** 上方新能力确实已接入bootstrap/direct/group/player API。旧EVENT_MODEL“事件/队列未实现”、PRODUCT_SURFACE“仅标题”、SCENES旧阶段“聊天未实现”等是历史切片状态，当前已有ActionResolution、scheduler和聊天；本轮补充当前说明。DIRECTOR_MODEL的计划/候选/主动联系仍未实现，与代码一致。可确认会话摘要已完成不代表P-16运行世界计划确认规则已确定。
+- **接下来：** 先形成可审阅Director计划契约，明确P-05/P-16/P-17的窗口耗尽、失效重规划、批量计划确认与候选消费；再接Kernel支持的角色活动、相遇和Outreach。不得隐式选择默认窗口、阈值或固定时钟调用模型。当前阶段是可体验聊天/创作＋回忆/摘要＋事件输入连接，完整自主世界尚未完成。
+
+## 前序切片：2026-09-29 可确认会话记忆摘要
 
 - 从干净 `848e628` / `codex/chat-feedback` 接续。用户接受建议继续推进，并在中断后要求从现场继续；中断前静态检查与 Core/desktop 编译已完成，中断后只核对、打包、文档与本地提交，没有重跑编译或进入其他功能。
 - 调查 SillyTavern 官方 Summarize（release/AGPL-3.0）和 LangMem 当日 main/pyproject 0.0.30/MIT。采用上一确认摘要＋后续原文的增量模式，复用已有 governed gateway、可信计数/预算/账本、SQLite/SQLAlchemy/Alembic 与 React/native dialog，不安装第二套 agent runtime 或复制酒馆源码。[调查与选择](docs/research/2026-09-29-conversation-summary-reuse.md)。

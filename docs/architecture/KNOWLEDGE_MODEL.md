@@ -117,3 +117,10 @@ AcquireKnowledge 不变：既有源 → 显式渠道 Observation → 接收方�
 | 开发者权限 | Trace 可见范围是否会影响玩家视角与后续体验 |
 
 本任务不为以上问题作默认产品决定。
+
+
+## 2026-09-29 亲历事件的只读展示与聊天输入
+
+复用 C-006B 的 event-time access：当前 Player 的已授权时间线、发言 Character 自有事件读取均先在 SQL 限定 world/owner/target。具体描述只来自同主体 witnessed + event_occurrence 和受支持 v1 事件的主体/地点引用；普通 Observation、assertion-target、源断言/其他主体的观察、关系数值与未支持 payload 不展开。名称只查已授权引用在同世界的当前标签。
+
+角色自己的记录可以作为有限 lower-trust 对话资料，但这不新建或推断 KnowledgeAssertion、EpisodicMemory 或 WorldTruth，也不表示玩家已获知角色所见事件。发言、引用和会话摘要仍不能自动授予事件访问。没有后台全知 prompt 或历史授权回填；真实运行隔离验收由用户完成。
