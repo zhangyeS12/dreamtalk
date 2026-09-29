@@ -118,6 +118,12 @@ export interface ChatMessagePage {
   items: ChatMessage[];
   next_before_position: number | null;
 }
+export interface ChatHistoryMatches {
+  items: ChatMessage[];
+  scanned_count: number;
+  skipped_count: number;
+  next_before_position: number | null;
+}
 export interface PendingPlayerSend {
   turn_id: string;
   token_ceiling: number;
@@ -334,6 +340,16 @@ export class CoreClient {
   conversationMessagePage(worldId: string, conversationId: string, beforePosition?: number): Promise<ChatMessagePage> {
     const path = `/worlds/${encodeURIComponent(worldId)}/conversations/${encodeURIComponent(conversationId)}/messages/page`;
     return this.productRequest(`${path}${beforePosition === undefined ? "" : `?before_position=${beforePosition}`}`);
+  }
+  searchChatHistory(worldId: string, conversationId: string, query: string, beforePosition?: number, signal?: AbortSignal): Promise<ChatHistoryMatches> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/${encodeURIComponent(conversationId)}/messages/search`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query, before_position: beforePosition }), signal,
+    });
+  }
+  chatMessageContext(worldId: string, conversationId: string, position: number, signal?: AbortSignal): Promise<ChatMessagePage> {
+    if (!Number.isSafeInteger(position) || position < 1 || !Number.isSafeInteger(position + 4)) throw new Error("chat_position_invalid");
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/${encodeURIComponent(conversationId)}/messages/page?limit=7&before_position=${position + 4}`, { signal });
   }
   sendPlayerMessage(worldId: string, conversationId: string, text: string, tokenCeiling: number, requestId: string): Promise<PendingPlayerSend> {
     return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/${encodeURIComponent(conversationId)}/messages`, {

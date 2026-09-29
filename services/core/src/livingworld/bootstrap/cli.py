@@ -242,6 +242,7 @@ async def run(
             group_chat_reply,
             content_builder,
             database.content_repository(),
+            chat_recall=earlier_chat_recall,
         )
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.bind((LOOPBACK_HOST, 0))

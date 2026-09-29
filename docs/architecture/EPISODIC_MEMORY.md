@@ -78,3 +78,9 @@ C-007A 采用 episodic record、explicit evidence、temporal coordinates、optio
 延后：Reflection、consolidation、forgetting、correction、memory update/delete、embedding/FTS/vector/RAG、automatic Observation→Memory、Conversation/Message ingestion、LLM summarization、checkpoint/branch inheritance、Developer UI、Director/Agent consumption。任何未来派生步骤都不得把 evidence 错当作真值证明，也不得绕过 owner-first permission filtering。
 
 验证见 [domain tests](../../tests/domain/test_memory.py)、[application tests](../../tests/application/test_episodic_memory.py) 和 [migration tests](../../tests/persistence/test_memory_migration.py)。
+
+## 2026-09-29 实际接续状态
+
+上方“延后”的清单记录 C007A 当时的切片范围，不代表当前全部代码。现有 DeveloperInspectorService 已能在开发者模式中按 owner 查看/记录 episodic memory；聊天上下文已消费该角色自己的记忆。release 普通界面不能因此读取其私有内容。
+
+本日新增的普通“聊天回忆”只检索当前玩家有权访问的共同 Conversation/Message 原文，并允许查看前后文与追加草稿。[实现边界](../research/2026-09-29-chat-recall-view-reuse.md)。未增加 Memory provenance、自动聊天摘要、写入/合并/遗忘/修正或新的 WorldTruth/Knowledge；Observation-only 证据约束仍有效。

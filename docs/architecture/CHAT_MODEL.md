@@ -403,3 +403,15 @@ An explicit managed-model setting declares streaming capability/profile consiste
 old settings remain unchanged until saved. Actual DeepSeek framing and native OpenAI
 input-count projection now include streaming. Other provider bounds retain fallback.
 See [sources, event contract, limits and pending acceptance](../research/2026-09-29-chat-streaming-reuse.md).
+
+## 2026-09-29 player-visible dialogue recall
+
+Direct/group chat now offer local history keyword search, source timestamps/positions,
+up to seven contextual messages, and quotation into the editable composer. The new
+search route uses the same owner-authorized message page and FTS5/jieba ranker; it
+never reads Character-private memories or initiates generation. Each batch processes
+at most 100 messages/512 KiB and returns up to eight matches/32 KiB; the UI can scan
+older pages, keeping at most 64 results. This is a bounded keyword recall browser,
+not a trace of the last model's context or automatic episodic-memory formation.
+Existing prompt recall limits, private owner binding, write semantics and financial
+controls remain unchanged. See [sources, limits and acceptance](../research/2026-09-29-chat-recall-view-reuse.md).

@@ -2,7 +2,22 @@
 
 更新日期：2026-09-29。此文件记录当前开发现场与接续工作，不替代 [AGENTS.md](AGENTS.md)。先读 AGENTS，再读本文，最后核对实际 Git 状态和相关代码；不能把下面的基线哈希当作永远不变的当前 HEAD。
 
-## 最新接续：2026-09-29 单聊与群聊流式回复
+## 最新接续：2026-09-29 聊天回忆检索与原文查看
+
+- 从干净 `3203dac` 接续，正式仓库仍为 `D:\LivingWorld` / `codex/chat-feedback`。用户授权继续推进。本轮交付可查看的共同聊天回忆；独立长期记忆/自动摘要仍未完成，前序流式切片仍待用户运行验收。
+- 先核对 AGENTS/HANDOFF、实际记忆/知识/对话实现，调查 Mem0 v2.2.1、Letta memory blocks、SQLite FTS5、jieba、原生 dialog。选择复用既有 SQLite 3.50.4 + 固定 jieba 0.42.1 + 授权分页 + WebView dialog，不新增依赖/模型调用/agent runtime，不复制框架或酒馆源码。[选型与详细契约](docs/research/2026-09-29-chat-recall-view-reuse.md)。
+- 单聊/群聊顶部新增“聊天回忆”。在当前会话中搜索关键词，显示原文发言人、时间、位置；“查看前后文”复用既有消息分页最多七条并标明命中；“引用这段，继续聊”只追加可编辑草稿，保留已有输入，UTF-8 超 64 KiB 拒绝。没有模型也能检索/阅读；模型不可用、生成中或待保存时不引用；用户自行确认发送才进入原聊天链路。
+- 新 authenticated POST messages/search，256 字符非空 query、可选 strict signed64 before cursor。沿用 World + 绑定 Player + Conversation 的 owner 查询，在读正文/排序前授权；不读别的会话/角色私有记忆或开发者 trace。返回每条原 Message/Turn/sender/source 及扫描/跳过计数和 older cursor；请求词不进入 URL，CLI access logs 原保持关闭。旧 routes/协议并存，没有 schema/migration 或写入。
+- 每批最多读 100 条、处理 512 KiB、单条 >8 KiB 跳过，返回最多八条/正文合计32 KiB。授权 DB page 仍会最多材料化 101 × 64 KiB，处理预算不是整个读取硬内存上限。字面 OR 分词/BM25/24不同词/两worker复用既有 ranker；UI 可继续向前分批，最多保留64条结果，明确上限。预算中止从最后消费位置续查，不跳过剩余历史；不是全库全局排名/语义检索/所有命中保证。
+- 原生 dialog 提供关闭/Escape；关闭或会话卸载 abort 读请求，不接收过期结果。引用后聚焦输入框；只关闭回忆不会停止已有流式回复。没有新增 prompt 临时字段，原自动 prompt recall 的三页/四条/8KiB、Character owner、group seen、Token/financial/claim 约束保持。
+- 实际代码与旧架构文档存在历史状态差异：EPISODIC_MEMORY 的“Developer UI/Agent consumption 延后”是 C007A 当时范围，当前 DeveloperInspectorService 已有 owner memory 查看/记录、角色上下文也已读取自己的记忆。本轮补充现状说明，未扩大普通玩家的私有记忆可见性。Conversation/Message 仍没有变成 Memory evidence/WorldTruth/Knowledge，自动摘要/合并/遗忘/修正规则未定义。
+- 初次 Ruff 指出一处长行/格式，已格式化后重新通过；Ruff lint/format、ESLint/TypeScript、源码审阅与 diff 检查通过。Core PyInstaller 构建成功；Vite 203 模块、Rust release（24.83秒）成功。四个修改 Python 源与包内 SHA256 一致；helper/desktop、项目/jieba 和既有第三方许可字节核对通过。保留既有 tzdata/pysqlite2/MySQLdb optional hidden-import warnings，无新 desktop warning。
+- 独立包 `D:\LivingWorld\artifacts\portable\chat-recall-view\dreamtalk\dreamtalk-desktop.exe`；ZIP `D:\LivingWorld\artifacts\portable\chat-recall-view\dreamtalk.zip`，42,607,569 bytes，SHA256 `B66D16CF072EC0FF0A31C8534E575C091C3488848DD65D8A8BFED619BBA91AAA`。日志 `artifacts/chat-recall-view-core-build.log` / `artifacts/chat-recall-view-desktop-build.log`；核对清单 `artifacts/chat-recall-view-package.json`，随包 README、RECALL 与前序 STREAMING。旧包未覆盖，未终止用户进程。
+- 按 AGENTS section 20，本轮没有新增/修改/执行测试、CI、GUI smoke、live-provider/credential probes、应用启停、用户 DB/配置/密钥操作或旧消息 replay。旧流式 mock 未适配的测试问题仍保留，不能声称测试套件通过。编译/哈希不证明运行体验或隔离验收；没有 push/release。
+- 用户验收入口：关闭旧窗口，打开上述新 exe → 单聊/群聊顶部“聊天回忆” → 搜索已聊过的关键词 → 查看前后文/追加草稿 → 手动发送；长历史继续检索更早页，换会话/世界确认范围，关闭/Escape/引用聚焦待实际验收。前序流式功能仍在，需模型设置勾选保存启用。
+- 下一步优先确定带 Conversation/Message 原文来源的记忆摘要写入、确认和纠正规则，再评估成熟框架接入；随后推进 Director 计划消费/主动世界活动。当前阶段仍是基础聊天/内容创作可体验、记忆能力逐步补齐，不是完整 LivingWorld 已完成。
+
+## 前序切片：2026-09-29 单聊与群聊流式回复
 
 - 从干净 `4303e68` 接续，正式仓库 `D:\LivingWorld` / `codex/chat-feedback`。用户授权继续推进；前序用户已确认内容 API 生成、单聊、群聊 @ / 无 @ 回复。本轮完成流式交付切片，不将编译当作 API 或整个产品验收。
 - 复用既有 governed stream、Starlette 1.6.0 与 MIT eventsource-parser 4.1.1（exact pin/lock/原始许可），没有重新实现 provider 流协议、引入 agent 框架或复制酒馆 AGPL 源码。[来源/许可/契约记录](docs/research/2026-09-29-chat-streaming-reuse.md)。

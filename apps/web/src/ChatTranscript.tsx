@@ -1,10 +1,11 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { CoreClient, CoreRequestError, type ChatReplyAvailability, type ChatConversation } from "@dreamtalk/api-client";
 import { useReplyStream } from "./useReplyStream";
 import { StreamingReplyBubble } from "./StreamingReplyBubble";
 import { useChatScroll } from "./useChatScroll";
 import { useTranscriptPages } from "./useTranscriptPages";
 import { ChatMessageBody } from "./ChatMessageBody";
+import { ChatHistoryPanel } from "./ChatHistoryPanel";
 import { submitChatOnEnter } from "./chatComposerKeys";
 import { chatTokenReservationFeedback, chatPhaseFeedback, chatReplyFailureFeedback, chatReplyStateFeedback, chatSaveFailureFeedback, type ChatRequestPhase } from "./chatFeedback";
 
@@ -20,6 +21,8 @@ interface Props {
 }
 
 export function ChatTranscript({ client, worldId, playerId, conversation, tokenCeiling, suggestedDraft, onSuggestionUsed, onBack }: Props) {
+  const draftInput = useRef<HTMLTextAreaElement>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [refresh, setRefresh] = useState(0);
   const [availability, setAvailability] = useState<ChatReplyAvailability | null>(null);
   const available = availability?.available ?? false;
@@ -115,8 +118,16 @@ export function ChatTranscript({ client, worldId, playerId, conversation, tokenC
     <div className="thread-heading">
       <button type="button" className="text-action" onClick={onBack}>返回聊天</button>
       <h2>{conversation.character_name}</h2><span>私聊</span>
-      <button type="button" className="text-action transcript-refresh" onClick={() => setRefresh(value => value + 1)}>刷新记录</button>
+      <button type="button" className="text-action transcript-refresh" onClick={() => setHistoryOpen(true)}>聊天回忆</button><button type="button" className="text-action transcript-refresh" onClick={() => setRefresh(value => value + 1)}>刷新记录</button>
     </div>
+    {historyOpen ? <ChatHistoryPanel client={client} worldId={worldId} conversationId={conversation.conversation_id} senderName={message => message.sender_kind === "player" && message.sender_id === playerId ? "我" : conversation.character_name} canQuote={available && !sending && !pendingSend} onClose={() => setHistoryOpen(false)} onQuote={text => {
+      if (!available || sending || pendingSend) return false;
+      const combined = draft.trim() ? `${draft}\n\n${text}` : text;
+      if (new TextEncoder().encode(combined).byteLength > 65536) return false;
+      setDraft(combined); setHistoryOpen(false);
+      requestAnimationFrame(() => { draftInput.current?.focus(); draftInput.current?.scrollIntoView({ block: "nearest" }); });
+      return true;
+    }} /> : null}
     {failed ? <p className="thread-hint" role="alert">无法读取会话记录，请刷新后重试。</p> : null}
     {messages === null ? failed ? null : <p className="thread-hint">正在读取消息…</p>
         : messages.length === 0 ? <div className="conversation-placeholder"><h2>还没有消息</h2><p>发一条消息，开始与角色聊天。</p></div>
@@ -135,7 +146,7 @@ export function ChatTranscript({ client, worldId, playerId, conversation, tokenC
       {budgetFeedback ? <p className="chat-feedback" role="alert">{budgetFeedback}</p> : null}
       {!available ? <p className="chat-feedback">尚未配置可用的聊天模型或路由及可信 Token 上限，暂时无法发送。</p> : null}
       <label htmlFor="direct-chat-draft" className="sr-only">发送给{conversation.character_name}的消息</label>
-      <textarea id="direct-chat-draft" value={draft} onChange={event => setDraft(event.target.value)} onKeyDown={submitChatOnEnter} disabled={!available || sending || !!pendingSend} maxLength={65536} placeholder="输入消息…" rows={3} />
+      <textarea ref={draftInput} id="direct-chat-draft" value={draft} onChange={event => setDraft(event.target.value)} onKeyDown={submitChatOnEnter} disabled={!available || sending || !!pendingSend} maxLength={65536} placeholder="输入消息…" rows={3} />
       <div className="chat-composer-actions"><small>回车发送 · Shift+回车换行 · 本轮输入与输出共用 {tokenCeiling.toLocaleString("zh-CN")} Token 上限</small>{latestPlayerMessage ? <button type="button" className="text-action" disabled={sending || !!pendingSend} onClick={() => void checkReply()}>检查回复状态</button> : null}{phase === "replying" ? <button type="button" className="text-action" disabled={stream.stopping} onClick={stream.stop}>{stream.stopping ? "正在停止…" : "停止生成"}</button> : null}<button type="submit" className="primary-button" disabled={!available || sending || (!!budgetFeedback && !pendingSend) || (!draft.trim() && !pendingSend)}>{phase === "saving" ? "正在保存…" : phase === "replying" ? "等待回复…" : phase === "checking" ? "检查中…" : pendingSend ? "重试保存" : "发送"}</button></div>
     </form>
   </section>;

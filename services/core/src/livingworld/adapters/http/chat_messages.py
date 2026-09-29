@@ -19,6 +19,7 @@ from livingworld.application.chat_messages import (
     GroupTurnView,
     PlayerSend,
 )
+from livingworld.application.chat_recall import EarlierChatRecall
 from livingworld.application.chat_reply import (
     ChatProgress,
     ChatReplyBudgetError,
@@ -43,6 +44,13 @@ class PlayerMessageRequest(BaseModel):
 
     text: str = Field(min_length=1, max_length=65536)
     token_ceiling: int = Field(strict=True, ge=1, le=9223372036854775807)
+
+
+class ChatHistorySearchRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    query: str = Field(min_length=1, max_length=256)
+    before_position: int | None = Field(default=None, strict=True, ge=1, le=9223372036854775807)
 
 
 def _view(message: ChatMessage) -> dict:
@@ -199,6 +207,7 @@ def chat_message_router(
     authorize,
     reply_service: DirectChatReplyService | None = None,
     group_reply_service: GroupChatReplyService | None = None,
+    chat_recall: EarlierChatRecall | None = None,
 ) -> APIRouter:
     router = APIRouter(
         prefix=f"/api/v{API_PROTOCOL}/worlds/{{world_id}}/conversations",
@@ -243,6 +252,29 @@ def chat_message_router(
         return {
             "items": [_view(message) for message in page.messages],
             "next_before_position": page.next_before_position,
+        }
+
+    @router.post("/{conversation_id}/messages/search")
+    async def search_history(
+        world_id: UUID, conversation_id: UUID, body: ChatHistorySearchRequest
+    ) -> dict:
+        if chat_recall is None:
+            raise HTTPException(503, "chat_history_unavailable")
+        try:
+            result = await chat_recall.search_history(
+                ConversationId(WorldId(world_id), conversation_id), body.query, body.before_position
+            )
+        except EntityNotFoundError as error:
+            if str(error) == "selected_player_required":
+                raise HTTPException(409, "selected_player_required") from None
+            raise HTTPException(404, "conversation_not_found") from None
+        except ValueError:
+            raise HTTPException(422, "chat_history_query_invalid") from None
+        return {
+            "items": [_view(message) for message in result.messages],
+            "scanned_count": result.scanned_count,
+            "skipped_count": result.skipped_count,
+            "next_before_position": result.next_before_position,
         }
 
     @router.post("/{conversation_id}/messages", status_code=202)
