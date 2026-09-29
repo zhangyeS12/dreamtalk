@@ -1,8 +1,9 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { BackgroundSettings } from "./BackgroundSettings";
 import { OfflineContactSettings } from "./OfflineContactSettings";
+import { useOfflineContact } from "./useOfflineContact";
 import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
-import { CoreClient, type ChatConversation, type GroupChatConversation, type KnownWorldEvent, type PlayerAvailability, type SelectablePlayer, type SelectedPlayerState, type WorldSettings, type OfflineContactStatus } from "@dreamtalk/api-client";
+import { CoreClient, type ChatConversation, type GroupChatConversation, type KnownWorldEvent, type PlayerAvailability, type SelectablePlayer, type SelectedPlayerState, type WorldSettings } from "@dreamtalk/api-client";
 import { ChatTranscript } from "./ChatTranscript";
 import { GroupChatDetails, GroupChatSetup } from "./GroupChat";
 import { ModelSetup } from "./ModelSetup";
@@ -59,7 +60,6 @@ function savedTokenCeiling(): number {
 }
 
 export function ProductApp({ client }: { client: CoreClient }) {
-  const [offlineStatus, setOfflineStatus] = useState<OfflineContactStatus | null>(null);
   const [tab, setTab] = useState<Tab>("chats");
   const [meVisited, setMeVisited] = useState(false);
   const [worldContentDirty, setWorldContentDirty] = useState(false);
@@ -88,6 +88,7 @@ export function ProductApp({ client }: { client: CoreClient }) {
   const [conversationsLoading, setConversationsLoading] = useState(false);
   const [tokenCeiling, setTokenCeiling] = useState(savedTokenCeiling);
   const [tokenCeilingInput, setTokenCeilingInput] = useState(() => String(savedTokenCeiling()));
+  const offlineContact = useOfflineContact(client, worldId, selectedPlayer);
   const tokenCeilingValid = Number.isSafeInteger(Number(tokenCeilingInput)) && Number(tokenCeilingInput) >= 1;
 
   const refresh = useCallback(async () => {
@@ -126,23 +127,6 @@ export function ProductApp({ client }: { client: CoreClient }) {
     }).catch(() => { if (active) setError("无法读取当前世界的玩家身份。"); });
     return () => { active = false; };
   }, [worldId, loadIdentity]);
-  useEffect(() => {
-    let active = true;
-    let timer: number | undefined;
-    let failures = 0;
-    setOfflineStatus(null);
-    if (!worldId || !selectedPlayer) return;
-    async function read() {
-      try {
-        const next = await client.offlineContactStatus(worldId);
-        if (active) setOfflineStatus(next);
-        failures = 0;
-      } catch { failures += 1; }
-      finally { if (active && failures < 2) timer = window.setTimeout(() => void read(), 10000); }
-    }
-    void read();
-    return () => { active = false; window.clearTimeout(timer); };
-  }, [client, worldId, selectedPlayer]);
   useEffect(() => {
     if (!isTauri()) return;
     let active = true;
@@ -275,7 +259,7 @@ export function ProductApp({ client }: { client: CoreClient }) {
         {selectedPlayer ? <button type="button" className="group-create-link" onClick={() => { setGroupSetupOpen(true); setSelectedGroupId(null); setSelectedConversationId(null); setEventsOpen(false); }}>＋ 新建群聊</button> : null}
         {conversationsLoading ? <p className="thread-hint">正在读取会话…</p> : conversations.length === 0 && groups.length === 0 ? <div className="empty-state"><h2>还没有会话</h2><p>在通讯录中选择角色，打开与他的会话。</p><button type="button" className="text-action" onClick={() => setTab("contacts")}>前往通讯录</button></div> : <>
           {groups.map(item => <button key={item.conversation_id} type="button" className={`conversation-row ${!eventsOpen && selectedGroupId === item.conversation_id ? "selected" : ""}`} aria-pressed={!eventsOpen && selectedGroupId === item.conversation_id} onClick={() => { setDraftSuggestion(null); setSelectedGroupId(item.conversation_id); setSelectedConversationId(null); setGroupSetupOpen(false); setEventsOpen(false); }}><span className="avatar event-avatar" aria-hidden="true">群</span><span className="row-copy"><strong>{item.participants.map(member => member.character_name).join("、")}</strong><small>群聊 · {item.participants.length} 位角色</small></span></button>)}
-          {conversations.map(item => <button key={item.conversation_id} type="button" className={`conversation-row ${!eventsOpen && selectedConversationId === item.conversation_id ? "selected" : ""}`} aria-pressed={!eventsOpen && selectedConversationId === item.conversation_id} onClick={() => { setDraftSuggestion(null); setSelectedConversationId(item.conversation_id); setSelectedGroupId(null); setGroupSetupOpen(false); setEventsOpen(false); }}><span className="avatar event-avatar" aria-hidden="true">{Array.from(item.character_name)[0]}</span><span className="row-copy"><strong>{item.character_name}</strong><small>{offlineStatus?.unread.some(message => message.conversation_id === item.conversation_id) ? "新消息 · 离线期间" : "私聊"}</small></span></button>)}
+          {conversations.map(item => <button key={item.conversation_id} type="button" className={`conversation-row ${!eventsOpen && selectedConversationId === item.conversation_id ? "selected" : ""}`} aria-pressed={!eventsOpen && selectedConversationId === item.conversation_id} onClick={() => { setDraftSuggestion(null); setSelectedConversationId(item.conversation_id); setSelectedGroupId(null); setGroupSetupOpen(false); setEventsOpen(false); }}><span className="avatar event-avatar" aria-hidden="true">{Array.from(item.character_name)[0]}</span><span className="row-copy"><strong>{item.character_name}</strong><small>{offlineContact.status?.unread.some(message => message.conversation_id === item.conversation_id) ? "新消息 · 离线期间" : "私聊"}</small></span></button>)}
         </>}
 
         </aside>
@@ -314,7 +298,7 @@ export function ProductApp({ client }: { client: CoreClient }) {
         {world && <WorldLocations key={`locations:${world.world_id}`} client={client} worldId={world.world_id} visible={tab === "settings"} onDirtyChange={setWorldLocationsDirty} />}
         <BackgroundSettings />
         <ModelSetup client={client} turnTokenCeiling={tokenCeiling} />
-        {world && selectedPlayer && <OfflineContactSettings key={`offline:${world.world_id}:${selectedPlayer}`} client={client} worldId={world.world_id} status={offlineStatus} onUpdated={setOfflineStatus} />}
+        {world && selectedPlayer && <OfflineContactSettings key={`offline:${world.world_id}:${selectedPlayer}`} status={offlineContact.status} busy={offlineContact.busy} refreshing={offlineContact.refreshing} error={offlineContact.error} onRefresh={offlineContact.refresh} onSave={offlineContact.save} />}
         {world && selectedPlayer && <WorldActivities key={`activities:${world.world_id}:${selectedPlayer}`} client={client} worldId={world.world_id} visible={tab === "settings"} paused={world.clock_state === "paused"} />}
         <section className="settings-section"><div className="section-heading"><h2>聊天额度</h2><p>每轮输入和输出共用上限。系统按可信上界预留，额度不足时不会开始下一次模型调用。</p></div>
           <div className="setting-row"><label className="field"><span>每轮 Token 上限</span><input type="number" min="1" max={Number.MAX_SAFE_INTEGER} step="1" value={tokenCeilingInput} onChange={event => setTokenCeilingInput(event.target.value)} /></label><button type="button" className="secondary-button" disabled={!tokenCeilingValid} onClick={() => { const next = Number(tokenCeilingInput); setTokenCeiling(next); try { window.localStorage.setItem(TOKEN_CEILING_KEY, String(next)); } catch { /* Session setting remains active. */ } setNotice("聊天额度已更新。"); }}>应用</button></div>

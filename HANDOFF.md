@@ -2,7 +2,20 @@
 
 更新日期：2026-09-29。此文件记录当前开发现场与接续工作，不替代 [AGENTS.md](AGENTS.md)。先读 AGENTS，再读本文，最后核对实际 Git 状态和相关代码；不能把下面的基线哈希当作永远不变的当前 HEAD。
 
-## 最新接续：2026-09-29 后台启动与有限离线主动消息
+## 最新接续：2026-09-29 离线联系保存失败与刷新入口修复
+
+- 从 `c0f0af18bb9b5661756c85b870329643f279a48d` / `codex/chat-feedback` 接续，实际仓库 `D:\LivingWorld`。用户反馈离线设置任意保存均显示“未能保存，请刷新状态后重试”，界面却没有刷新入口；用户已自行从托盘退出，并明确授权**这一次临时存档副本保存诊断及必要升级**，不调用模型、不改原存档。没有将授权扩大到测试套件、应用启停或真实API。
+- 根因路径已通过副本诊断重现：通讯录 `ChatConversationService.open_direct` 仅创建 Character，不必创建 CharacterState/物理地点；OfflineContactStore原 `_capture` 直接调用Director日常 `planning_input`，后者只查询已放置角色，因此抛出 `DirectorError(director_characters_required)`；HTTP将其吞为500/offline_request_failed，前端再吞为笼统保存失败。不能要求用户靠提高Token、增加地点或重试来绕过。
+- 离线输入现先绑定本World/Player已打开的direct会话，最多16位；将原Director已确认角色persona SQL字段投影提取为 `approved_persona` 由两处共用，不另写解析器。离线读角色名字/description/personality/background/accepted版本及合规公共背景，用角色名触发公共背景；既有活动意图也限制到这组角色。无需角色地点、Director开关、32地点容量；总资料仍64KiB，恢复/版本/去重/未回复/Busy/暂停/预算规则保持。没有新依赖或migration，没有放置角色、移动玩家、增造世界事件；Director日常输入仍要求已放置角色。
+- 新 `useOfflineContact` 统一只读状态与显式保存：请求序号、任务身份、World/Player/client作用域拒绝旧GET覆盖POST或切换后的状态；同步写锁防重复，失败不自动POST或付费重试。GET连续两次失败停轮询，手动刷新成功或保存成功恢复只读轮询。保存错误与读取错误分开，后台GET不会吞掉保存失败提示。
+- 设置区增加“刷新状态”/读取中/保存中，保留失败后的时长和授权界面。存储占用、结构/完整性/可用性、角色关联、公共背景容量与格式、内部异常均返回固定安全码及具体提示；日志仅固定码，不记录SQL/参数/异常正文、角色资料或凭据。刷新仅读取，不能修复真实坏存档，也不会重新提交设置或调用模型。
+- 存档取证限制：运行期间只读SQLite曾报告SQLITE_CORRUPT；退出后稳定副本却是0014且quick_check正常、没有当前玩家/聊天表，与运行日志的当前world和core_ready不一致。**不能据此判定当前存档已损坏或覆盖恢复原文件**。原三文件已备份并核对字节，保存在 `artifacts/offline-contact-save-investigation/original`。后续仅升级系统Temp临时副本；因无可用玩家，使用既有生产Kernel/内容确认/通讯录服务在该副本建立一个诊断角色（未放置），不是原当前世界完整重建。原版保存真实报上述DirectorError，修复版同路径保存为enabled=true/hours=1/revision=1/idle，eligible=true/1角色/仅批准persona字段；保存未新增WorldEvent，未调用任何模型。有限诊断记录 `artifacts/offline-contact-save-investigation/authorized-copy-diagnostic.json`；原存档/备份未覆盖、未删除WAL，没有自动修库。
+- Ruff lint/format（4份Python）、ESLint/TypeScript、diff检查通过；首次Ruff只发现导入排序，修正后通过。Core PyInstaller37.356秒、Vite210模块/Rust release26.43秒成功。沿用tzdata/pysqlite2/MySQLdb可选hidden-import及STATIC_VCRUNTIME弃用提示；Vite新增主chunk503.66kB超过500kB提示，属于后续页面拆分建议，未通过抬高阈值隐藏。193份Python、22份许可、8份说明、desktop/Core/helper与463份ZIP文件字节核对通过。
+- 完整独立新包 `D:\LivingWorld\artifacts\portable\offline-contact-save-fix\dreamtalk\dreamtalk-desktop.exe`，desktop13,185,024 bytes / SHA256 `5090360C7C8AFE62944E4534D7ED730D9100D9129388091C38F098D0EAC39D9E`；Core13,865,061 / `62FE65A44D67F272C8A685C8043A16BD8B4C2F2F66FEAF1DEA8A55961D789BAB`；ZIP43,041,469 / `6429F323377189A5FCCC2C3CB452059E68B95C0BABD994AAEBAB574F30991D66`。helper保持 `264DF8990752ABB179A3773ACE934F546C69AF99F4C9834EA1286D0D9886FDEA`。清单 `artifacts/offline-contact-save-fix-package.json`，日志同prefix；随包OFFLINE_MESSAGES/README已更新，旧包保留。
+- 本轮唯一运行例外是用户批准的上述副本保存诊断，没有新增/修改现有测试、运行套件/GUI smoke/应用/真实API/系统自启动设置或原用户存档迁移。编译和有限诊断不等于真实离线恢复、并发界面、权限隔离或模型质量验收。没有push/发布。
+- **接下来：** 用户打开完整新包，设置 → 离线期间的消息 → 刷新状态 → 确认开启；优先核对能够保存，再验收既定离线恢复。若仍有错误，按新固定码继续定位真实数据，不能用旧0014副本当最新存档恢复。另一个后续产品缺口是普通聊天角色的活动初始位置配置：日常Director仍需已放置角色，不应为修离线私聊偷偷放到玩家家或扩大行动权限；本轮没有实现地点初始化。无待批准步骤。
+
+## 前序切片：2026-09-29 后台启动与有限离线主动消息
 
 - 从干净 `83cdd3171820ce488fd00b0a15272c1155daad48` / `codex/chat-feedback` 接续，实际仓库仍是 `D:\LivingWorld`。用户明确批准“按你的建议，开始实现”，中断后要求继续；本轮完成这个有限切片，不把“继续”当作上一版运行验收或自动启用用户配置。
 - 实施前调查官方 Tauri autostart/single-instance/system tray。直接复用 autostart2.6.0、single-instance2.5.0、解析后的Tauri2.12.0、tray-icon0.25.1及MIT auto-launch0.5.0；不自写注册表/服务/托盘或引入另一个Agent框架。来源、许可与决定见[复用记录](docs/research/2026-09-29-offline-contact-reuse.md)，具体切片见[方案](docs/proposals/2026-09-29-offline-contact.md)。新增组件原始许可随包保留；项目仍Apache-2.0。

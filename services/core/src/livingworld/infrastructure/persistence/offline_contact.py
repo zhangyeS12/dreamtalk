@@ -7,12 +7,21 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import func, select, update
 
+from livingworld.application.director import DirectorError
 from livingworld.application.errors import EntityNotFoundError
+from livingworld.application.lore_activation import select_common_background
 from livingworld.application.offline_contact import OfflineContactError
 from livingworld.domain.identifiers import WorldId
-from livingworld.infrastructure.persistence.director_background import background_is_current
+from livingworld.infrastructure.persistence.director_background import (
+    background_is_current,
+    read_director_background,
+)
 from livingworld.infrastructure.persistence.director_models import (
     DirectorCandidateRecord as Candidate,
+)
+from livingworld.infrastructure.persistence.models import (
+    CharacterRecord,
+    WorldRecord,
 )
 from livingworld.infrastructure.persistence.models import (
     ChatConversationRecord as Conversation,
@@ -40,9 +49,6 @@ from livingworld.infrastructure.persistence.models import (
 )
 from livingworld.infrastructure.persistence.models import (
     WorldContentImportRecord as Imported,
-)
-from livingworld.infrastructure.persistence.models import (
-    WorldRecord,
 )
 from livingworld.infrastructure.persistence.offline_contact_models import (
     LocalSessionVisibilityRecord as Visibility,
@@ -190,14 +196,20 @@ class SqlAlchemyOfflineContactStore:
         logical = clock.logical_time.microseconds
         elapsed = max(0, int((now - clock.observed_wall_time_utc).total_seconds() * 1000000))
         logical += int(elapsed * clock.time_scale)
-        snapshot = await self.director.planning_input(session, world, logical)
+        # Remote contact does not require a physical placement or a routine plan.
+        # Bind the finite contact set to this Player before reading approved personas.
         contacts = (
             await session.execute(
-                select(Conversation, Participant)
+                select(Conversation, Participant, CharacterRecord.name)
                 .join(
                     Participant,
                     (Participant.world_id == Conversation.world_id)
                     & (Participant.conversation_id == Conversation.conversation_id),
+                )
+                .join(
+                    CharacterRecord,
+                    (CharacterRecord.world_id == Participant.world_id)
+                    & (CharacterRecord.character_id == Participant.character_id),
                 )
                 .where(
                     Conversation.world_id == cfg.world_id,
@@ -210,18 +222,44 @@ class SqlAlchemyOfflineContactStore:
         ).all()
         if len(contacts) > 16:
             raise OfflineContactError("offline_input_capacity")
-        by_character = {str(part.character_id): (convo, part) for convo, part in contacts}
+        by_character = {str(part.character_id): (convo, part) for convo, part, _ in contacts}
         characters = []
-        for character in snapshot["characters"]:
-            contact = by_character.get(character["character_id"])
-            if not contact or "accepted_import_id" not in character:
-                continue
-            convo, _ = contact
-            character = dict(character)
-            character["conversation_id"] = str(convo.conversation_id)
-            characters.append(character)
-        snapshot["characters"] = characters
-        snapshot["eligible"] = bool(characters)
+        try:
+            for convo, part, name in contacts:
+                persona = await self.director.approved_persona(session, world, part.character_id)
+                if "accepted_import_id" not in persona:
+                    raise OfflineContactError("offline_character_mapping_invalid")
+                characters.append(
+                    {
+                        "character_id": str(part.character_id),
+                        "name": name,
+                        "conversation_id": str(convo.conversation_id),
+                        **persona,
+                    }
+                )
+            background = (
+                select_common_background(
+                    await read_director_background(session, world),
+                    ("\n".join(c["name"] for c in characters),),
+                    generation_kind="quiet",
+                    include_references=True,
+                )
+                if characters
+                else []
+            )
+        except DirectorError as error:
+            labels = {
+                "director_world_capacity": "offline_input_capacity",
+                "director_character_mapping_invalid": "offline_character_mapping_invalid",
+                "director_background_capacity": "offline_background_capacity",
+                "director_background_invalid": "offline_background_invalid",
+            }
+            raise OfflineContactError(labels.get(str(error), "offline_input_unavailable")) from None
+        snapshot = {
+            "characters": characters,
+            "eligible": bool(characters),
+            "common_world_background": background,
+        }
         snapshot["player_epoch"] = await self._epoch(session, cfg.world_id, cfg.player_id)
         snapshot["utc_offset_minutes"] = int(now.astimezone().utcoffset().total_seconds() // 60)
         # This is a past plan/intent, not evidence that future activities occurred.
@@ -230,6 +268,7 @@ class SqlAlchemyOfflineContactStore:
                 select(Candidate)
                 .where(
                     Candidate.world_id == cfg.world_id,
+                    Candidate.character_id.in_([part.character_id for _, part, _ in contacts]),
                     Candidate.state.in_(["pending", "active"]),
                     Candidate.end_at > logical,
                 )
@@ -348,6 +387,10 @@ class SqlAlchemyOfflineContactStore:
             cfg.last_online_at = now
             try:
                 cfg.input_json = await self._capture(session, cfg, now)
+            except OfflineContactError as error:
+                cfg.input_json = None
+                if cfg.state not in {"waiting", "planning", "writing"}:
+                    cfg.state, cfg.error = "attention", str(error)
             except Exception:
                 cfg.input_json = None
                 if cfg.state not in {"waiting", "planning", "writing"}:

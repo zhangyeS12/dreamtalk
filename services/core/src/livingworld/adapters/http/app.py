@@ -146,7 +146,7 @@ def create_app(
             session_visibility_router,
         )
 
-        app.include_router(offline_contact_router(offline_contact, authorize))
+        app.include_router(offline_contact_router(offline_contact, authorize, logger))
         app.include_router(session_visibility_router(offline_contact, authorize))
 
     if director is not None:

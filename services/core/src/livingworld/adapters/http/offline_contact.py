@@ -1,9 +1,11 @@
 """Bound local recovery settings and delivered-message unread state."""
 
+import sqlite3
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy.exc import DBAPIError, IntegrityError, StatementError
 
 from livingworld.application.errors import EntityNotFoundError
 from livingworld.application.offline_contact import OfflineContactError
@@ -18,7 +20,29 @@ class OfflineSettingRequest(BaseModel):
     expected_revision: int = Field(strict=True, ge=0, le=2147483646)
 
 
-def offline_contact_router(service, authorize):
+def _failure_code(error):
+    if isinstance(error, DBAPIError):
+        code = (getattr(error.orig, "sqlite_errorcode", 0) or 0) & 255
+        if code in {sqlite3.SQLITE_CORRUPT, sqlite3.SQLITE_NOTADB}:
+            return "offline_storage_corrupt"
+        if code in {sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED}:
+            return "offline_storage_busy"
+        if code in {sqlite3.SQLITE_READONLY, sqlite3.SQLITE_FULL, sqlite3.SQLITE_CANTOPEN}:
+            return "offline_storage_unavailable"
+        if isinstance(error, IntegrityError):
+            return "offline_settings_integrity"
+        if code == sqlite3.SQLITE_ERROR:
+            return "offline_storage_schema"
+    if isinstance(error, StatementError):
+        return "offline_storage_value_invalid"
+    return {
+        AttributeError: "offline_internal_attribute",
+        TypeError: "offline_internal_type",
+        KeyError: "offline_internal_key",
+    }.get(type(error), "offline_request_failed")
+
+
+def offline_contact_router(service, authorize, logger=None):
     router = APIRouter(
         prefix="/api/v1/worlds/{world_id}/offline-contact", dependencies=[Depends(authorize)]
     )
@@ -30,8 +54,11 @@ def offline_contact_router(service, authorize):
             raise HTTPException(404, "offline_resource_not_found") from None
         except OfflineContactError as error:
             raise HTTPException(409, str(error)) from None
-        except Exception:
-            raise HTTPException(500, "offline_request_failed") from None
+        except Exception as error:
+            code = _failure_code(error)
+            if logger is not None:
+                logger.emit("offline_contact", code, level="ERROR")
+            raise HTTPException(503 if code.startswith("offline_storage_") else 500, code) from None
 
     @router.get("")
     async def snapshot(world_id: UUID):

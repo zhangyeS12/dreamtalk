@@ -329,73 +329,7 @@ class SqlAlchemyDirectorStore:
                     0, ((active_end or now) - now + 59_999_999) // 60_000_000
                 ),
             }
-            roots = (
-                await session.scalars(
-                    select(ChatParticipantRecord.root_import_id)
-                    .where(
-                        ChatParticipantRecord.world_id == world.value,
-                        ChatParticipantRecord.character_id == state.character_id,
-                    )
-                    .distinct()
-                    .limit(2)
-                )
-            ).all()
-            if len(roots) > 1:
-                raise DirectorError("director_character_mapping_invalid")
-            if roots:
-                imported = WorldContentImportRecord
-                current = roots[0]
-                for _ in range(128):
-                    kind = await session.scalar(
-                        select(imported.kind).where(
-                            imported.world_id == world.value, imported.import_id == current
-                        )
-                    )
-                    if kind != "character":
-                        raise DirectorError("director_character_mapping_invalid")
-                    replacement = await session.scalar(
-                        select(imported.import_id).where(
-                            imported.world_id == world.value, imported.replaces_import_id == current
-                        )
-                    )
-                    if replacement is None:
-                        break
-                    current = replacement
-                else:
-                    raise DirectorError("director_world_capacity")
-                # The accepted snapshot is an array of serialized canonical envelopes.
-                # SQL extracts only the character's approved basic persona fields;
-                # embedded lore, notes, extensions and instructions are never loaded.
-                safe_snapshot = case(
-                    (func.json_valid(imported.snapshot_json), imported.snapshot_json), else_="[]"
-                )
-                parts = func.json_each(safe_snapshot).table_valued("key", "value")
-                safe_part = case((func.json_valid(parts.c.value), parts.c.value), else_="{}")
-                fields = ("description", "personality", "background")
-                values = [func.json_extract(safe_part, f"$.data.{field}") for field in fields]
-                projection = [
-                    case((func.length(cast(value, LargeBinary)) <= 65536, value), else_=None)
-                    for value in values
-                ]
-                cards = (
-                    await session.execute(
-                        select(*projection)
-                        .select_from(imported)
-                        .join(parts, true())
-                        .where(
-                            imported.world_id == world.value,
-                            imported.import_id == current,
-                            func.json_extract(safe_part, "$.kind") == "character_definition",
-                        )
-                        .limit(2)
-                    )
-                ).all()
-                if len(cards) != 1:
-                    raise DirectorError("director_character_mapping_invalid")
-                if any(not isinstance(value, str) for value in cards[0]):
-                    raise DirectorError("director_world_capacity")
-                character["persona"] = dict(zip(fields, cards[0], strict=True))
-                character["accepted_import_id"] = str(current)
+            character.update(await self.approved_persona(session, world, state.character_id))
             characters.append(character)
         snapshot = {
             "window_start": now,
@@ -421,6 +355,79 @@ class SqlAlchemyDirectorStore:
         if len(json.dumps(snapshot, ensure_ascii=False).encode("utf-8")) > 64 * 1024:
             raise DirectorError("director_world_capacity")
         return snapshot
+
+    async def approved_persona(self, session, world, character_id):
+        """Reuse the approved field projection for both placed routines and remote contacts."""
+        roots = (
+            await session.scalars(
+                select(ChatParticipantRecord.root_import_id)
+                .where(
+                    ChatParticipantRecord.world_id == world.value,
+                    ChatParticipantRecord.character_id == character_id,
+                )
+                .distinct()
+                .limit(2)
+            )
+        ).all()
+        if len(roots) > 1:
+            raise DirectorError("director_character_mapping_invalid")
+        if roots:
+            imported = WorldContentImportRecord
+            current = roots[0]
+            for _ in range(128):
+                kind = await session.scalar(
+                    select(imported.kind).where(
+                        imported.world_id == world.value, imported.import_id == current
+                    )
+                )
+                if kind != "character":
+                    raise DirectorError("director_character_mapping_invalid")
+                replacement = await session.scalar(
+                    select(imported.import_id).where(
+                        imported.world_id == world.value, imported.replaces_import_id == current
+                    )
+                )
+                if replacement is None:
+                    break
+                current = replacement
+            else:
+                raise DirectorError("director_world_capacity")
+            # The accepted snapshot is an array of serialized canonical envelopes.
+            # SQL extracts only the character's approved basic persona fields;
+            # embedded lore, notes, extensions and instructions are never loaded.
+            safe_snapshot = case(
+                (func.json_valid(imported.snapshot_json), imported.snapshot_json), else_="[]"
+            )
+            parts = func.json_each(safe_snapshot).table_valued("key", "value")
+            safe_part = case((func.json_valid(parts.c.value), parts.c.value), else_="{}")
+            fields = ("description", "personality", "background")
+            values = [func.json_extract(safe_part, f"$.data.{field}") for field in fields]
+            projection = [
+                case((func.length(cast(value, LargeBinary)) <= 65536, value), else_=None)
+                for value in values
+            ]
+            cards = (
+                await session.execute(
+                    select(*projection)
+                    .select_from(imported)
+                    .join(parts, true())
+                    .where(
+                        imported.world_id == world.value,
+                        imported.import_id == current,
+                        func.json_extract(safe_part, "$.kind") == "character_definition",
+                    )
+                    .limit(2)
+                )
+            ).all()
+            if len(cards) != 1:
+                raise DirectorError("director_character_mapping_invalid")
+            if any(not isinstance(value, str) for value in cards[0]):
+                raise DirectorError("director_world_capacity")
+            return {
+                "persona": dict(zip(fields, cards[0], strict=True)),
+                "accepted_import_id": str(current),
+            }
+        return {}
 
     async def can_dispatch(self, world, request_id, generation):
         async with self.sessions() as session:
