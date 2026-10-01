@@ -791,7 +791,9 @@ class SqlAlchemyUnitOfWork:
         from livingworld.infrastructure.persistence.world_locations import (
             SqlAlchemyLocalLocationCatalog,
         )
+        from livingworld.infrastructure.persistence.world_story import WorldNewsKernelRepository
 
+        self.world_news = WorldNewsKernelRepository(self._session)
         self.director = DirectorKernelRepository(self._session)
         self.local_locations = SqlAlchemyLocalLocationCatalog(self._session)
         self.worlds = WorldRepository(self._session)

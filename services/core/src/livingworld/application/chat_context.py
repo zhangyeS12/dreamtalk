@@ -175,6 +175,7 @@ def recent_chat_transcript(
 @dataclass(frozen=True, slots=True)
 class DirectChatContext:
     messages: tuple[LLMMessage, ...] = field(repr=False)
+    character_id: CharacterId | None = None
 
 
 class DirectChatContextBuilder:
@@ -311,7 +312,7 @@ class DirectChatContextBuilder:
             else:
                 raise EntityNotFoundError("chat_sender_invalid")
             result.append(LLMMessage(role, (TextContent(item.text),)))
-        return DirectChatContext(tuple(result))
+        return DirectChatContext(tuple(result), conversation.character_id)
 
     @staticmethod
     def _recent_transcript(

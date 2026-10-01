@@ -31,13 +31,16 @@ from livingworld.domain.identifiers import (
     PlayerId,
     WorldId,
 )
+from livingworld.infrastructure.persistence.mapping import to_domain
 from livingworld.infrastructure.persistence.models import (
     ChatConversationRecord,
     ChatMessageRecord,
     ChatParticipantRecord,
     ChatTurnDispatchRecord,
     ChatTurnRecord,
+    WorldClockRecord,
 )
+from livingworld.infrastructure.persistence.world_story import record_chat_events
 
 
 def _message(row: ChatMessageRecord) -> ChatMessage:
@@ -62,8 +65,14 @@ def _message(row: ChatMessageRecord) -> ChatMessage:
 
 
 class SqlAlchemyChatMessageStore:
-    def __init__(self, sessions) -> None:
-        self._sessions = sessions
+    def __init__(self, sessions, time_source=None) -> None:
+        self._sessions, self._time_source = sessions, time_source
+
+    async def _story_time(self, session, world, events):
+        if not events or self._time_source is None:
+            return None
+        clock = await session.get(WorldClockRecord, world)
+        return self._time_source.read(to_domain(clock)).microseconds if clock is not None else None
 
     async def _conversation(self, session, conversation_id: ConversationId, player_id: PlayerId):
         if conversation_id.world_id != player_id.world_id:
@@ -525,7 +534,9 @@ class SqlAlchemyChatMessageStore:
                 turn.token_ceiling,
             )
 
-    async def complete_direct(self, claim: ClaimedDirectTurn, text: str) -> ChatMessage:
+    async def complete_direct(
+        self, claim: ClaimedDirectTurn, text: str, *, events=()
+    ) -> ChatMessage:
         if not (
             claim.turn_id.world_id
             == claim.conversation_id.world_id
@@ -597,6 +608,13 @@ class SqlAlchemyChatMessageStore:
             )
             session.add(row)
             await session.flush()
+            await record_chat_events(
+                session,
+                row,
+                claim.player_id,
+                events,
+                await self._story_time(session, world_id, events),
+            )
             return _message(row)
 
     async def claim_group(
@@ -666,7 +684,13 @@ class SqlAlchemyChatMessageStore:
             )
 
     async def complete_group_reply(
-        self, claim: ClaimedGroupTurn, character_id: CharacterId, ordinal: int, text: str
+        self,
+        claim: ClaimedGroupTurn,
+        character_id: CharacterId,
+        ordinal: int,
+        text: str,
+        *,
+        events=(),
     ) -> ChatMessage:
         if not (
             claim.turn_id.world_id
@@ -754,6 +778,13 @@ class SqlAlchemyChatMessageStore:
             )
             session.add(row)
             await session.flush()
+            await record_chat_events(
+                session,
+                row,
+                claim.player_id,
+                events,
+                await self._story_time(session, world_id, events),
+            )
             return _message(row)
 
     async def finish_group(self, claim: ClaimedGroupTurn) -> GroupTurnView:

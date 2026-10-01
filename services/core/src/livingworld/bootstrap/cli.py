@@ -50,6 +50,7 @@ from livingworld.bootstrap.llm_runtime import (
     configure_director,
     configure_group_chat_reply,
     configure_offline_dialogue,
+    configure_world_news,
     start_production_llm_session,
 )
 from livingworld.bootstrap.reader import derive_session, read_bootstrap
@@ -113,6 +114,7 @@ async def run(
     simulation_runtime = None
     director = None
     offline_contact = None
+    world_story = None
     try:
         trigger_registry = TriggerKindRegistry(
             {(INSPECTOR_TRIGGER_KIND, 1): lambda _payload: None} if developer_tools else None
@@ -168,7 +170,9 @@ async def run(
         chat_conversations = ChatConversationService(
             database.chat_conversation_store(), world_content, player_event_feed, command_handler
         )
-        chat_messages = ChatMessageService(database.chat_message_store(), player_event_feed)
+        chat_messages = ChatMessageService(
+            database.chat_message_store(time_source), player_event_feed
+        )
         earlier_chat_recall = EarlierChatRecall(chat_messages, Fts5ChatRecallRanker())
         developer_inspector = None
         if developer_tools:
@@ -206,7 +210,26 @@ async def run(
             wake_signal,
             credentials_ready=lambda: not desktop or llm_session.credentials.sync_complete,
         )
-        scheduler_runtime.set_world_work(director.tick)
+        from livingworld.application.world_story import WorldNewsKernel, WorldStoryService
+
+        story_store = database.world_story_store()
+        news_configured, news_json = configure_world_news(llm_session)
+        world_story = WorldStoryService(
+            story_store,
+            player_event_feed,
+            news_configured,
+            WorldNewsKernel(database.unit_of_work, wall_clock, time_source, simulation_runtime),
+            wake_signal,
+            credentials_ready=lambda: not desktop or llm_session.credentials.sync_complete,
+            json_output=news_json,
+        )
+
+        async def world_work(world, now):
+            deadlines = [await director.tick(world, now), await world_story.tick(world, now)]
+            return min((value for value in deadlines if value is not None), default=None)
+
+        scheduler_runtime.set_world_work(world_work)
+        await world_story.start()
         await director.start()
         from livingworld.application.offline_contact import OfflineContactService
 
@@ -236,6 +259,7 @@ async def run(
                 database.character_observed_event_reader,
                 lambda owner: database.character_activity_context_reader(owner, time_source),
             ),
+            journal=story_store,
         )
         group_chat_reply = configure_group_chat_reply(
             llm_session,
@@ -251,6 +275,7 @@ async def run(
                 database.character_observed_event_reader,
                 lambda owner: database.character_activity_context_reader(owner, time_source),
             ),
+            journal=story_store,
         )
         from livingworld.application.content_builder import ContentBuilder
         from livingworld.infrastructure.content_research import DDGSContentResearch
@@ -271,7 +296,11 @@ async def run(
                 llm_session.credentials,
                 logger,
                 on_credentials_changed=lambda: control_loop.call_soon_threadsafe(
-                    lambda: (director.credentials_changed(), offline_contact.credentials_changed())
+                    lambda: (
+                        director.credentials_changed(),
+                        offline_contact.credentials_changed(),
+                        world_story.credentials_changed(),
+                    )
                 ),
             )
             control_listener.start()
@@ -299,6 +328,7 @@ async def run(
             chat_recall=earlier_chat_recall,
             conversation_memory=conversation_memory,
             director=director,
+            world_story=world_story,
             offline_contact=offline_contact,
             character_activity_setup=CharacterActivitySetupService(
                 database.character_activity_directory(),
@@ -365,6 +395,8 @@ async def run(
     finally:
         shutdown_error = None
         try:
+            if world_story is not None:
+                await world_story.aclose()
             if offline_contact is not None:
                 await offline_contact.aclose()
             if director is not None:

@@ -11,6 +11,7 @@ from livingworld.infrastructure.persistence.conversation_memory import (
     ConversationMemoryRevisionRecord,  # noqa: F401
 )
 from livingworld.infrastructure.persistence.models import Base
+from livingworld.infrastructure.persistence.story_models import ChatStoryRecord  # noqa: F401
 
 connection = context.config.attributes.get("connection")
 if connection is None:

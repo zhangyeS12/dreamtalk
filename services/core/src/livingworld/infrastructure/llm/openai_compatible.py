@@ -664,7 +664,12 @@ class OpenAICompatibleChatGateway:
         if request.temperature is not None:
             raise self._error(request, LLMErrorCode.UNSUPPORTED_CAPABILITY)
         if streaming and (
-            not self._profile.supports_streaming or request.structured_output is not None
+            not self._profile.supports_streaming
+            or (
+                request.structured_output is not None
+                and self._profile.structured_output_mode
+                is not StructuredOutputMode.JSON_OBJECT_LOCAL_VALIDATE
+            )
         ):
             raise self._error(request, LLMErrorCode.UNSUPPORTED_CAPABILITY)
         if (
@@ -689,6 +694,14 @@ class OpenAICompatibleChatGateway:
             "max_tokens": request.max_output_tokens,
             "stream": streaming,
         }
+        if (
+            request.structured_output is not None
+            and self._profile.structured_output_mode
+            is StructuredOutputMode.JSON_OBJECT_LOCAL_VALIDATE
+        ):
+            if request.structured_output.schema.get("type") != "object":
+                raise self._error(request, LLMErrorCode.UNSUPPORTED_CAPABILITY)
+            payload["response_format"] = {"type": "json_object"}
         if streaming and self._profile.supports_stream_usage:
             payload["stream_options"] = {"include_usage": True}
         if request.stop_sequences:
@@ -699,7 +712,11 @@ class OpenAICompatibleChatGateway:
 
     def token_reservation_payload(self, request: LLMRequest) -> dict | None:
         """The actual text request body, with no credentials or dispatch capability."""
-        if request.structured_output is not None:
+        if (
+            request.structured_output is not None
+            and self._profile.structured_output_mode
+            is not StructuredOutputMode.JSON_OBJECT_LOCAL_VALIDATE
+        ):
             return None
         return self._payload(request, streaming=request.streaming)
 

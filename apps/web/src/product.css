@@ -281,3 +281,31 @@
 .activity-location-list { list-style: none; padding: 0; margin: 0 0 1.25rem; }
 .activity-location-list li { display: flex; align-items: baseline; gap: 1rem; padding: .75rem 0; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
 .activity-location-list small { color: var(--muted); white-space: nowrap; }
+
+.world-journal { padding: 0 24px 24px; }
+.world-journal section + section { margin-top: 32px; padding-top: 24px; border-top: 1px solid #d9dfdb; }
+.journal-refresh, .journal-entry-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.journal-refresh p { max-width: 65ch; }
+.journal-entry-heading span { font-size: .85rem; color: #536057; }
+.world-journal blockquote { margin: 12px 0; padding-left: 16px; border-left: 3px solid #c8d8cb; white-space: pre-wrap; }
+.world-journal details { overflow-wrap: anywhere; margin: 12px 0; }
+.journal-entry-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; margin-top: 12px; }
+.world-journal .event-item { display: flex; flex-direction: column; gap: 8px; }
+.world-journal .news-item { flex-direction: row; align-items: flex-start; justify-content: space-between; gap: 24px; }
+.news-copy { min-width: 0; flex: 1; }
+.news-copy p { white-space: pre-wrap; }
+.news-copy small { display: block; margin-top: 8px; }
+.news-marks { display: flex; flex-direction: column; gap: 8px; }
+.news-mark { border: 1px solid #d4ddd6; padding: 8px 16px; border-radius: 8px; background: white; min-width: 88px; }
+.news-mark[aria-pressed="true"] { border-width: 2px; font-weight: 700; opacity: 1; }
+.mark-pending[aria-pressed="true"] { color: #8b2525; background: #fff0ee; border-color: #bc5c5c; }
+.mark-experienced[aria-pressed="true"] { color: #205e35; background: #e1f1e5; border-color: #39824f; }
+.mark-skipped[aria-pressed="true"] { color: #46504a; background: #edf0ee; border-color: #707b74; }
+.news-experienced .news-copy { color: #356046; }
+.news-skipped .news-copy { color: #66716a; }
+@media (max-width: 640px) {
+  .world-journal { padding: 0 16px 16px; }
+  .journal-refresh, .journal-entry-heading { align-items: flex-start; flex-direction: column; }
+  .world-journal .news-item { flex-direction: column; }
+  .news-marks { flex-direction: row; flex-wrap: wrap; }
+}

@@ -7,6 +7,7 @@ from collections.abc import Callable
 from dataclasses import replace
 from uuid import UUID, uuid4
 
+from livingworld.application.chat_event_annotations import AnnotatedDialogue, annotate_request
 from livingworld.application.chat_messages import (
     ChatMessageService,
     ClaimedGroupTurn,
@@ -69,6 +70,8 @@ class GroupChatReplyService:
         available: Callable[[], bool] | None = None,
         selection: ModelSelection | None = None,
         input_token_reservation: int | None = None,
+        event_capture: bool = False,
+        journal=None,
     ) -> None:
         if (
             not isinstance(model, ModelRef)
@@ -88,6 +91,7 @@ class GroupChatReplyService:
         self._available = available or (lambda: True)
         self._selection = selection
         self._input_token_reservation = input_token_reservation
+        self._event_capture, self._journal = event_capture, journal
 
     @property
     def input_token_reservation(self) -> int | None:
@@ -110,6 +114,15 @@ class GroupChatReplyService:
             messages=messages,
             max_output_tokens=output_tokens,
         )
+
+    async def _dialogue(self, context, source, speaker, output):
+        request = self._request(context.messages, output)
+        if self._journal is not None:
+            request = replace(
+                request,
+                messages=request.messages + await self._journal.prompt_context(source, speaker),
+            )
+        return annotate_request(request) if self._event_capture else request
 
     async def _preflight(self, request: LLMRequest, remaining: int) -> LLMRequest:
         try:
@@ -231,7 +244,7 @@ class GroupChatReplyService:
         *,
         prepared: LLMRequest | None = None,
         progress: ChatProgressSink | None = None,
-    ) -> str:
+    ) -> str | AnnotatedDialogue:
         if budget.closed or budget.remaining < 1:
             raise ChatReplyBudgetError("turn_token_limit_exceeded")
         if prepared is None:
@@ -239,7 +252,9 @@ class GroupChatReplyService:
             prepared = await self._preflight(
                 dialogue_request(
                     self._gateway,
-                    self._request(context.messages, min(self._max_output_tokens, budget.remaining)),
+                    await self._dialogue(
+                        context, source, speaker, min(self._max_output_tokens, budget.remaining)
+                    ),
                     self._selection,
                     progress,
                 ),
@@ -269,7 +284,9 @@ class GroupChatReplyService:
             first_request = await self._preflight(
                 dialogue_request(
                     self._gateway,
-                    self._request(context.messages, min(self._max_output_tokens, budget.remaining)),
+                    await self._dialogue(
+                        context, sent, mentioned, min(self._max_output_tokens, budget.remaining)
+                    ),
                     self._selection,
                     progress,
                 ),
@@ -309,7 +326,13 @@ class GroupChatReplyService:
                 if ordinal:
                     return await self._messages.finish_group(claim)
                 raise
-            message = await self._messages.complete_group_reply(claim, speaker, ordinal, text)
+            message = (
+                await self._messages.complete_group_reply(
+                    claim, speaker, ordinal, text.text, events=text.events
+                )
+                if isinstance(text, AnnotatedDialogue)
+                else await self._messages.complete_group_reply(claim, speaker, ordinal, text)
+            )
             if progress is not None:
                 await progress(ChatProgress("message", message=message))
             if budget.closed or budget.remaining < 1 or ordinal + 1 == _MAX_GROUP_REPLIES:

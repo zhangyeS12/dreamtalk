@@ -219,7 +219,13 @@ class DirectorRoutineAuthority(Protocol):
     def start(self, row: RoutineCandidate) -> None: ...
 
 
+class WorldNewsAuthority(Protocol):
+    async def prepare(self, world: WorldId, now: int): ...
+    async def published(self, row, config, event: WorldEvent) -> None: ...
+
+
 class UnitOfWork(Protocol):
+    world_news: WorldNewsAuthority
     director: DirectorRoutineAuthority
     worlds: WorldRepository
     locations: LocationRepository

@@ -252,7 +252,8 @@ def resolve_route(
         or bool(requirements.structured_modes) != (request.structured_output is not None)
     ):
         raise LLMContractError("requirements_must_match_request")
-    if request.streaming and request.structured_output is not None:
+    structured_stream = request.streaming and request.structured_output is not None
+    if structured_stream and request.structured_output.schema_name != "chat_event_reply":
         raise RoutingError(RouteIssue.STRUCTURED_STREAM_UNSUPPORTED)
     if isinstance(selection, ProfileSelection):
         policy = configuration.policy(request.purpose, selection.profile)
@@ -278,7 +279,10 @@ def resolve_route(
         if issue is None:
             caps = entry.capabilities
             if (
-                not caps.text_generation
+                structured_stream
+                and caps.structured_output_mode
+                is not StructuredOutputMode.JSON_OBJECT_LOCAL_VALIDATE
+                or not caps.text_generation
                 or requirements.streaming
                 and not caps.streaming
                 or requirements.structured_modes

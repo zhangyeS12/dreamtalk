@@ -149,14 +149,22 @@ class ChatMessageStore(Protocol):
         self, conversation_id: ConversationId, turn_id: ChatTurnId, player_id: PlayerId
     ) -> ClaimedDirectTurn: ...
 
-    async def complete_direct(self, claim: ClaimedDirectTurn, text: str) -> ChatMessage: ...
+    async def complete_direct(
+        self, claim: ClaimedDirectTurn, text: str, *, events=()
+    ) -> ChatMessage: ...
 
     async def claim_group(
         self, conversation_id: ConversationId, turn_id: ChatTurnId, player_id: PlayerId
     ) -> ClaimedGroupTurn: ...
 
     async def complete_group_reply(
-        self, claim: ClaimedGroupTurn, character_id: CharacterId, ordinal: int, text: str
+        self,
+        claim: ClaimedGroupTurn,
+        character_id: CharacterId,
+        ordinal: int,
+        text: str,
+        *,
+        events=(),
     ) -> ChatMessage: ...
 
     async def finish_group(self, claim: ClaimedGroupTurn) -> GroupTurnView: ...
@@ -300,9 +308,15 @@ class ChatMessageService:
             conversation_id, turn_id, await self._player(conversation_id)
         )
 
-    async def complete_direct(self, claim: ClaimedDirectTurn, text: str) -> ChatMessage:
+    async def complete_direct(
+        self, claim: ClaimedDirectTurn, text: str, *, events=()
+    ) -> ChatMessage:
         self._validate_reply(text)
-        return await self._store.complete_direct(claim, text)
+        return (
+            await self._store.complete_direct(claim, text, events=events)
+            if events
+            else await self._store.complete_direct(claim, text)
+        )
 
     async def claim_group(
         self, conversation_id: ConversationId, turn_id: ChatTurnId
@@ -312,12 +326,24 @@ class ChatMessageService:
         )
 
     async def complete_group_reply(
-        self, claim: ClaimedGroupTurn, character_id: CharacterId, ordinal: int, text: str
+        self,
+        claim: ClaimedGroupTurn,
+        character_id: CharacterId,
+        ordinal: int,
+        text: str,
+        *,
+        events=(),
     ) -> ChatMessage:
         self._validate_reply(text)
         if type(ordinal) is not int or ordinal < 0:
             raise ValueError("chat_reply_ordinal_invalid")
-        return await self._store.complete_group_reply(claim, character_id, ordinal, text)
+        return (
+            await self._store.complete_group_reply(
+                claim, character_id, ordinal, text, events=events
+            )
+            if events
+            else await self._store.complete_group_reply(claim, character_id, ordinal, text)
+        )
 
     async def finish_group(self, claim: ClaimedGroupTurn) -> GroupTurnView:
         return await self._store.finish_group(claim)

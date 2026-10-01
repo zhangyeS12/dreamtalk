@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
+from urllib.parse import urlsplit
 from uuid import uuid4
 
 from livingworld.application.chat_context import DirectChatContextBuilder
@@ -12,7 +13,7 @@ from livingworld.application.chat_messages import ChatMessageService
 from livingworld.application.chat_reply import DirectChatReplyService
 from livingworld.application.group_chat_context import GroupChatContextBuilder
 from livingworld.application.group_chat_reply import GroupChatReplyService
-from livingworld.application.llm import InvocationId, LLMPurpose
+from livingworld.application.llm import InvocationId, LLMPurpose, StructuredOutputMode
 from livingworld.application.llm_budget import PreflightUsageBounder
 from livingworld.application.llm_config import LLMRuntimeHealth, SecretRef
 from livingworld.application.llm_registry import ModelRegistry
@@ -92,23 +93,53 @@ def configure_direct_chat_reply(
     session: ProductionLLMSession,
     messages: ChatMessageService,
     context: DirectChatContextBuilder,
+    journal=None,
 ) -> DirectChatReplyService | None:
     """Use the explicit BALANCED route, or the sole eligible configured model."""
     configured = _chat_reply_configuration(session)
     if configured is None:
         return None
-    return DirectChatReplyService(messages, context, *configured)
+    return DirectChatReplyService(
+        messages, context, *configured, event_capture=_capture_available(session), journal=journal
+    )
 
 
 def configure_group_chat_reply(
     session: ProductionLLMSession,
     messages: ChatMessageService,
     context: GroupChatContextBuilder,
+    journal=None,
 ) -> GroupChatReplyService | None:
     configured = _chat_reply_configuration(session)
     if configured is None:
         return None
-    return GroupChatReplyService(messages, context, *configured)
+    return GroupChatReplyService(
+        messages, context, *configured, event_capture=_capture_available(session), journal=journal
+    )
+
+
+def _capture_available(session, purpose="character_dialogue"):
+    runtime = session.runtime
+    if runtime is None:
+        return False
+    policy = runtime.configuration.routing.policy(LLMPurpose(purpose), RoutingProfile.BALANCED)
+    models = (
+        policy.candidates
+        if policy
+        else tuple(
+            e.model for e in runtime.registry.models if e.enabled and e.capabilities.text_generation
+        )
+    )
+    return bool(models) and all(
+        runtime.configuration.providers[m.provider_id].config.endpoint is not None
+        and urlsplit(
+            runtime.configuration.providers[m.provider_id].config.endpoint.base_url
+        ).hostname
+        == "api.deepseek.com"
+        and runtime.registry.lookup(m).capabilities.structured_output_mode
+        is StructuredOutputMode.JSON_OBJECT_LOCAL_VALIDATE
+        for m in models
+    )
 
 
 def configure_offline_dialogue(session: ProductionLLMSession):
@@ -119,6 +150,11 @@ def configure_offline_dialogue(session: ProductionLLMSession):
 def configure_director(session: ProductionLLMSession):
     configured = _chat_reply_configuration(session, "director_plan")
     return configured[:6] if configured is not None else None
+
+
+def configure_world_news(session):
+    configured = _chat_reply_configuration(session, "director_plan")
+    return (configured[:6] if configured else None), _capture_available(session, "director_plan")
 
 
 def configure_content_builder(session: ProductionLLMSession):

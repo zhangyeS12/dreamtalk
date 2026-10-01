@@ -2,7 +2,23 @@
 
 更新日期：2026-10-01。此文件记录当前开发现场与接续工作，不替代 [AGENTS.md](AGENTS.md)。先读 AGENTS，再读本文，最后核对实际 Git 状态和相关代码；不能把下面的基线哈希当作永远不变的当前 HEAD。
 
-## 最新接续：2026-10-01 回答对应角色自身活动（桌面0.1.4）
+## 最新接续：2026-10-01 两块世界事件（桌面0.1.5）
+
+- 从干净7c21c8e / codex/chat-feedback接续，实际仓库D:\LivingWorld。用户批准完成“聊天获知＋API批量世界动态”，同次回复判断事件避免单独分类调用，保留原句、获知时间与变化；DeepSeek优先后续适配其他模型。中断后续接完成，不需再次范围授权。[已批准方案](docs/proposals/2026-10-01-world-event-journal.md)、[使用说明](docs/WORLD_EVENT_JOURNAL.md)、[复用调查](docs/research/2026-10-01-world-event-journal-reuse.md)。
+- 复用DeepSeek官方JSON object、已安装pydantic-core部分JSON解析／Pydantic本地验证、原SQLAlchemy／Alembic、公开世界书过滤、世界scheduler／有效WorldTime、治理网关／财务预算及Kernel事件提交；不加依赖／Agent框架／第二调度器，不复制酒馆代码。官方recipe／encoding0.1.0已处理response_format，沿用原Rust输入预留helper及实际JSON请求payload；持久模型配置不改。普通其他供应商聊天保留，自动聊天提取当前仅官方DeepSeek受支持JSON object路由，离线联系消息暂不提取。
+- 普通单聊／群聊角色回复同次模型调用生成reply与0～3条activity/plan/rumor/invitation/change。selector不参与提取，UI流式只显示reply，原有台词／截断／费用结算边界保持；完整reply校验后保存。元数据有严格字段／长度／原句／时间原句校验，不合格候选忽略且不调用付费修复；格式不等于语义核实。没有额外分类API，但提示、有限上下文和元数据增加Token用量。角色依旧参考自己的活动／身份资料。
+- 回复和chat_story_entries在同一个writer事务保存：实际发言者／消息／会话／玩家固定，source事件须为本人同世界已授权观察，updates须同本人同会话历史。独立获知UTC和有效WorldTime，原话时间不猜现实日期；原句／来源指纹去重，明确改变关联旧记录且不覆盖。读取本人本会话最多6条及已发布公共动态最多4条，按完整记录收缩8KiB不截断否定词。聊天获知每页100条可读更早，用户带revision批注／隐藏不修改聊天；不发WorldTruth、Knowledge、Observation或Memory。
+- 公共池每世界默认关闭，当前玩家首次开启确认公共背景和后台费用；只发已确认且逐条公共世界书title/body、世界名、已有动态title。金融路由／硬预算沿用director_plan，运行开关和消费政策独立于日常Director。一次10条有限候选；可用在前6小时，过期12～24小时世界时间。持久随机顺序，首条可立即，随后通常15～45分钟世界时间逐条发布。有效公共背景引用、当前绑定、启用revision、暂停状态和候选时窗再次核对。
+- WorldNewsKernel经mutation barrier、writer UOW、同世界有效时间，按候选推导稳定EventId／RequestId／幂等键，原子提交PublicWorldEventPublished v1及候选发布状态。canonical事件表示公告实际发布，不证明正文里的传闻／活动结果。replay核对字段和同世界玩家，不改变物理状态／知识／记忆。未发布候选隐藏；关闭／换玩家／背景变化取消或停止受影响任务，付费中断不自动重发，程序关闭不生成，恢复不补造错过公告。
+- 每条已发布动态右侧红未经历／绿已经历／灰跳过，文字／aria／键盘操作并存，revision防覆盖。最近整批固定10条中8条已经历或跳过才自动续批，每批仅一次；发布／过期不计经历，旧未处理保留，未处理上限100。空池未达阈值／attention可显式“生成新一批”，刷新只是读取。UI“世界事件”两块显示，原玩家亲历折叠保留，话题仍编辑草稿后手动发；保存失败反馈不会被5秒只读刷新抹去。每世界／玩家组件key防跨身份旧结果。
+- 0028_world_event_journal增加chat_story_entries和四张world_news应用表；冻结显式迁移，保留0027旧版本验证路径。静态AST核对模型／迁移列、类型、nullable、主键、约束和索引一致。没有在用户存档运行迁移；用户首次启动新版按原升级机制升级，之后不应拿旧schema程序打开该存档。
+- 源码review、Ruff lint／format23份Python、ESLint／TypeScript、Git diff通过；203份Python AST、五张迁移声明、5处桌面版本、docs内547个本地链接核对通过。Core冻结24.673秒；Vite213模块／129ms，Rust release24.20秒成功，PE ProductVersion/FileVersion0.1.5。保留可选tzdata/pysqlite2/MySQLdb hidden-import告警、STATIC_VCRUNTIME弃用、主chunk526.05kB超过500kB告警，非编译失败。
+- 全新完整包D:\LivingWorld\artifacts\portable\world-event-journal\dreamtalk\dreamtalk-desktop.exe，旧包保留。desktop13,192,704 bytes / SHA256 B5E2258F2386BD9E07B60CAD3D1AB1D9DFCE3EB9EE505356FEA1E6C67AF27465；Core13,931,619 / 09AA0280157D7A08866B995E3DC9AEDC598C1ECAEA9D2AFCDBCEEAC340EB75BD；ZIP43,151,137 / 709B19C32B7DAA35C5BA6F759C1DC288D4D16E5AB463BF69253C8EA8D4BEE922；helper仍264DF8990752ABB179A3773ACE934F546C69AF99F4C9834EA1286D0D9886FDEA。203份冻结源码／22份许可／9份说明／474份ZIP文件字节一致，MEMORY／RECALL／STREAMING经旧包清单hash验证沿用，其余说明来自当前文档。清单artifacts/world-event-journal-package.json，两份build日志同prefix。
+- 交接冲突：上版接下来是活动成果／经历记忆，用户最新明确转为两块世界事件，按新范围执行。OBSERVED_EVENTS和EVENT_MODEL还写Director／候选未实现，与实际代码不符，已明确更正；旧切片记录保留历史含义，不扩大为全项目完成。AGENTS没改，Core／协议兼容版本、identifier和app-data位置沿用。
+- 按AGENTS§20未新增／修改／运行测试，未启动／停止应用／浏览器GUI、调用真实API／探测凭据、读写用户DB／配置／系统自启动。静态／编译／字节核对不等于聊天、迁移、暂停／重启、并发、数据隔离已运行验收。没有push／公开发布。所有写入D盘限定为本项目源码／文档／构建并经自动审批允许，没有未解审批拒绝。
+- **接下来：** 用户退出旧托盘后打开完整0.1.5包，核对设置版本及程序位置；换目录需手动“保存并更新启动位置”。先用官方DeepSeek普通私聊／群聊核对具体计划／变更／时间／寒暄／批注，再逐条公开世界书、在世界动态设置首次授权，检查逐条发布／手动进度／整批8／10续批及暂停／重启／切世界隔离。没有新的决策阻塞；建议收集误记／漏记原句，沿现有同次提取改进，之后适配其他模型，再接有来源活动成果／记忆及相遇／关系／更完整离线世界。当前不引入逐句付费裁判。
+
+## 前序切片：2026-10-01 回答对应角色自身活动（桌面0.1.4）
 
 - 从干净9aa765d / codex/chat-feedback接续，实际仓库仍D:\LivingWorld。用户明确要求“继续推进项目，回答需要对应角色自身活动”。核对原0.1.3自身阶段快照、授权事件投影、私聊/群聊输入和现有回复校验后，发现亲历资料缺少行动主体/目击者标记，直接persona也未给稳定角色ID；自然语言描述容易混淆自己和他人。交接中“当前角色自己的亲历记录”指本人有权看到，不等于本人是行动主体，本轮把两者明确分开。
 - 实现前调查Concordia当日main Observation组件（Apache-2.0）以及NVIDIA NeMo Guardrails事实核对文档/develop许可（Apache-2.0），见[复用记录](docs/research/2026-10-01-activity-identity-reuse.md)。沿用SQLAlchemy、既有观察/主体身份、RoutineActivity、活动快照和模型网关；没有复制第三方代码、安装Agent框架或自行增加关键词事实拦截器。语义核对模型会增加推理/费用与误判边界，本轮没有接入额外裁判模型，也不能把输入身份核对说成所有台词已事实验证。

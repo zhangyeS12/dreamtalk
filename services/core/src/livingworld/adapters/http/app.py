@@ -56,6 +56,7 @@ def create_app(
     chat_recall: EarlierChatRecall | None = None,
     conversation_memory=None,
     director=None,
+    world_story=None,
     offline_contact=None,
     world_locations=None,
     character_activity_setup=None,
@@ -157,6 +158,10 @@ def create_app(
         app.include_router(offline_contact_router(offline_contact, authorize, logger))
         app.include_router(session_visibility_router(offline_contact, authorize))
 
+    if world_story is not None:
+        from livingworld.adapters.http.world_story import world_story_router
+
+        app.include_router(world_story_router(world_story, authorize))
     if director is not None:
         from livingworld.adapters.http.director import director_router
 

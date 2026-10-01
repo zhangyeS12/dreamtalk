@@ -1,6 +1,6 @@
 # Event Model
 
-> 状态：保留 Stage 0 概念边界；Stage 2 已建立不可变事件、命令原子提交、知识隔离、canonical ledger、回放及资源级 CAS。C-006B 增加 deterministic ActionProposal→resolution→WorldEvent 路径和发生时感知快照。候选计划、Director、Agent 与 Character cognition 未实现。
+> 状态：保留 Stage 0 概念边界；Stage 2 已建立不可变事件、命令原子提交、知识隔离、canonical ledger、回放及资源级 CAS。C-006B 增加 deterministic ActionProposal→resolution→WorldEvent 路径和发生时感知快照。日常Director候选计划和Kernel基本活动已实现；2026-10-01增加应用层聊天获知记录、有限公共公告池和Kernel公告发布，完整角色认知／关系／活动成果仍待推进。
 
 规则来源：[PRODUCT_SPEC.md](../product/PRODUCT_SPEC.md) 中的 FR-01、FR-02、FR-04 至 FR-15、FR-22 至 FR-24。规划责任见 [DIRECTOR_MODEL.md](DIRECTOR_MODEL.md)，信息归属见 [KNOWLEDGE_MODEL.md](KNOWLEDGE_MODEL.md)。
 
@@ -44,7 +44,7 @@ WorldEvent、RelationshipEvent 与 WorldTruth 的关系属于概念分工。本�
 
 WorldTime 是逻辑坐标，不是全局事件 ID；两个 EventId 可以共享同一 WorldTime，未来分支也可以在同一坐标拥有不同历史。C-003A 不加入日历、调度或分支身份机制。
 
-WorldEvent 是 canonical history 的不可变领域表达，frozen snapshot 没有 update/delete 方法。外部原始 payload 后续修改不会改变事件；事件内部的嵌套结构也不能修改。构造 Python 值不等于提交事实。C-003C 确定性 command handler 承担首批 Kernel 执行职责，正式事实必须随投影和回执原子提交；Director 仍只提出计划。CandidateEvent 未实现，不能通过构造候选提前写入事实。
+WorldEvent 是 canonical history 的不可变领域表达，frozen snapshot 没有 update/delete 方法。外部原始 payload 后续修改不会改变事件；事件内部的嵌套结构也不能修改。构造 Python 值不等于提交事实。C-003C 确定性 command handler 承担首批 Kernel 执行职责，正式事实必须随投影和回执原子提交；Director 仍只提出计划。日常活动候选和公共公告候选已有持久运行实现，仍不能通过构造候选提前写入事实。
 
 [CommandReceipt](../../services/core/src/livingworld/domain/commands.py) 保持 RequestId、world_id、command_type、status、同世界结果引用、UTC 创建/完成时间及 Revision。完成时间不能早于创建时间。C-003C 原表新增独立语义指纹和原始结果：相同请求/语义返回旧结果，变更语义显式冲突，回执指向命令最后一个事件；见 [COMMAND_MODEL.md](COMMAND_MODEL.md)。单纯构造领域事件不自动执行去重。
 
@@ -218,3 +218,11 @@ WorldPlan、EventReservoir、候选批量消费、自动角色活动与 Outreach
 ## 离线消息与事实时间
 
 离线补生成的私聊属于通信记录，不是历史WorldEvent。剧情显示时间不覆盖真实created_at_utc，不改变世界账本顺序，不补造活动成果或知情。该时间严格位于持久离线区间，来自离线前受限输入；迟到资料/新玩家消息使结果失效。
+
+## 2026-10-01：聊天记录与公共公告
+
+chat_story_entries是当前玩家从聊天中获知的有出处说法，记录原句、类别、获知双时间及原话时间。保存／批注／隐藏不会发WorldTruth、Knowledge、Observation或Memory事件。普通聊天台词及用户绿色标记不是Kernel物理状态授权。
+
+world_news_candidates是有限未发布公告候选；随机时序、公开背景引用和暂停状态由现有scheduler／Kernel验证。PublicWorldEventPublished v1表示这条公告已实际发布；payload只含entry_id、batch_id、player_id、title、body、time_text，双时间在事件envelope。EventAppender和候选发布状态在同一事务，使用由候选ID推导的稳定事件／请求／幂等键。回放核对同世界玩家及字段而不改变物理状态／知识／记忆。正文中传闻、邀请、未来活动仍只是公开信息内容，不借公告事件宣称其结果已发生。用户的already-experienced／skipped是带revision的应用数据处理状态，不是canonical世界经历。
+
+具体范围见[已批准方案](../proposals/2026-10-01-world-event-journal.md)。

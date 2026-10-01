@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any
+from urllib.parse import urlsplit
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -470,6 +471,21 @@ def _convert(document: LLMConfigDocument) -> ProductionLLMConfiguration:
         declared = _capabilities(source.capabilities)
         if declared != _profile_capabilities(profile):
             raise LLMProductionConfigurationError("model_capability_mismatch")
+        # Official DeepSeek supports json_object. Enrich old managed documents in
+        # memory only, without rewriting user files or enabling other endpoints.
+        endpoint = provider.config.endpoint
+        if (
+            provider.adapter_kind is AdapterKind.OPENAI_COMPATIBLE
+            and endpoint is not None
+            and urlsplit(endpoint.base_url).scheme == "https"
+            and urlsplit(endpoint.base_url).hostname == "api.deepseek.com"
+            and urlsplit(endpoint.base_url).path.rstrip("/") in {"", "/v1"}
+            and profile.structured_output_mode is StructuredOutputMode.NONE
+        ):
+            profile = replace(
+                profile, structured_output_mode=StructuredOutputMode.JSON_OBJECT_LOCAL_VALIDATE
+            )
+            declared = _profile_capabilities(profile)
         limits = (
             ModelUsageLimits(
                 source.limits.max_billable_input_tokens, source.limits.max_output_tokens

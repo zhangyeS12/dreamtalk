@@ -94,6 +94,7 @@ class _EventFold:
             ("CharacterCreated", 1): self._character_created,
             ("CharacterPlaced", 1): self._character_placed,
             ("CharacterRoutineStarted", 1): self._character_routine_started,
+            ("PublicWorldEventPublished", 1): self._public_world_event_published,
             ("RelationshipChanged", 1): self._relationship_changed,
             ("WorldTruthAsserted", 1): self._truth_asserted,
             ("CharacterBeliefFormed", 1): self._character_belief_formed,
@@ -155,6 +156,32 @@ class _EventFold:
     def _new(self, collection, identity, entity) -> None:
         _check(identity not in collection, "Duplicate projection identity")
         collection[identity] = entity
+
+    def _public_world_event_published(self, event):
+        value = event.payload
+        _check(
+            self.world is not None
+            and set(value) == {"entry_id", "batch_id", "player_id", "title", "body", "time_text"},
+            "Invalid public announcement",
+        )
+        _uuid(value["entry_id"])
+        _uuid(value["batch_id"])
+        _check(self._id(PlayerId, value["player_id"]) in self.players, "Missing audience")
+        _check(
+            isinstance(value["title"], str) and 1 <= len(value["title"]) <= 80, "Invalid headline"
+        )
+        _check(
+            isinstance(value["body"], str) and 5 <= len(value["body"]) <= 500,
+            "Invalid announcement text",
+        )
+        _check(
+            value["time_text"] is None
+            or isinstance(value["time_text"], str)
+            and len(value["time_text"]) <= 100
+            and value["time_text"] in value["body"],
+            "Invalid reported time",
+        )
+        # Publication does not mutate physical state, beliefs, or experience.
 
     def _world_created(self, event):
         value = event.payload

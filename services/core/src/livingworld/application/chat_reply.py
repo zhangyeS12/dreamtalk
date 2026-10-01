@@ -9,6 +9,13 @@ from typing import Protocol
 from uuid import uuid4
 
 from livingworld.application.chat_context import DirectChatContextBuilder
+from livingworld.application.chat_event_annotations import (
+    AnnotatedDialogue,
+    annotate_request,
+    annotation_request,
+    decode_dialogue,
+    partial_reply,
+)
 from livingworld.application.chat_messages import ChatMessage, ChatMessageService, PlayerSend
 from livingworld.application.llm import (
     FinishReason,
@@ -110,12 +117,13 @@ async def dialogue_text(
     selection: ModelSelection | None,
     progress: ChatProgressSink | None,
     speaker: CharacterId,
-) -> str:
+) -> str | AnnotatedDialogue:
     """Reuse governed execution; stream deltas stay provisional until settlement."""
     try:
         if request.streaming:
             pieces: list[str] = []
             size = 0
+            visible = ""
             completion = None
             async with aclosing(
                 gateway.stream(request, selection=selection, turn_budget=budget)
@@ -139,7 +147,16 @@ async def dialogue_text(
                         if event.text:
                             pieces.append(event.text)
                             if progress is not None:
-                                await progress(ChatProgress("delta", speaker, event.text))
+                                delta = event.text
+                                if annotation_request(request):
+                                    decoded = partial_reply("".join(pieces))
+                                    if decoded is None:
+                                        continue
+                                    if not decoded.startswith(visible):
+                                        raise ChatReplyValidationError("chat_reply_invalid")
+                                    delta, visible = decoded[len(visible) :], decoded
+                                if delta:
+                                    await progress(ChatProgress("delta", speaker, delta))
                     elif isinstance(event, StreamCompleted):
                         # Governed streaming settles usage before yielding completion.
                         completion = event.completion
@@ -172,6 +189,14 @@ async def dialogue_text(
         or len(text.encode("utf-8")) > 65536
     ):
         raise ChatReplyValidationError("chat_reply_invalid")
+    if annotation_request(request):
+        try:
+            annotated = decode_dialogue(text)
+            if request.streaming and progress is not None and annotated.text != visible:
+                raise ValueError()
+            return annotated
+        except ValueError:
+            raise ChatReplyValidationError("chat_reply_invalid") from None
     return text
 
 
@@ -187,6 +212,8 @@ class DirectChatReplyService:
         available: Callable[[], bool] | None = None,
         selection: ModelSelection | None = None,
         input_token_reservation: int | None = None,
+        event_capture: bool = False,
+        journal=None,
     ) -> None:
         if (
             not isinstance(model, ModelRef)
@@ -206,6 +233,7 @@ class DirectChatReplyService:
         self._available = available or (lambda: True)
         self._selection = selection
         self._input_token_reservation = input_token_reservation
+        self._event_capture, self._journal = event_capture, journal
 
     @property
     def input_token_reservation(self) -> int | None:
@@ -235,6 +263,14 @@ class DirectChatReplyService:
             messages=context.messages,
             max_output_tokens=min(sent.token_ceiling, self._max_output_tokens),
         )
+        if self._journal is not None:
+            request = replace(
+                request,
+                messages=request.messages
+                + await self._journal.prompt_context(sent, context.character_id),
+            )
+        if self._event_capture:
+            request = annotate_request(request)
         request = dialogue_request(self._gateway, request, self._selection, progress)
         try:
             plan = self._gateway.plan(request, selection=self._selection)
@@ -274,7 +310,11 @@ class DirectChatReplyService:
         text = await dialogue_text(
             self._gateway, request, budget, self._selection, progress, claim.character_id
         )
-        message = await self._messages.complete_direct(claim, text)
+        message = (
+            await self._messages.complete_direct(claim, text.text, events=text.events)
+            if isinstance(text, AnnotatedDialogue)
+            else await self._messages.complete_direct(claim, text)
+        )
         if progress is not None:
             await progress(ChatProgress("message", message=message))
         return message

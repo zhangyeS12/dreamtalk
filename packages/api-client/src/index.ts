@@ -31,6 +31,23 @@ export interface DirectorStatus {
   enabled: boolean; revision: number; state: "off" | "idle" | "planning" | "ready" | "attention";
   error: string | null; consented: boolean; model_available: boolean; model: string | null;
 }
+export interface ChatStoryEntry {
+  entry_id: string; character_id: string; character_name: string; conversation_id: string; message_id: string;
+  kind: "activity" | "plan" | "rumor" | "invitation" | "change";
+  title: string; quote: string; time_text: string | null; source_event_id: string | null; updates_entry_id: string | null;
+  learned_at: string; learned_world_time: string | null; revision: number; correction: string | null;
+}
+export type NewsMark = "pending" | "experienced" | "skipped";
+export interface PublicNewsEntry {
+  entry_id: string; event_id: string; batch_id: string; title: string; body: string; time_text: string | null;
+  published_at: string; occurred_at: string; state: NewsMark; revision: number;
+}
+export interface WorldStoryEntries { chat: ChatStoryEntry[]; news: PublicNewsEntry[]; next_before: string | null }
+export interface WorldNewsStatus {
+  enabled: boolean; consented: boolean; revision: number; state: "off" | "idle" | "generating" | "ready" | "attention";
+  error: string | null; pending: number; batch_total: number; batch_processed: number;
+  model_available: boolean; model: string | null;
+}
 export interface SelectablePlayer { player_id: string; name: string }
 export type PlayerAvailability = "busy" | "available";
 export interface SelectedPlayerState {
@@ -556,6 +573,27 @@ export class CoreClient {
   }
   markOfflineMessageRead(worldId: string, messageId: string): Promise<{ read: boolean }> {
     return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/offline-contact/messages/${encodeURIComponent(messageId)}/read`, { method: "POST" });
+  }
+  worldStories(worldId: string, before?: string): Promise<WorldStoryEntries> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/stories${before ? `?before=${encodeURIComponent(before)}` : ""}`);
+  }
+  worldNewsStatus(worldId: string): Promise<WorldNewsStatus> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/stories/settings`);
+  }
+  configureWorldNews(worldId: string, status: WorldNewsStatus, enabled: boolean, consent = false, replenish = false): Promise<WorldNewsStatus> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/stories/settings`, { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled, consent_background_usage: consent, expected_revision: status.revision, replenish }),
+    });
+  }
+  markWorldNews(worldId: string, entry: PublicNewsEntry, state: NewsMark): Promise<WorldNewsStatus> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/stories/news/${encodeURIComponent(entry.entry_id)}/mark`, { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ state, expected_revision: entry.revision }),
+    });
+  }
+  correctChatStory(worldId: string, entry: ChatStoryEntry, correction: string | null, hidden = false): Promise<{ saved: boolean }> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/stories/chat/${encodeURIComponent(entry.entry_id)}`, { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ hidden, correction, expected_revision: entry.revision }),
+    });
   }
   directorStatus(worldId: string): Promise<DirectorStatus> {
     return this.productRequest(`/worlds/${worldId}/director`);
