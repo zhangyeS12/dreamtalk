@@ -50,6 +50,8 @@ pub struct BackgroundStatus {
     pub autostart: bool,
     pub close_to_tray: bool,
     pub window_visible: bool,
+    pub app_version: String,
+    pub executable_path: String,
 }
 pub fn show_main(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
@@ -63,7 +65,10 @@ pub fn desktop_background_status(
     app: tauri::AppHandle,
     state: State<'_, BackgroundState>,
 ) -> Result<BackgroundStatus, String> {
+    let executable = std::env::current_exe().map_err(|_| "background_identity_unavailable")?;
     Ok(BackgroundStatus {
+        app_version: app.package_info().version.to_string(),
+        executable_path: executable.display().to_string(),
         autostart: app
             .autolaunch()
             .is_enabled()
@@ -90,32 +95,33 @@ pub fn configure_desktop_background(
     let previous = manager
         .is_enabled()
         .map_err(|_| "autostart_status_failed")?;
-    if previous != autostart {
-        if autostart {
-            manager.enable()
-        } else {
-            manager.disable()
-        }
-        .map_err(|_| "autostart_update_failed")?;
-    }
     let updated = Preferences { close_to_tray };
-    let save = (|| -> Result<(), Box<dyn std::error::Error>> {
+    let temporary = state.path.with_extension("tmp");
+    // Prepare preferences before changing startup registration.
+    let prepare = (|| -> Result<(), Box<dyn std::error::Error>> {
         std::fs::create_dir_all(state.path.parent().ok_or("background_path_invalid")?)?;
-        let temporary = state.path.with_extension("tmp");
         std::fs::write(&temporary, serde_json::to_vec(&updated)?)?;
-        std::fs::rename(temporary, &state.path)?;
         Ok(())
     })();
-    if save.is_err() {
-        if previous != autostart {
-            let rollback = if previous {
-                manager.enable()
-            } else {
-                manager.disable()
-            };
-            if rollback.is_err() {
+    if prepare.is_err() {
+        return Err("background_settings_save_failed".into());
+    }
+    // The official plugin resolves this executable. Re-enabling overwrites a stale
+    // registered path even when is_enabled() already returns true.
+    if autostart {
+        manager.enable().map_err(|_| "autostart_update_failed")?;
+    } else if previous {
+        manager.disable().map_err(|_| "autostart_update_failed")?;
+    }
+    if std::fs::rename(temporary, &state.path).is_err() {
+        if !previous && autostart {
+            if manager.disable().is_err() {
                 return Err("background_settings_partial_update".into());
             }
+        } else if previous {
+            // We cannot restore an unknown old executable path through the
+            // plugin. Report the partial save so the user can refresh and retry.
+            return Err("background_settings_partial_update".into());
         }
         return Err("background_settings_save_failed".into());
     }

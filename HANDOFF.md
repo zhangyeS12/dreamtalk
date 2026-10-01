@@ -1,8 +1,20 @@
 # dreamtalk 工作交接
 
-更新日期：2026-09-29。此文件记录当前开发现场与接续工作，不替代 [AGENTS.md](AGENTS.md)。先读 AGENTS，再读本文，最后核对实际 Git 状态和相关代码；不能把下面的基线哈希当作永远不变的当前 HEAD。
+更新日期：2026-10-01。此文件记录当前开发现场与接续工作，不替代 [AGENTS.md](AGENTS.md)。先读 AGENTS，再读本文，最后核对实际 Git 状态和相关代码；不能把下面的基线哈希当作永远不变的当前 HEAD。
 
-## 最新接续：2026-09-29 离线联系保存失败与刷新入口修复
+## 最新接续：2026-10-01 桌面版本与自启动路径更新
+
+- 从干净`645c37b393e3013e7f7752efad80cc6c48d0b096` / `codex/chat-feedback`接续，实际仓库仍`D:\LivingWorld`。用户要求继续，按照前一轮建议先完成版本/自启动更新，下一步才是普通角色初始活动地点。前序排查曾确认真实HKCU登记仍指向offline-contact旧包；这不是本轮修改后的系统验收证据，本轮没有重新读取或改写真实注册。
+- 根因在`configure_desktop_background`：原来只有开关变化才enable，插件is_enabled在Windows判断已登记/StartupApproved，不比较exe路径，因此新版保持勾选并保存不会刷新旧地址。直接复用官方autostart2.6.0及既有auto-launch0.5.0的enable覆盖登记，保持--background和单实例/托盘生命周期。调查来源、发布源码核对及许可见[本轮复用记录](docs/research/2026-10-01-startup-version-reuse.md)；没有新依赖、手写注册表或另一个Agent框架。
+- 现在用户开启自启动时，每次显式保存都登记当前程序；按钮在保持勾选时仍可用，标为“保存并更新启动位置”。刷新只读，启动时不静默注册，默认关闭不变。托盘配置先准备临时文件；部分失败明确反馈，不冒充已恢复未知旧程序路径。前端请求锁/序号防重复保存、旧返回和卸载后的写入；“刷新设置”可从读取失败恢复，明确会恢复已保存的选项。
+- 后台设置显示`AppHandle.package_info().version`和`current_exe`提供的当前版本/程序位置；这不是原注册目标的读取。桌面Cargo/Tauri/npm workspace及lock版本同步0.1.1，Core和其他workspace保持0.1.0，identifier与数据目录不变，无DB migration。编译产物PE的ProductVersion/FileVersion均为0.1.1。
+- ESLint/TypeScript、cargo fmt和diff静态检查通过；Vite210模块/175ms，Rust release30.02秒成功。保留STATIC_VCRUNTIME弃用及主chunk505.29kB超过500kB的提示，没有提高阈值隐藏。Core未重编，复用645c37b的修复版并核对193份源码及冻结文件一致；22份许可、8份说明和463份ZIP文件字节核对通过。
+- 完整独立新包`D:\LivingWorld\artifacts\portable\startup-version\dreamtalk\dreamtalk-desktop.exe`，desktop13,188,096 bytes / SHA256 `CA8044D495E6E5F39A355855AEC2CFB4A07351ACEAABBA12046714E4337D0613`；ZIP43,045,133 / `F1558BF5B76F25D69F3BAE6D67A437F69314FDF800E73B72CDACAA27B7E38A04`。Core保持`62FE65A44D67F272C8A685C8043A16BD8B4C2F2F66FEAF1DEA8A55961D789BAB`，helper保持`264DF8990752ABB179A3773ACE934F546C69AF99F4C9834EA1286D0D9886FDEA`。清单`artifacts/startup-version-package.json`、编译日志`artifacts/startup-version-desktop-build.log`；随包README/OFFLINE_MESSAGES已更新，旧包保留。
+- 按AGENTS§20，仅静态审阅、编译、打包和文件核对；没有新增/修改测试、运行测试/GUI/应用、模型调用、存档诊断/迁移、真实自启动或用户配置变更。上轮临时副本诊断授权没有扩大复用。没有push/发布。此前角色主动消息是否已经成功投递仍没有新的运行证据，不把开启成功或用户“很好”当作此项验收。
+- 用户入口：从旧程序托盘右键“退出并停止后台运行”，打开完整新版，在设置 → 后台运行核对0.1.1及路径；保持自启动勾选，点击“保存并更新启动位置”。下次登录后核对真实版本/路径；保存失败可原地刷新。
+- **接下来：** 先调查成熟角色地点/活动设置方案，再复用现有Kernel的角色放置/地点命令，为普通通讯录角色提供显式初始活动位置配置；不能自动把所有角色放进玩家家，也不能因修离线联系移动玩家。然后完善活动与对话的衔接。暂无需用户另行决策的阻塞。
+
+## 前序切片：2026-09-29 离线联系保存失败与刷新入口修复
 
 - 从 `c0f0af18bb9b5661756c85b870329643f279a48d` / `codex/chat-feedback` 接续，实际仓库 `D:\LivingWorld`。用户反馈离线设置任意保存均显示“未能保存，请刷新状态后重试”，界面却没有刷新入口；用户已自行从托盘退出，并明确授权**这一次临时存档副本保存诊断及必要升级**，不调用模型、不改原存档。没有将授权扩大到测试套件、应用启停或真实API。
 - 根因路径已通过副本诊断重现：通讯录 `ChatConversationService.open_direct` 仅创建 Character，不必创建 CharacterState/物理地点；OfflineContactStore原 `_capture` 直接调用Director日常 `planning_input`，后者只查询已放置角色，因此抛出 `DirectorError(director_characters_required)`；HTTP将其吞为500/offline_request_failed，前端再吞为笼统保存失败。不能要求用户靠提高Token、增加地点或重试来绕过。
