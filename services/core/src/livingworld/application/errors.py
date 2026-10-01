@@ -1,6 +1,10 @@
 """Explicit application failures; no persistence exception details escape."""
 
 
+class CharacterActivitySetupError(ValueError):
+    """A local initial-placement request is not eligible; only fixed codes escape."""
+
+
 class IdempotencyConflictError(ValueError):
     """A request identity is occupied by different or unverifiable semantics."""
 

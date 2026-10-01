@@ -58,6 +58,7 @@ def create_app(
     director=None,
     offline_contact=None,
     world_locations=None,
+    character_activity_setup=None,
 ) -> FastAPI:
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
@@ -94,6 +95,13 @@ def create_app(
         from livingworld.adapters.http.developer import developer_router
 
         app.include_router(developer_router(developer_inspector, authorize))
+
+    if character_activity_setup is not None:
+        from livingworld.adapters.http.character_activity_setup import (
+            character_activity_setup_router,
+        )
+
+        app.include_router(character_activity_setup_router(character_activity_setup, authorize))
 
     if world_locations is not None:
         from livingworld.adapters.http.world_locations import world_locations_router

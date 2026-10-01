@@ -6,7 +6,7 @@ const errors: Record<string, string> = {
   director_model_unavailable: "请先配置可用的聊天模型。",
   director_settings_changed: "设置已变化，请刷新状态后重试。",
   director_consent_required: "首次开启需要确认后台模型用量。",
-  director_characters_required: "请先在通讯录打开角色的聊天，让角色加入当前世界。",
+  director_characters_required: "请先在通讯录打开角色私聊，再在设置中的“角色初始活动地点”为至少一名角色选择地点。",
   director_world_capacity: "当前资料超过规划容量（16位角色、32个地点、64 KiB资料），请精简后再规划。",
   director_background_capacity: "公共背景超过规划读取容量（512条启用条目，每条关键词和条件16 KiB），请精简公开范围或触发条件后再规划。",
   director_background_invalid: "公共背景资料格式异常，暂时不能规划，请检查或重新确认世界书。",

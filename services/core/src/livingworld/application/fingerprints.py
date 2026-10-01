@@ -109,6 +109,8 @@ def semantic_input(command: WorldCommand) -> dict:
                 if command.expected_state_revision is not None
                 else None,
             }
+            if command.activity_player_id is not None:
+                details["activity_player_id"] = id_input(command.activity_player_id)
         case ChangeRelationship():
             details = {
                 "source_id": id_input(command.source_id),

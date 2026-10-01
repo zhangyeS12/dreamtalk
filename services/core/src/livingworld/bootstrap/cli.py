@@ -273,6 +273,8 @@ async def run(
                 ),
             )
             control_listener.start()
+        from livingworld.application.character_activity_setup import CharacterActivitySetupService
+
         app = create_app(
             status,
             shutdown,
@@ -296,6 +298,12 @@ async def run(
             conversation_memory=conversation_memory,
             director=director,
             offline_contact=offline_contact,
+            character_activity_setup=CharacterActivitySetupService(
+                database.character_activity_directory(),
+                chat_conversations,
+                player_event_feed,
+                command_handler,
+            ),
             world_locations=WorldLocationsService(
                 database.local_location_directory(), command_handler
             ),

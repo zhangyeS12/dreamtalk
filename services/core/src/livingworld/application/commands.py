@@ -77,6 +77,11 @@ class Command:
                 require_type(self.character_id, CharacterId, "character_id")
                 require_type(self.location_id, LocationId, "location_id")
                 same_world(self.world_id, self.character_id, self.location_id)
+                if self.activity_player_id is not None:
+                    require_type(self.activity_player_id, PlayerId, "activity_player_id")
+                    same_world(self.world_id, self.activity_player_id)
+                    if self.expected_state_revision is not None:
+                        raise DomainInvariantError("Activity setup only permits initial placement")
             case ChangeRelationship():
                 _optional_revision(self.expected_relationship_revision)
                 require_type(self.source_id, (CharacterId, PlayerId), "source_id")
@@ -188,6 +193,7 @@ class PlaceCharacter(Command):
     character_id: CharacterId
     location_id: LocationId
     expected_state_revision: Revision | None
+    activity_player_id: PlayerId | None = None
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

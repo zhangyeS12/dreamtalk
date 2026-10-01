@@ -2,7 +2,21 @@
 
 更新日期：2026-10-01。此文件记录当前开发现场与接续工作，不替代 [AGENTS.md](AGENTS.md)。先读 AGENTS，再读本文，最后核对实际 Git 状态和相关代码；不能把下面的基线哈希当作永远不变的当前 HEAD。
 
-## 最新接续：2026-10-01 桌面版本与自启动路径更新
+## 最新接续：2026-10-01 角色初始活动地点
+
+- 从干净`1d735a918328611871fcbd9daf1ad49699688257` / `codex/chat-feedback`接续，实际仓库`D:\LivingWorld`。用户授权继续，完成前轮排定的普通角色初始活动地点入口。先读AGENTS/交接、PlaceCharacter/聊天实例化、地点目录、Director及产品/持久化边界，再调查成熟实现；[复用记录](docs/research/2026-10-01-character-activity-setup-reuse.md)核对SillyTavern1.19.0（AGPL-3.0）的Scenario/WorldInfo及Generative Agents当日main（Apache-2.0）的既有地点规划。未复制其实现或引入新依赖，复用当前Kernel、SQLAlchemy、React受控表单和API client。
+- 确认交接缺口：打开聊天只创建Character/Conversation，不能让没有CharacterState的角色进入日常规划。原DIRECTOR_ACTIVITIES步骤2及director_characters_required提示却让用户仅打开聊天；PRODUCT_SURFACE也暗示有家便可活动。已纠正为“打开私聊 → 明确确认初始地点 → 开启自动活动/显式重规划”，以实际代码为准。离线主动私聊依旧不需要物理地点。
+- 新`GET /worlds/{world}/activity-characters`只返回当前绑定玩家的私聊角色名/ID及是否已设置，不返回当前地点、未来活动、私人资料或事件。复用ChatConversationService的当前已接受角色名及SQL权限过滤；初始化存在性只在已授权私聊身份范围内投影，旧玩家/World/client返回不会覆盖新界面。
+- 新`POST .../activity-characters/{character}/initial-location`携带当前玩家、目录地点和X-Request-Id，薄服务调用原PlaceCharacter，expected_state_revision固定None。新增可选activity_player_id默认None，旧命令fingerprint保持；本入口指纹包括玩家且不允许非初始revision。Kernel持有writer后同事务核对当前绑定/私聊归属、本世界目录或真实初始家、没有CharacterState及原16名已放置角色容量，然后走原CharacterPlaced/state/receipt。无新表/migration/event版本、直接SQL世界状态写入、Player移动、Observation回填或另外的放置执行器。
+- 普通设置新增“角色初始活动地点”，不预选角色或家、不批量放置；已经设置的角色只能显示存在性，不能再次放置。保存不调用模型，不自动开启Director、立即打断旧批或主动请求新规划；旧缺角色attention需用户显式点击“重新规划”。按已有后台授权和正常批次运行。原自动活动提示与已过时“主动联系尚未开放”的交流状态文案同步修正。
+- 保存同步锁/请求序号、World+Player组件key和client失效保护保持；未确认结果保留角色/地点/原请求，未知错误不自动重放。只读刷新可显示已设置，但不把存在性当本次回执；同ID重试读原回执，不在角色后续已移动时再放置。确定固定码拒绝显示具体提示。切世界/新世界/切身份前保护未保存设置，关闭编辑会话后可重新只读核对是否已有初始位置。
+- Ruff11份Python检查通过；首次仅导入/长行/格式问题，按无缓存格式化后通过。ESLint/TypeScript、diff静态检查通过；文档链接570个本地目标0 broken，190外部URL仅计数。Core PyInstaller41.591秒成功，Vite211模块/119ms、Rust release26.70秒成功；PE ProductVersion/FileVersion为0.1.2。保留tzdata/pysqlite2/MySQLdb可选hidden-import、STATIC_VCRUNTIME弃用及Vite主chunk512.43kB超过500kB提示，未提高阈值隐藏。195份冻结Python、22份许可、8份说明、desktop/Core/helper及465份ZIP文件字节核对通过。
+- 完整独立新包`D:\LivingWorld\artifacts\portable\initial-activity\dreamtalk\dreamtalk-desktop.exe`：desktop13,188,608 bytes / SHA256 `2C76A382338B6B24929904F663508A78317EBFDAE3BD30E4CE731752A0651976`；Core13,874,046 / `16E6D1A8BA1E347047C0B0909D56E04A41FE793CD0AC397A00D1825027139B35`；ZIP43,056,796 / `37898F5108218A70F1BDBDC3EA5FA299AF0E8BD6CC92911F04279A1620198180`。helper保持`264DF8990752ABB179A3773ACE934F546C69AF99F4C9834EA1286D0D9886FDEA`。清单`artifacts/initial-activity-package.json`及Core/desktop build日志同prefix；随包README/DIRECTOR/ACTIVITY_LOCATIONS更新，旧包保留。桌面版本0.1.2，Core/协议兼容版本与identifier不变，0.1.1自启动路径修复沿用。
+- 按AGENTS§20没有新增/修改/运行测试、启动应用/GUI、真实API/模型调用、原存档或副本诊断/迁移、用户配置/系统注册变更；只编译和静态核对。旧副本诊断授权不复用。未push/发布，实际保存、重开、跨世界/身份、并发/重试和Director活动仍由用户验收。
+- 用户入口：从旧程序托盘右键“退出并停止后台运行”，打开完整0.1.2包；在通讯录打开私聊，设置 → 角色初始活动地点 → 刷新 → 选择角色/地点 → 确认；再按独立授权开启世界自动活动。更换包后若使用自启动，保持勾选并保存更新位置。普通UI不会列出角色后续隐藏地点。
+- **接下来：** 继续完善真实活动记录与聊天话题的衔接，并根据用户实际体验处理问题；不要用开始活动/时段结束伪造成果，也不要把位置或他人事件公开成全知时间线。多人主动联系/关系推进/完整离线世界重建仍是独立未完成范围，实施前需形成具体边界。暂没有待用户决策的阻塞。前端主chunk增长可在后续通过成熟React lazy/Vite拆分改善，而非提高告警阈值。
+
+## 前序切片：2026-10-01 桌面版本与自启动路径更新
 
 - 从干净`645c37b393e3013e7f7752efad80cc6c48d0b096` / `codex/chat-feedback`接续，实际仓库仍`D:\LivingWorld`。用户要求继续，按照前一轮建议先完成版本/自启动更新，下一步才是普通角色初始活动地点。前序排查曾确认真实HKCU登记仍指向offline-contact旧包；这不是本轮修改后的系统验收证据，本轮没有重新读取或改写真实注册。
 - 根因在`configure_desktop_background`：原来只有开关变化才enable，插件is_enabled在Windows判断已登记/StartupApproved，不比较exe路径，因此新版保持勾选并保存不会刷新旧地址。直接复用官方autostart2.6.0及既有auto-launch0.5.0的enable覆盖登记，保持--background和单实例/托盘生命周期。调查来源、发布源码核对及许可见[本轮复用记录](docs/research/2026-10-01-startup-version-reuse.md)；没有新依赖、手写注册表或另一个Agent框架。

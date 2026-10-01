@@ -8,7 +8,7 @@ from uuid import uuid5
 from livingworld.application.commands import CreateLocation
 from livingworld.domain.contracts import RequestId
 from livingworld.domain.errors import DomainInvariantError
-from livingworld.domain.identifiers import LocationId, WorldId
+from livingworld.domain.identifiers import CharacterId, LocationId, PlayerId, WorldId
 
 if TYPE_CHECKING:
     from livingworld.application.command_handler import CommandHandler
@@ -48,6 +48,9 @@ class LocalLocationDirectory(Protocol):
 class LocalLocationCatalog(Protocol):
     async def check_new(self, world_id: WorldId, name: str) -> None: ...
     async def add(self, location_id: LocationId, name: str) -> None: ...
+    async def check_initial_activity(
+        self, character_id: CharacterId, location_id: LocationId, player_id: PlayerId
+    ) -> None: ...
 
 
 class WorldLocationsService:

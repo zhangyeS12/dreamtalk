@@ -13,6 +13,8 @@ export interface CoreHealth {
 }
 export interface WorldSummary { world_id: string; name: string }
 export interface ActivityLocation { location_id: string; name: string; is_home: boolean }
+export interface ActivityCharacter { character_id: string; name: string; initialized: boolean }
+export interface ActivityCharacterDirectory { player_id: string | null; items: ActivityCharacter[] }
 export interface WorldSettings extends WorldSummary {
   world_time: string;
   clock_state: "running" | "paused";
@@ -473,6 +475,15 @@ export class CoreClient {
     return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/content/${importId}/discard`, { method: "POST" });
   }
 
+  listActivityCharacters(worldId: string): Promise<ActivityCharacterDirectory> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/activity-characters`);
+  }
+  initializeCharacterActivity(worldId: string, playerId: string, characterId: string, locationId: string, requestId: string): Promise<{ character_id: string; initialized: boolean }> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/activity-characters/${encodeURIComponent(characterId)}/initial-location`, {
+      method: "POST", headers: { "Content-Type": "application/json", "X-Request-Id": requestId },
+      body: JSON.stringify({ player_id: playerId, location_id: locationId }),
+    });
+  }
   listActivityLocations(worldId: string): Promise<ActivityLocation[]> {
     return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/activity-locations`);
   }

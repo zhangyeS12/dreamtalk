@@ -405,6 +405,10 @@ class CommandHandler:
 
             case PlaceCharacter():
                 same_world(world.world_id, command.character_id, command.location_id)
+                if command.activity_player_id is not None:
+                    await uow.local_locations.check_initial_activity(
+                        command.character_id, command.location_id, command.activity_player_id
+                    )
                 if await uow.characters.get(command.character_id) is None:
                     raise EntityNotFoundError("Character does not exist")
                 await self._location(uow, world, command.location_id)

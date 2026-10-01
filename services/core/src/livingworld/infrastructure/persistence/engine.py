@@ -194,6 +194,13 @@ class Database:
 
         return SqlAlchemyDeveloperInspectorStore(self._sessions)
 
+    def character_activity_directory(self):
+        from livingworld.infrastructure.persistence.world_locations import (
+            SqlAlchemyCharacterActivityDirectory,
+        )
+
+        return SqlAlchemyCharacterActivityDirectory(self._sessions)
+
     def local_location_directory(self):
         from livingworld.infrastructure.persistence.world_locations import (
             SqlAlchemyLocalLocationDirectory,

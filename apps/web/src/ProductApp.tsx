@@ -10,6 +10,7 @@ import { ModelSetup } from "./ModelSetup";
 import { WorldImports, WorldContacts } from "./WorldContent";
 import { WorldActivities } from "./WorldActivities";
 import { WorldLocations } from "./WorldLocations";
+import { CharacterActivitySetup } from "./CharacterActivitySetup";
 import { ProfileEditor } from "./ProfileEditor";
 import "./product.css";
 
@@ -64,6 +65,7 @@ export function ProductApp({ client }: { client: CoreClient }) {
   const [meVisited, setMeVisited] = useState(false);
   const [worldContentDirty, setWorldContentDirty] = useState(false);
   const [worldLocationsDirty, setWorldLocationsDirty] = useState(false);
+  const [characterActivityDirty, setCharacterActivityDirty] = useState(false);
   const [worldProfileDirty, setWorldProfileDirty] = useState(false);
   const [worlds, setWorlds] = useState<WorldSettings[]>([]);
   const [worldId, setWorldId] = useState("");
@@ -197,7 +199,7 @@ export function ProductApp({ client }: { client: CoreClient }) {
     event.preventDefault();
     const name = newWorldName.trim();
     if (!name || busy) return;
-    if ((worldProfileDirty || worldContentDirty || worldLocationsDirty) && !window.confirm("当前世界有尚未保存的编辑，是否放弃修改并创建新世界？")) return;
+    if ((worldProfileDirty || worldContentDirty || worldLocationsDirty || characterActivityDirty) && !window.confirm("当前世界有尚未保存的编辑，是否放弃修改并创建新世界？")) return;
     await act(async () => {
       const result = await client.createWorld(name, crypto.randomUUID());
       await refresh(); setSelectedPlayer(null); setConversationDirectory(null); setGroupDirectory(null); setSelectedConversationId(null); setSelectedGroupId(null); setGroupSetupOpen(false); setWorldId(result.world_id); setNewWorldName("");
@@ -276,7 +278,7 @@ export function ProductApp({ client }: { client: CoreClient }) {
 
       {<div className="settings-page" hidden={tab !== "settings"}>
         <section className="settings-section"><div className="section-heading"><h2>世界</h2><p>每个世界有独立的角色、聊天和身份。</p></div>
-          {worlds.length ? <label className="field"><span>当前世界</span><select value={worldId} disabled={busy} onChange={event => { if ((worldProfileDirty || worldContentDirty || worldLocationsDirty) && !window.confirm("当前世界有尚未保存的编辑，是否放弃修改并切换世界？")) return; setSelectedPlayer(null); setConversationDirectory(null); setGroupDirectory(null); setSelectedConversationId(null); setSelectedGroupId(null); setGroupSetupOpen(false); setWorldId(event.target.value); setEventsOpen(false); setNotice(""); }}>
+          {worlds.length ? <label className="field"><span>当前世界</span><select value={worldId} disabled={busy} onChange={event => { if ((worldProfileDirty || worldContentDirty || worldLocationsDirty || characterActivityDirty) && !window.confirm("当前世界有尚未保存的编辑，是否放弃修改并切换世界？")) return; setSelectedPlayer(null); setConversationDirectory(null); setGroupDirectory(null); setSelectedConversationId(null); setSelectedGroupId(null); setGroupSetupOpen(false); setWorldId(event.target.value); setEventsOpen(false); setNotice(""); }}>
             {worlds.map(item => <option key={item.world_id} value={item.world_id}>{item.name}</option>)}
           </select></label> : <p className="inline-hint">还没有世界。创建后才能导入角色卡和世界书。</p>}
           <form className="create-world" onSubmit={event => void createWorld(event)}><label className="field"><span>创建新世界</span><input value={newWorldName} onChange={event => setNewWorldName(event.target.value)} maxLength={120} placeholder="给世界起个名字" /></label><button type="submit" className="primary-button" disabled={busy || !newWorldName.trim()}>创建世界</button></form>
@@ -285,7 +287,7 @@ export function ProductApp({ client }: { client: CoreClient }) {
           <div className="setting-row"><span><strong>时间状态</strong><small>{world.clock_state === "running" ? "运行中" : "已暂停"}{world.runtime_state === "degraded" ? " · 运行异常" : ""}</small></span><button type="button" className="secondary-button" disabled={busy || world.runtime_state === "degraded"} onClick={() => void act(() => world.clock_state === "running" ? client.pauseProductWorld(world.world_id) : client.resumeProductWorld(world.world_id), world.clock_state === "running" ? "世界已暂停。" : "世界已恢复。")}>{world.clock_state === "running" ? "暂停" : "恢复"}</button></div>
           <div className="setting-row"><label className="field"><span>时间倍率</span><input type="number" min="0.01" max="1000" step="0.01" inputMode="decimal" value={scale} onChange={event => setScale(event.target.value)} /></label><button type="button" className="secondary-button" disabled={busy || !scale || Number(scale) <= 0 || Number(scale) > 1000} onClick={() => void act(() => client.scaleProductWorld(world.world_id, scale), "时间倍率已更新。")}>应用</button></div>
         </section>}
-        {world && selectedPlayer && selectedPlayerState?.availability && selectedPlayerState.presence_revision !== null && <section className="settings-section"><div className="section-heading"><h2>交流状态</h2><p>忙碌状态不会暂停世界运行。主动联系功能尚未开放，此设置目前不会触发自动消息。</p></div>
+        {world && selectedPlayer && selectedPlayerState?.availability && selectedPlayerState.presence_revision !== null && <section className="settings-section"><div className="section-heading"><h2>交流状态</h2><p>忙碌状态不会暂停世界运行，已开启的离线联系会跳过普通主动消息；设为可用不会立即补发。</p></div>
           <div className="setting-row"><span><strong>{selectedPlayerState.availability === "available" ? "可用" : "忙碌"}</strong><small>仅适用于当前世界绑定的玩家身份</small></span><button type="button" className="secondary-button" disabled={busy} onClick={() => {
             const next: PlayerAvailability = selectedPlayerState.availability === "available" ? "busy" : "available";
             void act(async () => {
@@ -296,6 +298,7 @@ export function ProductApp({ client }: { client: CoreClient }) {
           }}>{selectedPlayerState.availability === "available" ? "设为忙碌" : "设为可用"}</button></div>
         </section>}
         {world && <WorldLocations key={`locations:${world.world_id}`} client={client} worldId={world.world_id} visible={tab === "settings"} onDirtyChange={setWorldLocationsDirty} />}
+        {world && selectedPlayer && <CharacterActivitySetup key={`initial-activity:${world.world_id}:${selectedPlayer}`} client={client} worldId={world.world_id} playerId={selectedPlayer} visible={tab === "settings"} onDirtyChange={setCharacterActivityDirty} />}
         <BackgroundSettings />
         <ModelSetup client={client} turnTokenCeiling={tokenCeiling} />
         {world && selectedPlayer && <OfflineContactSettings key={`offline:${world.world_id}:${selectedPlayer}`} status={offlineContact.status} busy={offlineContact.busy} refreshing={offlineContact.refreshing} error={offlineContact.error} onRefresh={offlineContact.refresh} onSave={offlineContact.save} />}
@@ -310,7 +313,7 @@ export function ProductApp({ client }: { client: CoreClient }) {
 
       {(tab === "me" || meVisited) && <div className="settings-page profile-page" hidden={tab !== "me"}><ProfileEditor client={client} /><section className="settings-section"><div className="section-heading"><h2>我在当前世界</h2><p>每个世界选择一个自己的玩家身份；世界事件按此身份的已知范围显示。</p></div>
         {!world ? <p className="inline-hint">先在设置中创建世界。</p> : <>
-          {players.length > 0 ? <div className="identity-row"><label className="field"><span>玩家身份</span><select value={playerChoice} onChange={event => setPlayerChoice(event.target.value)}>{players.map(item => <option value={item.player_id} key={item.player_id}>{item.name}</option>)}</select></label><button type="button" className="secondary-button" disabled={busy || !playerChoice || playerChoice === selectedPlayer} onClick={() => void act(async () => { await client.bindPlayer(world.world_id, playerChoice); const [available, selected] = await loadIdentity(world.world_id); setPlayers(available); setSelectedPlayer(selected.player_id); setSelectedPlayerState(selected); setPlayerChoice(selected.player_id ?? available[0]?.player_id ?? ""); }, "当前世界的玩家身份已更新。")}>设为我的身份</button></div> : null}
+          {players.length > 0 ? <div className="identity-row"><label className="field"><span>玩家身份</span><select value={playerChoice} onChange={event => setPlayerChoice(event.target.value)}>{players.map(item => <option value={item.player_id} key={item.player_id}>{item.name}</option>)}</select></label><button type="button" className="secondary-button" disabled={busy || !playerChoice || playerChoice === selectedPlayer} onClick={() => { if (characterActivityDirty && !window.confirm("角色初始地点尚未确认，是否放弃本次设置并切换身份？")) return; void act(async () => { await client.bindPlayer(world.world_id, playerChoice); const [available, selected] = await loadIdentity(world.world_id); setPlayers(available); setSelectedPlayer(selected.player_id); setSelectedPlayerState(selected); setPlayerChoice(selected.player_id ?? available[0]?.player_id ?? ""); }, "当前世界的玩家身份已更新。"); }}>设为我的身份</button></div> : null}
           {!selectedPlayer ? <div className="identity-start"><p className="inline-hint">进入世界后，你会从“家”开始。聊天消息可以跨地点发送，不会改变你的物理位置。</p><button type="button" className="primary-button" disabled={busy} onClick={() => void act(async () => { await client.startAtHome(world.world_id); const [available, selected] = await loadIdentity(world.world_id); setPlayers(available); setSelectedPlayer(selected.player_id); setSelectedPlayerState(selected); setPlayerChoice(selected.player_id ?? available[0]?.player_id ?? ""); }, "已进入世界，当前位置：家。")}>{players.length > 0 ? "继续从家进入" : "进入世界"}</button></div> : null}
         </>}
         {selectedPlayer ? <p className="inline-hint">已绑定：{players.find(item => item.player_id === selectedPlayer)?.name ?? "当前玩家"}</p> : null}
