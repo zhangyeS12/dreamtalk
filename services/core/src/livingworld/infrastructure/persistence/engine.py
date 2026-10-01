@@ -186,6 +186,16 @@ class Database:
 
         return SqlAlchemyCharacterObservedEventReader(self._sessions, character_id)
 
+    def character_activity_context_reader(self, character_id: CharacterId, world_time_source):
+        """Bind the activity snapshot to the verified speaker and existing runtime clock."""
+        from livingworld.infrastructure.persistence.character_activity_context import (
+            SqlAlchemyCharacterActivityContextReader,
+        )
+
+        return SqlAlchemyCharacterActivityContextReader(
+            self._sessions, character_id, world_time_source
+        )
+
     def developer_inspector_store(self):
         """Developer-only read projection; it has no mutation capability."""
         from livingworld.infrastructure.persistence.developer_inspector import (

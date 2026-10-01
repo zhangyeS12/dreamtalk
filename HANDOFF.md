@@ -2,7 +2,19 @@
 
 更新日期：2026-10-01。此文件记录当前开发现场与接续工作，不替代 [AGENTS.md](AGENTS.md)。先读 AGENTS，再读本文，最后核对实际 Git 状态和相关代码；不能把下面的基线哈希当作永远不变的当前 HEAD。
 
-## 最新接续：2026-10-01 角色初始活动地点
+## 最新接续：2026-10-01 自身活动与聊天情境（桌面0.1.3）
+
+- 从干净68025eb / codex/chat-feedback接续，实际仓库仍D:\LivingWorld。用户要求继续上轮“真实活动与聊天衔接”。先读AGENTS/最新交接及相关观察、事件、时钟、角色活动和上下文；已有亲历事件输入，不重复造事件话题入口。调查SillyTavern官方Author’s Note当日文档（源码AGPL-3.0）和Generative Agents当日main retrieve.py（Apache-2.0），没有复制其代码或安装另一套环境；直接复用已有SQLAlchemy、Observation SQL、中文事件投影、有效WorldTime、聊天上下文与预算，见[复用记录](docs/research/2026-10-01-activity-chat-context-reuse.md)。
+- 原输入只有“开始活动”历史和原始微秒，没有当前有效时间/自身状态核对；最新自身开始可能被12条其他亲历观察挤出。本轮新增内部CharacterActivityContextReader，组合根明确绑定当前verified speaker。抽取原character_witnessed_events SQL供两处复用；单SQL捕获同世界时钟、该角色自己的witnessed/event_occurrence且主体为自己的最新已提交CharacterRoutineStarted v1、自身状态revision/地点；只取白名单JSON标量，兼顾json_type与SQLite typeof整数边界，不选整个payload、不读未来candidate或Director input。按同事件ID复用描述投影。
+- 当前阶段要求来源非未来、planned_until大于开始、自身revision/地点一致，且now早于planned_until，才是within_planned_interval；planned_interval_elapsed仅时段过去，changed_since_start仅状态变动。后两者不证明现在仍在活动或完成成果。WorldTime用现有monotonic/倍率/暂停机制；经过时间为世界分钟，不转换现实日期。无来源只给时钟，不猜活动。只读快照最多2KiB，超长历史描述省略；没有新依赖、表/迁移、公共API/协议或世界事实写入。
+- 私聊将活动快照作为lower-trust USER data放在当前问题前；群聊附到当前speaker输入，不进入selector。原亲历事件、记忆、摘要和公共背景继续复用，新增reader参数默认None保持旧构造边界。台词按既有生成路径发送，费用仍进正常回复预算，没有额外模型任务/后台循环。不能由聊天宣称Player同地点、目击或授予新Knowledge；没有普通UI全知活动列表，也没有改离线联系范围。
+- Ruff7份Python、格式、ESLint/TypeScript和Git diff静态检查通过；197份Python AST语法解析、4处桌面版本配置以及docs内538个本地链接核对通过。第一次仅导入排序/格式/101字符长行，修正后通过。Core初编25.304秒；源码复核新增typeof防异常超大JSON整数后重编25.199秒。Vite211模块/130ms、Rust release25.55秒成功，PE ProductVersion/FileVersion为0.1.3。仍有tzdata/pysqlite2/MySQLdb可选hidden-import未找到、STATIC_VCRUNTIME弃用、主chunk512.43kB超过500kB告警，没有提高阈值隐藏。
+- 新完整包D:\LivingWorld\artifacts\portable\activity-chat-context\dreamtalk\dreamtalk-desktop.exe，旧包保留。desktop13,189,632 bytes / SHA256 123948AAEDEFD9D6F1D3C872B9A8E651D569F360D4A256D8DBEC3EAC3101EEEF；Core13,881,689 / 5BB160618EED5B43606F6D7F3132F169E78F1455A05056BC41DC90A6CB0FB5B4；ZIP43,070,789 / AA449FF176A95FBE8236BDB0D0063C1DACE7B0914DDFC12FF6AE7D6FC2D92DA9。helper保持264DF8990752ABB179A3773ACE934F546C69AF99F4C9834EA1286D0D9886FDEA。197份冻结源码、22份许可（20份第三方+2份顶层）、8份说明和467份ZIP文件字节核对通过。MEMORY/RECALL/STREAMING沿用上包经已存hash核对的未变说明；README/DIRECTOR用当前文档。清单artifacts/activity-chat-context-package.json，build日志同prefix。桌面0.1.3，Core/协议兼容版本、identifier和用户数据路径不变。
+- 按AGENTS§20只做静态检查、构建、文件核对，没有新增/修改/运行测试、启动应用/GUI、数据库读取/迁移/副本诊断、真实模型调用或修改系统自启动/用户配置。没有push/发布。编译不代表模型会准确自然地使用情境，真实保存/暂停/重启/并发/跨角色隔离仍由用户验收。
+- 体验：旧程序托盘“退出并停止后台运行”后打开完整0.1.3包；为角色明确初始化活动地点，按既有独立授权启用自动活动，实际活动开始后在私聊或群聊问“你在忙什么”“刚才做了什么”。状态与记录无证据时不得期待真实活动细节。换包后自启动需显式“保存并更新启动位置”，避免单实例继续打开旧进程。
+- **接下来：** 推进有来源的经历记忆与真实活动结果，先限定结果类型、形成/纠正规则，再接Kernel和角色输入；不能把占用到期伪造成果。相遇剧情、多人主动联系/关系和完整离线重建仍分项未完成。当前切片没有待用户决策的阻塞；已有前端chunk告警可独立按成熟lazy/code splitting优化。
+
+## 前序切片：2026-10-01 角色初始活动地点
 
 - 从干净`1d735a918328611871fcbd9daf1ad49699688257` / `codex/chat-feedback`接续，实际仓库`D:\LivingWorld`。用户授权继续，完成前轮排定的普通角色初始活动地点入口。先读AGENTS/交接、PlaceCharacter/聊天实例化、地点目录、Director及产品/持久化边界，再调查成熟实现；[复用记录](docs/research/2026-10-01-character-activity-setup-reuse.md)核对SillyTavern1.19.0（AGPL-3.0）的Scenario/WorldInfo及Generative Agents当日main（Apache-2.0）的既有地点规划。未复制其实现或引入新依赖，复用当前Kernel、SQLAlchemy、React受控表单和API client。
 - 确认交接缺口：打开聊天只创建Character/Conversation，不能让没有CharacterState的角色进入日常规划。原DIRECTOR_ACTIVITIES步骤2及director_characters_required提示却让用户仅打开聊天；PRODUCT_SURFACE也暗示有家便可活动。已纠正为“打开私聊 → 明确确认初始地点 → 开启自动活动/显式重规划”，以实际代码为准。离线主动私聊依旧不需要物理地点。

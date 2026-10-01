@@ -454,7 +454,7 @@ serialized data enter lower-trust USER context; current world entity names are
 bounded readable labels, not historic snapshots. No player's event feed or
 other member's private observations enter this input. Group selection is unchanged.
 
-Only PlayerMoved, PlayerPlaced and CharacterPlaced have deterministic templates;
+PlayerMoved, PlayerPlaced, CharacterPlaced and CharacterRoutineStarted v1 have deterministic templates;
 unknown versions, invalid references and ordinary/legacy observations do not
 supply descriptions. This is event-time access, not automatic KnowledgeAssertion,
 Memory, Truth, or proof that the Character already told the player. Snapshot is
@@ -465,3 +465,13 @@ See [reuse and limits](../research/2026-09-29-observed-events-reuse.md).
 ## 离线主动消息
 
 0027增加ChatTurn.kind（旧数据默认player，主动消息为outreach）和可空ChatMessage.story_sent_at_utc。outreach没有伪造的Player消息，也不能由玩家reply/turn入口重新派发；独立恢复receipt控制一次生成，消息/完成记录原子提交。turn.token_ceiling记录两次有限任务的可信上界之和，实际费用仍来自独立LLMledger。created_at_utc永远真实，story字段仅呈现离线剧情时间。持久position和旧历史不重排；普通回复字段为空，兼容旧客户端。已读只改变恢复回执，不赋予WorldTruth/Knowledge。
+
+## 角色自身活动进入聊天（2026-10-01）
+
+私聊和群聊回复现在读取当前发言角色自己的最新真实活动开始，并结合现有有效WorldTime与自身状态快照区分：原定活动时段内、原定时段已过、自身状态已变化。来源必须是同世界、该角色自己的witnessed/event_occurrence观察，且事件主体是自己；从Kernel已提交的CharacterRoutineStarted v1取白名单标量，不读取Director输入、未来候选或其他角色状态。缺少来源不猜测活动。角色自己的最新开始独立读取，不会因12条近期观察全部被其他亲历事件占满而丢失。
+
+当前活动判断要求自身revision与地点仍对应这次开始，并且当前WorldTime早于事件中的planned_until。结束时段只释放占用，不表示完成了任务、取得成果或改变关系；状态变化后不把旧开始当现在。经过时间是世界分钟，不转换成现实日期；暂停世界不按现实时间产生进度。
+
+这段最多2KiB的临时情境只提供给该角色的回复，私聊放在当前问题前，群聊附在该发言者的资料中；群聊选人不读它。没有新的模型任务、UI全知活动面板、自动Memory/Knowledge写入或迁移。对话可以自然提及自己实际开始过的活动，但消息本身不把玩家标成目击者。现有亲历事件输入和“聊聊这件事”入口继续复用。
+
+只做静态检查和编译打包，实际模型是否自然、准确使用这些信息仍由用户体验验收。见[调查与实现边界](../research/2026-10-01-activity-chat-context-reuse.md)。

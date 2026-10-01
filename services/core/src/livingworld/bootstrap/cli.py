@@ -234,6 +234,7 @@ async def run(
                 earlier_chat_recall,
                 conversation_memory_store,
                 database.character_observed_event_reader,
+                lambda owner: database.character_activity_context_reader(owner, time_source),
             ),
         )
         group_chat_reply = configure_group_chat_reply(
@@ -248,6 +249,7 @@ async def run(
                 earlier_chat_recall,
                 conversation_memory_store,
                 database.character_observed_event_reader,
+                lambda owner: database.character_activity_context_reader(owner, time_source),
             ),
         )
         from livingworld.application.content_builder import ContentBuilder

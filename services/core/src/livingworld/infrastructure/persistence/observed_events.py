@@ -188,6 +188,29 @@ async def project_observed_events(
     return tuple(result)
 
 
+def character_witnessed_events(owner: CharacterId, *, event_id: UUID | None = None):
+    """Bind event-time access to one Character before any event payload is selected."""
+    query = (
+        select(
+            ObservationRecord.target_event_id.label("event_id"),
+            func.min(ObservationRecord.observed_at).label("observed_at"),
+            literal(1).label("witnessed"),
+        )
+        .where(
+            ObservationRecord.world_id == owner.world_id.value,
+            ObservationRecord.principal_kind == "character",
+            ObservationRecord.principal_character_id == owner.value,
+            ObservationRecord.target_kind == "event",
+            ObservationRecord.target_event_id.is_not(None),
+            witnessed_occurrence(),
+        )
+        .group_by(ObservationRecord.target_event_id)
+    )
+    if event_id is not None:
+        query = query.where(ObservationRecord.target_event_id == event_id)
+    return query.subquery()
+
+
 class SqlAlchemyCharacterObservedEventReader:
     def __init__(self, sessions, owner: CharacterId) -> None:
         self._sessions = sessions
@@ -201,23 +224,7 @@ class SqlAlchemyCharacterObservedEventReader:
         if type(limit) is not int or not 1 <= limit <= MAX_CHARACTER_EVENTS:
             raise ValueError("character_event_limit_invalid")
         owner = self._owner
-        seen = (
-            select(
-                ObservationRecord.target_event_id.label("event_id"),
-                func.min(ObservationRecord.observed_at).label("observed_at"),
-                literal(1).label("witnessed"),
-            )
-            .where(
-                ObservationRecord.world_id == owner.world_id.value,
-                ObservationRecord.principal_kind == "character",
-                ObservationRecord.principal_character_id == owner.value,
-                ObservationRecord.target_kind == "event",
-                ObservationRecord.target_event_id.is_not(None),
-                witnessed_occurrence(),
-            )
-            .group_by(ObservationRecord.target_event_id)
-            .subquery()
-        )
+        seen = character_witnessed_events(owner)
         async with self._sessions() as session:
             return await project_observed_events(
                 session, owner.world_id, seen, limit=limit, detailed_only=True
