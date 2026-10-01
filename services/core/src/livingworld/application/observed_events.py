@@ -46,6 +46,14 @@ async def character_observed_events(
             "ledger_position": str(event.ledger_position),
             "observation_channel": "witnessed",
         }
+        if event.subject is not None:
+            if event.subject.world_id != owner.world_id:
+                raise EntityNotFoundError("chat_event_subject_world_invalid")
+            item["subject_kind"] = (
+                "character" if isinstance(event.subject, CharacterId) else "player"
+            )
+            item["subject_id"] = str(event.subject.value)
+            item["participation"] = "actor" if event.subject == owner else "witness"
         size = len(json.dumps(item, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
         if used + size + 1 > MAX_CHARACTER_EVENT_BYTES:
             continue

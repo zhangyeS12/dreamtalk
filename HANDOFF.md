@@ -2,7 +2,20 @@
 
 更新日期：2026-10-01。此文件记录当前开发现场与接续工作，不替代 [AGENTS.md](AGENTS.md)。先读 AGENTS，再读本文，最后核对实际 Git 状态和相关代码；不能把下面的基线哈希当作永远不变的当前 HEAD。
 
-## 最新接续：2026-10-01 自身活动与聊天情境（桌面0.1.3）
+## 最新接续：2026-10-01 回答对应角色自身活动（桌面0.1.4）
+
+- 从干净9aa765d / codex/chat-feedback接续，实际仓库仍D:\LivingWorld。用户明确要求“继续推进项目，回答需要对应角色自身活动”。核对原0.1.3自身阶段快照、授权事件投影、私聊/群聊输入和现有回复校验后，发现亲历资料缺少行动主体/目击者标记，直接persona也未给稳定角色ID；自然语言描述容易混淆自己和他人。交接中“当前角色自己的亲历记录”指本人有权看到，不等于本人是行动主体，本轮把两者明确分开。
+- 实现前调查Concordia当日main Observation组件（Apache-2.0）以及NVIDIA NeMo Guardrails事实核对文档/develop许可（Apache-2.0），见[复用记录](docs/research/2026-10-01-activity-identity-reuse.md)。沿用SQLAlchemy、既有观察/主体身份、RoutineActivity、活动快照和模型网关；没有复制第三方代码、安装Agent框架或自行增加关键词事实拦截器。语义核对模型会增加推理/费用与误判边界，本轮没有接入额外裁判模型，也不能把输入身份核对说成所有台词已事实验证。
+- KnownWorldEvent追加默认None的内部subject，仅为已有授权白名单事件及有效描述投影typed CharacterId/PlayerId。角色观察输入增加subject_kind/subject_id及participation=actor/witness；跨世界主体拒绝，actor必须等于当前角色typed身份，主体字段一起计入原12条/8KiB资料上限。普通玩家HTTP仍逐字段返回旧契约，不暴露新增内部字段；未知schema/缺失引用不猜主体。
+- 自身开始的原单SQL标量查询增取合法activity，CharacterActivitySnapshot追加默认None的RoutineActivity。应用再次核对事件subject为当前owner、活动为领域enum，才加入last_own_activity_start；输入增加speaker_character_id/actor_character_id/activity_kind，仍最多2KiB，沿用有效WorldTime、自身revision/地点及未结束原定时段判定。只读已提交自身来源；没有未来候选、私人状态跨角色查询、新表/迁移、事件/Knowledge/Memory写入。
+- 私聊persona加入稳定角色ID；私聊与群聊回复共用ACTIVITY_GROUNDING_INSTRUCTIONS。近况以本人活动类型与阶段为依据，不能把角色卡习惯/公共背景/他人聊天替代真实经历，或把目击他人变成“我做过”；同名/改名不改变主体。原定时段过去不证明完成成果，暂停不推进现实时间；没有自身证据时不编造任务。允许角色语气、情绪和想法自然表达，内部字段不需要对玩家逐条播报。所有供应商沿用原自然文本/stream与费用治理，没有额外模型任务；selector不接收私人活动快照。
+- Ruff7份Python、format、ESLint/TypeScript、Git diff通过；197份Python AST、4处桌面版本和Cargo.lock、docs内542个本地链接核对通过。Core冻结25.804秒；Vite211模块/146ms，Rust release27.75秒成功，PE ProductVersion/FileVersion为0.1.4。保留tzdata/pysqlite2/MySQLdb三个可选hidden-import、STATIC_VCRUNTIME弃用和主chunk512.43kB超过500kB告警。一次默认沙箱uv缓存访问被拒后，改用已授权的静态解析执行，成功；没有自动审批拒绝或未解构建失败。
+- 完整包D:\LivingWorld\artifacts\portable\activity-identity\dreamtalk\dreamtalk-desktop.exe，旧包保留。desktop13,189,632 bytes / SHA256 D553F5076B3F7135D8948F0B4746F99797C3B61ACB6EB20B1BCCF93E8F8BC5C1；Core13,882,637 / F731BF85ADE3D07CB8B39649E8188DAEA122FEF0F6661679C9EF0C4A2684C48B；ZIP43,076,633 / 7A9073930CF0F31AE551782F193874BF0569857C81C2A3AB8611F124DB6DA869。helper保持264DF8990752ABB179A3773ACE934F546C69AF99F4C9834EA1286D0D9886FDEA。197份冻结源码、22份许可、8份说明和467份ZIP文件字节一致；MEMORY/RECALL/STREAMING经上包清单hash核对再沿用，README/DIRECTOR来自当前文档。清单artifacts/activity-identity-package.json，build日志同prefix。桌面0.1.4，Core/协议兼容版本、identifier和用户数据位置沿用。
+- 按AGENTS§20没有新增/修改/运行测试，没有启动/停止应用、GUI验收、真实模型调用、凭据探测、用户数据库/配置/系统自启动操作；没有push/公开发布。实现、静态检查与构建完成，不代表真实台词、暂停/重启/并发/跨角色隔离已验收。语言模型仍可能输出与证据不符内容；当前没有语义输出判定器，不能宣称自动保证全部事实。
+- 体验：旧程序托盘“退出并停止后台运行”后打开完整0.1.4包；为角色设置初始地点并按已有独立授权开启自动活动，等待实际开始后分别在私聊/群聊问当前和刚才的活动。重点核对两个角色活动不同、仅目击他人、同名/改名、原定时段已过和世界暂停。换包后如需自启动新目录，手动使用既有“保存并更新启动位置”，本轮没有代改。
+- **接下来：** 基于用户台词反馈继续改善当前活动衔接，再推进有来源的活动结果与经历记忆。先明确结果类型和形成/纠正规则，再接Kernel与角色输入；到期释放占用不等于已完成成果，不能由台词反写世界事实或自动新增私人Memory。多人相遇、关系/主动联系和完整离线世界重建仍未实现。当前切片没有待用户决策的阻塞；建议先核对活动对应，随后再扩展成果，不为每句话追加付费判定模型。
+
+## 前序切片：2026-10-01 自身活动与聊天情境（桌面0.1.3）
 
 - 从干净68025eb / codex/chat-feedback接续，实际仓库仍D:\LivingWorld。用户要求继续上轮“真实活动与聊天衔接”。先读AGENTS/最新交接及相关观察、事件、时钟、角色活动和上下文；已有亲历事件输入，不重复造事件话题入口。调查SillyTavern官方Author’s Note当日文档（源码AGPL-3.0）和Generative Agents当日main retrieve.py（Apache-2.0），没有复制其代码或安装另一套环境；直接复用已有SQLAlchemy、Observation SQL、中文事件投影、有效WorldTime、聊天上下文与预算，见[复用记录](docs/research/2026-10-01-activity-chat-context-reuse.md)。
 - 原输入只有“开始活动”历史和原始微秒，没有当前有效时间/自身状态核对；最新自身开始可能被12条其他亲历观察挤出。本轮新增内部CharacterActivityContextReader，组合根明确绑定当前verified speaker。抽取原character_witnessed_events SQL供两处复用；单SQL捕获同世界时钟、该角色自己的witnessed/event_occurrence且主体为自己的最新已提交CharacterRoutineStarted v1、自身状态revision/地点；只取白名单JSON标量，兼顾json_type与SQLite typeof整数边界，不选整个payload、不读未来candidate或Director input。按同事件ID复用描述投影。

@@ -9,7 +9,7 @@ from sqlalchemy import Text, and_, case, func, literal, select
 
 from livingworld.application.observed_events import MAX_CHARACTER_EVENTS
 from livingworld.application.player_event_feed import KnownWorldEvent
-from livingworld.domain.identifiers import CharacterId, EventId, WorldId
+from livingworld.domain.identifiers import CharacterId, EventId, PlayerId, WorldId
 from livingworld.infrastructure.persistence.models import (
     CharacterRecord,
     LocationRecord,
@@ -174,6 +174,17 @@ async def project_observed_events(
         text = description(row)
         if detailed_only and text is None:
             continue
+        subject = None
+        if text is not None:
+            identity = _uuid(
+                row.character_id if row.event_type in _CHARACTER_TYPES else row.player_id
+            )
+            if identity is not None:
+                subject = (
+                    CharacterId(world_id, identity)
+                    if row.event_type in _CHARACTER_TYPES
+                    else PlayerId(world_id, identity)
+                )
         result.append(
             KnownWorldEvent(
                 EventId(world_id, row.event_id),
@@ -183,6 +194,7 @@ async def project_observed_events(
                 row.ledger_position,
                 text,
                 "witnessed" if text is not None else None,
+                subject=subject,
             )
         )
     return tuple(result)

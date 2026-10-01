@@ -6,6 +6,7 @@ from sqlalchemy import Text, and_, case, func, literal, select
 
 from livingworld.application.character_activity_context import CharacterActivitySnapshot
 from livingworld.application.ports import WorldTimeSource
+from livingworld.domain.actions import RoutineActivity
 from livingworld.domain.identifiers import CharacterId
 from livingworld.domain.values import WorldTime
 from livingworld.domain.world import ClockState
@@ -41,6 +42,7 @@ class SqlAlchemyCharacterActivityContextReader:
         own_start = (
             select(
                 event.event_id.label("event_id"),
+                func.json_extract(body, "$.activity").label("activity"),
                 func.json_extract(body, "$.revision").label("revision"),
                 func.json_extract(body, "$.location_id").label("location_id"),
                 func.json_extract(body, "$.planned_until").label("planned_until"),
@@ -66,6 +68,7 @@ class SqlAlchemyCharacterActivityContextReader:
             select(
                 WorldClockRecord,
                 own_start.c.event_id,
+                own_start.c.activity,
                 own_start.c.planned_until,
                 and_(
                     state.revision == own_start.c.revision,
@@ -102,4 +105,5 @@ class SqlAlchemyCharacterActivityContextReader:
                 last_start=events[0] if events else None,
                 planned_until=WorldTime(row.planned_until),
                 presence_unchanged=row.presence_unchanged is True,
+                activity=RoutineActivity(row.activity),
             )
