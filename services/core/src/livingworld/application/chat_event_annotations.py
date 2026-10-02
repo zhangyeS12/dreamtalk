@@ -22,7 +22,7 @@ ANNOTATION_SCHEMA = {
 }
 ANNOTATION_INSTRUCTIONS = (
     "只返回一个json对象，先写reply，再写events。reply是正常角色台词，不向玩家显示字段。"
-    "原有‘只输出聊天台词’规则适用于reply内容；本次传输格式统一为此json。"
+    "原有‘只输出聊天台词’规则只约束reply内容，不约束传输格式；不要返回纯台词或省略reply字段。"
     "events是本次reply明确告知玩家的具体活动、未来计划、传闻、邀请或计划改变，最多3条；"
     "寒暄、感受、性格习惯、假设、玩笑和重复闲聊不记录，允许events为空数组，不为记录而编造剧情。"
     "每条只含kind(activity/plan/rumor/invitation/change)、title(简短标题)、quote(reply中完整原句)、"
@@ -56,8 +56,11 @@ class AnnotatedDialogue:
 def annotate_request(request):
     return replace(
         request,
-        messages=(LLMMessage(MessageRole.SYSTEM, (TextContent(ANNOTATION_INSTRUCTIONS),)),)
-        + request.messages,
+        # Put the transport contract after role instructions and before the
+        # unchanged conversation. Past plain-text replies must not override JSON.
+        messages=tuple(m for m in request.messages if m.role is MessageRole.SYSTEM)
+        + (LLMMessage(MessageRole.SYSTEM, (TextContent(ANNOTATION_INSTRUCTIONS),)),)
+        + tuple(m for m in request.messages if m.role is not MessageRole.SYSTEM),
         structured_output=StructuredOutputRequest("chat_event_reply", ANNOTATION_SCHEMA),
     )
 

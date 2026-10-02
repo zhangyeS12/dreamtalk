@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { CoreClient, CoreRequestError, type WorldNewsStatus } from "@dreamtalk/api-client";
 
 const errors: Record<string, string> = {
-  news_background_required: "请先确认世界书，并把适用条目逐条设为公共背景；至少一条需要能在世界动态场景触发（例如始终激活）。",
+  news_background_required: "尚无可用于生成动态的公共背景，本次未调用模型。请到“角色卡与世界书”确认世界书并逐条设为“公共背景”。若关键词未命中，可编辑一个适合公开的条目，将“提供条件”改为“常驻背景”，预览确认后重新设为公共背景，再生成。",
   news_background_invalid: "公共背景格式异常，请检查世界书。",
   news_background_capacity: "公共背景超过资料容量，请精简公开范围。",
   news_background_changed: "本批采用的背景已隐藏或更新，待发布内容已停止；可显式生成新的一批。",
@@ -46,7 +46,7 @@ export function WorldNewsSettings({ client, worldId, visible, paused }: { client
     busyRef.current = true; ++serial.current; setBusy(true); setNotice("");
     try {
       const next = await client.configureWorldNews(worldId, status, enabled, consent, replenish);
-      if (alive.current) { setStatus(next); setConsentOpen(false); setNotice(enabled ? "已排队；程序运行且世界恢复后处理。" : "已关闭后续发布与续批；已开始的请求仍可能产生用量。"); }
+      if (alive.current) { setStatus(next); setConsentOpen(false); setNotice(!enabled ? "已关闭后续发布与续批；已开始的请求仍可能产生用量。" : paused ? "已保存，世界暂停期间不会开始生成；恢复后处理。" : next.state === "idle" ? "背景条件已核对，等待后台开始生成。" : "设置已保存，请按当前事件池状态查看进度。"); }
     } catch (error) {
       if (alive.current) setNotice(error instanceof CoreRequestError && error.code && errors[error.code] ? errors[error.code] : "未能保存，请刷新状态后重试；未自动重试模型请求。");
     } finally { busyRef.current = false; if (alive.current) setBusy(false); }

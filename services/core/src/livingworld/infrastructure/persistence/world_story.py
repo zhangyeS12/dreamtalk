@@ -71,6 +71,28 @@ def _uuid(value):
         return None
 
 
+async def _news_background(session, world):
+    record = await session.get(WorldRecord, world.value)
+    try:
+        public = await read_director_background(session, world)
+        background = select_common_background(
+            public,
+            (record.name + " " + " ".join(item.entry.title for item in public),),
+            generation_kind="quiet",
+            include_references=True,
+        )
+    except DirectorError as error:
+        code = (
+            "news_background_capacity"
+            if str(error) == "director_background_capacity"
+            else "news_background_invalid"
+        )
+        raise WorldStoryError(code) from None
+    if not background:
+        raise WorldStoryError("news_background_required")
+    return background
+
+
 async def record_chat_events(session, message, player, events, learned_world_time=None):
     # Runs inside the completed-message transaction. IDs never come from a model.
     if not events:
@@ -461,6 +483,9 @@ class SqlAlchemyWorldStoryStore:
                 raise WorldStoryError("news_consent_required")
             if replenish and (not enabled or config is None or config.state == "generating"):
                 raise WorldStoryError("news_replenish_unavailable")
+            latest = await self._latest(session, world, owner)
+            if enabled and (replenish or latest is None):
+                await _news_background(session, world)
             if config is None:
                 if not enabled:
                     return
@@ -480,7 +505,6 @@ class SqlAlchemyWorldStoryStore:
                     .values(state="cancelled")
                 )
                 config.consented_at = datetime.now(UTC)
-            latest = await self._latest(session, world, owner)
             if replenish:
                 pending = (
                     await session.scalar(
@@ -560,19 +584,9 @@ class SqlAlchemyWorldStoryStore:
                 return None
             record = await session.get(WorldRecord, world.value)
             try:
-                public = await read_director_background(session, world)
-                background = select_common_background(
-                    public,
-                    (record.name + " " + " ".join(item.entry.title for item in public),),
-                    generation_kind="quiet",
-                    include_references=True,
-                )
-            except DirectorError:
-                config.state, config.error = "attention", "news_background_invalid"
-                await session.commit()
-                return None
-            if not background:
-                config.state, config.error = "attention", "news_background_required"
+                background = await _news_background(session, world)
+            except WorldStoryError as error:
+                config.state, config.error = "attention", str(error)
                 await session.commit()
                 return None
             recent = (

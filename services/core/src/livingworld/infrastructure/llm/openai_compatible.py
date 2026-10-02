@@ -616,6 +616,13 @@ class OpenAICompatibleChatGateway:
         retry_after_seconds=None,
     ):
         if self._logger is not None:
+            if structured_detail is not None:
+                self._logger.emit(
+                    "llm",
+                    "chat_structured_" + structured_detail.reason.value,
+                    level="WARNING",
+                    trace_id=str(request.invocation_id.value),
+                )
             self._logger.emit(
                 "llm",
                 f"chat_{code.value}",
@@ -702,6 +709,16 @@ class OpenAICompatibleChatGateway:
             if request.structured_output.schema.get("type") != "object":
                 raise self._error(request, LLMErrorCode.UNSUPPORTED_CAPABILITY)
             payload["response_format"] = {"type": "json_object"}
+            # Short product JSON tasks need no default reasoning phase. The
+            # bounder sees the actual body; proxies and legacy models keep policy.
+            if (
+                self._config.endpoint.base_url.rstrip("/")
+                in {"https://api.deepseek.com", "https://api.deepseek.com/v1"}
+                and request.model.model_id in {"deepseek-flash", "deepseek-v4-pro"}
+                and request.structured_output.schema_name
+                in {"chat_event_reply", "world_news_batch"}
+            ):
+                payload["thinking"] = {"type": "disabled"}
         if streaming and self._profile.supports_stream_usage:
             payload["stream_options"] = {"include_usage": True}
         if request.stop_sequences:

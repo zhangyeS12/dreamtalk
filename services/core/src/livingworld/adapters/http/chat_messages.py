@@ -118,6 +118,22 @@ class ChatStreamResponse(StreamingResponse):
                 await self.body_iterator.aclose()
 
 
+def _validation_failure_code(error: ChatReplyValidationError) -> str:
+    code = str(error)
+    return (
+        code
+        if code
+        in {
+            "group_selection_invalid",
+            "group_selection_output_limit",
+            "chat_reply_output_limit",
+            "chat_reply_empty",
+            "chat_reply_format_invalid",
+        }
+        else "chat_reply_invalid"
+    )
+
+
 def _stream_failure(error: Exception) -> tuple[int, str]:
     if isinstance(error, ChatReplyBudgetError):
         return 422, _budget_failure_code(error)
@@ -130,11 +146,7 @@ def _stream_failure(error: Exception) -> tuple[int, str]:
     if isinstance(error, EntityNotFoundError):
         return 404, "chat_turn_not_found"
     if isinstance(error, ChatReplyValidationError):
-        code = str(error)
-        return 502, code if code in {
-            "group_selection_invalid",
-            "group_selection_output_limit",
-        } else "chat_reply_invalid"
+        return 502, _validation_failure_code(error)
     return 502, "chat_generation_failed"
 
 
@@ -388,10 +400,7 @@ def chat_message_router(
         except ChatReplyIntegrityError:
             raise HTTPException(503, "chat_accounting_unavailable") from None
         except ChatReplyValidationError as error:
-            code = str(error)
-            if code not in {"group_selection_invalid", "group_selection_output_limit"}:
-                code = "chat_reply_invalid"
-            raise HTTPException(502, code) from None
+            raise HTTPException(502, _validation_failure_code(error)) from None
         except ChatReplyGenerationError:
             raise HTTPException(502, "chat_generation_failed") from None
 
@@ -433,8 +442,8 @@ def chat_message_router(
             raise HTTPException(503, "chat_model_unavailable") from None
         except ChatReplyIntegrityError:
             raise HTTPException(503, "chat_accounting_unavailable") from None
-        except ChatReplyValidationError:
-            raise HTTPException(502, "chat_reply_invalid") from None
+        except ChatReplyValidationError as error:
+            raise HTTPException(502, _validation_failure_code(error)) from None
         except ChatReplyGenerationError:
             raise HTTPException(502, "chat_generation_failed") from None
 

@@ -1,8 +1,21 @@
 # dreamtalk 工作交接
 
-更新日期：2026-10-01。此文件记录当前开发现场与接续工作，不替代 [AGENTS.md](AGENTS.md)。先读 AGENTS，再读本文，最后核对实际 Git 状态和相关代码；不能把下面的基线哈希当作永远不变的当前 HEAD。
+更新日期：2026-10-02。此文件记录当前开发现场与接续工作，不替代 [AGENTS.md](AGENTS.md)。先读 AGENTS，再读本文，最后核对实际 Git 状态和相关代码；不能把下面的基线哈希当作永远不变的当前 HEAD。
 
-## 最新接续：2026-10-01 两块世界事件（桌面0.1.5）
+## 最新接续：2026-10-02 聊天格式失败和动态池背景条件（桌面0.1.6）
+
+- 从干净2e0f992 / codex/chat-feedback接续，实际仓库仍D:\LivingWorld。用户报告聊天回复失败、世界动态生成未完成，并明确批准本次只读失败错误类别／结束原因／Token数量及世界书公开条目计数诊断；不读密钥或聊天正文、不改存档、不调API。[诊断与接口复用](docs/research/2026-10-02-json-chat-failure-fix.md)、[使用说明](docs/WORLD_EVENT_JOURNAL.md)。
+- 确认当前desktop和Core来自world-event-journal完整0.1.5包，非旧自启动版本。最新Core日志15:50:31日本时间记录chat_structured_output_failed：完成响应未过结构化校验。旧日志与AttemptFacts未保存细分reason，不能断言本次一定截断／空输出／缺reply字段，也不能说是密钥无效。截图动态池对应news_background_required；claim在付费dispatch前停止，pending和最近批次仍0，没有已生成但未显示的10条。
+- 发现角色“只输出台词”规则在JSON传输规则后。改为角色system规则之后、原顺序会话之前给最终格式要求，明确只有reply字段是角色台词；保留reply/events同次调用和严格本地校验，不把截断／格式错误正文当完整聊天、不另调API修复。核对当日DeepSeek官方JSON／thinking文档及已安装recipe0.1.0：仅官方https端点、deepseek-flash／deepseek-v4-pro的chat_event_reply／world_news_batch小型JSON任务指定thinking disabled；其它任务／供应商／代理／旧模型不变。实际payload继续进入保守预留和财务结算，不增加调用／重试或改用户额度。未证实thinking是此次失败的唯一原因。
+- 私聊／群聊、流式／非流式新增固定公开错误：chat_reply_output_limit、chat_reply_empty、chat_reply_format_invalid。安全日志额外记录结构化reason固定枚举，不含原始回复／schema／密钥。当前具体错误可见，旧失败不追溯猜测；失败用量原机制结算，未完成消息不自动重发。
+- 公共背景授权和常驻／关键词／quiet触发是两个条件。WorldNews configure开始新批前与claim共用同一公共背景筛选；失败事务不提交设置／候选／批次，也不发模型调用。UI不再一律报“已排队”，直接解释条件和路径：角色卡与世界书 → 编辑适合公开的条目 → 提供条件“常驻背景” → 预览确认 → 重新逐条“公共背景” → 生成新批。仍可选有效关键词触发，不自动公开隐藏设定，不更改世界书触发政策。
+- 只读用户数据库分支最初被自动审批拒绝，原因是此前只授权副本诊断；已明确报告并取得上述原存档限定读取授权。查询视图仍为0014／无新版表、mtime9月21日，与本次截图／日志不符，未获得可信的当前失败用量／finish_reason／公开计数。停止该分支，未重复第三次同类读取、读正文／密钥、修改／升级／修复／检查点数据库或停止应用；不能归因用户存档损坏。此诊断权限不是测试授权。
+- Ruff lint／format5份Python、ESLint／TypeScript、Git diff核对通过；203份Python AST、5处0.1.6版本和docs内547个本地链接通过。Core冻结40.179秒，Vite213模块／173ms，Rust release27.48秒，PE ProductVersion／FileVersion0.1.6。保留jieba无效escape SyntaxWarning、可选tzdata／pysqlite2／MySQLdb hidden-import、STATIC_VCRUNTIME弃用和主chunk526.88kB告警，未造成编译失败。
+- 全新完整目录D:\LivingWorld\artifacts\portable\world-event-fix\dreamtalk\dreamtalk-desktop.exe，不必解压，旧目录保留。desktop13,192,704 bytes / SHA256 0337988D5EFD1121235D01A7742FDB5EC0103E83DE9DF374007330B21704C1CA；Core13,933,137 / F4F2EE693B9F07CDB23C3014CEEFE513954E0138FCB78A1C385F81890899C2F7；ZIP43,151,659 / 862CB9F02C50AFD3CEFB2657253B2FDB31B5F37E61C971960D63535444ED7861；helper仍264DF8990752ABB179A3773ACE934F546C69AF99F4C9834EA1286D0D9886FDEA。203份冻结源码、22份许可、9份说明、474份ZIP文件与来源字节一致；三份历史使用说明验证旧清单hash沿用，其余来自当前文档。清单artifacts/world-event-fix-package.json和同前缀两份构建日志，清单source_commit以本次实际Git提交为准。
+- 未更改AGENTS、测试、迁移／表、Core协议兼容版本、identifier、存档／自启动配置；没有新增依赖。按AGENTS§20未运行测试、桌面／GUI／浏览器、真实API／凭据探测，没有push／公开发布。源码／编译／包内字节成功不等于运行验收，当前未解决的诊断限制是旧调用细分原因不可追溯。
+- **接下来：** 用户从旧托盘“退出并停止后台运行”，打开上述完整0.1.6目录，再到设置“保存并更新启动位置”。先核对普通单聊／群聊回复与聊天获知事件，再按提示确认可用公共背景生成动态，验收逐条发布／8/10续批。没有新决策阻塞；若仍失败，保留新版具体提示和安全日志再定位，不加逐句付费裁判。通过后接用户此前授权的项目后续切片。
+
+## 前序切片：2026-10-01 两块世界事件（桌面0.1.5）
 
 - 从干净7c21c8e / codex/chat-feedback接续，实际仓库D:\LivingWorld。用户批准完成“聊天获知＋API批量世界动态”，同次回复判断事件避免单独分类调用，保留原句、获知时间与变化；DeepSeek优先后续适配其他模型。中断后续接完成，不需再次范围授权。[已批准方案](docs/proposals/2026-10-01-world-event-journal.md)、[使用说明](docs/WORLD_EVENT_JOURNAL.md)、[复用调查](docs/research/2026-10-01-world-event-journal-reuse.md)。
 - 复用DeepSeek官方JSON object、已安装pydantic-core部分JSON解析／Pydantic本地验证、原SQLAlchemy／Alembic、公开世界书过滤、世界scheduler／有效WorldTime、治理网关／财务预算及Kernel事件提交；不加依赖／Agent框架／第二调度器，不复制酒馆代码。官方recipe／encoding0.1.0已处理response_format，沿用原Rust输入预留helper及实际JSON请求payload；持久模型配置不改。普通其他供应商聊天保留，自动聊天提取当前仅官方DeepSeek受支持JSON object路由，离线联系消息暂不提取。

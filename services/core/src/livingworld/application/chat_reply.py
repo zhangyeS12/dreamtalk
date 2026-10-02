@@ -22,6 +22,7 @@ from livingworld.application.llm import (
     InvocationId,
     LLMContractError,
     LLMError,
+    LLMErrorCode,
     LLMPurpose,
     LLMRequest,
     LLMResponse,
@@ -29,6 +30,7 @@ from livingworld.application.llm import (
     ModelRef,
     StreamCompleted,
     StreamFailed,
+    StructuredFailureReason,
     TextDelta,
 )
 from livingworld.application.llm_accounting import AccountingInfrastructureError
@@ -110,6 +112,20 @@ def dialogue_request(gateway, request, selection, progress) -> LLMRequest:
     return streamed
 
 
+def _generation_error(failure):
+    if failure.code is LLMErrorCode.STRUCTURED_OUTPUT_FAILED:
+        reason = failure.structured_detail.reason if failure.structured_detail else None
+        code = (
+            "chat_reply_output_limit"
+            if reason is StructuredFailureReason.OUTPUT_TRUNCATED
+            else "chat_reply_empty"
+            if reason is StructuredFailureReason.EMPTY_OUTPUT
+            else "chat_reply_format_invalid"
+        )
+        return ChatReplyValidationError(code)
+    return ChatReplyGenerationError("chat_generation_failed")
+
+
 async def dialogue_text(
     gateway: ChatGateway,
     request: LLMRequest,
@@ -139,7 +155,7 @@ async def dialogue_text(
                     if identity != request.invocation_id:
                         raise ChatReplyValidationError("chat_reply_invalid")
                     if isinstance(event, StreamFailed):
-                        raise ChatReplyGenerationError("chat_generation_failed")
+                        raise _generation_error(event.failure)
                     if isinstance(event, TextDelta):
                         size += len(event.text.encode("utf-8"))
                         if size > 65536:
@@ -177,12 +193,16 @@ async def dialogue_text(
         raise ChatReplyUnavailableError("chat_model_unavailable") from None
     except ExecutionDeadlineError:
         raise ChatReplyUnavailableError("chat_route_deadline_exhausted") from None
-    except LLMError:
-        raise ChatReplyGenerationError("chat_generation_failed") from None
+    except LLMError as error:
+        raise _generation_error(error.failure) from None
     except LLMContractError:
         raise ChatReplyValidationError("chat_reply_invalid") from None
     if budget.bound_violated:
         raise ChatReplyValidationError("chat_token_bound_violated")
+    if finish is FinishReason.OUTPUT_LIMIT:
+        raise ChatReplyValidationError("chat_reply_output_limit")
+    if not text.strip():
+        raise ChatReplyValidationError("chat_reply_empty")
     if (
         finish not in {FinishReason.STOP, FinishReason.REFUSAL}
         or not text.strip()
@@ -196,7 +216,7 @@ async def dialogue_text(
                 raise ValueError()
             return annotated
         except ValueError:
-            raise ChatReplyValidationError("chat_reply_invalid") from None
+            raise ChatReplyValidationError("chat_reply_format_invalid") from None
     return text
 
 
