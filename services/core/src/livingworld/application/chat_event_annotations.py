@@ -1,6 +1,7 @@
 """Same-call dialogue annotations are reported claims, never world facts."""
 
 import json
+import re
 from dataclasses import dataclass, replace
 from typing import Literal
 
@@ -10,10 +11,16 @@ from pydantic_core import from_json
 from livingworld.application.llm import (
     LLMMessage,
     MessageRole,
-    StructuredOutputRequest,
     TextContent,
 )
 from livingworld.application.long_chat_memory import MEMORY_INSTRUCTIONS, MemoryAnnotation
+
+CHAT_ANNOTATION_ENCODING = "same_call_chat_annotations_v1"
+_JSON_FENCE_START = re.compile(r"\A```(?:json)?[ \t]*\r?\n", re.IGNORECASE)
+_JSON_FENCE = re.compile(
+    r"\A```(?:json)?[ \t]*\r?\n(.*?)\r?\n```[ \t]*\Z", re.IGNORECASE | re.DOTALL
+)
+_METADATA_MEMBER = re.compile(r'"(?:reply|events|memories)"\s*:')
 
 ANNOTATION_SCHEMA = {
     "type": "object",
@@ -70,12 +77,19 @@ def annotate_request(request):
             ),
         )
         + tuple(m for m in request.messages if m.role is not MessageRole.SYSTEM),
-        structured_output=StructuredOutputRequest("chat_event_reply", ANNOTATION_SCHEMA),
+        # Annotations are optional dialogue data, not a mandatory provider
+        # structured-output result. Complete normal dialogue may still succeed.
+        structured_output=None,
+        metadata={**request.metadata, "chat_reply_encoding": CHAT_ANNOTATION_ENCODING},
     )
 
 
+def optional_annotation_request(request):
+    return request.metadata.get("chat_reply_encoding") == CHAT_ANNOTATION_ENCODING
+
+
 def annotation_request(request):
-    return (
+    return optional_annotation_request(request) or (
         request.structured_output is not None
         and request.structured_output.schema_name == "chat_event_reply"
     )
@@ -83,8 +97,13 @@ def annotation_request(request):
 
 def partial_reply(raw):
     """Use the existing mature JSON parser; no handwritten escape/token parser."""
+    candidate = raw.lstrip()
+    if start := _JSON_FENCE_START.match(candidate):
+        candidate = candidate[start.end() :]
+        if candidate.rstrip().endswith("\n```"):
+            candidate = candidate.rstrip()[:-4]
     try:
-        value = from_json(raw.encode("utf-8"), allow_partial="trailing-strings")
+        value = from_json(candidate.encode("utf-8"), allow_partial="trailing-strings")
     except ValueError:
         return None
     reply = value.get("reply") if isinstance(value, dict) else None
@@ -100,9 +119,26 @@ def _unique_json(pairs):
     return result
 
 
+def _reject_non_finite(_):
+    raise ValueError("chat_reply_invalid")
+
+
+def decode_optional_dialogue(raw):
+    """Accept complete dialogue; never display an invalid annotation envelope."""
+    candidate = raw.strip()
+    if fence := _JSON_FENCE.fullmatch(candidate):
+        return decode_dialogue(fence[1])
+    if candidate.startswith(("{", "[", "```")) or _METADATA_MEMBER.search(candidate):
+        # A malformed/truncated envelope is not a plain-text chat fallback.
+        return decode_dialogue(candidate)
+    if not candidate or len(raw.encode("utf-8")) > 65536:
+        raise ValueError("chat_reply_invalid")
+    return AnnotatedDialogue(raw)
+
+
 def decode_dialogue(raw):
     try:
-        value = json.loads(raw, object_pairs_hook=_unique_json)
+        value = json.loads(raw, object_pairs_hook=_unique_json, parse_constant=_reject_non_finite)
         reply = value["reply"]
         if not isinstance(reply, str) or not reply.strip() or len(reply.encode("utf-8")) > 65536:
             raise ValueError()

@@ -30,12 +30,13 @@ class StructuredLogger:
             record["trace_id"] = str(RequestId.parse(trace_id))
         self._write(record)
 
-    def emit_llm_structured_failure(
+    def emit_llm_reply_facts(
         self,
         *,
         trace_id: str,
-        reason: str,
         transport: str,
+        reason: str | None = None,
+        event: str = "chat_structured_failure_facts",
         finish_reason: str | None = None,
         input_tokens: int | None = None,
         output_tokens: int | None = None,
@@ -47,21 +48,26 @@ class StructuredLogger:
         from livingworld.application.llm import FinishReason, StructuredFailureReason
         from livingworld.domain.contracts import RequestId
 
-        if reason not in {item.value for item in StructuredFailureReason}:
+        if event not in {"chat_structured_failure_facts", "chat_annotation_response_facts"}:
+            raise ValueError("invalid_llm_fact_event")
+        if reason is not None and reason not in {item.value for item in StructuredFailureReason}:
             raise ValueError("invalid_structured_failure_reason")
+        if event == "chat_structured_failure_facts" and reason is None:
+            raise ValueError("structured_failure_reason_required")
         if finish_reason is not None and finish_reason not in {item.value for item in FinishReason}:
             raise ValueError("invalid_finish_reason")
         if transport not in {"prompt_json", "native_json"}:
             raise ValueError("invalid_structured_transport")
         record: dict[str, object] = {
             "timestamp": datetime.now(UTC).isoformat(),
-            "level": "WARNING",
+            "level": "WARNING" if reason is not None else "INFO",
             "component": "llm",
-            "event": "chat_structured_failure_facts",
+            "event": event,
             "trace_id": str(RequestId.parse(trace_id)),
-            "reason": reason,
             "transport": transport,
         }
+        if reason is not None:
+            record["reason"] = reason
         if finish_reason is not None:
             record["finish_reason"] = finish_reason
         for name, value in {

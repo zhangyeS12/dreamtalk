@@ -2,7 +2,18 @@
 
 更新日期：2026-10-02。此文件记录当前开发现场与接续工作，不替代 [AGENTS.md](AGENTS.md)。先读 AGENTS，再读本文，最后核对实际 Git 状态和相关代码；不能把下面的基线哈希当作永远不变的当前 HEAD。
 
-## 最新接续：2026-10-02 全角色空回复共用链路（桌面0.1.8）
+## 最新接续：2026-10-02 聊天台词与可选资料格式兼容（桌面0.1.9）
+
+- 从1347b0b546efba178ff52fae87da461e3db9a6cc / codex/chat-feedback接续，实际仓库D:\LivingWorld。用户反馈0.1.8仍不回复。只读进程路径确认桌面与Core都来自empty-reply-fix完整包；19:04:50日本时间的安全日志是HTTP200/stop/input7870/output33/max_output173315/prompt_json/json_parse_failed，发生在网关严格JSON验证。此次不是空正文；没有原文证据，不能确定是普通台词、代码块或损坏JSON。未读用户DB、密钥或聊天正文，不重复追查先前与运行不一致的空配置。
+- [证据与复用选择](docs/research/2026-10-02-optional-chat-annotations-fix.md)：0.1.8只省略provider response_format，却仍声明强制StructuredOutputRequest，导致应用还没获得台词就拦住回复。直接复用现有json/Pydantic/pydantic-core，聊天附带字段以本地chat_reply_encoding标记承载，structured_output=None；标记不发送服务商，提示与真实payload仍走原用量预留／路由／结算。非聊天严格任务及其他模型原策略保持，没有新增框架、JSON修复器或额外API。
+- 完整普通台词在调用身份、终态、Token边界及64KiB校验后可保存，该次没有新事件／长期条目，不补调用；既有记忆和历史原文仍可召回。完整JSON及单层JSON代码块只显示非空reply，资料继续按原句／权限／来源／开关校验。损坏／截断JSON、空正文仍失败，不展示内部字段；重复键和NaN/Infinity拒绝。流式JSON保留渐进reply和终态一致校验，普通台词等待完成验证再显示。私聊／群聊共用，不改Kernel活动、世界真值、角色隔离或捕获开关。
+- 官方非流式可选资料聊天新增chat_annotation_response_facts，仅固定枚举和数字计数；旧structured_failure安全事实仍保留。提供商完成不等于应用落库，日志不含正文、推理、模型ID、凭据或自由字符串，诊断失败不改结算也不重发。精确官方DeepSeek Flash/V4 Pro既有小任务thinking策略保持；准确用户模型ID仍未知，未改变真实设置。
+- Ruff lint/format4份Python、ESLint/TypeScript、209份AST、5处0.1.9版本、3个完整提示JSON示例、610本地文档链接（0 broken）、Git diff静态核对通过。Core冻结28.454秒、Vite143ms/Rust release27.88秒成功；实际桌面PE FileVersion/ProductVersion=0.1.9。保留tzdata/pysqlite2/MySQLdb可选hidden-import、STATIC_VCRUNTIME弃用、主chunk533.69kB告警，未隐藏阈值。
+- 新完整目录D:\LivingWorld\artifacts\portable\dialogue-resilience\dreamtalk\dreamtalk-desktop.exe，ZIP位于同父目录dreamtalk.zip。desktop13,193,728 bytes / SHA256 6B216DBEAC02A92D7EDF1BF70596340E120E5CB46B8087B7CDB1916827EE6421；Core13,969,523 / F3488529ACF9CE859BED0B3FDE8949DE462BDFAFC441DFD336395343ABACF00C；ZIP43,210,022 / 7286B637BB325676E9E89B7DE83729A28A134B59D7C0D1556DF2CB3BA624BA7A；helper保持264DF8990752ABB179A3773ACE934F546C69AF99F4C9834EA1286D0D9886FDEA。209冻结源码、22许可、11说明及482ZIP文件逐字节核对。清单artifacts/dialogue-resilience-package.json及Core/desktop编译日志同prefix，source_commit交付前更新为实际本轮提交；旧包保留。
+- 没有新增／修改／运行测试、启动应用／GUI、真实API、凭据探测、用户DB读写／迁移或自启动改动。没有新依赖／表／公共契约，Core与协议版本及identifier不变；编译不是实际回复验收，不push发布。本次只读既有安全日志与当前进程位置，没有复用以前单次DB诊断授权。
+- **接下来：** 退出旧托盘后直接打开完整0.1.9exe，在后台设置核对版本；有自启动时显式保存更新路径。用户验收普通单聊／群聊、具体计划及重要偏好：纯台词应回复但可能无新条目，合规JSON应同次记录。若仍失败，按本次新的固定计数定位，不承诺损坏JSON或提供商空正文已全部解决，不用提高额度或重新生成角色／世界书。暂无新的用户决策阻塞。
+
+## 前序切片：2026-10-02 全角色空回复共用链路（桌面0.1.8）
 
 - 从干净0121a73 / codex/chat-feedback接续，实际仓库D:\LivingWorld。用户报告0.1.7每个角色都返回空。日志日本时间18:38:11、18:48:03、18:48:15均chat_structured_empty_output，发生在完成HTTP响应的空text检查、事件/记忆解码之前；不是JSON字段错误、截断或未获预算的固定码。不能把前一轮“官方偶发”直接当成反复失败的完整根因。用户表示DeepSeek、上限100000、未开流式，准确API模型ID未知；非秘密配置读取仍见177字节空文档，与日志不符，未将其当作真实配置，不再重复诊断。无用户DB/密钥/正文读取。
 - [证据与成熟实现核对](docs/research/2026-10-02-empty-dialogue-transport-fix.md)：官方JSON空正文边界及可省略response_format；LiteLLM的格式提示+客户端验证方法。仅复用当前jsonschema/Pydantic/pydantic-core及预算网关，不引入框架或付费修复。原角色规则仍说“只输出台词”，长记忆示例不是完整传输对象，确认风险但未证明某句造成空返回。

@@ -9,6 +9,7 @@ from urllib.parse import unquote, urlsplit
 
 import httpx
 
+from livingworld.application.chat_event_annotations import CHAT_ANNOTATION_ENCODING
 from livingworld.application.llm import (
     DispatchState,
     FinishReason,
@@ -619,7 +620,7 @@ class OpenAICompatibleChatGateway:
             if structured_detail is not None:
                 try:
                     usage = attempt.usage if attempt is not None else None
-                    self._logger.emit_llm_structured_failure(
+                    self._logger.emit_llm_reply_facts(
                         trace_id=str(request.invocation_id.value),
                         reason=structured_detail.reason.value,
                         finish_reason=attempt.finish_reason.value if attempt is not None else None,
@@ -675,11 +676,14 @@ class OpenAICompatibleChatGateway:
 
     def _prompt_json_dialogue(self, request):
         # Native JSON decoding can return empty content on official DeepSeek.
-        # Keep the structured request and local validation, but use prompt JSON
-        # for this product's ordinary dialogue only. No second provider attempt.
+        # Dialogue annotations are parsed locally. Provider structured-output
+        # enforcement stays reserved for tasks that require it. No replay.
         return (
-            request.structured_output is not None
-            and request.structured_output.schema_name == "chat_event_reply"
+            (
+                request.metadata.get("chat_reply_encoding") == CHAT_ANNOTATION_ENCODING
+                or request.structured_output is not None
+                and request.structured_output.schema_name == "chat_event_reply"
+            )
             and request.purpose.value == "character_dialogue"
             and self._profile.structured_output_mode
             is StructuredOutputMode.JSON_OBJECT_LOCAL_VALIDATE
@@ -743,16 +747,22 @@ class OpenAICompatibleChatGateway:
                 raise self._error(request, LLMErrorCode.UNSUPPORTED_CAPABILITY)
             if not self._prompt_json_dialogue(request):
                 payload["response_format"] = {"type": "json_object"}
-            # Short product JSON tasks need no default reasoning phase. The
-            # bounder sees the actual body; proxies and legacy models keep policy.
-            if (
-                self._config.endpoint.base_url.rstrip("/")
-                in {"https://api.deepseek.com", "https://api.deepseek.com/v1"}
-                and request.model.model_id in {"deepseek-flash", "deepseek-v4-pro"}
+        # Keep the established small-task reasoning policy when optional chat
+        # annotations no longer require a provider structured-output contract.
+        if (
+            self._config.endpoint.base_url.rstrip("/")
+            in {"https://api.deepseek.com", "https://api.deepseek.com/v1"}
+            and request.model.model_id in {"deepseek-flash", "deepseek-v4-pro"}
+            and (
+                self._prompt_json_dialogue(request)
+                or request.structured_output is not None
+                and self._profile.structured_output_mode
+                is StructuredOutputMode.JSON_OBJECT_LOCAL_VALIDATE
                 and request.structured_output.schema_name
                 in {"chat_event_reply", "world_news_batch"}
-            ):
-                payload["thinking"] = {"type": "disabled"}
+            )
+        ):
+            payload["thinking"] = {"type": "disabled"}
         if streaming and self._profile.supports_stream_usage:
             payload["stream_options"] = {"include_usage": True}
         if request.stop_sequences:
@@ -876,6 +886,24 @@ class OpenAICompatibleChatGateway:
                         ),
                     )
             if self._logger is not None:
+                if self._prompt_json_dialogue(request) and request.structured_output is None:
+                    try:
+                        usage = result.usage
+                        self._logger.emit_llm_reply_facts(
+                            event="chat_annotation_response_facts",
+                            trace_id=str(request.invocation_id.value),
+                            transport="prompt_json",
+                            finish_reason=result.finish_reason.value,
+                            input_tokens=usage.input_tokens if usage is not None else None,
+                            output_tokens=usage.output_tokens if usage is not None else None,
+                            reasoning_output_tokens=(
+                                usage.reasoning_output_tokens if usage is not None else None
+                            ),
+                            max_output_tokens=request.max_output_tokens,
+                            http_status=response.status_code,
+                        )
+                    except Exception:
+                        pass  # Optional facts cannot alter settlement or trigger another call.
                 self._logger.emit(
                     "llm", "chat_completed", trace_id=str(request.invocation_id.value)
                 )

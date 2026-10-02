@@ -14,6 +14,8 @@ from livingworld.application.chat_event_annotations import (
     annotate_request,
     annotation_request,
     decode_dialogue,
+    decode_optional_dialogue,
+    optional_annotation_request,
     partial_reply,
 )
 from livingworld.application.chat_messages import ChatMessage, ChatMessageService, PlayerSend
@@ -211,12 +213,20 @@ async def dialogue_text(
         raise ChatReplyValidationError("chat_reply_invalid")
     if annotation_request(request):
         try:
-            annotated = decode_dialogue(text)
-            if request.streaming and progress is not None and annotated.text != visible:
+            annotated = (
+                decode_optional_dialogue(text)
+                if optional_annotation_request(request)
+                else decode_dialogue(text)
+            )
+            if request.streaming and progress is not None and visible and annotated.text != visible:
                 raise ValueError()
-            return annotated
         except ValueError:
             raise ChatReplyValidationError("chat_reply_format_invalid") from None
+        if request.streaming and progress is not None and not visible:
+            # Plain dialogue and a complete fenced envelope are withheld until
+            # terminal validation, so metadata never becomes a displayed delta.
+            await progress(ChatProgress("delta", speaker, annotated.text))
+        return annotated
     return text
 
 
