@@ -30,6 +30,55 @@ class StructuredLogger:
             record["trace_id"] = str(RequestId.parse(trace_id))
         self._write(record)
 
+    def emit_llm_structured_failure(
+        self,
+        *,
+        trace_id: str,
+        reason: str,
+        transport: str,
+        finish_reason: str | None = None,
+        input_tokens: int | None = None,
+        output_tokens: int | None = None,
+        reasoning_output_tokens: int | None = None,
+        max_output_tokens: int | None = None,
+        http_status: int | None = None,
+    ) -> None:
+        """Fixed enums and counters only; no model, prompt, answer or private IDs."""
+        from livingworld.application.llm import FinishReason, StructuredFailureReason
+        from livingworld.domain.contracts import RequestId
+
+        if reason not in {item.value for item in StructuredFailureReason}:
+            raise ValueError("invalid_structured_failure_reason")
+        if finish_reason is not None and finish_reason not in {item.value for item in FinishReason}:
+            raise ValueError("invalid_finish_reason")
+        if transport not in {"prompt_json", "native_json"}:
+            raise ValueError("invalid_structured_transport")
+        record: dict[str, object] = {
+            "timestamp": datetime.now(UTC).isoformat(),
+            "level": "WARNING",
+            "component": "llm",
+            "event": "chat_structured_failure_facts",
+            "trace_id": str(RequestId.parse(trace_id)),
+            "reason": reason,
+            "transport": transport,
+        }
+        if finish_reason is not None:
+            record["finish_reason"] = finish_reason
+        for name, value in {
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "reasoning_output_tokens": reasoning_output_tokens,
+            "max_output_tokens": max_output_tokens,
+            "http_status": http_status,
+        }.items():
+            if value is not None:
+                if type(value) is not int or not 0 <= value <= 2**63 - 1:
+                    raise ValueError("invalid_llm_counter")
+                if name == "http_status" and not 100 <= value <= 599:
+                    raise ValueError("invalid_http_status")
+                record[name] = value
+        self._write(record)
+
     def emit_scheduler(
         self,
         event: str,

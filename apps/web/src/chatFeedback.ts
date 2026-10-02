@@ -34,7 +34,7 @@ export function chatReplyFailureFeedback(failure: unknown, kind: ChatKind): stri
   if (code === "group_selection_output_limit") return `${prefix}自动选人输出被截断，本轮未能确定下一位发言者。${noReplay}`;
   if (code === "group_selection_invalid") return `${prefix}自动选人没有返回一个有效的群内角色，未能继续发言。${noReplay}`;
   if (code === "chat_reply_output_limit") return `${prefix}模型输出达到本次回复长度上限，完整回复未保存。请在模型设置中提高回复长度，或让角色简短回答；请核对当前聊天剩余额度。${noReplay}`;
-  if (code === "chat_reply_empty") return `${prefix}模型返回了空回复，可能已产生用量。请检查模型设置后发送新消息。${noReplay}`;
+  if (code === "chat_reply_empty") return `${prefix}模型服务没有返回可用的回复正文，可能已产生用量。此提示不表示角色没有资料或聊天额度不足；检查回复状态只读取已有结果。${noReplay}`;
   if (code === "chat_reply_format_invalid") return `${prefix}模型返回的格式不符合聊天要求，完整回复未保存；请检查模型设置后发送新消息。${noReplay}`;
   if (code === "chat_reply_invalid") return `${prefix}模型回复未通过校验，未作为完整回复发送。${noReplay}`;
   if (code === "chat_stream_interrupted") return `${prefix}实时连接已中断，未完成文字未保存。${noReplay}`;

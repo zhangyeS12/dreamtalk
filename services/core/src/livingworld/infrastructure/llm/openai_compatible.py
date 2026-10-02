@@ -617,6 +617,25 @@ class OpenAICompatibleChatGateway:
     ):
         if self._logger is not None:
             if structured_detail is not None:
+                try:
+                    usage = attempt.usage if attempt is not None else None
+                    self._logger.emit_llm_structured_failure(
+                        trace_id=str(request.invocation_id.value),
+                        reason=structured_detail.reason.value,
+                        finish_reason=attempt.finish_reason.value if attempt is not None else None,
+                        input_tokens=usage.input_tokens if usage is not None else None,
+                        output_tokens=usage.output_tokens if usage is not None else None,
+                        reasoning_output_tokens=(
+                            usage.reasoning_output_tokens if usage is not None else None
+                        ),
+                        max_output_tokens=request.max_output_tokens,
+                        http_status=http_status,
+                        transport="prompt_json"
+                        if self._prompt_json_dialogue(request)
+                        else "native_json",
+                    )
+                except Exception:
+                    pass  # Optional diagnostics cannot alter settlement or cause a replay.
                 self._logger.emit(
                     "llm",
                     "chat_structured_" + structured_detail.reason.value,
@@ -652,6 +671,20 @@ class OpenAICompatibleChatGateway:
             dispatch_state=failure.dispatch_state,
             http_status=failure.http_status,
             retry_after_seconds=failure.retry_after_seconds,
+        )
+
+    def _prompt_json_dialogue(self, request):
+        # Native JSON decoding can return empty content on official DeepSeek.
+        # Keep the structured request and local validation, but use prompt JSON
+        # for this product's ordinary dialogue only. No second provider attempt.
+        return (
+            request.structured_output is not None
+            and request.structured_output.schema_name == "chat_event_reply"
+            and request.purpose.value == "character_dialogue"
+            and self._profile.structured_output_mode
+            is StructuredOutputMode.JSON_OBJECT_LOCAL_VALIDATE
+            and self._config.endpoint.base_url.rstrip("/")
+            in {"https://api.deepseek.com", "https://api.deepseek.com/v1"}
         )
 
     def _payload(self, request, *, streaming=False):
@@ -708,7 +741,8 @@ class OpenAICompatibleChatGateway:
         ):
             if request.structured_output.schema.get("type") != "object":
                 raise self._error(request, LLMErrorCode.UNSUPPORTED_CAPABILITY)
-            payload["response_format"] = {"type": "json_object"}
+            if not self._prompt_json_dialogue(request):
+                payload["response_format"] = {"type": "json_object"}
             # Short product JSON tasks need no default reasoning phase. The
             # bounder sees the actual body; proxies and legacy models keep policy.
             if (
@@ -786,7 +820,7 @@ class OpenAICompatibleChatGateway:
                         "schema": schema,
                     },
                 }
-            else:
+            elif not self._prompt_json_dialogue(request):
                 payload["response_format"] = {"type": "json_object"}
         secret = await self._secret(request)
         wire = None

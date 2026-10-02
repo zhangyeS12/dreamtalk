@@ -17,13 +17,16 @@ from livingworld.application.long_chat_memory import MEMORY_INSTRUCTIONS, Memory
 
 ANNOTATION_SCHEMA = {
     "type": "object",
-    "properties": {"reply": {"type": "string"}, "events": {}},
+    "properties": {"reply": {"type": "string", "minLength": 1}, "events": {}, "memories": {}},
     "required": ["reply"],
     "additionalProperties": True,
 }
 ANNOTATION_INSTRUCTIONS = (
-    "只返回一个json对象，先写reply，再写events。reply是正常角色台词，不向玩家显示字段。"
-    "原有‘只输出聊天台词’规则只约束reply内容，不约束传输格式；不要返回纯台词或省略reply字段。"
+    "输出完整的json对象，不加Markdown代码块、解释或对象外文字。先完成非空reply台词，"
+    "再写events和memories。角色台词是首要任务，即使没有活动记录、事件或新记忆也必须正常回应。"
+    "寒暄可以简短回应，events和memories为空数组；不要以空正文或空reply代替回答。"
+    '完整寒暄格式示例：{"reply":"我在，怎么了？","events":[],"memories":[]}。'
+    "reply是正常角色台词，不向玩家显示字段，不要求机械复述示例。"
     "events是本次reply明确告知玩家的具体活动、未来计划、传闻、邀请或计划改变，最多3条；"
     "寒暄、感受、性格习惯、假设、玩笑和重复闲聊不记录，允许events为空数组，不为记录而编造剧情。"
     "每条只含kind(activity/plan/rumor/invitation/change)、title(简短标题)、quote(reply中完整原句)、"
@@ -34,7 +37,7 @@ ANNOTATION_INSTRUCTIONS = (
     '示例json：{"reply":"我明天下午想去商店购物，你要一起吗？",'
     '"events":[{"kind":"plan","title":"铃计划购物",'
     '"quote":"我明天下午想去商店购物，你要一起吗？","time_text":"明天下午",'
-    '"source_event_id":null,"updates_entry_id":null}]}。'
+    '"source_event_id":null,"updates_entry_id":null}],"memories":[]}。'
 )
 
 

@@ -39,9 +39,10 @@ MEMORY_INSTRUCTIONS = (
     "变更偏好或明确纠正旧记忆时replaces引用同一说话者的旧ID并写新内容，保留否定。"
     "玩家明确取消与角色的约定时可引用该角色promise的旧ID，不能用玩家自述覆盖其他角色身份或偏好。"
     "不要把其他角色的私有记忆复述成自己的经历。long_memory_capture_enabled=false时memories必须[]。"
-    "例：玩家本轮说‘我叫小林，喜欢无糖咖啡’，memories可含"
+    "完整示例（玩家本轮说‘我叫小林，喜欢无糖咖啡’）："
+    '{"reply":"记住了，小林。下次给你留无糖咖啡。","events":[],"memories":['
     '{"kind":"preference","topic":"咖啡偏好","content":"玩家说自己喜欢无糖咖啡",'
-    '"source":"player","quote":"喜欢无糖咖啡","replaces":null}。'
+    '"source":"player","quote":"喜欢无糖咖啡","replaces":null}]}。'
 )
 
 

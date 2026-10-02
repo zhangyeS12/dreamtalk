@@ -2,7 +2,19 @@
 
 更新日期：2026-10-02。此文件记录当前开发现场与接续工作，不替代 [AGENTS.md](AGENTS.md)。先读 AGENTS，再读本文，最后核对实际 Git 状态和相关代码；不能把下面的基线哈希当作永远不变的当前 HEAD。
 
-## 最新接续：2026-10-02 长期记忆、活动生命周期和近期经历（桌面0.1.7）
+## 最新接续：2026-10-02 全角色空回复共用链路（桌面0.1.8）
+
+- 从干净0121a73 / codex/chat-feedback接续，实际仓库D:\LivingWorld。用户报告0.1.7每个角色都返回空。日志日本时间18:38:11、18:48:03、18:48:15均chat_structured_empty_output，发生在完成HTTP响应的空text检查、事件/记忆解码之前；不是JSON字段错误、截断或未获预算的固定码。不能把前一轮“官方偶发”直接当成反复失败的完整根因。用户表示DeepSeek、上限100000、未开流式，准确API模型ID未知；非秘密配置读取仍见177字节空文档，与日志不符，未将其当作真实配置，不再重复诊断。无用户DB/密钥/正文读取。
+- [证据与成熟实现核对](docs/research/2026-10-02-empty-dialogue-transport-fix.md)：官方JSON空正文边界及可省略response_format；LiteLLM的格式提示+客户端验证方法。仅复用当前jsonschema/Pydantic/pydantic-core及预算网关，不引入框架或付费修复。原角色规则仍说“只输出台词”，长记忆示例不是完整传输对象，确认风险但未证明某句造成空返回。
+- 仅精确官方https DeepSeek根端点/v1、character_dialogue、chat_event_reply、原JSON_OBJECT_LOCAL_VALIDATE能力改用prompt JSON，_payload与generate统一省略response_format，流式同一_payload。保留结构化请求和非流式严格schema校验、应用decode/流式部分JSON，仅完整非空reply保存，不接受纯文本/截断/思考链替代台词。实际body继续进入保守预留；没有额外API、重试或用户配置/预算/开关变化。世界动态、内容生成、选择器、代理及其他服务保持原策略。
+- 统一私聊/群聊角色台词与格式规则；明确无事件/记忆/活动来源仍要自然回答，三个完整reply/events/memories示例及reply minLength=1。无效元数据仍忽略、不付费修复，记忆原句/权限/更正/开关及活动Kernel保持。空回复反馈不再默认让用户改模型设置，解释检查状态只是读取。
+- 非流式结构化失败新增安全事实日志，仅固定reason/finish/transport枚举及输入/输出/推理Token、max_output、HTTP status数字；不记录原文/推理/模型ID/schema/密钥。未知字段不当0，新日志失败不影响费用结算或引发重试。旧三次失败细分用量仍无法追溯，不能声称已得知提供商内部原因。
+- Ruff lint/format6份Python、ESLint/TypeScript、209份Core AST、5处0.1.8版本和3个完整提示JSON示例、608本地文档链接（0 broken）、Git diff静态检查通过。Core冻结30.425秒，Vite134ms/Rust release26.72秒成功；桌面PE FileVersion/ProductVersion为0.1.8。保留tzdata/pysqlite2/MySQLdb三个可选hidden-import、STATIC_VCRUNTIME弃用、Vite533.69kB告警，未提高阈值隐藏。
+- 完整新目录D:\LivingWorld\artifacts\portable\empty-reply-fix\dreamtalk\dreamtalk-desktop.exe，ZIP同父目录dreamtalk.zip。desktop 13,194,240 bytes / 302210FF4A0E7B9A45DB71003CC32E21E97145B00898016B4C30E7DEA5FB7C94；Core 13,967,643 / 5695849573FBA00D29BA2A5AB40374CB5A6DE7BDE669272D0E7AB352773908E7；ZIP 43,204,981 / 569828C9C2C10E92D9CCA25A78917FEC1DA04E0AA52E2533A11BBD06EA94FDCD；helper保持264DF8990752ABB179A3773ACE934F546C69AF99F4C9834EA1286D0D9886FDEA。209份冻结源码、22许可、11说明、482份ZIP文件字节一致，旧目录保留。清单artifacts/empty-reply-fix-package.json，两份编译日志同prefix，source_commit交付前更新为实际本轮提交。
+- 没有自动化测试、应用/GUI启动、真实API、凭据探测、用户DB读写/迁移或自启动改动；本轮只读安全日志和非秘密配置投影，既有单次数据库许可没有扩大复用。无新依赖/表/迁移/公共契约，Core/协议/identifier保持；编译不等于模型实际回复验收，不push发布。
+- **接下来：** 用户退出旧托盘后用完整0.1.8包验收单聊/群聊、寒暄、事件/长期记忆及关闭捕获；自启动需显式更新位置。prompt JSON格式仍可能失败，按本地校验报错，不承诺所有模型输出必然合规；若仍失败，从新版本次安全计数继续定位，不用提高聊天额度或重生成角色/世界书。
+
+## 前序切片：2026-10-02 长期记忆、活动生命周期和近期经历（桌面0.1.7）
 
 - 从干净bf9f367a81c574e61420230d5084ab8f5b31cc65 / codex/chat-feedback接续，实际仓库D:\LivingWorld。用户要求尽快完成长期记忆，并明确要求活动生命周期与聊天参考近期经历一并完成再汇报。[复用调查](docs/research/2026-10-02-long-chat-memory-reuse.md)、[普通使用说明](docs/LONG_TERM_MEMORY.md)。核对Mem0、Letta、SillyTavern、Concordia及Temporal的官方实现边界和许可，实际直接复用项目已安装SQLAlchemy/Alembic、Pydantic、SQLite FTS5/BM25、jieba0.42.1、既有结构化回复/预算/Kernel事务/世界deadline调度与原生React dialog。未复制AGPL代码、引入外部Agent/记忆框架、embedding服务、新依赖或额外提取API。
 - 新增0029两张应用层表long_chat_memories/long_chat_memory_settings，保留世界/玩家/角色/来源会话/消息/说话者/UTC与可用WorldTime。正常完整回复同次JSON在reply/events之后返回最多4条身份/偏好/约定/重要经历；原句需逐字属于本轮玩家消息或本次台词，无效元数据忽略、不付费修复。完成回复与来源记忆同事务；群聊公开来源进入获准固定成员的独立记忆，私聊只供对方。提取随当前发言角色开关控制，落库仍逐成员检查各自开关；关闭发言角色自动记录时，该次同调用不会为其他成员额外生成元数据。默认开启，用户可按角色关闭后续写入。非官方DeepSeek或未启用现有结构化聊天的路径保留普通聊天，原文召回可用但不保证自动生成新条目。
