@@ -1,7 +1,7 @@
 .product-shell.archive-shell {
   --page: oklch(.965 .002 160); --line: oklch(.85 .004 160); --archive-muted: oklch(.43 .008 160);
   --shelf-back: oklch(.25 .007 160); --shelf-ink: oklch(.89 .002 160);
-  --book-width: 196px; --book-height: 286px; --book-depth: 42px;
+  --book-slot: 84px; --book-width: 196px; --book-height: 286px; --book-depth: 42px;
   min-height: 100dvh;
 }
 .archive-header { min-height: 64px; padding: 0 36px; display: flex; align-items: center; gap: 24px; border-bottom: 1px solid var(--line); }
@@ -17,21 +17,26 @@
 .archive-scroll-actions { display: flex; gap: 8px; }
 .archive-scroll-actions button { width: 42px; height: 36px; padding: 0; background: transparent; color: var(--ink); border: 1px solid var(--line); border-radius: 3px; }
 .archive-scroll-actions button:hover { background: var(--surface); }
-/* Scrolling sits outside the shared 3D context: overflow:auto would flatten it. */
-.shelf-viewport { --selection-position: .34; width: 100%; overflow-x: auto; overflow-y: hidden; background: var(--shelf-back); scrollbar-color: oklch(.61 .008 160) var(--shelf-back); scrollbar-width: thin; border-radius: 5px; }
+/* Embla owns drag/loop physics. Its planar measuring track is separate from the shared 3D books. */
+.shelf-viewport { --selection-position: .34; width: 100%; overflow: hidden; touch-action: pan-y pinch-zoom; user-select: none; cursor: grab; background: var(--shelf-back); border-radius: 5px; }
+.shelf-viewport.is-dragging, .shelf-viewport.is-dragging .archive-book { cursor: grabbing; }
+.shelf-motion-track { position: absolute; inset: 0 0 auto; display: flex; height: 530px; pointer-events: none; }
+.shelf-motion-slot { flex: 0 0 var(--book-slot); min-width: 0; }
 .shelf-scene { position: relative; height: 530px; perspective: 1100px; transform-style: preserve-3d; }
 .shelf-backboard { position: absolute; inset: 24px -80px 0; background: radial-gradient(ellipse at 38% 25%, oklch(.37 .01 160), var(--shelf-back) 68%); transform: translateZ(-110px); }
 .shelf-top { position: absolute; inset: 18px -40px auto; height: 32px; background: oklch(.19 .007 160); transform: translateZ(-40px); box-shadow: 0 7px 7px oklch(.13 .006 160 / .6); }
 .shelf-floor { position: absolute; top: 426px; left: -100px; right: -100px; height: 220px; transform: rotateX(90deg); transform-origin: center top; background: linear-gradient(oklch(.34 .009 160), oklch(.2 .007 160)); }
 .shelf-edge { position: absolute; top: 426px; left: -100px; right: -100px; height: 16px; background: oklch(.18 .006 160); transform: translateZ(220px); border-top: 2px solid oklch(.4 .008 160); }
-.archive-book { position: absolute; top: 140px; width: 68px; height: var(--book-height); padding: 0; background: transparent; color: var(--ink); border: 0; border-radius: 0; text-align: left; overflow: visible; transform-style: preserve-3d; cursor: pointer; }
+.archive-book { position: absolute; top: 140px; width: var(--book-slot); height: var(--book-height); padding: 0; background: transparent; color: var(--ink); border: 0; border-radius: 0; text-align: left; overflow: visible; transform-style: preserve-3d; cursor: pointer; }
 .archive-book:hover { background: transparent; }
 /* Override the product-wide disabled opacity: it would flatten this 3D container. */
 .product-shell .archive-book:disabled { background: transparent; opacity: 1; cursor: default; }
 .product-shell .archive-book:focus-visible { outline: none; }
-.book-shadow { position: absolute; top: 286px; left: -64px; width: 196px; height: 196px; pointer-events: none; background: radial-gradient(ellipse, oklch(.1 .004 160 / .65), transparent 68%); transform: translateZ(-98px) rotateX(90deg) scaleX(.3); opacity: .7; transition: transform 480ms cubic-bezier(.22,1,.36,1), opacity 340ms; }
+.book-shadow { position: absolute; top: 286px; left: calc((var(--book-slot) - var(--book-width)) / 2); width: 196px; height: 196px; pointer-events: none; background: radial-gradient(ellipse, oklch(.1 .004 160 / .65), transparent 68%); transform: translateZ(-98px) rotateX(90deg) scaleX(.3); opacity: .7; transition: transform 480ms cubic-bezier(.22,1,.36,1), opacity 340ms; }
 .archive-book.is-selected .book-shadow { transform: translate3d(var(--display-shift, 0px),0px,70px) rotateX(90deg) scaleX(1.15) scaleY(.72); opacity: .4; }
-.book-volume { position: absolute; left: calc((68px - var(--book-width)) / 2); top: 0; display: block; width: var(--book-width); height: var(--book-height); transform-style: preserve-3d; transform: translate3d(0,0,0) rotateY(-90deg); }
+.book-volume { position: absolute; left: calc((var(--book-slot) - var(--book-width)) / 2); top: 0; display: block; width: var(--book-width); height: var(--book-height); transform-style: preserve-3d; transform: translate3d(0,0,0) rotateY(90deg); }
+.book-repeat .book-volume { transition: transform 180ms cubic-bezier(.22,1,.36,1); }
+.shelf-viewport:not(.is-dragging) .book-repeat:hover .book-volume { transform: translate3d(0,-2px,44px) rotateY(86deg); }
 .book-face { position: absolute; display: block; backface-visibility: hidden; }
 .book-front, .book-back { inset: 0; padding: 24px 22px; background: oklch(.92 .004 160); }
 .book-front { display: flex; flex-direction: column; transform: translateZ(21px); box-shadow: inset 7px 0 0 oklch(.8 .005 160), inset 0 0 0 1px oklch(.8 .005 160); }
@@ -43,7 +48,7 @@
 .book-back { display: flex; flex-direction: column; justify-content: space-between; font-size: .8rem; color: var(--archive-muted); transform: rotateY(180deg) translateZ(21px); box-shadow: inset 0 0 0 1px oklch(.75 .005 160); }
 .book-back span { overflow-wrap: anywhere; }
 .book-spine { left: -21px; top: 0; width: var(--book-depth); height: 100%; transform: rotateY(-90deg); display: flex; flex-direction: column; align-items: center; padding: 17px 6px; background: linear-gradient(90deg, oklch(.69 .008 160), oklch(.88 .005 160) 30%, oklch(.86 .005 160) 82%, oklch(.73 .008 160)); box-shadow: inset 0 0 0 1px oklch(.65 .006 160); }
-.book-spine strong { margin: auto 0; writing-mode: vertical-rl; text-orientation: mixed; max-height: 198px; overflow: hidden; font-size: 1rem; line-height: 1.3; letter-spacing: .06em; font-weight: 600; }
+.book-spine strong { margin: auto 0; writing-mode: vertical-rl; text-orientation: mixed; max-height: 198px; overflow: hidden; font-size: 1.05rem; line-height: 1.3; letter-spacing: .06em; font-weight: 600; }
 .book-spine small { font-size: .7rem; }
 .book-spine > span { font-size: .5rem; writing-mode: vertical-rl; color: oklch(.36 .007 160); }
 .book-pages { right: -21px; top: 3px; width: var(--book-depth); height: calc(100% - 6px); transform: rotateY(90deg); background: oklch(.85 .002 160); box-shadow: inset 4px 0 5px oklch(.63 .003 160); }
@@ -90,4 +95,4 @@
 @media (min-width: 1600px) { .archive-main { padding-top: 36px; } .archive-preview { width: 390px; right: 48px; } }
 @media (max-width: 919px) { .shelf-viewport { --selection-position: .5; } .archive-main { padding: 24px; } .archive-header, .archive-footer { padding-inline: 24px; } .archive-preview { position: relative; top: auto; right: auto; width: 100%; max-height: none; margin-top: 20px; padding: 24px; } .archive-preview-actions { flex-direction: row; flex-wrap: wrap; } }
 @media (max-width: 600px) { .archive-main { padding: 22px 16px; } .archive-header, .archive-footer { padding-inline: 16px; } .archive-header { gap: 12px; } .archive-header-label { padding-left: 12px; } .archive-preview-actions { flex-direction: column; } .workspace-header-actions .world-context { max-width: 120px; } }
-@media (prefers-reduced-motion: reduce) { .world-workspace, .archive-preview { animation: none; } .shelf-viewport { scroll-behavior: auto; } .book-shadow { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .world-workspace, .archive-preview { animation: none; } .shelf-viewport { scroll-behavior: auto; } .book-shadow, .book-repeat .book-volume { transition: none; } }

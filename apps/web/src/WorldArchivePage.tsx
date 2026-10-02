@@ -3,7 +3,7 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import { CoreClient, CoreRequestError, type WorldSettings, type WorldContentItem } from "@dreamtalk/api-client";
 import { ModelSetup } from "./ModelSetup";
 import { WorldImports } from "./WorldContent";
-import { WorldShelf } from "./WorldShelf";
+import { WorldShelf, worldShelfBlankCount } from "./WorldShelf";
 import "./world-archive.css";
 
 export function WorldArchivePage({ client, initialWorldId, onEnter, displayTime }: {
@@ -48,6 +48,7 @@ export function WorldArchivePage({ client, initialWorldId, onEnter, displayTime 
     const result = await client.listProductWorlds();
     if (!active.current) return result;
     setWorlds(result);
+    setBlankIndex(current => current === null ? null : Math.min(current, worldShelfBlankCount(result.length) - 1));
     // Remembered world positions never imply an active selection.
     setSelectedId(current => current && !result.some(item => item.world_id === current) ? "" : current);
     return result;
