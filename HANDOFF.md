@@ -2,7 +2,22 @@
 
 更新日期：2026-10-02。此文件记录当前开发现场与接续工作，不替代 [AGENTS.md](AGENTS.md)。先读 AGENTS，再读本文，最后核对实际 Git 状态和相关代码；不能把下面的基线哈希当作永远不变的当前 HEAD。
 
-## 最新接续：2026-10-02 聊天台词与可选资料格式兼容（桌面0.1.9）
+## 最新接续：2026-10-02 世界档案书架首轮（桌面0.1.10）
+
+- 从90edd3c6e45c36ff13c897e6939d76dac14d45b3建立codex/world-archive，实际仓库D:\LivingWorld。重构前的90edd3c已备份到用户私有GitHub仓库zhangyeS12/dreamtalk的main和codex/chat-feedback，检查点backup/pre-world-archive-0.1.9；本地完整bundle在artifacts/backups。本轮只本地提交，没有上传新前端或发布版本。
+- 用户明确要求“开始优化前端，先明确需求”。沿用已讨论的绝区零代理人秘闻式横向世界书架：没有世界也有白灰空书位；真实世界文字封面和书脊写名字；世界书入口移到这里，三张图片封面最后再做。先在commentary列明范围后实施，未更换React19／TS／Vite8／Tauri2或增加库。需求、交互与边界同步到PRODUCT、README、USER_FLOWS、PRODUCT_SURFACE与[使用说明](docs/WORLD_ARCHIVE.md)。
+- WorldArchivePage／WorldShelf／独立CSS以真实世界为书，无假世界、消息、最后进入时间、综合未读、关系或记忆计数。空书仅入口，既有世界不限数量；原生横向滚动／吸附，书的正面／侧面、悬停拉出、选中预览，宽窗口并排详情、窄窗口堆叠、键盘焦点／减少动画。状态通常15秒只读更新，可显式刷新；所选摘要请求有失效保护，不把其他世界内容放到当前预览。
+- 直接复用WorldImports／ContentEditor／ModelSetup／CoreClient；通过onlyKind与保存回调区分入口。书架管理世界书手动／联网生成／JSON导入／编辑／文件更新／逐条公共背景，设置保留角色卡。所有原Draft→Preview→Commit、来源、预算、隐藏／公共权限和模型路由保持；没有新解析器或额外付费调用。加载失败前禁止编辑，避免慢旧读覆盖新保存，展开管理定位标题，不出现按钮操作后编辑区在视口外而缺少反馈。
+- 明确先创建世界档案再加世界书；未知创建结果保留名称与同一RequestId核对，422明确拒绝才允许改名。取消世界书草稿不删除已创建的档案。入口读取实际世界存在与绑定身份，进入后挂载原四个业务页面；未绑定身份时前往“我”完成从家进入，书架不自动绑定或移动玩家。返回书架／切世界提示未保存的内容／资料／模型／当前聊天草稿及进行中的请求，已发起请求可能继续；不暂停世界或改后台开关。
+- 预览与真正进入分离；书架报告worldId=null／visible=false，世界内继续原桌面可见租约，退出业务界面清除租约。预览不会加载或标记聊天已读，后台Core与已授权功能仍按原设置运行。没有用户数据库／配置／自启动操作，其他角色私聊／隐藏事件／关系值不进入普通预览。
+- [复用调查](docs/research/2026-10-02-world-archive-reuse.md)：原生MDN scroll-snap／reduced-motion和React状态身份；酒馆独立世界书编辑与绑定作为组织参考。核对酒馆AGPL-3.0与Embla MIT，不复制酒馆脚本／素材；当前原生浏览足够，未装轮播库。Embla官方React文档抓取失败已注明，未据此声称API验证。未生成／导入图片或建立封面持久化。
+- ESLint／TypeScript与Git diff检查通过，Vite217模块／120ms、Rustrelease21.21秒完成；PE FileVersion／ProductVersion=0.1.10，五处桌面声明同步，Core／协议／identifier兼容值不变。保留Vite547.28kB主chunk超过500kB与STATIC_VCRUNTIME弃用告警；没有调整阈值隐藏。
+- Core完全未修改，沿用完整dialogue-resilience包并逐份核对所有Core／依赖文件及209份冻结Python源码；新独立完整目录artifacts/portable/world-archive/dreamtalk，旧包不覆盖。包内说明／许可／ZIP逐字节核对，具体尺寸与SHA见artifacts/world-archive-package.json；desktop构建日志同prefix。package脚本仅静态／编译产物与字节核对，不运行服务或测试。
+- 按AGENTS第20节没有修改／运行自动化测试、启动应用／GUI、真实API或凭据探测，没有读取或升级用户存档。已知ProductApp.test仍断言旧首页立即显示四标签与设置下拉切世界，需要后续获准适配；没有删除、skip或弱化这些测试。代码／编译完成不等于真实视觉、导入、切世界或旧存档运行验收。
+- 文档冲突已校正：PRODUCT／README先前把世界创建／世界书导入放在设置，与最新用户书架方案冲突，按最新授权移动入口。README关于Director／世界池／Builder／记忆全未实现的旧概览与既有代码不符，改为已完成受约束切片、完整自主能力仍未完成；旧交接段保留为历史。
+- **接下来：** 用户退出旧托盘后打开完整0.1.10包，先验收书架文字封面／空书、已有世界进入与返回、世界书导入／编辑／联网草稿、双世界隔离、窄窗口与键盘。如果使用开机自启动，在新版世界内设置显式保存更新路径，本轮没有代改。下一切片统一聊天与通讯录的视觉／导航，再整理设置；三图封面留最后。暂无新增必需产品决策，现有旧首页自动化断言适配需用户改变测试责任指令后进行。
+
+## 前序切片：2026-10-02 聊天台词与可选资料格式兼容（桌面0.1.9）
 
 - 从1347b0b546efba178ff52fae87da461e3db9a6cc / codex/chat-feedback接续，实际仓库D:\LivingWorld。用户反馈0.1.8仍不回复。只读进程路径确认桌面与Core都来自empty-reply-fix完整包；19:04:50日本时间的安全日志是HTTP200/stop/input7870/output33/max_output173315/prompt_json/json_parse_failed，发生在网关严格JSON验证。此次不是空正文；没有原文证据，不能确定是普通台词、代码块或损坏JSON。未读用户DB、密钥或聊天正文，不重复追查先前与运行不一致的空配置。
 - [证据与复用选择](docs/research/2026-10-02-optional-chat-annotations-fix.md)：0.1.8只省略provider response_format，却仍声明强制StructuredOutputRequest，导致应用还没获得台词就拦住回复。直接复用现有json/Pydantic/pydantic-core，聊天附带字段以本地chat_reply_encoding标记承载，structured_output=None；标记不发送服务商，提示与真实payload仍走原用量预留／路由／结算。非聊天严格任务及其他模型原策略保持，没有新增框架、JSON修复器或额外API。

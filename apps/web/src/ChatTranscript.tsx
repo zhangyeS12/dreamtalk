@@ -22,9 +22,10 @@ interface Props {
   suggestedDraft?: string | null;
   onSuggestionUsed?: () => void;
   onBack: () => void;
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
-export function ChatTranscript({ client, worldId, playerId, conversation, tokenCeiling, suggestedDraft, onSuggestionUsed, onBack }: Props) {
+export function ChatTranscript({ client, worldId, playerId, conversation, tokenCeiling, suggestedDraft, onSuggestionUsed, onBack, onDirtyChange }: Props) {
   const draftInput = useRef<HTMLTextAreaElement>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [memoryOpen, setMemoryOpen] = useState(false);
@@ -37,6 +38,8 @@ export function ChatTranscript({ client, worldId, playerId, conversation, tokenC
   const [pendingSend, setPendingSend] = useState<{ text: string; ceiling: number; requestId: string } | null>(null);
   const [phase, setPhase] = useState<ChatRequestPhase>(null);
   const sending = phase !== null;
+  useEffect(() => { onDirtyChange?.(Boolean(draft.trim() || pendingSend || sending)); }, [draft, pendingSend, sending, onDirtyChange]);
+  useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
   const [feedback, setFeedback] = useState("");
   const [replyFailure, setReplyFailure] = useState<{ turnId: string; message: string } | null>(null);
   const stream = useReplyStream();

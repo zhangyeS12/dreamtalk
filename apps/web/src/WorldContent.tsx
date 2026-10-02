@@ -35,7 +35,10 @@ export function ContentDetails({ item, onCommonChange, changingEntry }: {
 
 const ignoreDirty = () => undefined;
 
-export function WorldImports({ client, worldId, onDirtyChange = ignoreDirty }: { client: CoreClient; worldId: string; onDirtyChange?: (dirty: boolean) => void }) {
+export function WorldImports({ client, worldId, onlyKind, onSaved, onDirtyChange = ignoreDirty }: {
+  client: CoreClient; worldId: string; onlyKind?: "character" | "lorebook";
+  onSaved?: () => void; onDirtyChange?: (dirty: boolean) => void;
+}) {
   const [editor, setEditor] = useState<{ kind: "character" | "lorebook"; item?: WorldContentItem } | null>(null);
   const active = useRef(true);
   const pendingId = useRef<string | null>(null);
@@ -46,7 +49,7 @@ export function WorldImports({ client, worldId, onDirtyChange = ignoreDirty }: {
       if (pendingId.current) void client.discardWorldContent(worldId, pendingId.current).catch(() => undefined);
     };
   }, [client, worldId]);
-  const [kind, setKind] = useState<"character" | "lorebook">("character");
+  const [kind, setKind] = useState<"character" | "lorebook">(onlyKind ?? "character");
   const [replacement, setReplacement] = useState<WorldContentItem | null>(null);
   const [preview, setPreview] = useState<WorldContentItem | null>(null);
   const [busy, setBusy] = useState(false);
@@ -60,13 +63,17 @@ export function WorldImports({ client, worldId, onDirtyChange = ignoreDirty }: {
   }, [message]);
   const [error, setError] = useState("");
   const [accepted, setAccepted] = useState<WorldContentItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [changingEntry, setChangingEntry] = useState<string | null>(null);
   useEffect(() => {
     let mounted = true;
-    void client.worldContent(worldId).then(items => { if (mounted) setAccepted(items); }).catch(() => { if (mounted) setError("无法读取当前世界的已导入内容。"); });
+    void client.worldContent(worldId).then(items => { if (mounted) setAccepted(items); })
+      .catch(() => { if (mounted) { setLoadFailed(true); setError("无法读取当前世界的已导入内容，请重新打开管理页面。"); } })
+      .finally(() => { if (mounted) setLoading(false); });
     return () => { mounted = false; };
   }, [client, worldId]);
-  useEffect(() => { onDirtyChange(!!editor || !!preview || busy); }, [editor, preview, busy, onDirtyChange]);
+  useEffect(() => { onDirtyChange(!!editor || !!preview || !!replacement || busy || !!changingEntry); }, [editor, preview, replacement, busy, changingEntry, onDirtyChange]);
   useEffect(() => () => onDirtyChange(false), [onDirtyChange]);
   const upload = async (file: File) => {
     setError(""); setMessage("");
@@ -79,7 +86,7 @@ export function WorldImports({ client, worldId, onDirtyChange = ignoreDirty }: {
       pendingId.current = result.import_id;
       setPreview(result);
     } catch (failure) { setError(failure instanceof CoreRequestError && failure.status === 409
-      ? "该内容已更新，请重新打开设置并选择最新版本。"
+      ? "该内容已更新，请重新打开管理页面并选择最新版本。"
       : "无法读取文件。请选择有效的角色卡或世界书；文件内容尚未保存。"); }
     finally { setBusy(false); }
   };
@@ -88,6 +95,8 @@ export function WorldImports({ client, worldId, onDirtyChange = ignoreDirty }: {
     setBusy(true); setError("");
     try {
       const saved = await client.commitWorldContent(worldId, preview);
+      if (!active.current) return;
+      onSaved?.();
       setAccepted(items => items.some(item => item.import_id === saved.import_id)
         ? items : [...items.filter(item => item.import_id !== saved.replaces_import_id), saved]);
       pendingId.current = null; setPreview(null); setReplacement(null);
@@ -103,27 +112,30 @@ export function WorldImports({ client, worldId, onDirtyChange = ignoreDirty }: {
     setChangingEntry(entryId); setError(""); setMessage("");
     try {
       await client.setCommonLore(worldId, importId, entryId, common);
+      if (!active.current) return;
+      onSaved?.();
       setAccepted(items => items.map(item => item.import_id !== importId ? item : {
         ...item, entries: item.entries.map(entry => entry.id === entryId ? { ...entry, common } : entry),
       }));
       setMessage(common ? "已设为公共背景。" : "已设为隐藏内容。");
-    } catch { setError("无法更新公共背景范围，请重新进入设置后重试。"); }
+    } catch { setError("无法更新公共背景范围，请重新打开管理页面后重试。"); }
     finally { setChangingEntry(null); }
   };
-  return <section className="settings-section import-section"><div className="section-heading"><h2>角色卡与世界书</h2><p>直接创建、联网生成，或导入已有内容。确认后加入当前世界。</p></div>
-    <div className="profile-actions"><button type="button" className="secondary-button" disabled={busy || !!preview || !!editor} onClick={() => { setEditor({ kind: "character" }); setError(""); setMessage(""); }}>新建角色卡</button><button type="button" className="secondary-button" disabled={busy || !!preview || !!editor} onClick={() => { setEditor({ kind: "lorebook" }); setError(""); setMessage(""); }}>新建世界书</button></div>
-    {editor && <ContentEditor key={editor.item?.import_id ?? editor.kind} client={client} worldId={worldId} kind={editor.kind} editing={editor.item} onCancel={() => setEditor(null)} onSaved={saved => { setAccepted(items => [...items.filter(item => item.import_id !== saved.replaces_import_id && item.import_id !== saved.import_id), saved]); setEditor(null); setMessage(saved.kind === "character" ? "角色卡已保存，可在通讯录中打开会话。" : "世界书已保存，可在下方设置各条目的可见范围。"); }} />}
-    <details className="file-import-options"><summary>从文件导入</summary>
-    {(kind === "lorebook" || accepted.some(item => item.kind === "lorebook")) && <p className="inline-hint">世界书条目默认隐藏。确认导入后，可逐条设为公共背景，供当前世界角色聊天和已开启的自动活动规划参考；暗线请保持隐藏。素材不会因此变成世界事实，也不会创建新地点。</p>}
+  const visibleItems = accepted.filter(item => !onlyKind || item.kind === onlyKind);
+  return <section className="settings-section import-section"><div className="section-heading"><h2>{onlyKind === "lorebook" ? "创建与导入世界书" : onlyKind === "character" ? "角色卡" : "角色卡与世界书"}</h2><p>直接创建、联网生成，或导入已有内容。确认后加入当前世界。</p></div>
+    <div className="profile-actions">{onlyKind !== "lorebook" && <button type="button" className="secondary-button" disabled={loading || loadFailed || busy || !!preview || !!editor} onClick={() => { setEditor({ kind: "character" }); setError(""); setMessage(""); }}>新建角色卡</button>}{onlyKind !== "character" && <button type="button" className="secondary-button" disabled={loading || loadFailed || busy || !!preview || !!editor} onClick={() => { setEditor({ kind: "lorebook" }); setError(""); setMessage(""); }}>新建世界书</button>}</div>
+    {editor && <ContentEditor key={editor.item?.import_id ?? editor.kind} client={client} worldId={worldId} kind={editor.kind} editing={editor.item} onCancel={() => setEditor(null)} onSaved={saved => { if (!active.current) return; onSaved?.(); setAccepted(items => [...items.filter(item => item.import_id !== saved.replaces_import_id && item.import_id !== saved.import_id), saved]); setEditor(null); setMessage(saved.kind === "character" ? "角色卡已保存，可在通讯录中打开会话。" : "世界书已保存，可在下方设置各条目的可见范围。"); }} />}
+    <details className="file-import-options" open={onlyKind === "lorebook" ? true : undefined}><summary>{onlyKind === "lorebook" ? "导入世界书（JSON）" : "从文件导入"}</summary>
+    {(kind === "lorebook" || visibleItems.some(item => item.kind === "lorebook")) && <p className="inline-hint">世界书条目默认隐藏。确认导入后，可逐条设为公共背景，供当前世界角色聊天和已开启的自动活动规划参考；暗线请保持隐藏。素材不会因此变成世界事实，也不会创建新地点。</p>}
     {replacement && <p className="inline-hint">正在更新：{replacement.characters[0]?.name ?? replacement.lorebooks[0]?.name} <button type="button" className="text-action" disabled={busy || !!preview} onClick={() => setReplacement(null)}>取消更新</button></p>}
-    <label className="field"><span>内容类型</span><select value={kind} disabled={busy || !!preview || !!replacement || !!editor} onChange={event => setKind(event.target.value as typeof kind)}><option value="character">角色卡（PNG / JSON）</option><option value="lorebook">世界书（JSON）</option></select></label>
-    <label className="field import-file"><span>选择文件</span><input type="file" disabled={busy || !!editor} accept={kind === "character" ? ".png,.json" : ".json"} onChange={event => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void upload(file); }} /></label>
-    </details>{busy && <p role="status">正在处理…</p>}{error && <p role="alert" className="app-alert">{error}</p>}{message && <p ref={savedNotice} tabIndex={-1} role="status" className="app-notice editor-feedback">{message}</p>}
+    {!onlyKind && <label className="field"><span>内容类型</span><select value={kind} disabled={busy || !!preview || !!replacement || !!editor} onChange={event => setKind(event.target.value as typeof kind)}><option value="character">角色卡（PNG / JSON）</option><option value="lorebook">世界书（JSON）</option></select></label>}
+    <label className="field import-file"><span>选择文件</span><input type="file" disabled={loading || loadFailed || busy || !!editor} accept={kind === "character" ? ".png,.json" : ".json"} onChange={event => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void upload(file); }} /></label>
+    </details>{loading && <p role="status">正在读取已保存的内容…</p>}{busy && <p role="status">正在处理…</p>}{error && <p role="alert" className="app-alert">{error}</p>}{message && <p ref={savedNotice} tabIndex={-1} role="status" className="app-notice editor-feedback">{message}</p>}
     {preview && <div className="import-preview"><h3>导入预览</h3><ContentDetails item={preview} />
       {!!preview.warnings?.length && <div className="compatibility-notice"><p>部分来源内容无法完整映射，原始数据仍会保留。确认前请检查以下提示。</p><ul>{preview.warnings.map((warning, index) => <li key={index}>{warning.code === "lore_activation_metadata_preserved_inert" ? "导入不会执行触发设定；聊天支持范围见各条目说明。" : warning.code.includes("blank_tags") ? "空白标签已从角色标签中省略。" : warning.code.includes("empty_content") ? "空白条目已从世界书中省略。" : warning.code.includes("secondary_keys") ? "存在含义不明确的次级关键词，未作猜测转换。" : "存在兼容性差异，请核对预览内容。"}</li>)}</ul></div>}
       <div className="profile-actions"><button className="primary-button" type="button" disabled={busy} onClick={() => void commit()}>{replacement ? "确认更新当前世界" : "确认加入当前世界"}</button><button className="secondary-button" type="button" disabled={busy} onClick={() => { pendingId.current = null; void client.discardWorldContent(worldId, preview.import_id).catch(() => undefined); setPreview(null); }}>取消</button></div>
     </div>}
-    {accepted.length > 0 && <div className="accepted-content"><h3>当前世界已保存</h3>{accepted.map(item => <div key={item.import_id} className="accepted-item"><details><summary>{item.characters[0]?.name ?? item.lorebooks[0]?.name ?? "导入内容"} · {item.kind === "character" ? "角色卡" : "世界书"}</summary><ContentDetails item={item} onCommonChange={item.kind === "lorebook" ? (entryId, common) => void setCommon(item.import_id, entryId, common) : undefined} changingEntry={changingEntry} /></details><button type="button" className="text-action" disabled={busy || !!preview || !!editor} onClick={() => { setEditor({ kind: item.kind, item }); setError(""); setMessage(""); }}>编辑</button><button type="button" className="text-action" disabled={busy || !!preview || !!editor} onClick={() => { setReplacement(item); setKind(item.kind); setMessage(""); }}>从文件更新</button></div>)}</div>}
+    {visibleItems.length > 0 && <div className="accepted-content"><h3>当前世界已保存</h3>{visibleItems.map(item => <div key={item.import_id} className="accepted-item"><details><summary>{item.characters[0]?.name ?? item.lorebooks[0]?.name ?? "导入内容"} · {item.kind === "character" ? "角色卡" : "世界书"}</summary><ContentDetails item={item} onCommonChange={item.kind === "lorebook" ? (entryId, common) => void setCommon(item.import_id, entryId, common) : undefined} changingEntry={changingEntry} /></details><button type="button" className="text-action" disabled={loading || loadFailed || busy || !!preview || !!editor} onClick={() => { setEditor({ kind: item.kind, item }); setError(""); setMessage(""); }}>编辑</button><button type="button" className="text-action" disabled={loading || loadFailed || busy || !!preview || !!editor} onClick={() => { setReplacement(item); setKind(item.kind); setMessage(""); }}>从文件更新</button></div>)}</div>}
   </section>;
 }
 

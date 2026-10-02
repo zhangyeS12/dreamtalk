@@ -28,16 +28,17 @@ function validServiceUrl(value: string): boolean {
 }
 
 const statusText: Record<LLMRuntimeStatus, string> = {
-  ready: "模型和凭据已就绪。首次聊天时才会实际联系提供商。",
+  ready: "模型和凭据已就绪。聊天或联网生成时才会实际联系提供商。",
   partially_configured: "部分模型缺少凭据。请检查现有高级模型配置。",
   unconfigured: "尚未配置聊天模型。完成首次设置后才能向角色发送消息。",
   degraded: "模型配置或凭据状态异常。世界和已有聊天记录仍可使用。",
 };
 
-export function ModelSetup({ client, turnTokenCeiling, onConfigured = () => window.location.reload() }: {
+export function ModelSetup({ client, turnTokenCeiling, onConfigured = () => window.location.reload(), onDirtyChange }: {
   client: CoreClient;
   turnTokenCeiling?: number;
   onConfigured?: () => void;
+  onDirtyChange?: (dirty: boolean) => void;
 }) {
   const [status, setStatus] = useState<LLMRuntimeStatus | null>(null);
   const [managed, setManaged] = useState<ChatModelSetup | null>(null);
@@ -53,6 +54,9 @@ export function ModelSetup({ client, turnTokenCeiling, onConfigured = () => wind
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [streaming, setStreaming] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [dirty, setDirty] = useState(false);
+  useEffect(() => { onDirtyChange?.(dirty || saving); }, [dirty, saving, onDirtyChange]);
+  useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const formId = useId();
 
@@ -159,6 +163,7 @@ export function ModelSetup({ client, turnTokenCeiling, onConfigured = () => wind
       if (outcome?.old_credential_cleanup_incomplete) {
         try { window.sessionStorage.setItem(cleanupWarningKey, "模型已更新，但旧凭据未能从 Windows 安全凭据存储清理。请检查本机凭据存储。"); } catch { /* The update remains committed. */ }
       }
+      setDirty(false);
       onConfigured();
     } catch (failure) {
       if (failure === "secure_storage_unavailable") setError("Windows 安全凭据存储不可用，密钥未保存。");
@@ -175,7 +180,7 @@ export function ModelSetup({ client, turnTokenCeiling, onConfigured = () => wind
     {error ? <p className="app-alert" role="alert">{error}</p> : null}
     {managedUnsupported && status !== "unconfigured" ? <p className="inline-hint">当前配置由高级方式管理；此处不会覆盖其中的路由、定价或其他设置。</p> : null}
     {turnTokenCeiling !== undefined && !requestBoundAvailable && inputBound >= turnTokenCeiling && (editing || status === "unconfigured") ? <p className="compatibility-notice" role="status">当前每轮 {turnTokenCeiling.toLocaleString("zh-CN")} Token 额度无法容纳 {inputBound.toLocaleString("zh-CN")} Token 输入预留与回复。聊天额度至少需 {(inputBound + 1).toLocaleString("zh-CN")}；{Number.isSafeInteger(outputBound) && outputBound > 0 ? `建议设置为 ${(inputBound + outputBound).toLocaleString("zh-CN")}，预留一次完整回复。` : ""} 模型设置仍可保存。输入预留使用填写的可信上界，不代表实际发送量；请按官方说明填写，勿为通过检查虚填较低值。</p> : null}
-    {isTauri() && (status === "unconfigured" || (editing && !managedUnsupported)) ? <form noValidate aria-busy={saving} onSubmit={event => void save(event)}>
+    {isTauri() && (status === "unconfigured" || (editing && !managedUnsupported)) ? <form noValidate aria-busy={saving} onChangeCapture={() => setDirty(true)} onSubmit={event => void save(event)}>
       {submitAttempted && firstInvalidField ? <p className="app-alert" role="alert">尚未保存：{validationErrors[firstInvalidField]} 请修改标红的字段后再保存。</p> : null}
       <div className="model-setup-fields">
         <label className="field"><span>提供商</span><select value={providerKind} disabled={saving} onChange={event => { setProviderKind(event.target.value as ProviderKind); resetCapacity(); }}><option value="openai-responses">OpenAI</option><option value="anthropic">Anthropic</option><option value="gemini">Gemini</option><option value="openai-compatible">兼容 Chat Completions 的服务</option></select></label>

@@ -12,17 +12,20 @@ import { ConversationMemoryPanel } from "./ConversationMemoryPanel";
 import { submitChatOnEnter } from "./chatComposerKeys";
 import { chatTokenReservationFeedback, chatPhaseFeedback, chatReplyFailureFeedback, chatReplyStateFeedback, chatSaveFailureFeedback, type ChatRequestPhase } from "./chatFeedback";
 
-export function GroupChatSetup({ client, worldId, onCreated, onBack }: {
+export function GroupChatSetup({ client, worldId, onCreated, onBack, onDirtyChange }: {
   client: CoreClient;
   worldId: string;
   onCreated: (group: GroupChatConversation) => void;
   onBack: () => void;
+  onDirtyChange?: (dirty: boolean) => void;
 }) {
   const [contacts, setContacts] = useState<WorldContentItem[] | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
   const [pending, setPending] = useState<{ importIds: string[]; requestId: string } | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  useEffect(() => { onDirtyChange?.(selected.length > 0 || !!pending || saving); }, [selected, pending, saving, onDirtyChange]);
+  useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
 
   useEffect(() => {
     let active = true;
@@ -67,9 +70,9 @@ export function GroupChatSetup({ client, worldId, onCreated, onBack }: {
   </section>;
 }
 
-export function GroupChatDetails({ client, worldId, playerId, group, tokenCeiling, suggestedDraft, onSuggestionUsed, onBack }: {
+export function GroupChatDetails({ client, worldId, playerId, group, tokenCeiling, suggestedDraft, onSuggestionUsed, onBack, onDirtyChange }: {
   client: CoreClient; worldId: string; playerId: string; group: GroupChatConversation; tokenCeiling: number;
-  suggestedDraft?: string | null; onSuggestionUsed?: () => void; onBack: () => void;
+  suggestedDraft?: string | null; onSuggestionUsed?: () => void; onBack: () => void; onDirtyChange?: (dirty: boolean) => void;
 }) {
   const draftInput = useRef<HTMLTextAreaElement>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -83,6 +86,8 @@ export function GroupChatDetails({ client, worldId, playerId, group, tokenCeilin
   const [pending, setPending] = useState<{ text: string; ceiling: number; requestId: string } | null>(null);
   const [phase, setPhase] = useState<ChatRequestPhase>(null);
   const sending = phase !== null;
+  useEffect(() => { onDirtyChange?.(Boolean(draft.trim() || pending || sending)); }, [draft, pending, sending, onDirtyChange]);
+  useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
   const [feedback, setFeedback] = useState("");
   const [replyFailure, setReplyFailure] = useState<{ turnId: string; message: string } | null>(null);
   const stream = useReplyStream();
