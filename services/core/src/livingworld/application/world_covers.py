@@ -95,6 +95,8 @@ class WorldCoverService:
 
     async def save(self, world, mode, title, show_title, faces, revision):
         await self._repository.world_name(world)
+        if mode == "text" and not title.strip():
+            raise CoverError("cover_title_required")
         if mode == "image" and "front" not in faces:
             raise CoverError("cover_front_required")
         previous = await self.load(world)

@@ -31,7 +31,7 @@ class FaceWrite(BaseModel):
 class CoverWrite(BaseModel):
     model_config = ConfigDict(extra="forbid")
     mode: Literal["text", "image"]
-    title: str = Field(min_length=1, max_length=120)
+    title: str = Field(max_length=120)
     show_title: bool = Field(strict=True)
     faces: dict[Literal["front", "spine", "back"], FaceWrite] = Field(max_length=3)
     expected_revision: int = Field(ge=0, strict=True)
@@ -60,7 +60,7 @@ def create_world_cover_router(service, authorize):
 
     @router.put("/worlds/{world_id}/cover")
     async def save(world_id: UUID, body: CoverWrite):
-        if not body.title.strip():
+        if body.mode == "text" and not body.title.strip():
             raise HTTPException(422, detail="cover_title_required")
         faces = {
             name: (face.source_digest, CoverCrop(**face.crop.model_dump()))

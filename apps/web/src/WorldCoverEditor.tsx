@@ -74,7 +74,10 @@ export function WorldCoverEditor({ client, world, onDirty, onBusy, onSaved, onCl
 }) {
   const [cover, setCover] = useState<WorldCover | null>(null);
   const [mode, setMode] = useState<"text" | "image">("text");
-  const [title, setTitle] = useState(world.name);
+  const [textTitle, setTextTitle] = useState(world.name);
+  const [imageTitle, setImageTitle] = useState("");
+  const title = mode === "image" ? imageTitle : textTitle;
+  const setTitle = mode === "image" ? setImageTitle : setTextTitle;
   const [showTitle, setShowTitle] = useState(true);
   const [faces, setFaces] = useState<Partial<Record<CoverFace, FaceDraft>>>({});
   const latestFaces = useRef(faces); latestFaces.current = faces;
@@ -125,7 +128,8 @@ export function WorldCoverEditor({ client, world, onDirty, onBusy, onSaved, onCl
         }
         if (abort.signal.aborted) return;
         FACES.forEach(face => { previewEpoch.current[face] += 1; });
-        setCover(saved); setTitle(saved.title); setMode(saved.mode); setShowTitle(saved.show_title);
+        setCover(saved); setTextTitle(saved.mode === "text" ? saved.title : world.name);
+        setImageTitle(saved.mode === "image" ? saved.title : ""); setMode(saved.mode); setShowTitle(saved.show_title);
         setFaces(sources); setPreviews(displays); setDirty(false); dirtyCallback.current(false); setCropKey(value => value + 1);
       } catch (failure) { if (!abort.signal.aborted) setError(failureMessage(failure)); }
       finally { if (!abort.signal.aborted) { operation.current = false; setBusy(false); busyCallback.current(false); } }
@@ -168,7 +172,7 @@ export function WorldCoverEditor({ client, world, onDirty, onBusy, onSaved, onCl
     finally { if (mounted.current) setWorking(false); }
   };
   const save = async () => {
-    if (operation.current || !cover || pending || !title.trim() || mode === "image" && !faces.front) return;
+    if (operation.current || !cover || pending || mode === "text" && !title.trim() || mode === "image" && !faces.front) return;
     const draft: WorldCoverWrite = { mode, title: title.trim(), show_title: showTitle, faces: {}, expected_revision: cover.revision };
     for (const face of FACES) { const value = faces[face]; if (value) {
       if (!value.crop) { setError("图片裁剪尚未准备好，请选择该面并完成裁剪。"); return; }
@@ -196,7 +200,7 @@ export function WorldCoverEditor({ client, world, onDirty, onBusy, onSaved, onCl
     <div className="cover-editor-grid">
       <div className="cover-preview-pane"><p className="cover-eyebrow">封面预览</p>
         <div className={`cover-book-stage view-${view}`} aria-label={`${title || world.name}的${LABELS[view]}预览`}>
-          <span className="book-volume"><BookFaces name={world.name} appearance={{ cover: { mode, title: title || world.name, show_title: showTitle }, urls: previews }} /></span>
+          <span className="book-volume"><BookFaces name={world.name} appearance={{ cover: { mode, title, show_title: showTitle }, urls: previews }} /></span>
         </div>
         <div className="cover-segment" aria-label="预览角度">{FACES.map(item => <button key={item} type="button" aria-pressed={view === item} onClick={() => setView(item)}>{LABELS[item]}</button>)}</div>
         <p className="cover-hint">左上角的 dreamtalk 始终保留。保存后才会应用到书架。</p>
@@ -205,8 +209,8 @@ export function WorldCoverEditor({ client, world, onDirty, onBusy, onSaved, onCl
         {error && <p className="app-alert" role="alert">{error}</p>}{notice && <p className="app-notice" role="status">{notice}</p>}
         {!cover && busy ? <p role="status">正在读取封面…</p> : <>
           <div className="cover-segment" aria-label="封面方式"><button type="button" disabled={busy || !cover} aria-pressed={mode === "text"} onClick={() => { setMode("text"); setPending(false); markDirty(); }}>文字封面</button><button type="button" disabled={busy || !cover} aria-pressed={mode === "image"} onClick={() => { setMode("image"); setPending(false); setCropKey(value => value + 1); markDirty(); }}>图片封面</button></div>
-          <label className="field"><span>封面标题</span><input maxLength={120} value={title} disabled={busy || !cover} onChange={event => { setTitle(event.target.value); markDirty(); }} placeholder={world.name} /></label>
-          <p className="cover-hint">标题同步到正面和书脊，不会修改世界名称或世界书内容。</p>
+          <label className="field"><span>{mode === "image" ? "封面标题（可留空）" : "封面标题"}</span><input maxLength={120} value={title} disabled={busy || !cover} onChange={event => { setTitle(event.target.value); markDirty(); }} placeholder={mode === "image" ? "留空不显示标题" : world.name} /></label>
+          <p className="cover-hint">{mode === "image" ? "图片标题默认留空；填写后同步到正面和书脊，标题底色透明。" : "标题同步到正面和书脊。"}不会修改世界名称或世界书内容。</p>
           {mode === "image" && <>
             <label className="cover-check"><input type="checkbox" checked={showTitle} disabled={busy} onChange={event => { setShowTitle(event.target.checked); markDirty(); }} />在图片上显示封面标题</label>
             <div className="cover-face-tabs" aria-label="编辑书的各面">{FACES.map(item => <button key={item} type="button" disabled={busy || pending} aria-pressed={face === item} onClick={() => { setFace(item); setView(item); setCropKey(value => value + 1); }}>{LABELS[item]}<small>{faces[item] ? "已上传" : item === "front" ? "必选" : "可选"}</small></button>)}</div>
@@ -222,7 +226,7 @@ export function WorldCoverEditor({ client, world, onDirty, onBusy, onSaved, onCl
             {draft ? <FaceCropper key={`${face}:${draft.source.digest}:${cropKey}`} face={face} draft={draft} disabled={busy} onCrop={updateCrop} onPending={setPending} /> : <p className="cover-empty">{face === "front" ? "先上传正面图片，再拖动和缩放裁剪。" : "这一面可暂时留空，使用白灰书体与封面标题。"}</p>}
             <p className="cover-hint">正面和背面比例 196:286，书脊比例 42:286。原图无需精确匹配，裁剪会保持比例。只上传正面也可以保存。</p>
           </>}
-          <div className="cover-save-actions"><button type="button" className="primary-button" disabled={busy || !cover || !dirty || !title.trim() || pending || mode === "image" && !faces.front} onClick={() => void save()}>{busy ? "正在处理…" : "保存封面"}</button>
+          <div className="cover-save-actions"><button type="button" className="primary-button" disabled={busy || !cover || !dirty || mode === "text" && !title.trim() || pending || mode === "image" && !faces.front} onClick={() => void save()}>{busy ? "正在处理…" : "保存封面"}</button>
             <button type="button" className="text-action" disabled={busy} onClick={() => { if (!dirty || window.confirm("重新读取会放弃尚未保存的封面编辑，是否继续？")) { FACES.forEach(face => { previewEpoch.current[face] += 1; }); setPending(false); setReload(value => value + 1); } }}>重新读取已保存封面</button></div>
           <p className="cover-hint">图片与原图副本只保存在本机，不调用模型，也不发送到联网服务。</p>
         </>}

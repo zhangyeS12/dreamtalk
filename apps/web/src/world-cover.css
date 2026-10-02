@@ -3,8 +3,8 @@
 .book-face.has-cover-art .book-art { z-index: -1; }
 .book-front.has-cover-art::after { border-color: oklch(.96 0 0 / .3); }
 .book-front.has-cover-art .book-brand { align-self: flex-start; padding: 4px 7px; margin: -4px -7px 0; background: oklch(.98 .001 160 / .93); color: oklch(.22 .005 160); border-radius: 2px; }
-.book-front.has-cover-art .book-title { color: white; text-shadow: 0 1px 5px black; background: oklch(.15 0 0 / .65); padding: 8px; margin-inline: -8px; border-radius: 2px; }
-.book-spine.has-cover-art .book-title { color: white; text-shadow: 0 1px 4px black; background: oklch(.15 0 0 / .6); padding: 4px 2px; border-radius: 2px; }
+.book-front.has-cover-art .book-title { color: white; text-shadow: 0 1px 5px black; background: transparent; }
+.book-spine.has-cover-art .book-title { color: white; text-shadow: 0 1px 4px black; background: transparent; }
 .cover-editor-grid { display: grid; grid-template-columns: minmax(280px, .8fr) minmax(0, 1.4fr); }
 .cover-preview-pane { background: oklch(.94 .003 160); padding: 28px 26px; border-right: 1px solid var(--line); }
 .cover-eyebrow { margin: 0; color: var(--archive-muted); font-size: .78rem; }
