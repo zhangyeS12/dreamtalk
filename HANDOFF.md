@@ -2,7 +2,20 @@
 
 更新日期：2026-10-02。此文件记录当前开发现场与接续工作，不替代 [AGENTS.md](AGENTS.md)。先读 AGENTS，再读本文，最后核对实际 Git 状态和相关代码；不能把下面的基线哈希当作永远不变的当前 HEAD。
 
-## 最新接续：2026-10-02 世界档案书架首轮（桌面0.1.10）
+## 最新接续：2026-10-02 世界书架空间与动效（桌面0.1.11）
+
+- 从干净dee08acf1b3df23aa7c8b547973230043d023371 / codex/world-archive接续，实际仓库D:\LivingWorld。用户明确反馈0.1.10默认选中绝区零后悬停无抽动、右侧信息太早出现、缺少空间感，并提供27.4秒绝区零代理人秘闻视频，随后批准“参考视频效果，现在开始实现”。本轮只完成书架修订，不扩展聊天业务页或三图封面。
+- **覆盖首轮需求的最新决定：** 初始横排书脊，没有默认抽出的书或右侧内容；已有／空白书悬停都轻抽，点击完整抽出并转向封面后才出现信息。空白书点击后显示创建／导入选项，再进一步填写名称；切换／取消归位。原“记住世界即选中”和页头常驻新建入口与此冲突，已移除。上次世界仅恢复浏览位置；一本实体书仍代表真实世界档案，可包含多份世界书。
+- WorldShelf改为共享perspective、六面厚书体、灰色背板／底板／前缘／接触阴影。原生横向滚动位于三维上下文外，叶子面控制背景亮度，避免overflow／filter／opacity把整本书压平。8个白灰空位只是稳定UI入口，不是假世界或世界数量限制；真实世界封面／书脊写用户世界名，没有复制游戏封面或录屏素材。
+- 直接使用CSS3D与Web Animations API：悬停180ms、抽出480ms、归位340ms，换书接续90ms；从当前姿态取消／续接，选中键和epoch过滤迟到完成，750ms兜底避免隐藏标签暂停动画导致详情不可用。减少动画时即时切换，窗口尺寸／滚动变更保持选中书与信息区域的空间关系。方向键／Home／End浏览，Enter／Space选书，Esc／再次点击／归位按钮／背景取消，焦点返回原书。动画只处理界面，不驱动模型任务或世界运行。
+- WorldArchivePage将真实世界选择、空白书选择、创建表单和详情就绪分开；选中世界摘要仍按ID防迟到，15秒世界状态只读刷新。宽窗口右侧信息叠在场景留出的区域，窄窗口置于下方；命名表单有离开确认，创建未知结果保留名称和稳定RequestId。创建／导入仍先明确创建世界档案，随后复用原WorldImports／ContentEditor／Draft→Preview→Commit，不增加解析／模型调用。
+- [复用调查](docs/research/2026-10-02-world-shelf-motion-reuse.md)：核对Codrops六面书与书脊示例、MDN三维压平边界／原生动画完成和取消、Motion React与Three CSS3DRenderer官方文档／MIT。Codrops是旧实验示例，仅结构参考，不复制旧jQuery／素材；Motion未安装，原生动画承担本轮需求；CSS3DRenderer有100%缩放限制，本轮不引入。保留React19／TS／Vite8／Tauri2，无新依赖／Core变更／API／表／迁移／权限扩大。
+- ESLint／TypeScript和Git diff静态检查通过；最终Vite217模块／124ms，JS552.23kB（gzip164.42）／CSS33.25kB，Rust release24.46秒成功（首编155ms／27.48秒后，源码复核发现全局disabled透明度优先级会压平三维书体，补强选择器并重新编译）。五处桌面声明同步0.1.11，PE FileVersion／ProductVersion由打包静态读取核对；Core／协议／identifier仍为兼容基线。保留主chunk超过500kB和STATIC_VCRUNTIME弃用告警，没有调整阈值隐藏。
+- 新独立完整目录artifacts/portable/world-shelf-motion/dreamtalk，ZIP同父目录；从完整0.1.10包沿用Core，209份源码AST／冻结源码hash及全部Core／依赖文件逐份核对。许可／说明／ZIP逐字节核对，静态清单artifacts/world-shelf-motion-package.json；构建日志与静态打包脚本同prefix。旧0.1.10与0.1.9目录均保留。本轮仅本地提交，不push／发布。
+- 按AGENTS第20节没有新增／修改／运行自动化测试、启动应用／浏览器／桌面检查、真实API或凭据探测；没有读取／修改用户DB、模型配置或自启动路径。既有ProductApp旧首页／下拉切世界断言仍待后续获准适配，没有删除、skip或弱化。编译与静态核对不代表真实动效、键盘或窄窗口验收通过。
+- **接下来：** 用户退出旧托盘后直接打开完整0.1.11包，核对初始无详情、已有／空白书悬停、抽出与归位、快速切换、空书创建／导入、窄窗口与减少动画，以及旧世界进入／返回。自启动需在新版后台设置显式更新启动位置，本轮不代改。书架接受后再统一聊天／通讯录与设置视觉；三图封面最后做。暂无新的产品决策阻塞。
+
+## 前序切片：2026-10-02 世界档案书架首轮（桌面0.1.10）
 
 - 从90edd3c6e45c36ff13c897e6939d76dac14d45b3建立codex/world-archive，实际仓库D:\LivingWorld。重构前的90edd3c已备份到用户私有GitHub仓库zhangyeS12/dreamtalk的main和codex/chat-feedback，检查点backup/pre-world-archive-0.1.9；本地完整bundle在artifacts/backups。本轮只本地提交，没有上传新前端或发布版本。
 - 用户明确要求“开始优化前端，先明确需求”。沿用已讨论的绝区零代理人秘闻式横向世界书架：没有世界也有白灰空书位；真实世界文字封面和书脊写名字；世界书入口移到这里，三张图片封面最后再做。先在commentary列明范围后实施，未更换React19／TS／Vite8／Tauri2或增加库。需求、交互与边界同步到PRODUCT、README、USER_FLOWS、PRODUCT_SURFACE与[使用说明](docs/WORLD_ARCHIVE.md)。
