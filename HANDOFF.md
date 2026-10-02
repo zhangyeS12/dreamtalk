@@ -1,8 +1,21 @@
 # dreamtalk 工作交接
 
-更新日期：2026-10-02。此文件记录当前开发现场与接续工作，不替代 [AGENTS.md](AGENTS.md)。先读 AGENTS，再读本文，最后核对实际 Git 状态和相关代码；不能把下面的基线哈希当作永远不变的当前 HEAD。
+更新日期：2026-10-03。此文件记录当前开发现场与接续工作，不替代 [AGENTS.md](AGENTS.md)。先读 AGENTS，再读本文，最后核对实际 Git 状态和相关代码；不能把下面的基线哈希当作永远不变的当前 HEAD。
 
-## 最新接续：2026-10-02 循环拖动书架（桌面0.1.12）
+## 最新接续：2026-10-03 本地文字与三面图片封面（桌面0.1.13）
+
+- 从干净c4fe0ff41aebe36acd547c4e5b48f2d7b92a9fb5 / codex/world-archive接续，实际仓库D:\LivingWorld。用户已认可0.1.12效果，讨论两种封面与尺寸/上传后批准“可以，开始实现”。**当前要求覆盖前序交接的“三图封面最后再做”：本轮已实现，不能再按未实现安排。** 保留正面左上角dreamtalk，不改世界名称、世界书正文、玩家状态或背景授权。
+- 点击已有世界书后，右侧下方“编辑封面”打开左右编辑区；文字模式输入独立展示标题，正面/书脊同步、白灰书体。图片模式正面必选、书脊/背面可选，缺面使用文字外观；支持静态JPG/PNG/WebP、点选/拖入、固定比例拖动缩放、90度旋转/重置、三角度立体实时预览、图片标题开关、保存/取消及重新读取。比例196:286 / 42:286 / 196:286；建议与正式展示图尺寸980×1430 / 210×1430 / 980×1430。每张<=10MiB/20MP/最长边10000像素。图片标识用浅底保留可读。
+- [成熟复用与许可](docs/research/2026-10-03-world-cover-reuse.md)：精确react-easy-crop6.2.3（MIT）及normalize-wheel1.0.1（BSD），Pillow12.3.0（MIT-CMU及随附codec许可）；原始许可随包分发。不写手势/图像codec，不替换React19/TS/Vite8/Tauri2。Canvas只渲染组件选区预览，Core用Pillow格式核对、EXIF方向和LANCZOS生成WebP。按Tauri官方设置main.dragDropEnabled=false，浏览器处理文件拖放；ProductApp仅阻止Files默认页面导航，子上传区正常接收；CSP img-src加blob:，不增任意路径权限。
+- 复用FileContentAssetStore哈希不可变资产/大小与哈希校验/链接路径排除，保存原图副本、裁剪百分比与角度；外部原图移动不会影响重新编辑。封面元数据与world_cover_images绑定按真实世界ID隔离，图片经Bearer读取，不能按其他世界/内容摘要读取；单项解码在线程串行处理，不阻塞世界调度。上传准备素材后才确认正式封面；取消不改展示，准备过的哈希素材暂不自动删除，避免误删共享引用。无外部上传/API/模型用量。
+- 新增0030_world_covers仅追加world_covers与world_cover_images表。迁移shape保留0029_LONG_MEMORY_REVISION以及更早历史，HEAD改0030；没有执行用户存档迁移。展示metadata不进入canonical、知识、lore/package/replay或模型上下文。编辑沿用revision CAS；保存响应丢失只读核对，不自动重写。草稿/忙状态接入书架离开保护，迟到原图/裁剪预览不能覆盖新的来源或世界；循环展示副本和真实书共用BookFaces/封面URL。
+- 五处桌面声明同步0.1.13，Core/协议/identifier兼容值保持。ESLint/TypeScript、Ruff、Python AST及源码diff检查通过。Pillow完整原始许可自带14处尾空格，保持与wheel字节相同；git diff --check仅对此原始许可路径排除尾空格，所有工程源码照常检查。新PyInstaller Core构建约26.5s、PIL.Image/JPEG/PNG/WebP hook与pillow元数据进入包；首次桌面232模块、Vite135ms、Rust23.34s。补齐裁剪重置/实时预览及全应用防文件导航后最终重编译：Vite232模块/129ms、JS614.91kB（gzip185.51）/CSS39.01kB，Rust release21.55s；精确输出见artifacts/world-covers-desktop-final-build.log。保留主chunk>500kB与STATIC_VCRUNTIME弃用告警；PyInstaller可选tzdata/pysqlite2/MySQLdb及Pillow numpy/olefile/defusedxml未安装，不伪装已验证运行时。
+- 现有build-portable.py添加--output-name，用全新目录保留旧包；使用--build-only，不跑内嵌烟测。首次shutil.make_archive因依赖可复现旧日期早于ZIP1980失败，已经改为标准zipfile strict_timestamps=False；程序本身构建成功。独立静态打包脚本补齐说明、复制最终桌面并重新压缩；artifacts/package-world-covers.py和world-covers-package.json记录来源与哈希。最终完整目录artifacts/portable/world-covers/dreamtalk，ZIP同父目录；所有旧完整包保留。
+- 静态核对215份Python AST/冻结源码哈希、471份Core文件、26份许可、13份说明及511份ZIP文件逐字节一致；667个本地Markdown目标无缺失。Desktop13,220,352 bytes / SHA256 1A3C28DAAB627817CB76EFA0835DF1454A2D508E0EC5CE424F9D4FAE1FA73603；Core14,615,356 / 9F10583EEB992EAC1AD0FB0422E77A88BF2C064FF7A64860302209953E2F5A1F；ZIP50,729,684 / 6E7CDEC67E1F028669262C5354477DE87110A7A1F6273A8762045FC6547EF050。源码仅本地提交，不push/发布。
+- 按AGENTS第20节未新增/修改/运行测试，未启动应用/GUI/浏览器、真实模型/API或读写用户存档/凭据/自启动。编译与包核对不等于真实裁剪/保存/存档升级验收；既有ProductApp旧首页断言待后续授权适配，没有删除、skip或弱化。
+- **接下来：** 用户退出旧托盘后直接打开完整0.1.13，核对文字与三面图片保存、只正面保存、标题开关、裁剪重置/旋转、取消/换书保护、多世界与循环副本、重新打开/重启保留及0030正常升级，见[封面说明](docs/WORLD_COVERS.md)。升级后不以旧schema程序打开同一存档；自启动需新版设置显式更新位置，本轮不代改。验收后继续统一聊天/通讯录/设置视觉；本地素材清理可后续规划，目前不自动删资产。暂无新产品选择阻塞。
+
+## 前序切片：2026-10-02 循环拖动书架（桌面0.1.12）
 
 - 从干净c2046bccb6063044b90608232c0b54d7f7a3a786 / codex/world-archive接续，实际仓库D:\LivingWorld。用户体验0.1.11后要求间距略散、首尾循环、至少12本且始终保留空白入口、侧面写世界名、按住鼠标直接拖动；先明确五点，用户随后批准“开始实现”。本轮只完成此书架修订，三图封面和聊天业务页视觉留后续。
 - 逻辑总书位max(12,世界数+1)：0世界12空白，5世界7空白，12世界追加第13空白，更多仍留1空白；世界ID与空白索引稳定，没有创建演示存档。间距68→84px，正面／背面／书脊同源BookFaces。**原交接与实现冲突：** 0.1.11确有书脊名称DOM，但整书-90deg与左侧面-90deg使名称背向用户被隐藏；REST现+90deg、悬停+86deg、展示+24deg，修正实际可见方向。

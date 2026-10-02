@@ -113,6 +113,13 @@ class Database:
 
         return SqlAlchemyPackageRepository(self._sessions)
 
+    def world_cover_repository(self):
+        from livingworld.infrastructure.persistence.world_covers import (
+            SqlAlchemyWorldCoverRepository,
+        )
+
+        return SqlAlchemyWorldCoverRepository(self._sessions)
+
     def content_asset_store(self) -> ContentAssetStore:
         from livingworld.infrastructure.packages.asset_store import FileContentAssetStore
 

@@ -311,6 +311,8 @@ async def run(
             )
             control_listener.start()
         from livingworld.application.character_activity_setup import CharacterActivitySetupService
+        from livingworld.application.world_covers import WorldCoverService
+        from livingworld.infrastructure.world_cover_images import PillowCoverImageProcessor
 
         app = create_app(
             status,
@@ -342,6 +344,11 @@ async def run(
                 chat_conversations,
                 player_event_feed,
                 command_handler,
+            ),
+            world_covers=WorldCoverService(
+                database.world_cover_repository(),
+                database.content_asset_store(),
+                PillowCoverImageProcessor(),
             ),
             world_locations=WorldLocationsService(
                 database.local_location_directory(), command_handler

@@ -61,6 +61,7 @@ def create_app(
     offline_contact=None,
     world_locations=None,
     character_activity_setup=None,
+    world_covers=None,
 ) -> FastAPI:
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
@@ -74,6 +75,8 @@ def create_app(
         finally:
             status.ready = False
             logger.emit("core", "runtime_stopped")
+
+    from livingworld.adapters.http.world_covers import create_world_cover_router
 
     app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=[LOOPBACK_HOST])
@@ -200,4 +203,6 @@ def create_app(
         logger.emit("http", "shutdown_requested", trace_id=str(request_id))
         return result
 
+    if world_covers is not None:
+        app.include_router(create_world_cover_router(world_covers, authorize))
     return app

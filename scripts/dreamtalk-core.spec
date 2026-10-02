@@ -25,6 +25,7 @@ analysis = Analysis(
     ],
     datas=collect_data_files("livingworld", include_py_files=True)
     + copy_metadata("dreamtalk-core")
+    + copy_metadata("pillow")
     + copy_metadata("jieba")
     + copy_metadata("ddgs")
     + copy_metadata("primp")

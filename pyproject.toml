@@ -16,6 +16,7 @@ dependencies = [
     "httpx>=0.28,<1",
     "jieba==0.42.1",
     "jsonschema>=4.26,<5",
+    "pillow==12.3.0",
     "pydantic>=2.10,<3",
     "referencing>=0.37,<1",
     "sqlalchemy[asyncio]>=2.0,<3",

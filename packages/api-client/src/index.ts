@@ -1,3 +1,11 @@
+export type CoverFace = "front" | "spine" | "back";
+export type CoverCrop = { x: number; y: number; width: number; height: number; rotation: 0 | 90 | 180 | 270 };
+export type CoverImage = { digest: string; size: number; media_type: string; width: number; height: number };
+export type WorldCover = { world_id: string; mode: "text" | "image"; title: string; show_title: boolean;
+  faces: Partial<Record<CoverFace, { source: CoverImage; display: CoverImage; crop: CoverCrop }>>; revision: number };
+export type WorldCoverWrite = Pick<WorldCover, "mode" | "title" | "show_title"> & {
+  faces: Partial<Record<CoverFace, { source_digest: string; crop: CoverCrop }>>; expected_revision: number };
+
 import { createParser } from "eventsource-parser";
 import contract from "../../../services/core/src/livingworld/domain/api_contract.json";
 
@@ -529,6 +537,29 @@ export class CoreClient {
       method: "POST", headers: { "Content-Type": "application/json", "X-Request-Id": requestId },
       body: JSON.stringify({ name }),
     });
+  }
+  listWorldCovers(signal?: AbortSignal): Promise<WorldCover[]> {
+    return this.productRequest("/world-covers", { signal });
+  }
+  worldCover(worldId: string, signal?: AbortSignal): Promise<WorldCover> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/cover`, { signal });
+  }
+  saveWorldCover(worldId: string, cover: WorldCoverWrite, signal?: AbortSignal): Promise<WorldCover> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/cover`, {
+      method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(cover), signal,
+    });
+  }
+  uploadCoverImage(worldId: string, file: File, signal?: AbortSignal): Promise<CoverImage> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/cover/images`, {
+      method: "POST", headers: { "Content-Type": file.type || "application/octet-stream" }, body: file, signal,
+    });
+  }
+  async coverImage(worldId: string, digest: string, signal?: AbortSignal): Promise<Blob> {
+    const response = await this.fetcher(new URL(`/api/v${API_PROTOCOL}/worlds/${encodeURIComponent(worldId)}/cover/images/${encodeURIComponent(digest)}`, this.endpoint), {
+      headers: { Authorization: `Bearer ${this.connection.token}` }, credentials: "omit", cache: "no-store", signal,
+    });
+    if (!response.ok) throw new CoreRequestError(response.status, "cover_image_unavailable");
+    return response.blob();
   }
   listProductWorlds(): Promise<WorldSettings[]> { return this.productRequest("/worlds"); }
   createWorld(name: string, requestId: string): Promise<{ world_id: string }> {

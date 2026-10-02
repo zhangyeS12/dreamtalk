@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import useEmblaCarousel, { type UseEmblaCarouselType } from "embla-carousel-react";
 import type { WorldSettings } from "@dreamtalk/api-client";
+import { BookFaces, type BookAppearance } from "./BookFaces";
 
 const SLOT = 84;
 const MIN_BOOKS = 12;
@@ -11,17 +12,8 @@ type Book = { key: string; name: string; number: string; worldId?: string; blank
 type Carousel = NonNullable<UseEmblaCarouselType[1]>;
 type Geometry = { width: number; positions: number[] };
 
-function BookFaces({ book }: { book: Book }) {
-  return <>
-    <span className="book-front book-face"><small>dreamtalk</small><strong>{book.worldId ? book.name : "下一个世界"}</strong><span>{book.worldId ? "世界档案" : "创建 · 导入"}</span><i>{book.number}</i></span>
-    <span className="book-back book-face"><small>dreamtalk</small><span>{book.worldId ? book.name : "等待一段新的故事"}</span></span>
-    <span className="book-spine book-face"><small>{book.number}</small><strong>{book.name}</strong><span>dreamtalk</span></span>
-    <span className="book-pages book-face" /><span className="book-top book-face" /><span className="book-bottom book-face" />
-  </>;
-}
-
-export function WorldShelf({ worlds, selectedKey, initialWorldId, disabled, loading, onSelect, onCreate, onClose, onSettled }: {
-  worlds: WorldSettings[]; selectedKey: string | null; initialWorldId: string | null;
+export function WorldShelf({ worlds, appearances, selectedKey, initialWorldId, disabled, loading, onSelect, onCreate, onClose, onSettled }: {
+  worlds: WorldSettings[]; appearances: Record<string, BookAppearance>; selectedKey: string | null; initialWorldId: string | null;
   disabled: boolean; loading: boolean; onSelect: (id: string) => void; onCreate: (index: number) => void;
   onClose: () => void; onSettled: (key: string | null) => void;
 }) {
@@ -220,7 +212,7 @@ export function WorldShelf({ worlds, selectedKey, initialWorldId, disabled, load
         {copies.filter(copy => !primaryCopies.has(copy.index)).map(({ book, index, key }) => <div key={key} aria-hidden="true"
           className={`archive-book book-repeat ${book.blankIndex !== undefined ? "blank-book" : ""}`}
           style={{ left: geometry.positions[index] ?? index * SLOT }} onClick={event => choose(book, index, geometry.positions[index] ?? index * SLOT, event.currentTarget)}>
-          <span className="book-shadow" /><span className="book-volume"><BookFaces book={book} /></span>
+          <span className="book-shadow" /><span className="book-volume"><BookFaces name={book.name} number={book.number} blank={!book.worldId} appearance={book.worldId ? appearances[book.worldId] : undefined} /></span>
         </div>)}
         {representatives.map(({ book, copy, left }) => <button type="button" data-book-key={book.key} key={book.key}
           className={`archive-book ${book.blankIndex !== undefined ? "blank-book" : ""} ${selectedKey === book.key ? "is-selected" : ""}`}
@@ -230,7 +222,7 @@ export function WorldShelf({ worlds, selectedKey, initialWorldId, disabled, load
           onFocus={event => { if (event.currentTarget.matches(":focus-visible")) { setHovered(book.key); reveal(book.key); } }} onBlur={() => setHovered(current => current === book.key ? null : current)}
           onClick={event => choose(book, copy, left, event.currentTarget)}>
           <span className="book-shadow" aria-hidden="true" />
-          <span className="book-volume" ref={node => { if (node) volumes.current.set(book.key, node); else volumes.current.delete(book.key); }} aria-hidden="true"><BookFaces book={book} /></span>
+          <span className="book-volume" ref={node => { if (node) volumes.current.set(book.key, node); else volumes.current.delete(book.key); }} aria-hidden="true"><BookFaces name={book.name} number={book.number} blank={!book.worldId} appearance={book.worldId ? appearances[book.worldId] : undefined} /></span>
         </button>)}
       </div>
     </div>

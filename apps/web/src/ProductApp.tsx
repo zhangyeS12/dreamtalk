@@ -64,6 +64,14 @@ function savedTokenCeiling(): number {
 }
 
 export function ProductApp({ client }: { client: CoreClient }) {
+  useEffect(() => {
+    const preventFileNavigation = (event: DragEvent) => {
+      if (event.dataTransfer?.types.includes("Files")) event.preventDefault();
+    };
+    window.addEventListener("dragover", preventFileNavigation);
+    window.addEventListener("drop", preventFileNavigation);
+    return () => { window.removeEventListener("dragover", preventFileNavigation); window.removeEventListener("drop", preventFileNavigation); };
+  }, []);
   const [entered, setEntered] = useState<{ worldId: string; hasIdentity: boolean } | null>(null);
   const [previewId, setPreviewId] = useState(savedWorldId);
   return entered ? <WorldWorkspace key={entered.worldId} client={client} initialWorldId={entered.worldId}

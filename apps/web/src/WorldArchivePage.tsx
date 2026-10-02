@@ -4,12 +4,21 @@ import { CoreClient, CoreRequestError, type WorldSettings, type WorldContentItem
 import { ModelSetup } from "./ModelSetup";
 import { WorldImports } from "./WorldContent";
 import { WorldShelf, worldShelfBlankCount } from "./WorldShelf";
+import { WorldCoverEditor } from "./WorldCoverEditor";
+import { useWorldCovers } from "./useWorldCovers";
 import "./world-archive.css";
+import "./world-cover.css";
 
 export function WorldArchivePage({ client, initialWorldId, onEnter, displayTime }: {
   client: CoreClient; initialWorldId: string | null;
   onEnter: (id: string, hasIdentity: boolean) => void; displayTime: (raw: string) => string;
 }) {
+  const covers = useWorldCovers(client);
+  const [coverOpen, setCoverOpen] = useState(false);
+  const [coverDirty, setCoverDirty] = useState(false);
+  const [coverBusy, setCoverBusy] = useState(false);
+  const coverBusyRef = useRef(false);
+  const coverWorking = useCallback((value: boolean) => { coverBusyRef.current = value; setCoverBusy(value); }, []);
   const [worlds, setWorlds] = useState<WorldSettings[]>([]);
   const [selectedId, setSelectedId] = useState("");
   const [blankIndex, setBlankIndex] = useState<number | null>(null);
@@ -58,7 +67,7 @@ export function WorldArchivePage({ client, initialWorldId, onEnter, displayTime 
     void refresh().catch(() => { if (active.current) setError("世界档案未能读取。请检查核心连接后刷新。"); })
       .finally(() => { if (active.current) setLoading(false); });
     const timer = window.setInterval(() => {
-      if (!lock.current) void refresh().catch(() => { if (active.current) setError("世界状态暂时无法刷新。已有草稿仍保留。"); });
+      if (!lock.current && !coverBusyRef.current) void refresh().catch(() => { if (active.current) setError("世界状态暂时无法刷新。已有草稿仍保留。"); });
     }, 15000);
     return () => { active.current = false; window.clearInterval(timer); };
   }, [refresh]);
@@ -82,10 +91,10 @@ export function WorldArchivePage({ client, initialWorldId, onEnter, displayTime 
     return () => { mounted = false; };
   }, [client, selectedId, contentRevision]);
   const leaveEditor = () => {
-    if (lock.current) return false;
-    if ((contentDirty || modelDirty || creating && name.trim() && !pendingCreation) &&
+    if (lock.current || coverBusyRef.current) return false;
+    if ((contentDirty || modelDirty || coverDirty || creating && name.trim() && !pendingCreation) &&
       !window.confirm("有尚未保存的编辑，是否离开当前编辑？已发起的联网生成不会自动重放。")) return false;
-    setManaging(false); setModelOpen(false); setContentDirty(false); setModelDirty(false);
+    setCoverOpen(false); setCoverDirty(false); setManaging(false); setModelOpen(false); setContentDirty(false); setModelDirty(false);
     return true;
   };
   const clearSelection = () => { setSelectedId(""); setBlankIndex(null); setReadyKey(null); setCreating(false); };
@@ -111,7 +120,7 @@ export function WorldArchivePage({ client, initialWorldId, onEnter, displayTime 
   const create = async (event: FormEvent) => {
     event.preventDefault();
     const value = name.trim();
-    if (!value || lock.current) return;
+    if (!value || lock.current || coverBusyRef.current) return;
     lock.current = true; setBusy(true); setPendingCreation(true); setError(""); setNotice("");
     if (!request.current || request.current.name !== value) request.current = { name: value, id: crypto.randomUUID() };
     try {
@@ -145,8 +154,8 @@ export function WorldArchivePage({ client, initialWorldId, onEnter, displayTime 
     finally { lock.current = false; if (active.current) setEntering(false); }
   };
   const refreshArchive = () => {
-    if (lock.current || loading) return;
-    setLoading(true);
+    if (lock.current || coverBusyRef.current || loading) return;
+    setLoading(true); void covers.refresh();
     void refresh().then(() => { if (active.current) { setError(""); setContentRevision(value => value + 1); } })
       .catch(() => { if (active.current) setError("世界档案仍无法读取，请检查核心连接。"); })
       .finally(() => { if (active.current) setLoading(false); });
@@ -154,24 +163,25 @@ export function WorldArchivePage({ client, initialWorldId, onEnter, displayTime 
   const contentChanged = useCallback(() => setContentRevision(value => value + 1), []);
   return <div className="product-shell archive-shell">
     <header className="archive-header"><span className="app-brand">dreamtalk</span><span className="archive-header-label">世界档案库</span>
-      <button type="button" className="text-action" disabled={busy || entering} onClick={() => {
+      <button type="button" className="text-action" disabled={busy || entering || coverBusy} onClick={() => {
         if (modelOpen) { leaveEditor(); return; }
         if (leaveEditor()) { clearSelection(); setModelOpen(true); }
       }}>模型设置</button>
     </header>
     <main className="archive-main">
       <div className="archive-intro"><div><h1 ref={heading} tabIndex={-1}>世界书架</h1><p>挑一本书，走进其中的世界。</p></div>
-        <button type="button" className="text-action" disabled={loading || busy || entering} onClick={refreshArchive}>{loading ? "正在读取…" : "刷新书架"}</button>
+        <button type="button" className="text-action" disabled={loading || busy || entering || coverBusy} onClick={refreshArchive}>{loading ? "正在读取…" : "刷新书架"}</button>
       </div>
-      {error && <p className="app-alert" role="alert">{error} <button type="button" className="text-action" disabled={busy || entering || loading} onClick={refreshArchive}>刷新书架</button></p>}
+      {error && <p className="app-alert" role="alert">{error} <button type="button" className="text-action" disabled={busy || entering || coverBusy || loading} onClick={refreshArchive}>刷新书架</button></p>}
+      {covers.error && <p className="app-alert" role="alert">{covers.error}</p>}
       {notice && <p className="app-notice" role="status">{notice}</p>}
       {modelOpen && <div className="archive-editor"><div className="archive-editor-heading"><h2>模型连接</h2><button type="button" className="text-action" onClick={() => { leaveEditor(); }}>收起</button></div><ModelSetup client={client} onDirtyChange={setModelDirty} /><p className="inline-hint">保存会重新连接核心；聊天和联网创作使用现有模型配置。</p></div>}
       <div ref={layout} className={`archive-layout ${selectionKey ? "has-selection" : ""}`}>
-        <WorldShelf worlds={worlds} selectedKey={selectionKey} initialWorldId={initialWorldId} loading={loading} disabled={busy || entering}
+        <WorldShelf worlds={worlds} appearances={covers.appearances} selectedKey={selectionKey} initialWorldId={initialWorldId} loading={loading} disabled={busy || entering || coverBusy}
           onSelect={select} onCreate={selectBlank} onClose={closeSelection} onSettled={settled} />
         {previewReady && <section key={selectionKey} id="archive-preview" className="archive-preview" aria-label={blankIndex !== null ? "创建世界档案" : "所选世界预览"} aria-busy={entering}
           onKeyDown={event => { if (event.key === "Escape") { event.preventDefault(); closeSelection(); } }}>
-          <div className="archive-preview-heading"><span>{blankIndex !== null ? "新的世界" : "世界档案"}</span><button type="button" className="text-action" disabled={busy || entering} onClick={closeSelection}>归位 ×</button></div>
+          <div className="archive-preview-heading"><span>{blankIndex !== null ? "新的世界" : "世界档案"}</span><button type="button" className="text-action" disabled={busy || entering || coverBusy} onClick={closeSelection}>归位 ×</button></div>
           {blankIndex !== null ? creating ? <><h2>先给世界一个名字</h2><p className="archive-description">{createIntent === "import" ? "先创建世界档案，再选择已有世界书文件，检查并确认导入。" : "创建档案后，可以手动填写设定、联网生成，或导入世界书。"}</p>
             <form onSubmit={event => void create(event)}><label className="field"><span>世界名称</span><input ref={creatorInput} maxLength={120} value={name} disabled={busy || pendingCreation} onChange={event => setName(event.target.value)} placeholder="例如：绝区零" required /></label>
               <button type="submit" className="primary-button" disabled={busy || !name.trim()}>{busy ? "正在创建…" : pendingCreation ? "核对上次创建结果" : createIntent === "import" ? "创建档案并导入世界书" : "创建档案并添加世界书"}</button>
@@ -184,15 +194,17 @@ export function WorldArchivePage({ client, initialWorldId, onEnter, displayTime 
           </> : world ? <><h2>{world.name}</h2>
             {contentError ? <p role="alert" className="archive-description">{contentError} <button type="button" className="text-action" onClick={contentChanged}>刷新摘要</button></p> : !books ? <p className="archive-description" role="status">正在读取世界设定…</p> : books.length ? <div className="archive-book-summary"><ul>{books.slice(0, 4).map(item => <li key={item.import_id}><strong>{item.lorebooks[0]?.name ?? "世界书"}</strong>{item.lorebooks[0]?.description && <p>{item.lorebooks[0].description}</p>}</li>)}</ul>{books.length > 4 && <small>管理世界书可查看全部 {books.length} 份设定。</small>}</div> : <p className="archive-description">尚未添加世界书。可以先导入设定，也可以进入世界后继续完善。</p>}
             <div className="archive-facts"><span>世界时间</span><strong>{displayTime(world.world_time)}</strong><span>时间状态</span><strong>{world.clock_state === "paused" ? "已暂停" : "运行中"}{world.runtime_state === "degraded" ? " · 运行需要处理" : ""}</strong></div>
-            <div className="archive-preview-actions"><button type="button" className="primary-button" disabled={busy || entering || loading} onClick={() => void enter()}>{entering ? "正在读取世界…" : "进入世界 →"}</button>
-              <button type="button" className="secondary-button" disabled={busy || entering} onClick={() => { const shouldOpen = !managing; if (!leaveEditor()) return; setManaging(shouldOpen); }}>管理 / 导入世界书</button></div>
+            <div className="archive-preview-actions"><button type="button" className="primary-button" disabled={busy || entering || coverBusy || loading} onClick={() => void enter()}>{entering ? "正在读取世界…" : "进入世界 →"}</button>
+              <button type="button" className="secondary-button" disabled={busy || entering || coverBusy} onClick={() => { const shouldOpen = !managing; if (!leaveEditor()) return; setManaging(shouldOpen); }}>管理 / 导入世界书</button>
+              <button type="button" className="text-action" disabled={busy || entering || coverBusy} onClick={() => { const opening = !coverOpen; if (leaveEditor()) setCoverOpen(opening); }}>编辑封面</button></div>
           </> : <p className="archive-description">这个世界暂时无法读取，请刷新书架。</p>}
         </section>}
       </div>
-      {managing && world && previewReady && <div className="archive-editor"><div className="archive-editor-heading"><h2 ref={managerHeading} tabIndex={-1}>「{world.name}」的世界书</h2><button type="button" className="text-action" disabled={busy || entering} onClick={() => { if (leaveEditor()) heading.current?.focus(); }}>收起管理</button></div>
+      {coverOpen && world && previewReady && <WorldCoverEditor key={`cover:${world.world_id}`} client={client} world={world} onDirty={setCoverDirty} onBusy={coverWorking} onSaved={covers.saved} onClose={() => { if (leaveEditor()) heading.current?.focus(); }} />}
+      {managing && world && previewReady && <div className="archive-editor"><div className="archive-editor-heading"><h2 ref={managerHeading} tabIndex={-1}>「{world.name}」的世界书</h2><button type="button" className="text-action" disabled={busy || entering || coverBusy} onClick={() => { if (leaveEditor()) heading.current?.focus(); }}>收起管理</button></div>
         <WorldImports key={`archive:${world.world_id}`} client={client} worldId={world.world_id} onlyKind="lorebook" onDirtyChange={setContentDirty} onSaved={contentChanged} />
       </div>}
     </main>
-    <footer className="archive-footer"><span>世界档案 · 文字封面</span><span>世界书架只预览，后台功能遵循已有设置</span></footer>
+    <footer className="archive-footer"><span>世界档案 · 我的书架</span><span>世界书架只预览，后台功能遵循已有设置</span></footer>
   </div>;
 }
