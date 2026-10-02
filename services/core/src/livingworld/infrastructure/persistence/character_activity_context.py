@@ -89,8 +89,59 @@ class SqlAlchemyCharacterActivityContextReader:
                 return None
             clock = to_domain(row[0])
             now = self._time_source.read(clock)
+            own_seen = (
+                select(seen.c.event_id, seen.c.observed_at, seen.c.witnessed)
+                .join(event, event.event_id == seen.c.event_id)
+                .where(
+                    event.world_id == owner.world_id.value,
+                    event.payload_version == 1,
+                    event.event_type.in_(
+                        (
+                            "CharacterPlaced",
+                            "CharacterRoutineStarted",
+                            "CharacterRoutineEnded",
+                            "CharacterRoutineInterrupted",
+                        )
+                    ),
+                    event.occurred_at <= now,
+                    func.json_extract(body, "$.character_id") == str(owner.value),
+                )
+                .subquery()
+            )
+            recent = await project_observed_events(
+                session, owner.world_id, own_seen, limit=6, detailed_only=True
+            )
             if row.event_id is None:
-                return CharacterActivitySnapshot(owner, now, clock.state is ClockState.PAUSED)
+                return CharacterActivitySnapshot(
+                    owner, now, clock.state is ClockState.PAUSED, recent_experiences=recent
+                )
+            terminal_id = await session.scalar(
+                select(event.event_id)
+                .join(seen, event.event_id == seen.c.event_id)
+                .where(
+                    event.world_id == owner.world_id.value,
+                    event.payload_version == 1,
+                    event.event_type.in_(("CharacterRoutineEnded", "CharacterRoutineInterrupted")),
+                    event.occurred_at <= now,
+                    func.json_extract(body, "$.character_id") == str(owner.value),
+                    func.json_extract(body, "$.start_event_id") == str(row.event_id),
+                )
+                .order_by(event.occurred_at.desc(), event.ledger_position.desc())
+                .limit(1)
+            )
+            terminals = (
+                (
+                    await project_observed_events(
+                        session,
+                        owner.world_id,
+                        character_witnessed_events(owner, event_id=terminal_id),
+                        limit=1,
+                        detailed_only=True,
+                    )
+                )
+                if terminal_id is not None
+                else ()
+            )
             events = await project_observed_events(
                 session,
                 owner.world_id,
@@ -106,4 +157,6 @@ class SqlAlchemyCharacterActivityContextReader:
                 planned_until=WorldTime(row.planned_until),
                 presence_unchanged=row.presence_unchanged is True,
                 activity=RoutineActivity(row.activity),
+                last_terminal=terminals[0] if terminals else None,
+                recent_experiences=recent,
             )

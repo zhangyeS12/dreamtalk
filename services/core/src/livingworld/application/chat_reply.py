@@ -331,7 +331,9 @@ class DirectChatReplyService:
             self._gateway, request, budget, self._selection, progress, claim.character_id
         )
         message = (
-            await self._messages.complete_direct(claim, text.text, events=text.events)
+            await self._messages.complete_direct(
+                claim, text.text, events=text.events, memories=text.memories
+            )
             if isinstance(text, AnnotatedDialogue)
             else await self._messages.complete_direct(claim, text)
         )

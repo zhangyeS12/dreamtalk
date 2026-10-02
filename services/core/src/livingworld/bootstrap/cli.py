@@ -241,6 +241,10 @@ async def run(
             credentials_ready=lambda: not desktop or llm_session.credentials.sync_complete,
         )
         await offline_contact.start()
+        from livingworld.application.long_chat_memory import LongChatMemoryService
+
+        long_memory_store = database.long_chat_memory_store()
+        long_memory = LongChatMemoryService(long_memory_store, player_event_feed)
         conversation_memory_store = database.conversation_memory_store()
         conversation_memory = ConversationMemoryService(
             conversation_memory_store, player_event_feed, configure_content_builder(llm_session)
@@ -258,6 +262,7 @@ async def run(
                 conversation_memory_store,
                 database.character_observed_event_reader,
                 lambda owner: database.character_activity_context_reader(owner, time_source),
+                long_memory_store,
             ),
             journal=story_store,
         )
@@ -274,6 +279,7 @@ async def run(
                 conversation_memory_store,
                 database.character_observed_event_reader,
                 lambda owner: database.character_activity_context_reader(owner, time_source),
+                long_memory_store,
             ),
             journal=story_store,
         )
@@ -327,6 +333,7 @@ async def run(
             database.content_repository(),
             chat_recall=earlier_chat_recall,
             conversation_memory=conversation_memory,
+            long_chat_memory=long_memory,
             director=director,
             world_story=world_story,
             offline_contact=offline_contact,

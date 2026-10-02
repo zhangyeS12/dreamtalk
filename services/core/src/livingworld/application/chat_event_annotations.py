@@ -13,6 +13,7 @@ from livingworld.application.llm import (
     StructuredOutputRequest,
     TextContent,
 )
+from livingworld.application.long_chat_memory import MEMORY_INSTRUCTIONS, MemoryAnnotation
 
 ANNOTATION_SCHEMA = {
     "type": "object",
@@ -51,6 +52,7 @@ class ChatEventAnnotation(BaseModel):
 class AnnotatedDialogue:
     text: str
     events: tuple[ChatEventAnnotation, ...] = ()
+    memories: tuple[MemoryAnnotation, ...] = ()
 
 
 def annotate_request(request):
@@ -59,7 +61,11 @@ def annotate_request(request):
         # Put the transport contract after role instructions and before the
         # unchanged conversation. Past plain-text replies must not override JSON.
         messages=tuple(m for m in request.messages if m.role is MessageRole.SYSTEM)
-        + (LLMMessage(MessageRole.SYSTEM, (TextContent(ANNOTATION_INSTRUCTIONS),)),)
+        + (
+            LLMMessage(
+                MessageRole.SYSTEM, (TextContent(ANNOTATION_INSTRUCTIONS + MEMORY_INSTRUCTIONS),)
+            ),
+        )
         + tuple(m for m in request.messages if m.role is not MessageRole.SYSTEM),
         structured_output=StructuredOutputRequest("chat_event_reply", ANNOTATION_SCHEMA),
     )
@@ -101,7 +107,7 @@ def decode_dialogue(raw):
         raise ValueError("chat_reply_invalid") from None
     candidates = value.get("events", [])
     if not isinstance(candidates, list) or len(candidates) > 3:
-        return AnnotatedDialogue(reply)
+        candidates = []
     result = []
     for candidate in candidates:
         try:
@@ -117,4 +123,17 @@ def decode_dialogue(raw):
             result.append(item)
         except (ValueError, TypeError):
             continue  # Metadata never triggers a paid repair request.
-    return AnnotatedDialogue(reply, tuple(result))
+    memories = []
+    proposals = value.get("memories", [])
+    if isinstance(proposals, list) and len(proposals) <= 4:
+        for proposal in proposals:
+            try:
+                item = MemoryAnnotation.model_validate(proposal)
+                if not item.content.strip() or not item.topic.strip() or not item.quote.strip():
+                    continue
+                if item.source == "reply" and item.quote not in reply:
+                    continue
+                memories.append(item)
+            except (ValueError, TypeError):
+                continue
+    return AnnotatedDialogue(reply, tuple(result), tuple(memories))

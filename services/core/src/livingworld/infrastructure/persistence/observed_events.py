@@ -18,7 +18,8 @@ from livingworld.infrastructure.persistence.models import (
     WorldEventRecord,
 )
 
-_CHARACTER_TYPES = ("CharacterPlaced", "CharacterRoutineStarted")
+_ROUTINE_TYPES = ("CharacterRoutineStarted", "CharacterRoutineEnded", "CharacterRoutineInterrupted")
+_CHARACTER_TYPES = ("CharacterPlaced", *_ROUTINE_TYPES)
 _SUPPORTED_TYPES = ("PlayerMoved", "PlayerPlaced", *_CHARACTER_TYPES)
 
 
@@ -100,7 +101,7 @@ async def project_observed_events(
                 (
                     and_(
                         eligible,
-                        event.event_type == "CharacterRoutineStarted",
+                        event.event_type.in_(_ROUTINE_TYPES),
                         func.json_extract(safe_body, "$.activity").in_(("rest", "work", "leisure")),
                     ),
                     func.json_extract(safe_body, "$.activity"),
@@ -156,12 +157,16 @@ async def project_observed_events(
         who = "角色" if row.event_type in _CHARACTER_TYPES else "玩家"
         subject = f"{who}「{actor_names[actor] or who}」"
         target = location_names[destination] or "未命名地点"
-        if row.event_type == "CharacterRoutineStarted":
+        if row.event_type in _ROUTINE_TYPES:
             activity = {"rest": "休息", "work": "工作", "leisure": "自由活动"}.get(
                 row.routine_activity
             )
             if activity is None:
                 return None
+            if row.event_type == "CharacterRoutineEnded":
+                return f"{subject}在「{target}」的{activity}时段已结束；没有记录任务成果。"
+            if row.event_type == "CharacterRoutineInterrupted":
+                return f"{subject}此前在「{target}」的{activity}已中断。"
             movement = f"来到「{target}」，" if origin != destination else f"在「{target}」"
             return f"{subject}{movement}开始{activity}。"
         if origin is not None:

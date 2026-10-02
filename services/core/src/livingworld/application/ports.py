@@ -2,6 +2,7 @@
 
 from datetime import datetime
 from typing import Protocol, Self
+from uuid import UUID
 
 from livingworld.application.ledger import CanonicalEvent
 from livingworld.application.projections import ProjectionSnapshot
@@ -210,6 +211,11 @@ class CommandReceiptRepository(Protocol):
 
 class RoutineCandidate(Protocol):
     end_at: int
+    candidate_id: UUID
+    character_id: UUID
+    location_id: UUID
+    activity: str
+    expected_revision: int
 
 
 class DirectorRoutineAuthority(Protocol):
@@ -217,6 +223,10 @@ class DirectorRoutineAuthority(Protocol):
     async def occupied(self, character: CharacterId, now: WorldTime) -> bool: ...
     def invalidate(self, row: RoutineCandidate, reason=...) -> None: ...
     def start(self, row: RoutineCandidate) -> None: ...
+    async def active(
+        self, world: WorldId, character: CharacterId | None = None
+    ) -> tuple[RoutineCandidate, ...]: ...
+    def finish(self, row: RoutineCandidate, interrupted: bool) -> None: ...
 
 
 class WorldNewsAuthority(Protocol):

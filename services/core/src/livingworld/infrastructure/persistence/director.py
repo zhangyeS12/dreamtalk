@@ -159,15 +159,6 @@ class SqlAlchemyDirectorStore:
                 update(Candidate)
                 .where(
                     Candidate.world_id == world.value,
-                    Candidate.state == "active",
-                    Candidate.end_at <= now,
-                )
-                .values(state="finished")
-            )
-            await session.execute(
-                update(Candidate)
-                .where(
-                    Candidate.world_id == world.value,
                     Candidate.state == "pending",
                     Candidate.end_at <= now,
                 )
@@ -558,3 +549,21 @@ class DirectorKernelRepository:
 
     def start(self, row):
         row.state = "active"
+
+    async def active(self, world, character=None):
+        query = select(Candidate).where(
+            Candidate.world_id == world.value, Candidate.state == "active"
+        )
+        if character is not None:
+            query = query.where(Candidate.character_id == character.value)
+        return tuple(
+            (
+                await self.session.scalars(
+                    query.order_by(Candidate.end_at, Candidate.candidate_id).limit(64)
+                )
+            ).all()
+        )
+
+    def finish(self, row, interrupted):
+        row.state = "cancelled" if interrupted else "finished"
+        row.reason = "presence_changed" if interrupted else "interval_elapsed"

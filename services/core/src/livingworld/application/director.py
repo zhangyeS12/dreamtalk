@@ -143,7 +143,14 @@ class DirectorService:
         async with self._lock:
             if self._closing:
                 return None
+            lifecycle_deadline = await self.actions.advance_routines(world_id)
             state, due, next_time = await self.store.advance(world_id, now.microseconds)
+            if lifecycle_deadline is not None:
+                next_time = (
+                    min(next_time, lifecycle_deadline.microseconds)
+                    if next_time is not None
+                    else lifecycle_deadline.microseconds
+                )
             for row in due:
                 if self._closing:
                     return None
@@ -174,17 +181,17 @@ class DirectorService:
                 if not self._credentials_ready():
                     # Host startup sync is not a failed model invocation. Wait for
                     # the explicit credential-change signal before any durable claim.
-                    return None
+                    return lifecycle_deadline
                 if len(self._jobs) >= 2:
                     # Wait for an existing job's completion wake; no paid claim yet.
-                    return None
+                    return lifecycle_deadline
                 claim = await self.store.claim(world_id, now.microseconds, uuid4())
                 if claim and self._closing:
                     await self.store.fail(world_id, claim[0], claim[1], "director_interrupted")
                     return None
                 if claim:
                     self._jobs[world_id] = asyncio.create_task(self._plan(world_id, claim))
-                    return None
+                    return lifecycle_deadline
             if due:
                 self.wake_signal.wake(world_id)
                 return now

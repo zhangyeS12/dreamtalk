@@ -328,7 +328,7 @@ class GroupChatReplyService:
                 raise
             message = (
                 await self._messages.complete_group_reply(
-                    claim, speaker, ordinal, text.text, events=text.events
+                    claim, speaker, ordinal, text.text, events=text.events, memories=text.memories
                 )
                 if isinstance(text, AnnotatedDialogue)
                 else await self._messages.complete_group_reply(claim, speaker, ordinal, text)

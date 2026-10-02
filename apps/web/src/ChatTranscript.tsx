@@ -8,6 +8,7 @@ import { useChatScroll } from "./useChatScroll";
 import { useTranscriptPages } from "./useTranscriptPages";
 import { ChatMessageBody } from "./ChatMessageBody";
 import { ChatHistoryPanel } from "./ChatHistoryPanel";
+import { LongChatMemoryPanel } from "./LongChatMemoryPanel";
 import { ConversationMemoryPanel } from "./ConversationMemoryPanel";
 import { submitChatOnEnter } from "./chatComposerKeys";
 import { chatTokenReservationFeedback, chatPhaseFeedback, chatReplyFailureFeedback, chatReplyStateFeedback, chatSaveFailureFeedback, type ChatRequestPhase } from "./chatFeedback";
@@ -27,6 +28,7 @@ export function ChatTranscript({ client, worldId, playerId, conversation, tokenC
   const draftInput = useRef<HTMLTextAreaElement>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [memoryOpen, setMemoryOpen] = useState(false);
+  const [longMemoryOpen, setLongMemoryOpen] = useState(false);
   const [refresh, setRefresh] = useState(0);
   const [availability, setAvailability] = useState<ChatReplyAvailability | null>(null);
   const available = availability?.available ?? false;
@@ -148,8 +150,9 @@ export function ChatTranscript({ client, worldId, playerId, conversation, tokenC
     <div className="thread-heading">
       <button type="button" className="text-action" onClick={onBack}>返回聊天</button>
       <h2>{conversation.character_name}</h2><span>私聊</span>
-      <button type="button" className="text-action transcript-refresh" onClick={() => setMemoryOpen(true)}>记忆摘要</button><button type="button" className="text-action transcript-refresh" onClick={() => setHistoryOpen(true)}>聊天回忆</button><button type="button" className="text-action transcript-refresh" onClick={() => setRefresh(value => value + 1)}>刷新记录</button>
+      <button type="button" className="text-action transcript-refresh" onClick={() => setLongMemoryOpen(true)}>长期记忆</button><button type="button" className="text-action transcript-refresh" onClick={() => setMemoryOpen(true)}>会话摘要</button><button type="button" className="text-action transcript-refresh" onClick={() => setHistoryOpen(true)}>聊天回忆</button><button type="button" className="text-action transcript-refresh" onClick={() => setRefresh(value => value + 1)}>刷新记录</button>
     </div>
+    {longMemoryOpen ? <LongChatMemoryPanel client={client} worldId={worldId} conversationId={conversation.conversation_id} characters={[{ character_id: conversation.character_id, character_name: conversation.character_name }]} onClose={() => setLongMemoryOpen(false)} /> : null}
     {memoryOpen ? <ConversationMemoryPanel client={client} worldId={worldId} conversationId={conversation.conversation_id} senderName={message => message.sender_kind === "player" && message.sender_id === playerId ? "我" : conversation.character_name} canGenerate={!sending && !pendingSend} onClose={() => setMemoryOpen(false)} /> : null}
     {historyOpen ? <ChatHistoryPanel client={client} worldId={worldId} conversationId={conversation.conversation_id} senderName={message => message.sender_kind === "player" && message.sender_id === playerId ? "我" : conversation.character_name} canQuote={available && !sending && !pendingSend} onClose={() => setHistoryOpen(false)} onQuote={text => {
       if (!available || sending || pendingSend) return false;

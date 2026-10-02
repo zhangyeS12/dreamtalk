@@ -2,7 +2,22 @@
 
 更新日期：2026-10-02。此文件记录当前开发现场与接续工作，不替代 [AGENTS.md](AGENTS.md)。先读 AGENTS，再读本文，最后核对实际 Git 状态和相关代码；不能把下面的基线哈希当作永远不变的当前 HEAD。
 
-## 最新接续：2026-10-02 聊天格式失败和动态池背景条件（桌面0.1.6）
+## 最新接续：2026-10-02 长期记忆、活动生命周期和近期经历（桌面0.1.7）
+
+- 从干净bf9f367a81c574e61420230d5084ab8f5b31cc65 / codex/chat-feedback接续，实际仓库D:\LivingWorld。用户要求尽快完成长期记忆，并明确要求活动生命周期与聊天参考近期经历一并完成再汇报。[复用调查](docs/research/2026-10-02-long-chat-memory-reuse.md)、[普通使用说明](docs/LONG_TERM_MEMORY.md)。核对Mem0、Letta、SillyTavern、Concordia及Temporal的官方实现边界和许可，实际直接复用项目已安装SQLAlchemy/Alembic、Pydantic、SQLite FTS5/BM25、jieba0.42.1、既有结构化回复/预算/Kernel事务/世界deadline调度与原生React dialog。未复制AGPL代码、引入外部Agent/记忆框架、embedding服务、新依赖或额外提取API。
+- 新增0029两张应用层表long_chat_memories/long_chat_memory_settings，保留世界/玩家/角色/来源会话/消息/说话者/UTC与可用WorldTime。正常完整回复同次JSON在reply/events之后返回最多4条身份/偏好/约定/重要经历；原句需逐字属于本轮玩家消息或本次台词，无效元数据忽略、不付费修复。完成回复与来源记忆同事务；群聊公开来源进入获准固定成员的独立记忆，私聊只供对方。提取随当前发言角色开关控制，落库仍逐成员检查各自开关；关闭发言角色自动记录时，该次同调用不会为其他成员额外生成元数据。默认开启，用户可按角色关闭后续写入。非官方DeepSeek或未启用现有结构化聊天的路径保留普通聊天，原文召回可用但不保证自动生成新条目。
+- 核心/置顶/相关长期条目最多16条、完整数组8KiB；不重复发送当前玩家全文。明确变更写新条目并关联旧条目superseded，按同说话者或玩家明确取消promise限定更正范围；同来源去重、置顶/停用/恢复及revision CAS有界。角色参与过的本世界/本玩家共同会话先SQL授权筛选再FTS5排序，旧原句最多4条、完整数组8KiB，候选最多200条/正文96KiB。新store替代提示中旧近三页召回，避免重复输入；停用或被更新条目的来源不参与长期档案召回。原聊天/近期上下文不删除，非语义向量检索，可能漏掉同义说法。
+- 自动审批先拒绝历史原句外发，用户随后具体授权：只限当前世界/玩家、该角色参与会话的相关原句，最多4条/8KiB，随用户发起的正常聊天发送配置模型，不后台批量外发、不额外API，不读其他角色私聊或隐藏世界书。授权后才实施。权限先在SQL验证当前绑定玩家及该Conversation固定成员，再加载内容；selector不读私人观察或长期条目。普通“长期记忆”页查看自己的共同对话内容，不开放私有EpisodicMemory；原Observation-only来源约束不变，不把自述/计划/聊天认证为WorldTruth/Knowledge。
+- 活动原缺口是Director到期仅把候选标finished，没有终止事件。新Kernel settle_routines经受信世界调度调用：active候选到期、状态已变化，或已有PlaceCharacter通过CAS后合法中断时，单事务写唯一CharacterRoutineEnded/Interrupted和获准Observation，并标finished/cancelled。ID由candidate稳定派生、链接原start；不改CharacterState revision/位置/Player/成果，保持后续计划revision衔接。自动活动关闭或attention/planning时仍保留已开始活动的结束deadline，PAUSED不推进，重启不补造未发生过程。旧版已finished且没有终止事件的历史不回填，仅作为原定时段已过。
+- Replay增加终止校验：唯一start与单次terminal、角色/活动/原地点/计划时刻、当前presence/revision、时段结束边界；现有事件投影对白名单类型支持结束/中断且先Observation授权。聊天快照提供最新活动终止阶段，以及最多6条本人移动/开始/结束/中断，完整6KiB；当前状态优先、旧完整经历先省略。主体ID、亲历时间与actor/witness区分保持，自然语言不由额外API裁判，活动到期不保证任务完成。玩家事件仍只显示自己获知内容，不出现全知后台时间线。
+- 最后自动审批拦截可选“任一群成员开启即生成元数据”的开关联动，担心绕过停用角色设置，同时指出提案校验前的终止调用风险。该补丁整段未执行。采用更安全替代：不改当前独立捕获开关；从ActionProposal execute路径完全移除生命周期调用，仅保留受信调度与CAS验证后放置事务。无待批准补丁或授权阻塞。
+- Ruff/格式28份修改Python、ESLint/TypeScript、Git diff静态检查通过；209份Core Python AST、5处桌面0.1.7版本配置、29个单head迁移文件及新2表与ORM列/类型/nullable/PK/检查/唯一/FK静态声明核对通过。初次revision AST遗漏AnnAssign，补充读取后单head核对通过；未执行迁移函数或打开数据库。文档本地链接核对通过，最终数量见artifacts/long-memory-package.json。Core初编24.945秒，收紧提案授权后重编23.616秒；Vite138ms、Rust release24.47秒成功，桌面PE FileVersion/ProductVersion0.1.7。保留jieba第三方SyntaxWarning、tzdata/pysqlite2/MySQLdb可选hidden import、STATIC_VCRUNTIME弃用和Vite533.61kB提示，没有提高阈值隐藏。
+- 新完整目录D:\LivingWorld\artifacts\portable\long-memory\dreamtalk\dreamtalk-desktop.exe，ZIP同父目录dreamtalk.zip，旧包保留。desktop13,194,240 bytes / B6C4BBE79FF3CB7071748F39C482B2FCE4E5A88FCE23E2526260464133E340CA；Core13,965,528 / 1751AC42606D0BAEABDD2C3DED3D2FDA2D42DCB7E5001CF7D676B9163436DCF6；ZIP43,202,704 / A3A6AE2EF219C87A26451FF7019FB0C8CC0FA527CD819ED81EF963FA3B423887。helper保持264DF8990752ABB179A3773ACE934F546C69AF99F4C9834EA1286D0D9886FDEA。209份冻结源码、22份许可、11份说明和482份ZIP文件字节核对通过；MEMORY/RECALL/STREAMING按旧清单核验后沿用，新增LONG_TERM_MEMORY与原名DIRECTOR_ACTIVITIES确保新说明链接可用。清单artifacts/long-memory-package.json，日志同prefix。打包脚本首次旧清单路径引用错，创建目录前失败；修正引用后全量成功，无用户文件改动。
+- 按AGENTS§20未新增/修改/运行测试、启动应用或GUI、调用真实API、读取/写入/迁移用户存档或副本、探测密钥、修改系统自启动。既有单次数据库诊断许可未复用。静态声明/构建/字节核对不等于运行验收；实际保存、模型提取/更正、重启、知情隔离、到期/暂停/中断、预算与自然回答仍由用户验收。Core/协议兼容版本和app-data/identifier不变；新增0029仍沿用现有启动升级流程，升级后不要用旧程序打开存档。没有push/发布。
+- 用户入口：旧托盘“退出并停止后台运行”后，直接打开新完整目录exe，无需解压；聊天顶部“长期记忆”可核对、搜索、置顶、停用。体验重要偏好→明确更正→重启回忆，以及自动活动开始→到期→问“刚才在做什么”。换包若使用自启动，需显式保存更新启动位置；本轮未替用户修改注册位置。
+- **接下来：** 先根据这轮体验修复记忆提取/更正/活动衔接的真实问题，再决定是否增加成熟语义召回与观察经历总结，费用必须另行具体授权；多人主动联系、相遇剧情、关系推进、任务成果/物品及完整离线世界重建仍未完成。当前交付切片无待用户决策阻塞；不要把共同聊天记忆当私有EpisodicMemory，也不要为了更像完成而伪造活动成果。
+
+## 前序切片：2026-10-02 聊天格式失败和动态池背景条件（桌面0.1.6）
 
 - 从干净2e0f992 / codex/chat-feedback接续，实际仓库仍D:\LivingWorld。用户报告聊天回复失败、世界动态生成未完成，并明确批准本次只读失败错误类别／结束原因／Token数量及世界书公开条目计数诊断；不读密钥或聊天正文、不改存档、不调API。[诊断与接口复用](docs/research/2026-10-02-json-chat-failure-fix.md)、[使用说明](docs/WORLD_EVENT_JOURNAL.md)。
 - 确认当前desktop和Core来自world-event-journal完整0.1.5包，非旧自启动版本。最新Core日志15:50:31日本时间记录chat_structured_output_failed：完成响应未过结构化校验。旧日志与AttemptFacts未保存细分reason，不能断言本次一定截断／空输出／缺reply字段，也不能说是密钥无效。截图动态池对应news_background_required；claim在付费dispatch前停止，pending和最近批次仍0，没有已生成但未显示的10条。

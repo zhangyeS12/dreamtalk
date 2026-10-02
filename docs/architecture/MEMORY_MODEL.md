@@ -40,3 +40,8 @@ Checkpoint / Timeline Branch 继承、Reflection、consolidation、forgetting、
 | CharacterBelief | Character 相信什么命题？ | Memory 不自动形成、纠正或调和 Belief |
 | Conversation / Message | 表达了什么？ | C-007A 不自动摄取对话 |
 | Reflection | 从经历推导了什么解释？ | 尚未实现，不能伪装成 EpisodicMemory |
+
+
+## 应用层长期对话记忆（2026-10-02，桌面0.1.7）
+
+新增long_chat_memories/long_chat_memory_settings（0029），按world/player/character以及来源Conversation/Message隔离。正常回复同次提取最多4条identity/preference/promise/experience，quote必须属于本轮玩家原文或本次reply；只代表自述，不是Observation-only EpisodicMemory新provenance，不创建Knowledge或WorldTruth。核心/置顶/相关条目16条/8KiB，授权的参与会话历史原句4条/8KiB；复用jieba/SQLite FTS5，不额外提取/embedding API。默认自动记录，可停用、置顶与明确更正关联旧条目。详见[普通使用说明](../LONG_TERM_MEMORY.md)和[复用记录](../research/2026-10-02-long-chat-memory-reuse.md)。

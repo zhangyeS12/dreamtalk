@@ -34,6 +34,7 @@ from livingworld.application.ports import (
     WorldTimeSource,
 )
 from livingworld.application.results import CommandResult, EntityReference, RelationshipReference
+from livingworld.application.routine_lifecycle import settle_routines
 from livingworld.domain.actions import (
     ActionKind,
     ActionProposal,
@@ -419,6 +420,15 @@ class CommandHandler:
                     before.revision if before else None,
                     command.expected_state_revision,
                 )
+                if before is not None:
+                    await settle_routines(
+                        uow,
+                        world.world_id,
+                        logical_time,
+                        now,
+                        character=command.character_id,
+                        interrupt=True,
+                    )
                 revision = (
                     before.revision.advance(command.expected_state_revision)
                     if before

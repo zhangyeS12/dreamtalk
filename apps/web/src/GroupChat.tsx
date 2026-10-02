@@ -7,6 +7,7 @@ import { useChatScroll } from "./useChatScroll";
 import { useTranscriptPages } from "./useTranscriptPages";
 import { ChatMessageBody } from "./ChatMessageBody";
 import { ChatHistoryPanel } from "./ChatHistoryPanel";
+import { LongChatMemoryPanel } from "./LongChatMemoryPanel";
 import { ConversationMemoryPanel } from "./ConversationMemoryPanel";
 import { submitChatOnEnter } from "./chatComposerKeys";
 import { chatTokenReservationFeedback, chatPhaseFeedback, chatReplyFailureFeedback, chatReplyStateFeedback, chatSaveFailureFeedback, type ChatRequestPhase } from "./chatFeedback";
@@ -73,6 +74,7 @@ export function GroupChatDetails({ client, worldId, playerId, group, tokenCeilin
   const draftInput = useRef<HTMLTextAreaElement>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [memoryOpen, setMemoryOpen] = useState(false);
+  const [longMemoryOpen, setLongMemoryOpen] = useState(false);
   const [refresh, setRefresh] = useState(0);
   const [availability, setAvailability] = useState<ChatReplyAvailability | null>(null);
   const available = availability?.available ?? false;
@@ -180,7 +182,8 @@ export function GroupChatDetails({ client, worldId, playerId, group, tokenCeilin
   for (const item of group.participants) nameCounts.set(item.character_name, (nameCounts.get(item.character_name) ?? 0) + 1);
   const mentionable = group.participants.filter(item => nameCounts.get(item.character_name) === 1);
   return <section ref={thread} className="chat-thread" aria-label="群聊">
-    <div className="thread-heading"><button type="button" className="text-action" onClick={onBack}>返回聊天</button><h2>{group.participants.map(item => item.character_name).join("、")}</h2><span>群聊</span><button type="button" className="text-action transcript-refresh" onClick={() => setMemoryOpen(true)}>记忆摘要</button><button type="button" className="text-action transcript-refresh" onClick={() => setHistoryOpen(true)}>聊天回忆</button><button type="button" className="text-action transcript-refresh" onClick={() => setRefresh(value => value + 1)}>刷新记录</button></div>
+    <div className="thread-heading"><button type="button" className="text-action" onClick={onBack}>返回聊天</button><h2>{group.participants.map(item => item.character_name).join("、")}</h2><span>群聊</span><button type="button" className="text-action transcript-refresh" onClick={() => setLongMemoryOpen(true)}>长期记忆</button><button type="button" className="text-action transcript-refresh" onClick={() => setMemoryOpen(true)}>会话摘要</button><button type="button" className="text-action transcript-refresh" onClick={() => setHistoryOpen(true)}>聊天回忆</button><button type="button" className="text-action transcript-refresh" onClick={() => setRefresh(value => value + 1)}>刷新记录</button></div>
+    {longMemoryOpen ? <LongChatMemoryPanel client={client} worldId={worldId} conversationId={group.conversation_id} characters={group.participants} onClose={() => setLongMemoryOpen(false)} /> : null}
     {memoryOpen ? <ConversationMemoryPanel client={client} worldId={worldId} conversationId={group.conversation_id} senderName={message => message.sender_kind === "player" && message.sender_id === playerId ? "我" : names.get(message.sender_id) ?? "角色"} canGenerate={!sending && !pending} onClose={() => setMemoryOpen(false)} /> : null}
     {historyOpen ? <ChatHistoryPanel client={client} worldId={worldId} conversationId={group.conversation_id} senderName={message => message.sender_kind === "player" && message.sender_id === playerId ? "我" : names.get(message.sender_id) ?? "角色"} canQuote={available && !sending && !pending} onClose={() => setHistoryOpen(false)} onQuote={text => {
       if (!available || sending || pending) return false;

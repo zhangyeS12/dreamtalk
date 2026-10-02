@@ -55,6 +55,7 @@ def create_app(
     content_repository=None,
     chat_recall: EarlierChatRecall | None = None,
     conversation_memory=None,
+    long_chat_memory=None,
     director=None,
     world_story=None,
     offline_contact=None,
@@ -158,6 +159,10 @@ def create_app(
         app.include_router(offline_contact_router(offline_contact, authorize, logger))
         app.include_router(session_visibility_router(offline_contact, authorize))
 
+    if long_chat_memory is not None:
+        from livingworld.adapters.http.long_chat_memory import long_chat_memory_router
+
+        app.include_router(long_chat_memory_router(long_chat_memory, authorize))
     if world_story is not None:
         from livingworld.adapters.http.world_story import world_story_router
 

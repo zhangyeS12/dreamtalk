@@ -13,7 +13,7 @@ from livingworld.domain.actions import RoutineActivity
 from livingworld.domain.identifiers import CharacterId
 from livingworld.domain.values import WorldTime
 
-MAX_ACTIVITY_CONTEXT_BYTES = 2 * 1024
+MAX_ACTIVITY_CONTEXT_BYTES = 6 * 1024
 
 ACTIVITY_GROUNDING_INSTRUCTIONS = (
     "character_observed_world_events 是当前角色被授权亲历的事件资料，"
@@ -34,6 +34,11 @@ ACTIVITY_GROUNDING_INSTRUCTIONS = (
     "二者都不能证明任务完成、当前仍在做旧活动或已经开始了另一个活动。"
     "elapsed_world_minutes 是经过的世界分钟，不是现实时间，不换算成现实日期。"
     "world_paused=true 时世界时间暂停，不把现实经过时间写成活动进展。"
+    "interval_ended 表示已记录这段活动时段结束，interrupted 表示活动中断；"
+    "只证明活动状态变化，不证明工作完成、拿到物品或实现约定。"
+    "recent_own_experiences 是本人已亲历的近期移动和活动开始/结束/中断，"
+    "可以自然提及刚才或此前的经历；occurred_at/elapsed_world_minutes 是世界时间，"
+    "较早经历不能覆盖最新活动状态，不要把活动经历变成玩家也经历过的事实。"
     "未提供有效的自身活动记录时，自然表达不确定，不编造亲历日常。"
     "聊天是远程交流，不能据此声称玩家同地点或目击了活动。"
 )
@@ -48,12 +53,28 @@ class CharacterActivitySnapshot:
     planned_until: WorldTime | None = None
     presence_unchanged: bool = False
     activity: RoutineActivity | None = None
+    last_terminal: KnownWorldEvent | None = None
+    recent_experiences: tuple[KnownWorldEvent, ...] = ()
 
 
 class CharacterActivityContextReader(Protocol):
     @property
     def owner_character_id(self) -> CharacterId: ...
     async def snapshot(self) -> CharacterActivitySnapshot | None: ...
+
+
+def _bounded_context(data):
+    def size():
+        return len(json.dumps(data, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+
+    # Current state and its actual termination outrank older complete experiences.
+    while size() > MAX_ACTIVITY_CONTEXT_BYTES and data.get("recent_own_experiences"):
+        data["recent_own_experiences"].pop(0)
+    if size() > MAX_ACTIVITY_CONTEXT_BYTES:
+        data.pop("last_own_activity_start", None)
+    if size() > MAX_ACTIVITY_CONTEXT_BYTES:
+        data.pop("last_own_activity_transition", None)
+    return data
 
 
 async def character_activity_context(
@@ -75,9 +96,39 @@ async def character_activity_context(
         "world_time_microseconds": str(snapshot.current_world_time.microseconds),
         "world_paused": snapshot.world_paused,
     }
+    data["recent_own_experiences"] = []
+    for item in reversed(snapshot.recent_experiences[-6:]):
+        if (
+            item.event_id.world_id != owner.world_id
+            or item.subject != owner
+            or item.observation_channel != "witnessed"
+            or not item.description
+            or item.occurred_at > snapshot.current_world_time
+            or item.event_type
+            not in {
+                "CharacterPlaced",
+                "CharacterRoutineStarted",
+                "CharacterRoutineEnded",
+                "CharacterRoutineInterrupted",
+            }
+        ):
+            continue
+        value = {
+            "event_id": str(item.event_id.value),
+            "event_type": item.event_type,
+            "actor_character_id": str(owner.value),
+            "description": item.description,
+            "occurred_at": str(item.occurred_at.microseconds),
+            "elapsed_world_minutes": str(
+                (snapshot.current_world_time.microseconds - item.occurred_at.microseconds)
+                // 60_000_000
+            ),
+        }
+        data["recent_own_experiences"].append(value)
+    data["recent_own_experiences"].reverse()
     event = snapshot.last_start
     if event is None:
-        return data
+        return _bounded_context(data)
     if event.event_id.world_id != owner.world_id:
         raise EntityNotFoundError("chat_activity_world_invalid")
     if (
@@ -90,7 +141,7 @@ async def character_activity_context(
         or snapshot.planned_until is None
         or snapshot.planned_until <= event.occurred_at
     ):
-        return data
+        return _bounded_context(data)
     # Interval expiry frees occupancy; it is never evidence of an achieved outcome.
     phase = "changed_since_start"
     if snapshot.presence_unchanged:
@@ -99,6 +150,27 @@ async def character_activity_context(
             if snapshot.current_world_time < snapshot.planned_until
             else "planned_interval_elapsed"
         )
+    terminal = snapshot.last_terminal
+    if (
+        terminal is not None
+        and terminal.event_id.world_id == owner.world_id
+        and terminal.subject == owner
+        and terminal.observation_channel == "witnessed"
+        and terminal.description
+        and event.occurred_at <= terminal.occurred_at <= snapshot.current_world_time
+    ):
+        if terminal.event_type in {"CharacterRoutineEnded", "CharacterRoutineInterrupted"}:
+            phase = (
+                "interval_ended"
+                if terminal.event_type == "CharacterRoutineEnded"
+                else "interrupted"
+            )
+            data["last_own_activity_transition"] = {
+                "event_id": str(terminal.event_id.value),
+                "phase": phase,
+                "description": terminal.description,
+                "occurred_at": str(terminal.occurred_at.microseconds),
+            }
     data["last_own_activity_start"] = {
         "event_id": str(event.event_id.value),
         "actor_character_id": str(owner.value),
@@ -110,7 +182,4 @@ async def character_activity_context(
         ),
         "phase": phase,
     }
-    size = len(json.dumps(data, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
-    if size > MAX_ACTIVITY_CONTEXT_BYTES:
-        del data["last_own_activity_start"]
-    return data
+    return _bounded_context(data)

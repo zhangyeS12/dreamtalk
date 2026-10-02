@@ -32,6 +32,8 @@ _EVENT_TITLES = {
     "PlayerPlaced": "有人来到了一个地点",
     "CharacterPlaced": "有角色来到了一个地点",
     "CharacterRoutineStarted": "有角色开始了日常活动",
+    "CharacterRoutineEnded": "有角色的活动时段结束了",
+    "CharacterRoutineInterrupted": "有角色的活动中断了",
 }
 
 

@@ -89,3 +89,8 @@ C-007A 采用 episodic record、explicit evidence、temporal coordinates、optio
 ## 2026-09-29 已确认会话摘要的独立存储
 
 前段记录的是聊天回忆切片当时的范围。本次新增独立 `conversation_memory_revisions` / `conversation_memory_drafts` 交互表（0024），不是 `character_memories` 的新 kind/provenance；Observation-only EpisodicMemory 约束仍未改变。普通玩家只预览、确认、修正自己当前绑定身份在本会话内的共同聊天摘要。确认版本及 Conversation/Message 来源形成递增链，8KiB摘要与32条新增来源有界；角色仅在该会话授权后读取已确认摘要。没有更改 Knowledge、WorldTruth、Reflection、Consolidated 或遗忘语义。详见 [CHAT_MODEL.md](CHAT_MODEL.md) 与 [复用记录](../research/2026-09-29-conversation-summary-reuse.md)。
+
+
+## 与自动对话记忆的边界（2026-10-02）
+
+桌面0.1.7的自动长期聊天记忆是另一应用层模型，保存真实对话来源但不把说过的话认证为亲历。原Observation-only约束不变。活动结束/中断新增Canonical WorldEvent与实际获准Observation，聊天按owner消费近期经历；尚没有自动把这些Observation总结写入EpisodicMemory、Reflection或Consolidated。见[MEMORY_MODEL.md](MEMORY_MODEL.md)。

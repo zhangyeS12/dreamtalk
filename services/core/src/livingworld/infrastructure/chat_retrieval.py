@@ -34,6 +34,16 @@ class Fts5ChatRecallRanker:
             if token.isalnum() and token.casefold() not in _STOP_TERMS
         ]
 
+    async def query_terms(self, query: str) -> tuple[str, ...]:
+        async with self._slots:
+            job = asyncio.create_task(asyncio.to_thread(self._tokens, query[:2000]))
+            try:
+                tokens = await asyncio.shield(job)
+            except asyncio.CancelledError:
+                await job
+                raise
+        return tuple(term for term in dict.fromkeys(reversed(tokens)) if len(term) <= 64)[:24]
+
     async def rank(
         self, query: str, candidates: tuple[ChatMessage, ...], *, limit: int
     ) -> tuple[ChatMessage, ...]:

@@ -84,6 +84,8 @@ class _EventFold:
         self._observation_causes = {}
         self._position = 0
         self._event_ids = set()
+        self._routine_starts = {}
+        self._routine_ends = set()
         self._handlers = {
             ("WorldCreated", 1): self._world_created,
             ("LocationCreated", 1): self._location_created,
@@ -94,6 +96,8 @@ class _EventFold:
             ("CharacterCreated", 1): self._character_created,
             ("CharacterPlaced", 1): self._character_placed,
             ("CharacterRoutineStarted", 1): self._character_routine_started,
+            ("CharacterRoutineEnded", 1): self._character_routine_ended,
+            ("CharacterRoutineInterrupted", 1): self._character_routine_ended,
             ("PublicWorldEventPublished", 1): self._public_world_event_published,
             ("RelationshipChanged", 1): self._relationship_changed,
             ("WorldTruthAsserted", 1): self._truth_asserted,
@@ -323,8 +327,52 @@ class _EventFold:
             _integer(value["planned_until"]) > event.occurred_at.microseconds,
             "Invalid routine window",
         )
-        UUID(value["candidate_id"])
+        candidate = UUID(value["candidate_id"])
+        _check(candidate not in self._routine_starts, "Duplicate routine candidate")
         self._character_placed(event)
+        self._routine_starts[candidate] = (
+            event.event_id,
+            identity,
+            value["activity"],
+            value["location_id"],
+            value["planned_until"],
+            event.occurred_at,
+        )
+
+    def _character_routine_ended(self, event):
+        value = event.payload
+        candidate = UUID(value["candidate_id"])
+        _check(
+            candidate in self._routine_starts and candidate not in self._routine_ends,
+            "Routine termination requires one unterminated start",
+        )
+        start, owner, activity, location, planned, began = self._routine_starts[candidate]
+        _check(self._id(EventId, value["start_event_id"]) == start, "Routine source mismatch")
+        _check(
+            self._id(CharacterId, value["character_id"]) == owner
+            and value["activity"] == activity
+            and value["location_id"] == location
+            and _integer(value["planned_until"]) == planned,
+            "Routine termination metadata mismatch",
+        )
+        presence = self.character_states[owner]
+        _check(
+            self._id(LocationId, value["current_location_id"]) == presence.location_id
+            and _integer(value["revision"]) == presence.revision.value,
+            "Routine termination presence mismatch",
+        )
+        _check(event.occurred_at >= began, "Routine termination predates start")
+        expected = (
+            "interval_elapsed"
+            if event.event_type == "CharacterRoutineEnded"
+            else "presence_changed"
+        )
+        _check(value["reason"] == expected, "Invalid routine termination reason")
+        if expected == "interval_elapsed":
+            _check(event.occurred_at.microseconds >= planned, "Routine interval has not elapsed")
+        # Termination frees operational occupancy but never moves the actor, advances
+        # placement revision or proves any work/result was accomplished.
+        self._routine_ends.add(candidate)
 
     def _relationship_changed(self, event):
         value = event.payload

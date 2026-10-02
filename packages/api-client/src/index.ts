@@ -43,6 +43,16 @@ export interface PublicNewsEntry {
   published_at: string; occurred_at: string; state: NewsMark; revision: number;
 }
 export interface WorldStoryEntries { chat: ChatStoryEntry[]; news: PublicNewsEntry[]; next_before: string | null }
+export interface LongChatMemory {
+  entry_id: string; character_id: string; kind: "identity" | "preference" | "promise" | "experience";
+  topic: string; content: string; quote: string; source_kind: "player" | "character"; source_sender_id: string;
+  conversation_id: string; message_id: string; created_at: string; world_time: string | null;
+  state: "active" | "forgotten" | "superseded"; pinned: boolean; revision: number; replaces: string | null;
+}
+export interface LongChatMemorySnapshot {
+  enabled: boolean; settings_revision: number; items: LongChatMemory[]; next_cursor: string | null;
+}
+
 export interface WorldNewsStatus {
   enabled: boolean; consented: boolean; revision: number; state: "off" | "idle" | "generating" | "ready" | "attention";
   error: string | null; pending: number; batch_total: number; batch_processed: number;
@@ -399,6 +409,16 @@ export class CoreClient {
   chatMessageContext(worldId: string, conversationId: string, position: number, signal?: AbortSignal): Promise<ChatMessagePage> {
     if (!Number.isSafeInteger(position) || position < 1 || !Number.isSafeInteger(position + 4)) throw new Error("chat_position_invalid");
     return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/${encodeURIComponent(conversationId)}/messages/page?limit=7&before_position=${position + 4}`, { signal });
+  }
+  longChatMemory(worldId: string, conversationId: string, characterId: string, query = "", before?: string, signal?: AbortSignal): Promise<LongChatMemorySnapshot> {
+    const params = new URLSearchParams({ query }); if (before) params.set("before", before);
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/${encodeURIComponent(conversationId)}/long-memory/${encodeURIComponent(characterId)}?${params}`, { signal });
+  }
+  configureLongChatMemory(worldId: string, conversationId: string, characterId: string, enabled: boolean, revision: number, signal?: AbortSignal): Promise<LongChatMemorySnapshot> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/${encodeURIComponent(conversationId)}/long-memory/${encodeURIComponent(characterId)}/settings`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled, expected_revision: revision }), signal });
+  }
+  markLongChatMemory(worldId: string, conversationId: string, characterId: string, entry: LongChatMemory, active: boolean, pinned: boolean, signal?: AbortSignal): Promise<LongChatMemorySnapshot> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/${encodeURIComponent(conversationId)}/long-memory/${encodeURIComponent(characterId)}/${encodeURIComponent(entry.entry_id)}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ active, pinned, expected_revision: entry.revision }), signal });
   }
   conversationMemory(worldId: string, conversationId: string, signal?: AbortSignal): Promise<ConversationMemorySnapshot> {
     return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/${encodeURIComponent(conversationId)}/memory`, { signal });

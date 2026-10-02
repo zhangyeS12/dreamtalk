@@ -31,6 +31,7 @@ from livingworld.domain.identifiers import (
     PlayerId,
     WorldId,
 )
+from livingworld.infrastructure.persistence.long_chat_memory import record_chat_memories
 from livingworld.infrastructure.persistence.mapping import to_domain
 from livingworld.infrastructure.persistence.models import (
     ChatConversationRecord,
@@ -535,7 +536,7 @@ class SqlAlchemyChatMessageStore:
             )
 
     async def complete_direct(
-        self, claim: ClaimedDirectTurn, text: str, *, events=()
+        self, claim: ClaimedDirectTurn, text: str, *, events=(), memories=()
     ) -> ChatMessage:
         if not (
             claim.turn_id.world_id
@@ -615,6 +616,13 @@ class SqlAlchemyChatMessageStore:
                 events,
                 await self._story_time(session, world_id, events),
             )
+            await record_chat_memories(
+                session,
+                row,
+                claim.player_id,
+                memories,
+                await self._story_time(session, world_id, memories),
+            )
             return _message(row)
 
     async def claim_group(
@@ -691,6 +699,7 @@ class SqlAlchemyChatMessageStore:
         text: str,
         *,
         events=(),
+        memories=(),
     ) -> ChatMessage:
         if not (
             claim.turn_id.world_id
@@ -784,6 +793,13 @@ class SqlAlchemyChatMessageStore:
                 claim.player_id,
                 events,
                 await self._story_time(session, world_id, events),
+            )
+            await record_chat_memories(
+                session,
+                row,
+                claim.player_id,
+                memories,
+                await self._story_time(session, world_id, memories),
             )
             return _message(row)
 

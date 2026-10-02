@@ -238,6 +238,14 @@ class Database:
 
         return SqlAlchemyPlayerEventFeedStore(self._sessions)
 
+    def long_chat_memory_store(self):
+        from livingworld.infrastructure.chat_retrieval import Fts5ChatRecallRanker
+        from livingworld.infrastructure.persistence.long_chat_memory import (
+            SqlAlchemyLongChatMemoryStore,
+        )
+
+        return SqlAlchemyLongChatMemoryStore(self._sessions, Fts5ChatRecallRanker())
+
     def conversation_memory_store(self):
         from livingworld.infrastructure.persistence.conversation_memory import (
             SqlAlchemyConversationMemoryStore,

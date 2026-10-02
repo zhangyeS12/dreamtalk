@@ -25,6 +25,7 @@ from livingworld.application.ports import (
     WorldTimeSource,
 )
 from livingworld.application.results import ActionResult
+from livingworld.application.routine_lifecycle import settle_routines
 from livingworld.domain.actions import (
     ActionKind,
     ActionProposal,
@@ -202,6 +203,22 @@ class ActionResolutionService:
                 (ActionKind.CHARACTER_ROUTINE, 1): self._resolve_routine,
             }
         )
+
+    async def advance_routines(self, world_id):
+        """Existing world scheduler settles accepted activities even with Director off."""
+        if self._mutation_barrier is not None:
+            await self._mutation_barrier.assert_mutation_allowed(world_id)
+        async with self._uow_factory() as uow:
+            world = await uow.worlds.get(world_id)
+            if world is None:
+                raise EntityNotFoundError("World does not exist")
+            if world.clock.state is ClockState.PAUSED:
+                return None
+            now = self._world_time_source.read(world.clock)
+            created = utc_timestamp(self._clock.now_utc(), "application wall clock")
+            deadline = await settle_routines(uow, world_id, now, created)
+            await uow.commit()
+            return deadline
 
     async def execute(self, request_id: RequestId, proposal: ActionProposal) -> ActionResult:
         if self._mutation_barrier is not None:
