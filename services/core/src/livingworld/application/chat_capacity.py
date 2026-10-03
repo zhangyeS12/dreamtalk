@@ -55,6 +55,11 @@ class ContextPacker:
                 continue
             for index, value in enumerate(values):
                 score = priority
+                if (
+                    key == "character_observed_world_events"
+                    and value.get("recall_basis") == "topic_match"
+                ):
+                    score = 55
                 if key == "long_term_dialogue_memories":
                     score = 90 if value.get("kind") in {"identity", "preference", "promise"} else 65
                     # The reader orders pinned/core/related; first entries get priority.

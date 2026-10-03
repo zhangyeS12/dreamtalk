@@ -29,6 +29,7 @@ from livingworld.application.lore_activation import select_common_background
 from livingworld.application.observed_events import (
     CharacterObservedEventReader,
     character_observed_events,
+    experience_queries,
 )
 from livingworld.application.ports import CharacterMemoryReader
 from livingworld.application.world_content import CommonLoreEntry
@@ -273,7 +274,9 @@ class DirectChatContextBuilder:
             if q.get("message_id") not in quote_ids
         ]
         observations = await character_observed_events(
-            self._observed_event_reader, conversation.character_id
+            self._observed_event_reader,
+            conversation.character_id,
+            query_texts=experience_queries(sent.message, visible),
         )
         if observations:
             persona["character_observed_world_events"] = observations

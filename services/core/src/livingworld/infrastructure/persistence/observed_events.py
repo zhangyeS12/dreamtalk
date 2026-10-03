@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import unicodedata
+from dataclasses import dataclass
 from uuid import UUID
 
 from sqlalchemy import Text, and_, case, func, literal, select
 
-from livingworld.application.observed_events import MAX_CHARACTER_EVENTS
+from livingworld.application.observed_events import MAX_CHARACTER_EVENTS, CharacterEventRecall
 from livingworld.application.player_event_feed import KnownWorldEvent
 from livingworld.domain.identifiers import CharacterId, EventId, PlayerId, WorldId
 from livingworld.infrastructure.persistence.models import (
@@ -228,10 +229,17 @@ def character_witnessed_events(owner: CharacterId, *, event_id: UUID | None = No
     return query.subquery()
 
 
+@dataclass(frozen=True, slots=True)
+class _ExperienceDocument:
+    text: str
+    event: KnownWorldEvent
+
+
 class SqlAlchemyCharacterObservedEventReader:
-    def __init__(self, sessions, owner: CharacterId) -> None:
+    def __init__(self, sessions, owner: CharacterId, ranker=None) -> None:
         self._sessions = sessions
         self._owner = owner
+        self._ranker = ranker
 
     @property
     def owner_character_id(self) -> CharacterId:
@@ -246,3 +254,58 @@ class SqlAlchemyCharacterObservedEventReader:
             return await project_observed_events(
                 session, owner.world_id, seen, limit=limit, detailed_only=True
             )
+
+    async def recall(self, queries: tuple[str, ...], *, limit: int) -> CharacterEventRecall:
+        """Rank at most 128 owner-authorized projections, never the global ledger."""
+        if type(limit) is not int or not 1 <= limit <= MAX_CHARACTER_EVENTS:
+            raise ValueError("character_event_limit_invalid")
+        if self._ranker is None or not queries:
+            return CharacterEventRecall(await self.recent(limit=limit))
+        queries = tuple(
+            query[:2000] for query in queries[:3] if isinstance(query, str) and query.strip()
+        )
+        if not queries:
+            return CharacterEventRecall(await self.recent(limit=limit))
+        owner = self._owner
+        async with self._sessions() as session:
+            pool = await project_observed_events(
+                session,
+                owner.world_id,
+                character_witnessed_events(owner),
+                limit=128,
+                detailed_only=True,
+            )
+        # Release the database transaction before the existing bounded FTS worker.
+        documents = []
+        used = 0
+        for item in reversed(pool):
+            size = len(item.description.encode("utf-8"))
+            if used + size > 256 * 1024:
+                continue
+            documents.append(_ExperienceDocument(item.description, item))
+            used += size
+        documents = tuple(documents)
+        hits = await self._ranker.rank_queries(queries, documents, limit=16)
+        # Keep recent grounding while allowing up to four older topic matches.
+        recent_count = max(1, limit - min(4, limit // 3))
+        selected = {item.event_id: item for item in pool[-recent_count:]}
+        related = []
+        for document in hits:
+            if len(selected) >= limit:
+                break
+            if document.event.event_id in selected:
+                continue
+            selected[document.event.event_id] = document.event
+            related.append(document.event.event_id)
+            if len(selected) == limit:
+                break
+        for item in reversed(pool):
+            if len(selected) == limit:
+                break
+            selected.setdefault(item.event_id, item)
+        return CharacterEventRecall(
+            tuple(
+                sorted(selected.values(), key=lambda item: (item.occurred_at, item.ledger_position))
+            ),
+            tuple(related),
+        )

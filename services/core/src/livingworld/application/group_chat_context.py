@@ -36,6 +36,7 @@ from livingworld.application.long_chat_memory import LONG_MEMORY_GROUNDING_INSTR
 from livingworld.application.observed_events import (
     CharacterObservedEventReader,
     character_observed_events,
+    experience_queries,
 )
 from livingworld.application.ports import CharacterMemoryReader
 from livingworld.application.world_content import CommonLoreEntry
@@ -285,7 +286,12 @@ class GroupChatContextBuilder:
                     current.conversation_id, current.sender_id, speaker, current
                 )
             )
-        observations = await character_observed_events(self._observed_event_reader, speaker)
+        current = source.message if isinstance(source, PlayerSend) else source.player_message
+        observations = await character_observed_events(
+            self._observed_event_reader,
+            speaker,
+            query_texts=experience_queries(current, transcript),
+        )
         if observations:
             data["character_observed_world_events"] = observations
         if self._conversation_summary is not None:

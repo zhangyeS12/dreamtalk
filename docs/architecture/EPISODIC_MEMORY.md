@@ -94,3 +94,8 @@ C-007A 采用 episodic record、explicit evidence、temporal coordinates、optio
 ## 与自动对话记忆的边界（2026-10-02）
 
 桌面0.1.7的自动长期聊天记忆是另一应用层模型，保存真实对话来源但不把说过的话认证为亲历。原Observation-only约束不变。活动结束/中断新增Canonical WorldEvent与实际获准Observation，聊天按owner消费近期经历；尚没有自动把这些Observation总结写入EpisodicMemory、Reflection或Consolidated。见[MEMORY_MODEL.md](MEMORY_MODEL.md)。
+
+
+## 桌面0.1.24经历召回
+
+已有授权亲历现在可按当前话题检索，保留近期并补最多4条旧相关项，最终仍12条/8KiB；仅近128条词法召回，无额外API、事件/知识写入或自动Observation→EpisodicMemory。当前活动快照保持优先，目击不等于相遇剧情。见[体验说明](../EXPERIENCE_RECALL.md)。真实模型效果待用户验收。

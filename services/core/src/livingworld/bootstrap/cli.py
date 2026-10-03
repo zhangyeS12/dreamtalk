@@ -185,7 +185,12 @@ async def run(
             database.chat_message_store(time_source), player_event_feed
         )
         await chat_messages.recover_reply_executions()
-        earlier_chat_recall = EarlierChatRecall(chat_messages, Fts5ChatRecallRanker())
+        lexical_recall = Fts5ChatRecallRanker()
+        earlier_chat_recall = EarlierChatRecall(chat_messages, lexical_recall)
+
+        def observed_event_reader(owner):
+            return database.character_observed_event_reader(owner, ranker=lexical_recall)
+
         developer_inspector = None
         if developer_tools:
             developer_inspector = DeveloperInspectorService(
@@ -272,7 +277,7 @@ async def run(
                 world_content.list_common_lore,
                 earlier_chat_recall,
                 conversation_memory_store,
-                database.character_observed_event_reader,
+                observed_event_reader,
                 lambda owner: database.character_activity_context_reader(owner, time_source),
                 long_memory_store,
             ),
@@ -289,7 +294,7 @@ async def run(
                 world_content.list_common_lore,
                 earlier_chat_recall,
                 conversation_memory_store,
-                database.character_observed_event_reader,
+                observed_event_reader,
                 lambda owner: database.character_activity_context_reader(owner, time_source),
                 long_memory_store,
             ),

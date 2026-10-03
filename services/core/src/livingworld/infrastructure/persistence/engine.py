@@ -190,13 +190,13 @@ class Database:
 
         return SqlAlchemyCharacterMemoryReader(self._sessions, character_id)
 
-    def character_observed_event_reader(self, character_id: CharacterId):
+    def character_observed_event_reader(self, character_id: CharacterId, *, ranker=None):
         """Bind event-time access to the verified speaker; no global truth reader."""
         from livingworld.infrastructure.persistence.observed_events import (
             SqlAlchemyCharacterObservedEventReader,
         )
 
-        return SqlAlchemyCharacterObservedEventReader(self._sessions, character_id)
+        return SqlAlchemyCharacterObservedEventReader(self._sessions, character_id, ranker)
 
     def character_activity_context_reader(self, character_id: CharacterId, world_time_source):
         """Bind the activity snapshot to the verified speaker and existing runtime clock."""
