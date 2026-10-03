@@ -1192,10 +1192,11 @@ class ChatReplyExecutionRecord(Base):
     """Local generation lifecycle; uncertainty never authorizes an automatic replay."""
 
     __tablename__ = "chat_reply_executions"
-    context_reports: Mapped[str | None] = mapped_column(Text)
     world_id: Mapped[UUID] = mapped_column(UUIDStorage(), primary_key=True)
     turn_id: Mapped[UUID] = mapped_column(UUIDStorage(), primary_key=True)
     state: Mapped[str] = mapped_column(String(16), nullable=False)
+    # Revision 0032 appends this column; strict schema checks preserve column order.
+    context_reports: Mapped[str | None] = mapped_column(Text)
     __table_args__ = (
         ForeignKeyConstraint(
             ["world_id", "turn_id"], ["chat_turns.world_id", "chat_turns.turn_id"]

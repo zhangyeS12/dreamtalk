@@ -2,6 +2,15 @@
 
 更新日期：2026-10-03。此文件记录当前开发现场与接续工作，不替代 [AGENTS.md](AGENTS.md)。先读 AGENTS，再读本文，最后核对实际 Git 状态和相关代码；不能把下面的基线哈希当作永远不变的当前 HEAD。
 
+## 最新接续：2026-10-03 修复上下文升级后的核心连接失败（桌面0.1.19）
+
+- 用户反馈核心持续连接失败。只读现有Core安全日志（时间、级别、组件和固定错误码），2026-10-03 15:05的三次启动和15:29启动均记录migration/alembic_schema_shape_mismatch；14:14的旧进程有core_ready，说明本轮失败发生在数据库结构检查阶段，尚未联系模型服务。
+- 源码确认0031按world_id、turn_id、state创建chat_reply_executions，0032用add_column把context_reports追加到末尾；0.1.18 ORM却把它放在第一列，而_validate_domain_shape逐列比较顺序。旧版本预检跳过此列正常，升级后检查必然不匹配。HANDOFF此前所说“保留旧0031形状检查”仅涵盖升级前，不代表升级后运行已通过；以此次代码和日志为准。
+- 只把ORM的context_reports声明移到state之后，与迁移的物理顺序一致。保留0031/0032迁移和严格结构、列类型、可空性、键、索引检查；不重建表、不新增迁移、不删除或修改真实用户存档。五处桌面版本同步0.1.19，旧完整包保留。
+- 用户明确授权本次新建临时空数据库升级诊断：0031→0032完整upgrade及再次initialize通过，物理列顺序与修正模型一致，旧模型顺序不一致；未读写真实存档，不启动界面或联系模型。没有运行测试套件或实际桌面/Core启动，真实存档恢复仍待用户验收。
+- 修改模型的Ruff lint/format、Git diff静态检查通过；完整PyInstaller、Vite237模块（638.87kB/gzip191.98）、Rust release29s完成。保留>500kB前端体积、STATIC_VCRUNTIME弃用及可选依赖构建提示，没有隐藏或据此声称运行兼容。
+- 独立0.1.19包artifacts/portable/core-schema-fix/dreamtalk与dreamtalk.zip，保留旧0.1.18。221份源码AST/冻结字节及1022份包/ZIP文件、文档/许可/语义模型核对通过；日志artifacts/core-schema-fix-build.log，清单artifacts/core-schema-fix-audit.json。Desktop SHA256=0da01f3693cb7ed325dbb8752440d870a1782b3c8a2051030eff4c5e019a5c61；Core=923ff28b7d5b23cc8cd3ecda585813c4777a902a73ffe45c180f9c2971c8fcbb；ZIP=f684701fe26567b3739ccfff6b4a880e6489c47ac176e120376e668519ff009d。未读取聊天正文、密钥或自启动设置，不push或发布。
+
 ## 最新接续：2026-10-03 上下文容量与中文混合召回（桌面0.1.18）
 
 - 从干净2984c91109e5bd0e73bc35bb9e5b4c2f7c74848f / codex/world-archive接续，正式D:\LivingWorld。用户在讨论上下文/长短期记忆后明确“同意，按你说的优化”。本轮将统一上下文分配、来源查看、中文语义检索、时间来源和摘要整理落实为可体验切片，没有推断额外后台收费或跨角色历史外发授权。
