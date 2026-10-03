@@ -251,7 +251,10 @@ class Database:
         )
         from livingworld.infrastructure.semantic_chat_retrieval import HybridChatRecallRanker
 
-        return SqlAlchemyLongChatMemoryStore(self._sessions, HybridChatRecallRanker())
+        return SqlAlchemyLongChatMemoryStore(
+            self._sessions,
+            HybridChatRecallRanker(self.data_dir / "cache" / "chat-recall-v2"),
+        )
 
     def conversation_memory_store(self):
         from livingworld.infrastructure.persistence.conversation_memory import (

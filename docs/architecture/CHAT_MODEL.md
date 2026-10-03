@@ -500,3 +500,10 @@ See [reuse and limits](../research/2026-09-29-observed-events-reuse.md).
 长期记忆核心分桶、关键词多查询RRF、明确更新且同主题补充共存，16条/8KiB和4原句/8KiB上限不变。现有jieba/SQLite/SQLAlchemy直接复用；不增加embedding或模型调用。详见[复用记录](../research/2026-10-03-memory-recovery-reuse.md)及[用户体验](../CHAT_FUNCTIONAL_EXPERIENCE.md)。
 
 恢复后的历史回复在提示层归到原问题，并有界补入其真实源问题，继续按完整回合裁剪，防止只留下回复。当前群聊尝试仍按当前尝试聚合；实际存档、消息ID、原句及时间不改，普通历史/原文读取保持真实attempt ID。
+
+
+## 本地持久召回（2026-10-03，桌面0.1.20）
+
+沿用现有FTS/FastEmbed/NumPy和角色权限边界，集成DiskCache5.6.3作为可重建派生缓存。每通道读取最多8192条SQL授权后的源ID/版本，使用已缓存向量排序，再读回命中正文及64条待编码历史页；最近与关键词候选仍独立保留。新候选每通道最多128条编码，只有显式聊天/搜索触发，外发上限、Kernel真值、主库及Alembic结构不变。
+
+缓存键包括模型/编码规则、world/player/character、源ID和记忆版本；缓存不承载权限，失效或遗忘来源不得参与排名。向量和摘要存于app-data/data/cache/chat-recall-v2，目标256MiB，按写入顺序淘汰，不复制正文、不使用pickle；内存LRU4096条，查询向量只在内存中复用。磁盘失败回退内存且说明，模型失败回退关键词。大规模耗时与语义质量待验收。详见[复用调查](../research/2026-10-03-persistent-recall-reuse.md)及[体验说明](../CONTEXT_AND_RECALL.md)。

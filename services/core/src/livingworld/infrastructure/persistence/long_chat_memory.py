@@ -18,6 +18,7 @@ from livingworld.infrastructure.persistence.models import ChatConversationRecord
 from livingworld.infrastructure.persistence.models import ChatMessageRecord as Message
 from livingworld.infrastructure.persistence.models import ChatParticipantRecord as Participant
 from livingworld.infrastructure.persistence.models import LocalPlayerBindingRecord as Binding
+from livingworld.infrastructure.semantic_chat_retrieval import MAX_INDEX_REFERENCES, reference_key
 
 
 def _scope(world, player, character):
@@ -220,6 +221,8 @@ class RecallCandidate:
     text: str
     row: object
     scope_key: str = ""
+    index_key: bytes = b""
+    index_priority: bool = False
 
 
 class SqlAlchemyLongChatMemoryStore:
@@ -249,6 +252,53 @@ class SqlAlchemyLongChatMemoryStore:
             terms.extend(await self.ranker.query_terms(query[:2000]))
         return tuple(dict.fromkeys(terms))
 
+    async def _history_pool(self, session, authorized, model, scope, queries):
+        method = getattr(self.ranker, "historical", None)
+        if method is None:
+            return [], [], False
+        is_memory = model is Memory
+        identity = Memory.entry_id if is_memory else Message.message_id
+        stamp = Memory.created_at if is_memory else Message.created_at_utc
+        columns = (
+            (identity, Memory.fingerprint, Memory.revision)
+            if is_memory
+            else (identity, Message.created_at_utc)
+        )
+        # Only metadata is read here. Bodies are fetched for hits and one small
+        # backfill page; authorization precedes every cached-vector lookup.
+        metadata = (
+            await session.execute(
+                authorized.with_only_columns(*columns)
+                .order_by(None)
+                .order_by(stamp.desc(), identity)
+                .limit(MAX_INDEX_REFERENCES)
+            )
+        ).all()
+        references = [
+            (
+                row[0],
+                reference_key(
+                    scope,
+                    "memory" if is_memory else "message",
+                    row[0],
+                    f"{row[1]}:{row[2]}" if is_memory else row[1].isoformat(),
+                ),
+            )
+            for row in reversed(metadata)
+        ]
+        hits, page, partial = await method(queries, references, limit=24)
+        keys = {identity: key for identity, key in references}
+        selected = [*page, *hits]
+        if not selected:
+            return [], [], partial
+        rows = (await session.scalars(authorized.where(identity.in_(selected)).limit(88))).all()
+        values = {row.entry_id if is_memory else row.message_id: row for row in rows}
+        return (
+            [(values[item], keys[item]) for item in page if item in values],
+            [(values[item], keys[item]) for item in hits if item in values],
+            partial,
+        )
+
     async def _matching(self, session, world, player, character, query, cutoff=None, modes=None):
         queries = (query,) if isinstance(query, str) else query
         terms = await self._terms(queries)
@@ -277,30 +327,48 @@ class SqlAlchemyLongChatMemoryStore:
                 .limit(500)
             )
         ).all()
+        scope = f"{world}:{player}:{character}"
+        authorized = select(Memory).where(
+            *_scope(world, player, character),
+            Memory.state == "active",
+            *([Memory.created_at <= cutoff] if cutoff is not None else []),
+        )
         independent = (
             await session.scalars(
-                select(Memory)
-                .where(
-                    *_scope(world, player, character),
-                    Memory.state == "active",
-                    *([Memory.created_at <= cutoff] if cutoff is not None else []),
-                )
-                .order_by(Memory.created_at.desc(), Memory.entry_id)
-                .limit(256)
+                authorized.order_by(Memory.created_at.desc(), Memory.entry_id).limit(256)
             )
         ).all()
+        page, historical, partial = await self._history_pool(
+            session, authorized, Memory, scope, queries
+        )
+        priority = {row.entry_id for row, _key in page}
         candidates, seen = [], set()
-        for pool in (independent, rows):
+        for pool in (
+            independent,
+            rows,
+            [row for row, _key in page],
+            [row for row, _key in historical],
+        ):
             size = 0
             for row in pool:
                 text = row.topic + " " + row.content + " " + row.quote
                 amount = len(text.encode("utf-8"))
                 if row.entry_id in seen or size + amount > 256 * 1024:
                     continue
-                candidates.append(RecallCandidate(text, row, f"{world}:{player}:{character}"))
+                candidates.append(
+                    RecallCandidate(
+                        text,
+                        row,
+                        scope,
+                        reference_key(
+                            scope, "memory", row.entry_id, f"{row.fingerprint}:{row.revision}"
+                        ),
+                        row.entry_id in priority,
+                    )
+                )
                 size += amount
                 seen.add(row.entry_id)
-        ranked = await self._rank(queries, candidates, 12, modes)
+        ranked = await self._rank(queries, candidates, 12, modes, partial)
         return [item.row for item in ranked]
 
     async def _older_quotes(
@@ -366,9 +434,19 @@ class SqlAlchemyLongChatMemoryStore:
             else []
         )
         independent = (await session.scalars(authorized.limit(256))).all()
-        # Give both channels space; a large keyword corpus cannot evict all semantic candidates.
+        scope = f"{conversation.world_id.value}:{player.value}:{character.value}"
+        page, historical, partial = await self._history_pool(
+            session, authorized, Message, scope, queries
+        )
+        priority = {row.message_id for row, _key in page}
+        # Each channel gets a body allowance; metadata never enters model input.
         candidates, seen = [], set()
-        for rows in (independent, lexical):
+        for rows in (
+            independent,
+            lexical,
+            [row for row, _key in page],
+            [row for row, _key in historical],
+        ):
             used = 0
             for row in rows:
                 size = len(row.text.encode("utf-8"))
@@ -380,10 +458,14 @@ class SqlAlchemyLongChatMemoryStore:
                     RecallCandidate(
                         row.text,
                         row,
-                        f"{conversation.world_id.value}:{player.value}:{character.value}",
+                        scope,
+                        reference_key(
+                            scope, "message", row.message_id, row.created_at_utc.isoformat()
+                        ),
+                        row.message_id in priority,
                     )
                 )
-        ranked = await self._rank(queries, candidates, 4, modes)
+        ranked = await self._rank(queries, candidates, 4, modes, partial)
         result, used = [], 2
         for item in ranked:
             row = item.row
@@ -402,11 +484,13 @@ class SqlAlchemyLongChatMemoryStore:
             result.append(value)
         return result
 
-    async def _rank(self, queries, candidates, limit, modes):
+    async def _rank(self, queries, candidates, limit, modes, history_partial=False):
         method = getattr(self.ranker, "rank_with_mode", None)
         if method is None:
             return await self.ranker.rank_queries(queries, tuple(candidates), limit=limit)
         result, mode = await method(queries, tuple(candidates), limit=limit)
+        if mode == "hybrid" and history_partial:
+            mode = "hybrid_partial"
         if modes is not None:
             modes.append(mode)
         return result
@@ -512,7 +596,9 @@ class SqlAlchemyLongChatMemoryStore:
                 session, conversation, player, character, current, queries, modes
             )
             return {
-                "_retrieval_mode": "hybrid_partial"
+                "_retrieval_mode": "hybrid_memory_only"
+                if "hybrid_memory_only" in modes
+                else "hybrid_partial"
                 if "hybrid_partial" in modes
                 else "hybrid"
                 if "hybrid" in modes

@@ -2,6 +2,16 @@
 
 更新日期：2026-10-03。此文件记录当前开发现场与接续工作，不替代 [AGENTS.md](AGENTS.md)。先读 AGENTS，再读本文，最后核对实际 Git 状态和相关代码；不能把下面的基线哈希当作永远不变的当前 HEAD。
 
+## 最新接续：2026-10-03 长历史渐进索引与持久缓存（桌面0.1.20）
+
+- 从干净d983565/codex/world-archive接续。用户在“完善长历史检索和重启后的缓存”建议后明确继续推进。先核对[成熟方案](docs/research/2026-10-03-persistent-recall-reuse.md)，直接集成DiskCache5.6.3/Apache-2.0；保留FTS/FastEmbed/NumPy/RRF，未加入向量服务、原生SQLite扩展或额外付费模型。
+- 修复0.1.19字段顺序保留，本轮不加主库表/字段/迁移。每次SQL先限定世界/绑定玩家/参与角色/有效状态/时间与正文范围，再读取各通道至多8192条近期ID/版本元数据；缓存排名只用当前获准引用。命中最多24条正文、未编码历史页64条；最近256与关键词500/200仍独立保留。每通道仍最多128个新编码，历史优先64，其余填当前候选；仅显式聊天/记忆搜索触发，没有后台导出或模型费用变化。
+- DiskCache派生目录data/cache/chat-recall-v2，目标256MiB、least-recently-stored淘汰；按上游源码避免读8192条时逐读写事务。内存LRU4096，问题向量只在内存128条缓存复用。键含固定模型SHA、编码规则、world/player/character、源ID和记忆版本，值为32字节摘要+512维float32；不存第二份原文，禁用pickle和缓存指定文件读取、拒绝符号链接路径。缓存异常回退内存并在参考面板说明，模型失败回退关键词，启动时不打开缓存。
+- 当前语义覆盖有限8192/通道，尚未编码的旧同义内容可能无法当次召回；重要资料可置顶/摘要。模型512 Token截断、0.8阈值与冷启动CPU耗时仍待体验，不宣称全历史无界检索。遗忘/更正由SQL状态与版本先过滤，派生字节按淘汰回收，不宣称立即安全擦除；提示仍16条记忆/8KiB与4原句/8KiB。
+- Ruff四份Python lint/format、ESLint/TypeScript和工程diff检查通过。完整PyInstaller、Vite237模块（639.01kB/gzip192.03、183ms）、Rust release29.52s完成，PE FileVersion/ProductVersion静态读取均为0.1.20。保留主chunk>500kB、STATIC_VCRUNTIME弃用和可选依赖提示；uv跨盘hardlink回退copy的提示也保留。依赖同步后已恢复此前浏览器测试依赖，没有删除/改动测试或CI。
+- 独立完整包artifacts/portable/persistent-recall/dreamtalk与dreamtalk.zip，旧0.1.19不覆盖；222份源码AST/冻结字节和1035份包/ZIP、当前文档/许可/模型核对通过，DiskCache5.6.3元数据与wheel原始LICENSE匹配。日志artifacts/persistent-recall-build.log，清单artifacts/persistent-recall-audit.json。Desktop SHA256=faa8a88b74dabfd6ae12804cbb8fe46cda1ae242d2a3df8d98791b19c27c9173；Core=c985d96d7f20c847fe3718df41d71c89c361108d4bb77248ebd58e98d9b83749；ZIP=eeaac9f14513d24f8f59171cb1726abb649ca7a51745730317dfaad576c1eaa0。
+- 按AGENTS第20节未运行测试套件、应用/GUI、模型推理、付费API或用户存档/凭据/自启动诊断；上一轮单次临时升级授权不复用。实际重启复用、长历史响应耗时、更正/遗忘后的效果与语义质量仍待用户体验。不push/发布。下一步根据体验校准后继续活动/离线/事件池的可操作状态反馈；需要更大历史时再扩展分页/索引，不把本轮有限窗口当成全历史覆盖。
+
 ## 最新接续：2026-10-03 修复上下文升级后的核心连接失败（桌面0.1.19）
 
 - 用户反馈核心持续连接失败。只读现有Core安全日志（时间、级别、组件和固定错误码），2026-10-03 15:05的三次启动和15:29启动均记录migration/alembic_schema_shape_mismatch；14:14的旧进程有core_ready，说明本轮失败发生在数据库结构检查阶段，尚未联系模型服务。

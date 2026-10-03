@@ -33,6 +33,7 @@ analysis = Analysis(
     + copy_metadata("primp")
     + copy_metadata("lxml")
     + copy_metadata("fastembed", recursive=True)
+    + copy_metadata("diskcache")
     + copy_metadata("onnxruntime")
     + copy_metadata("tokenizers")
     + collect_data_files("fastembed", include_py_files=True)
