@@ -11,3 +11,7 @@
 *.png binary
 *.ico binary
 tests/core/fixtures/llm/*.sse -text whitespace=-blank-at-eof,cr-at-eol
+
+# Preserve redistributed upstream license bytes and checksum inventory.
+docs/licenses/semantic-runtime/** -text
+docs/licenses/bge-model-LICENSE.txt -text
