@@ -2,7 +2,19 @@
 
 更新日期：2026-10-03。此文件记录当前开发现场与接续工作，不替代 [AGENTS.md](AGENTS.md)。先读 AGENTS，再读本文，最后核对实际 Git 状态和相关代码；不能把下面的基线哈希当作永远不变的当前 HEAD。
 
-## 最新接续：2026-10-03 状态提示与世界书公开范围修复（桌面0.1.16）
+## 最新接续：2026-10-03 记忆可靠性与显式回复恢复（桌面0.1.17）
+
+- 从干净8303d32a26d585524d20ffaa0751da8cf312ab75 / codex/world-archive接续，正式D:\LivingWorld。用户要求先查成熟实现、推进功能体验，并明确批准已领取失败回复采用“独立新尝试，点击时明确费用”。[批准方案](docs/proposals/2026-10-03-reply-recovery.md)与AGENTS第25节记录对第23节同消息额度的有限例外；没有推断后台自动重试授权。此前第23节一条消息共享同额度与新决定存在冲突，按用户本次明确决定，仅手动新attempt采用独立额度，内部重试/回退/选人/多角色仍共享该attempt额度。
+- [复用调查](docs/research/2026-10-03-memory-recovery-reuse.md)核对SillyTavern1.19.0 AGPL、Mem0 main Apache、FastEmbed0.8.1 Apache、RRF原论文/官方公式及Temporal生命周期。直接复用已安装jieba0.42.1、SQLite FTS5/BM25、SQLAlchemy/Alembic和现有模型/预算/stream；无新依赖、embedding模型下载、记忆服务或额外提取/裁判API。未复制AGPL或上游源码。
+- 记忆按身份/偏好/约定及当前玩家/该角色分桶，有界置顶/核心/相关分配保持16条/8KiB；当前问题加同会话前两句在一个私有内存FTS索引内分别查询，按项目权重2/1/1、k60融合。SQL先权限及正文/候选限制；历史原句仍最多4条/8KiB。不是同义语义检索，不保证所有偏好永远进入提示，重要条目可置顶。去掉按相同topic隐式覆盖，只有明确replaces且原句/权限验证才更新，群聊成员副本按获准来源指纹对应，不能查别人的私聊；既有superseded历史不自动回填。记忆面板切角色清理旧读取/错误/搜索状态。
+- 0031新增chat_reply_executions与chat_reply_recoveries，保留旧turn、claims和模型用量。pending可手动使用原额度；新版已记录本地校验失败或可靠中断且最后一条消息没有角色回复，才可确认当前额度创建独立retry Turn，source_turn_id关联唯一原玩家消息，不复制原文。创建当前玩家绑定/最新attempt CAS、X-Request-Id回执与领取/完成保护；旧attempt不可在新attempt后派发。running/unknown与部分群聊不重放；legacy已claim无执行状态按unknown。启动在接受HTTP前将新版遗留running标为interrupted，不自动恢复调用，unknown保持，原未知费用预留不清空。
+- HTTP认证的GET/POST reply-recovery状态/准备接口、共享前端按钮、费用确认、读回和重复点击保护已接入原生成链。准备丢响应只沿用同请求ID，回执再读最新状态才显式生成；读取不触发API。异常状态用固定标签，不记录正文/凭据。恢复保留输入草稿，现有私聊/群聊/@/事件与记忆落库继续复用。历史恢复回复在提示层与真实源问题成对裁剪，当前群聊按当前attempt聚合；实际消息ID/时间/turn来源不重写。
+- ESLint/TypeScript、15份修改/新增Python的Ruff lint/format及diff检查通过。首包后发现历史裁剪配对边界，补齐后重新完整编译：最终Core/PyInstaller约24.9s、Vite236模块/138ms（JS635.06kB、gzip190.84）与Rust release21.54s，桌面PE FileVersion/ProductVersion=0.1.17。217份Python AST/冻结源码哈希、473份Core文件、26份许可证、16份指南及516份ZIP文件逐字节核对；685个本地Markdown目标无缺失。三份未变历史指南沿用已核对0.1.16包，其余按当前docs更新，来源记录清单。
+- **交付仅使用最终目录** artifacts/portable/chat-functional-ready/dreamtalk；首轮chat-functional是中间构建，保留不作为交付。Desktop 13224960 bytes / D0107FB4017AB373CC44ABF574DC1F098F9463E3F089402C5752634057698A6A；Core 14634952 / 3B67F76929D26B970DB0EF9B90479D59F94C3525F742DE791FA729D230038D3C；ZIP 50773739 / 7415F17245874DE0688DD471D8B5E317F55DE59F4ADF4D031AEE42628C6AA08A。日志artifacts/chat-functional-final-build.log，清单artifacts/chat-functional-package.json，source_commit交付前绑定本轮实际本地提交。仍有Vite主chunk>500kB、STATIC_VCRUNTIME弃用及PyInstaller可选tzdata/pysqlite2/MySQLdb警告，未隐藏或运行验证其影响。源Core/API协议兼容标识不变。
+- **未验收：** 没有新增/修改/运行测试，没有启动应用/GUI/浏览器、真实模型调用、用户DB/配置/凭据/自启动读取或写入、迁移执行；编译/静态核对不证明功能已通过。新增迁移与自然语言效果由用户验收；现有相关自动化断言后续适配需另获授权，不删除或弱化。只本地提交，不push/发布。现有已授权Director/离线/事件池在用户启动新版后仍按原开关运行，回复恢复本身不自动付费。
+- **接下来：** 用户退出旧托盘，直接运行完整0.1.17，无需再解压；自启动在新版显式保存更新路径，已升级0031不要旧版重开存档。按[功能体验说明](docs/CHAT_FUNCTIONAL_EXPERIENCE.md)核对正常聊天、旧偏好/补充/纠正及失败手动恢复/草稿/不确定状态/切世界。验收后继续公共背景可用数量/触发说明、事件池与活动任务的具体原因和可操作入口；语义向量/Reflection/相遇关系仍未完成，不能宣称完整项目完工。暂无新的必需用户决策。
+
+## 前序切片：2026-10-03 状态提示与世界书公开范围修复（桌面0.1.16）
 
 - 从干净1108998adc6c3d087cf9a8bd388b39580c9ed1ee / codex/world-archive接续，正式D:\LivingWorld。用户截图反馈已放置角色仍被提示缺角色、离线offline_reason_used刷新仍红色、范围保存跳顶且再更新世界书后隐藏；用户进一步确认范围公开后又执行了预览/确认内容更新。未读取用户存档或聊天/密钥，前两项由现有状态语义和源码定位，第三项旧更新清空范围路径已确认。
 - **前序行为冲突已修复：** 原所有新版本默认隐藏导致未改条目授权也丢失。原生编辑在既有dreamtalk.edit扩展记录服务器验证的旧/新条目对应，保存同一事务仅读当前旧授权，逐条完整内容/条件/兼容字段及书级条件完全未变才保留；新增、修改、无法明确对应及文件替换仍隐藏，不按标题/相似文本匹配，不从历史回填。commit响应读回真实公共范围。无新schema/表/迁移，沿用0030；不改变WorldTruth/知识/预算/模型调用规则。

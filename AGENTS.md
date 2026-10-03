@@ -811,3 +811,18 @@ This section and sections 14–22 replace the former blanket instruction to halt
 The user explicitly approved the recommended [Director proposal](docs/proposals/2026-09-29-director-runtime.md): per-world default off, first enable consents to background model usage, then compliant runtime batches are accepted automatically. Each window is six hours of WorldTime; replan at window end or when at least two candidates and at least half the original batch are invalid. Failed/interrupted/empty plans require an explicit new request, never an automatic provider replay.
 
 This resolves the runtime WorldPlan part of P-16 separately from authored cards/books and reviewed conversation summaries. DIRECTOR may propose only existing placed Characters' typed routine activities/movement, through Kernel consent, candidate, revision, location and occupancy checks; it never moves Player or writes final dialogue, private knowledge or relationships. Closing prevents new work/late result activation; already admitted provider work may charge. PAUSED does not execute candidates or admit a new plan. Outreach purpose/episode policy remains a later concrete decision. This supersedes the older C-006B Director prohibition only for this approved routine action.
+
+
+# 25. Approved manual reply recovery (2026-10-03)
+
+The user explicitly approved an independent paid generation attempt after a failed
+reply. It is limited to the latest player message with no persisted Character reply.
+The player explicitly confirms the current token ceiling and model usage; each new
+attempt has its own one-time claim and shares that attempt's ceiling across selection,
+retries/fallbacks and all speakers. The original message is not duplicated; original
+turns, usage and claims remain durable and are never reset. Running or unknown results
+cannot be replayed. A pending attempt may be manually dispatched using its saved ceiling.
+Only a recorded terminal validation failure or a known interrupted local execution may
+permit a new attempt; old untracked claimed turns remain unknown. No startup, refresh or
+background process automatically invokes the provider for reply recovery. This narrowly supersedes the
+single-ceiling-per-original-message clause in section 23 for this explicit new attempt.

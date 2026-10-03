@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from livingworld.application.character_activity_context import (
     ACTIVITY_GROUNDING_INSTRUCTIONS,
@@ -105,7 +105,9 @@ class GroupChatContextBuilder:
         conversation_id = sent.conversation_id
         turn_id = source.turn_id
         player_id = sent.sender_id
-        if not isinstance(player_id, PlayerId) or sent.turn_id != turn_id:
+        if not isinstance(player_id, PlayerId) or sent.turn_id != (
+            source.source_turn_id or turn_id
+        ):
             raise EntityNotFoundError("chat_message_invalid")
         current = await self._conversations.current_group_characters(conversation_id)
         participant_ids = {participant.character_id for participant, _ in current}
@@ -123,11 +125,25 @@ class GroupChatContextBuilder:
         if group is None or group.player_id != player_id:
             raise EntityNotFoundError("conversation_not_found")
         transcript = await self._messages.context_messages(
-            conversation_id, sent, allow_current_replies=True
+            conversation_id,
+            sent,
+            allow_current_replies=True,
+            reply_turn_id=turn_id if source.source_turn_id else None,
         )
         if sent not in transcript:
             raise EntityNotFoundError("chat_message_not_found")
-        visible = recent_chat_transcript(transcript, sent, allow_current_replies=True)
+        # For a retry, the original question and this attempt form one prompt turn.
+        prompt_transcript = (
+            tuple(
+                replace(item, turn_id=turn_id) if item.message_id == sent.message_id else item
+                for item in transcript
+            )
+            if source.source_turn_id
+            else transcript
+        )
+        visible = recent_chat_transcript(
+            prompt_transcript, replace(sent, turn_id=turn_id), allow_current_replies=True
+        )
         allowed = {player_id, *participant_ids}
         if any(item.sender_id not in allowed for item in visible):
             raise EntityNotFoundError("chat_sender_invalid")

@@ -24,6 +24,7 @@ export function LongChatMemoryPanel({ client, worldId, conversationId, character
   }, []);
   useEffect(() => {
     const request = new AbortController(); lifetime.current = request; lock.current = true;
+    setBusy(true); setView(null); setError(""); setNotice(""); setQuery("");
     void client.longChatMemory(worldId, conversationId, characterId, "", undefined, request.signal)
       .then(result => { if (!request.signal.aborted) { setView(result); setError(""); setNotice(""); setQuery(""); } })
       .catch(failure => { if (!request.signal.aborted) setError(feedback(failure)); })
@@ -66,7 +67,7 @@ export function LongChatMemoryPanel({ client, worldId, conversationId, character
     </div>
     <p className="inline-hint">自动记录随正常回复完成，不额外调用提取 API；提示和记忆会增加有限 Token 用量。当前自动提取优先支持官方 DeepSeek；旧聊天可按关键词召回相关原句，不需要先调用模型整理。停用或置顶不调用模型。</p>
     <form className="controls" onSubmit={event => { event.preventDefault(); void run(signal => client.longChatMemory(worldId, conversationId, characterId, query, undefined, signal)); }}>
-      <label>搜索记忆 <input value={query} maxLength={200} onChange={event => setQuery(event.target.value)} /></label><button type="submit" disabled={busy}>搜索</button>
+      <label>搜索记忆 <input value={query} disabled={busy} maxLength={200} onChange={event => setQuery(event.target.value)} /></label><button type="submit" disabled={busy}>搜索</button>
     </form>
     {busy && <p role="status">正在处理记忆…</p>}
     {view && view.items.length === 0 && <p>还没有符合条件的长期记忆。后续聊天中明确告诉角色重要信息后，可以回来核对。</p>}
@@ -78,6 +79,6 @@ export function LongChatMemoryPanel({ client, worldId, conversationId, character
       {entry.state !== "superseded" && <div className="controls"><button type="button" disabled={busy} onClick={() => mark(entry, entry.state === "active", !entry.pinned)}>{entry.pinned ? "取消置顶" : "置顶"}</button><button type="button" disabled={busy} onClick={() => mark(entry, entry.state !== "active", entry.pinned)}>{entry.state === "active" ? "停用此条" : "重新使用"}</button></div>}
     </article>)}
     {view?.next_cursor && <button type="button" disabled={busy} onClick={() => void run(signal => client.longChatMemory(worldId, conversationId, characterId, "", view.next_cursor ?? undefined, signal), true)}>加载更早记忆</button>}
-    <p className="inline-hint">记错或偏好改变时，可以在聊天中明确纠正，或先停用该条。私聊记忆只供对方使用，群聊中的公开原话供固定成员使用。</p>
+    <p className="inline-hint">同一主题的补充信息可以并存；明确纠正时才更新旧记录。特别重要的偏好可置顶，保证长期取用优先；记错时也可停用该条。私聊记忆只供对方使用，群聊中的公开原话供固定成员使用。</p>
   </dialog>;
 }

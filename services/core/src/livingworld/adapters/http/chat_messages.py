@@ -46,6 +46,12 @@ class PlayerMessageRequest(BaseModel):
     token_ceiling: int = Field(strict=True, ge=1, le=9223372036854775807)
 
 
+class ReplyRecoveryRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    expected_attempt_id: UUID
+    token_ceiling: int = Field(strict=True, ge=1, le=9223372036854775807)
+
+
 class ChatHistorySearchRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -480,5 +486,53 @@ def chat_message_router(
         if current.state == "claimed":
             raise HTTPException(409, "chat_turn_already_claimed")
         return _stream_response(current, group_reply_service)
+
+    @router.get("/{conversation_id}/reply-recovery/{source_turn_id}")
+    async def get_reply_recovery(world_id: UUID, conversation_id: UUID, source_turn_id: UUID):
+        try:
+            return await service.reply_recovery(
+                ConversationId(WorldId(world_id), conversation_id),
+                ChatTurnId(WorldId(world_id), source_turn_id),
+            )
+        except EntityNotFoundError:
+            raise HTTPException(404, "chat_turn_not_found") from None
+
+    @router.post("/{conversation_id}/reply-recovery/{source_turn_id}", status_code=201)
+    async def create_reply_recovery(
+        world_id: UUID,
+        conversation_id: UUID,
+        source_turn_id: UUID,
+        body: ReplyRecoveryRequest,
+        x_request_id: Annotated[UUID, Header(alias="X-Request-Id")],
+    ):
+        try:
+            return await service.create_reply_recovery(
+                RequestId(x_request_id),
+                ConversationId(WorldId(world_id), conversation_id),
+                ChatTurnId(WorldId(world_id), source_turn_id),
+                body.expected_attempt_id,
+                body.token_ceiling,
+            )
+        except EntityNotFoundError:
+            raise HTTPException(404, "chat_turn_not_found") from None
+        except IdempotencyConflictError:
+            raise HTTPException(409, "chat_request_conflict") from None
+        except ChatTurnUnavailableError as error:
+            # Only labels produced by the recovery store are permitted.
+            code = str(error)
+            raise HTTPException(
+                409,
+                code
+                if code
+                in {
+                    "chat_recovery_changed",
+                    "chat_recovery_not_latest",
+                    "chat_recovery_has_replies",
+                    "chat_recovery_unknown",
+                    "chat_recovery_running",
+                    "chat_recovery_unavailable",
+                }
+                else "chat_recovery_unavailable",
+            ) from None
 
     return router

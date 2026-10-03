@@ -173,6 +173,7 @@ async def run(
         chat_messages = ChatMessageService(
             database.chat_message_store(time_source), player_event_feed
         )
+        await chat_messages.recover_reply_executions()
         earlier_chat_recall = EarlierChatRecall(chat_messages, Fts5ChatRecallRanker())
         developer_inspector = None
         if developer_tools:

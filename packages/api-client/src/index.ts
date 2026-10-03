@@ -212,6 +212,16 @@ export interface GroupTurnView {
   replies: ChatMessage[];
 }
 
+export interface ReplyRecoveryView {
+  source_turn_id: string;
+  attempt_turn_id: string;
+  state: "pending" | "running" | "completed" | "failed" | "unknown" | "interrupted" | "has_replies";
+  token_ceiling: number;
+  can_generate: boolean;
+  can_create: boolean;
+  reason: string | null;
+}
+
 export interface ChatReplyAvailability {
   available: boolean;
   input_token_reservation?: number | null;
@@ -461,6 +471,15 @@ export class CoreClient {
   }
   directReplyAvailability(worldId: string): Promise<ChatReplyAvailability> {
     return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/reply-availability`);
+  }
+  replyRecovery(worldId: string, conversationId: string, sourceTurnId: string, signal?: AbortSignal): Promise<ReplyRecoveryView> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/${encodeURIComponent(conversationId)}/reply-recovery/${encodeURIComponent(sourceTurnId)}`, { signal });
+  }
+  createReplyRecovery(worldId: string, conversationId: string, sourceTurnId: string, expectedAttemptId: string, ceiling: number, requestId: string, signal?: AbortSignal): Promise<{ turn_id: string; token_ceiling: number }> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/${encodeURIComponent(conversationId)}/reply-recovery/${encodeURIComponent(sourceTurnId)}`, {
+      method: "POST", headers: { "Content-Type": "application/json", "X-Request-Id": requestId },
+      body: JSON.stringify({ expected_attempt_id: expectedAttemptId, token_ceiling: ceiling }), signal,
+    });
   }
   directTurn(worldId: string, conversationId: string, turnId: string): Promise<DirectTurnView> {
     return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/${encodeURIComponent(conversationId)}/turns/${encodeURIComponent(turnId)}`);

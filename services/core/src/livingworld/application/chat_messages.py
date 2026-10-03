@@ -46,6 +46,7 @@ class PlayerSend:
     message: ChatMessage
     token_ceiling: int
     status: str
+    source_turn_id: ChatTurnId | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,6 +75,7 @@ class ClaimedDirectTurn:
     character_id: CharacterId
     player_message: ChatMessage = field(repr=False)
     token_ceiling: int
+    source_turn_id: ChatTurnId | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,6 +88,7 @@ class ClaimedGroupTurn:
     character_ids: tuple[CharacterId, ...]
     player_message: ChatMessage = field(repr=False)
     token_ceiling: int
+    source_turn_id: ChatTurnId | None = None
 
 
 class ChatMessageStore(Protocol):
@@ -127,6 +130,7 @@ class ChatMessageStore(Protocol):
         player_id: PlayerId,
         current: ChatMessage,
         allow_current_replies: bool,
+        reply_turn_id: ChatTurnId | None = None,
     ) -> tuple[ChatMessage, ...]: ...
 
     async def seen_group_messages(
@@ -169,6 +173,16 @@ class ChatMessageStore(Protocol):
     ) -> ChatMessage: ...
 
     async def finish_group(self, claim: ClaimedGroupTurn) -> GroupTurnView: ...
+
+    async def reply_recovery(self, conversation, source, player) -> dict: ...
+
+    async def create_reply_recovery(
+        self, request, conversation, source, player, expected, ceiling
+    ) -> dict: ...
+
+    async def fail_reply_execution(self, sent, known_failure: bool) -> None: ...
+
+    async def recover_reply_executions(self) -> None: ...
 
 
 class ChatMessageService:
@@ -255,7 +269,12 @@ class ChatMessageService:
         )
 
     async def context_messages(
-        self, conversation_id: ConversationId, current: ChatMessage, *, allow_current_replies: bool
+        self,
+        conversation_id: ConversationId,
+        current: ChatMessage,
+        *,
+        allow_current_replies: bool,
+        reply_turn_id: ChatTurnId | None = None,
     ) -> tuple[ChatMessage, ...]:
         if current.conversation_id != conversation_id:
             raise EntityNotFoundError("chat_world_mismatch")
@@ -264,6 +283,7 @@ class ChatMessageService:
             await self._player(conversation_id),
             current,
             allow_current_replies,
+            **({"reply_turn_id": reply_turn_id} if reply_turn_id is not None else {}),
         )
 
     async def seen_group_messages(
@@ -354,3 +374,28 @@ class ChatMessageService:
     def _validate_reply(text: str) -> None:
         if not isinstance(text, str) or not text.strip() or len(text.encode("utf-8")) > 65536:
             raise ValueError("chat_reply_invalid")
+
+    async def reply_recovery(self, conversation_id, source_turn_id):
+        return await self._store.reply_recovery(
+            conversation_id, source_turn_id, await self._player(conversation_id)
+        )
+
+    async def create_reply_recovery(
+        self, request_id, conversation_id, source_turn_id, expected, ceiling
+    ):
+        if type(ceiling) is not int or not 1 <= ceiling <= 9223372036854775807:
+            raise ValueError("chat_token_ceiling_invalid")
+        return await self._store.create_reply_recovery(
+            request_id,
+            conversation_id,
+            source_turn_id,
+            await self._player(conversation_id),
+            expected,
+            ceiling,
+        )
+
+    async def fail_reply_execution(self, sent, known_failure):
+        await self._store.fail_reply_execution(sent, known_failure)
+
+    async def recover_reply_executions(self):
+        await self._store.recover_reply_executions()

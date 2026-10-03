@@ -1186,3 +1186,44 @@ class ChatMessageRecord(Base):
             name="ck_chat_message_sender",
         ),
     )
+
+
+class ChatReplyExecutionRecord(Base):
+    """Local generation lifecycle; uncertainty never authorizes an automatic replay."""
+
+    __tablename__ = "chat_reply_executions"
+    world_id: Mapped[UUID] = mapped_column(UUIDStorage(), primary_key=True)
+    turn_id: Mapped[UUID] = mapped_column(UUIDStorage(), primary_key=True)
+    state: Mapped[str] = mapped_column(String(16), nullable=False)
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["world_id", "turn_id"], ["chat_turns.world_id", "chat_turns.turn_id"]
+        ),
+        CheckConstraint(
+            "state IN ('running','completed','failed','unknown','interrupted')",
+            name="ck_chat_reply_execution_state",
+        ),
+    )
+
+
+class ChatReplyRecoveryRecord(Base):
+    """Independent explicit attempt, pointing to the one original player message."""
+
+    __tablename__ = "chat_reply_recoveries"
+    world_id: Mapped[UUID] = mapped_column(UUIDStorage(), primary_key=True)
+    turn_id: Mapped[UUID] = mapped_column(UUIDStorage(), primary_key=True)
+    source_turn_id: Mapped[UUID] = mapped_column(UUIDStorage(), nullable=False)
+    ordinal: Mapped[int] = mapped_column(Integer(), nullable=False)
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["world_id", "turn_id"], ["chat_turns.world_id", "chat_turns.turn_id"]
+        ),
+        ForeignKeyConstraint(
+            ["world_id", "source_turn_id"], ["chat_turns.world_id", "chat_turns.turn_id"]
+        ),
+        UniqueConstraint(
+            "world_id", "source_turn_id", "ordinal", name="uq_chat_reply_recovery_order"
+        ),
+        CheckConstraint("ordinal > 0", name="ck_chat_reply_recovery_order"),
+        CheckConstraint("turn_id != source_turn_id", name="ck_chat_reply_recovery_source"),
+    )

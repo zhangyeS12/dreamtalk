@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime
 from uuid import uuid4
 
@@ -31,12 +32,15 @@ from livingworld.domain.identifiers import (
     PlayerId,
     WorldId,
 )
+from livingworld.infrastructure.persistence.chat_reply_recovery import ChatReplyRecoveryMixin
 from livingworld.infrastructure.persistence.long_chat_memory import record_chat_memories
 from livingworld.infrastructure.persistence.mapping import to_domain
 from livingworld.infrastructure.persistence.models import (
     ChatConversationRecord,
     ChatMessageRecord,
     ChatParticipantRecord,
+    ChatReplyExecutionRecord,
+    ChatReplyRecoveryRecord,
     ChatTurnDispatchRecord,
     ChatTurnRecord,
     WorldClockRecord,
@@ -65,7 +69,7 @@ def _message(row: ChatMessageRecord) -> ChatMessage:
     )
 
 
-class SqlAlchemyChatMessageStore:
+class SqlAlchemyChatMessageStore(ChatReplyRecoveryMixin):
     def __init__(self, sessions, time_source=None) -> None:
         self._sessions, self._time_source = sessions, time_source
 
@@ -311,12 +315,13 @@ class SqlAlchemyChatMessageStore:
         player_id: PlayerId,
         current: ChatMessage,
         allow_current_replies: bool,
+        reply_turn_id: ChatTurnId | None = None,
     ) -> tuple[ChatMessage, ...]:
         if current.conversation_id != conversation_id:
             raise EntityNotFoundError("chat_world_mismatch")
         world_id = conversation_id.world_id.value
         conversation_value = conversation_id.value
-        current_turn = current.turn_id.value
+        current_turn = (reply_turn_id or current.turn_id).value
         async with self._sessions() as session:
             await self._conversation(session, conversation_id, player_id)
             # Descending positions reproduce the old "latest message in turn" order.
@@ -366,7 +371,44 @@ class SqlAlchemyChatMessageStore:
                     .order_by(ChatMessageRecord.position)
                 )
             ).all()
-            return tuple(_message(row) for row in rows)
+            # Recovery replies have their own durable attempt ID. For prompt
+            # history only, pair past replies with their one original question;
+            # otherwise complete-turn trimming could retain an orphan reply.
+            recoveries = (
+                await session.scalars(
+                    select(ChatReplyRecoveryRecord).where(
+                        ChatReplyRecoveryRecord.world_id == world_id,
+                        ChatReplyRecoveryRecord.turn_id.in_({row.turn_id for row in rows}),
+                        ChatReplyRecoveryRecord.turn_id != current_turn,
+                    )
+                )
+            ).all()
+            sources = {item.turn_id: item.source_turn_id for item in recoveries}
+            missing_sources = set(sources.values()) - {row.turn_id for row in rows}
+            if missing_sources:
+                questions = (
+                    await session.scalars(
+                        select(ChatMessageRecord).where(
+                            ChatMessageRecord.world_id == world_id,
+                            ChatMessageRecord.conversation_id == conversation_value,
+                            ChatMessageRecord.turn_id.in_(missing_sources),
+                            ChatMessageRecord.sender_player_id == player_id.value,
+                            ChatMessageRecord.position <= current.position,
+                        )
+                    )
+                ).all()
+                if {row.turn_id for row in questions} != missing_sources:
+                    raise EntityNotFoundError("chat_state_invalid")
+                rows.extend(questions)
+            return tuple(
+                replace(
+                    _message(row),
+                    turn_id=ChatTurnId(conversation_id.world_id, sources[row.turn_id]),
+                )
+                if row.turn_id in sources
+                else _message(row)
+                for row in sorted(rows, key=lambda item: item.position)
+            )
 
     async def direct_turn(
         self, conversation_id: ConversationId, turn_id: ChatTurnId, player_id: PlayerId
@@ -382,7 +424,7 @@ class SqlAlchemyChatMessageStore:
             )
             if (
                 turn is None
-                or turn.kind != "player"
+                or turn.kind not in {"player", "retry"}
                 or turn.conversation_id != conversation_id.value
             ):
                 raise EntityNotFoundError("chat_turn_not_found")
@@ -396,10 +438,22 @@ class SqlAlchemyChatMessageStore:
                 )
             ).all()
             player_rows = [row for row in rows if row.sender_player_id == player_id.value]
+            if turn.kind == "retry":
+                player_rows = [
+                    await self._source_message(session, conversation_id, turn, player_id)
+                ]
+                rows = [*player_rows, *rows]
             replies = [row for row in rows if row.sender_character_id is not None]
             if len(player_rows) != 1 or len(replies) > 1 or len(rows) != 1 + len(replies):
                 raise EntityNotFoundError("chat_state_invalid")
-            sent = PlayerSend(turn_id, _message(player_rows[0]), turn.token_ceiling, turn.status)
+            recovery = await session.get(ChatReplyRecoveryRecord, (turn.world_id, turn.turn_id))
+            sent = PlayerSend(
+                turn_id,
+                _message(player_rows[0]),
+                turn.token_ceiling,
+                turn.status,
+                ChatTurnId(conversation_id.world_id, recovery.source_turn_id) if recovery else None,
+            )
             dispatch = await session.get(
                 ChatTurnDispatchRecord, (conversation_id.world_id.value, turn_id.value)
             )
@@ -422,7 +476,7 @@ class SqlAlchemyChatMessageStore:
             )
             if (
                 turn is None
-                or turn.kind != "player"
+                or turn.kind not in {"player", "retry"}
                 or turn.conversation_id != conversation_id.value
             ):
                 raise EntityNotFoundError("chat_turn_not_found")
@@ -438,6 +492,11 @@ class SqlAlchemyChatMessageStore:
                 )
             ).all()
             player_rows = [row for row in rows if row.sender_player_id == player_id.value]
+            if turn.kind == "retry":
+                player_rows = [
+                    await self._source_message(session, conversation_id, turn, player_id)
+                ]
+                rows = [*player_rows, *rows]
             replies = [row for row in rows if row.sender_character_id is not None]
             if len(player_rows) != 1 or len(rows) != 1 + len(replies):
                 raise EntityNotFoundError("chat_state_invalid")
@@ -468,7 +527,14 @@ class SqlAlchemyChatMessageStore:
                 if dispatch is not None
                 else "pending"
             )
-            sent = PlayerSend(turn_id, _message(player_rows[0]), turn.token_ceiling, turn.status)
+            recovery = await session.get(ChatReplyRecoveryRecord, (turn.world_id, turn.turn_id))
+            sent = PlayerSend(
+                turn_id,
+                _message(player_rows[0]),
+                turn.token_ceiling,
+                turn.status,
+                ChatTurnId(conversation_id.world_id, recovery.source_turn_id) if recovery else None,
+            )
             return GroupTurnView(sent, state, tuple(_message(row) for row in replies))
 
     async def claim_direct(
@@ -486,7 +552,7 @@ class SqlAlchemyChatMessageStore:
             )
             if (
                 turn is None
-                or turn.kind != "player"
+                or turn.kind not in {"player", "retry"}
                 or turn.conversation_id != conversation_id.value
             ):
                 raise EntityNotFoundError("chat_turn_not_found")
@@ -509,13 +575,12 @@ class SqlAlchemyChatMessageStore:
             ).all()
             if len(participants) != 1:
                 raise ChatTurnUnavailableError("direct_participant_invalid")
-            player_message = await session.scalar(
-                select(ChatMessageRecord).where(
-                    ChatMessageRecord.world_id == conversation_id.world_id.value,
-                    ChatMessageRecord.turn_id == turn_id.value,
-                    ChatMessageRecord.sender_player_id == player_id.value,
-                )
+            await self._active_attempt(session, conversation_id, turn)
+            player_message = await self._source_message(session, conversation_id, turn, player_id)
+            execution = ChatReplyExecutionRecord(
+                world_id=turn.world_id, turn_id=turn.turn_id, state="running"
             )
+            session.add(execution)
             if player_message is None or player_message.conversation_id != conversation_id.value:
                 raise EntityNotFoundError("chat_state_invalid")
             session.add(
@@ -533,6 +598,9 @@ class SqlAlchemyChatMessageStore:
                 CharacterId(conversation_id.world_id, participants[0].character_id),
                 _message(player_message),
                 turn.token_ceiling,
+                ChatTurnId(conversation_id.world_id, player_message.turn_id)
+                if turn.kind == "retry"
+                else None,
             )
 
     async def complete_direct(
@@ -555,13 +623,13 @@ class SqlAlchemyChatMessageStore:
                 ChatParticipantRecord,
                 (world_id, claim.conversation_id.value, claim.character_id.value),
             )
-            player_message = await session.scalar(
-                select(ChatMessageRecord).where(
-                    ChatMessageRecord.world_id == world_id,
-                    ChatMessageRecord.turn_id == claim.turn_id.value,
-                    ChatMessageRecord.sender_player_id == claim.player_id.value,
-                )
+            player_message = (
+                await self._source_message(session, claim.conversation_id, turn, claim.player_id)
+                if turn is not None
+                else None
             )
+            if turn is not None:
+                await self._active_attempt(session, claim.conversation_id, turn, completing=True)
             if (
                 conversation.kind != "direct"
                 or turn is None
@@ -622,7 +690,11 @@ class SqlAlchemyChatMessageStore:
                 claim.player_id,
                 memories,
                 await self._story_time(session, world_id, memories),
+                source_player=player_message,
             )
+            execution = await session.get(ChatReplyExecutionRecord, (world_id, claim.turn_id.value))
+            if execution is not None:
+                execution.state = "completed"
             return _message(row)
 
     async def claim_group(
@@ -640,7 +712,7 @@ class SqlAlchemyChatMessageStore:
             )
             if (
                 turn is None
-                or turn.kind != "player"
+                or turn.kind not in {"player", "retry"}
                 or turn.conversation_id != conversation_id.value
             ):
                 raise EntityNotFoundError("chat_turn_not_found")
@@ -665,13 +737,12 @@ class SqlAlchemyChatMessageStore:
             ).all()
             if len(participants) < 2:
                 raise ChatTurnUnavailableError("group_participants_invalid")
-            player_message = await session.scalar(
-                select(ChatMessageRecord).where(
-                    ChatMessageRecord.world_id == conversation_id.world_id.value,
-                    ChatMessageRecord.turn_id == turn_id.value,
-                    ChatMessageRecord.sender_player_id == player_id.value,
-                )
+            await self._active_attempt(session, conversation_id, turn)
+            player_message = await self._source_message(session, conversation_id, turn, player_id)
+            execution = ChatReplyExecutionRecord(
+                world_id=turn.world_id, turn_id=turn.turn_id, state="running"
             )
+            session.add(execution)
             if player_message is None or player_message.conversation_id != conversation_id.value:
                 raise EntityNotFoundError("chat_state_invalid")
             session.add(
@@ -689,6 +760,9 @@ class SqlAlchemyChatMessageStore:
                 tuple(CharacterId(conversation_id.world_id, p.character_id) for p in participants),
                 _message(player_message),
                 turn.token_ceiling,
+                ChatTurnId(conversation_id.world_id, player_message.turn_id)
+                if turn.kind == "retry"
+                else None,
             )
 
     async def complete_group_reply(
@@ -724,13 +798,13 @@ class SqlAlchemyChatMessageStore:
                     .order_by(ChatParticipantRecord.character_id)
                 )
             ).all()
-            player_message = await session.scalar(
-                select(ChatMessageRecord).where(
-                    ChatMessageRecord.world_id == world_id,
-                    ChatMessageRecord.turn_id == claim.turn_id.value,
-                    ChatMessageRecord.sender_player_id == claim.player_id.value,
-                )
+            player_message = (
+                await self._source_message(session, claim.conversation_id, turn, claim.player_id)
+                if turn is not None
+                else None
             )
+            if turn is not None:
+                await self._active_attempt(session, claim.conversation_id, turn, completing=True)
             if (
                 conversation.kind != "group"
                 or turn is None
@@ -800,6 +874,7 @@ class SqlAlchemyChatMessageStore:
                 claim.player_id,
                 memories,
                 await self._story_time(session, world_id, memories),
+                source_player=player_message,
             )
             return _message(row)
 
@@ -815,13 +890,13 @@ class SqlAlchemyChatMessageStore:
             conversation = await self._conversation(session, claim.conversation_id, claim.player_id)
             turn = await session.get(ChatTurnRecord, (world_id, claim.turn_id.value))
             dispatch = await session.get(ChatTurnDispatchRecord, (world_id, claim.turn_id.value))
-            player_message = await session.scalar(
-                select(ChatMessageRecord).where(
-                    ChatMessageRecord.world_id == world_id,
-                    ChatMessageRecord.turn_id == claim.turn_id.value,
-                    ChatMessageRecord.sender_player_id == claim.player_id.value,
-                )
+            player_message = (
+                await self._source_message(session, claim.conversation_id, turn, claim.player_id)
+                if turn is not None
+                else None
             )
+            if turn is not None:
+                await self._active_attempt(session, claim.conversation_id, turn, completing=True)
             participants = tuple(
                 await session.scalars(
                     select(ChatParticipantRecord.character_id)
@@ -855,5 +930,10 @@ class SqlAlchemyChatMessageStore:
                 raise ChatTurnUnavailableError("chat_turn_claim_invalid")
             if dispatch.completed_at_utc is None:
                 dispatch.completed_at_utc = datetime.now(UTC)
+                execution = await session.get(
+                    ChatReplyExecutionRecord, (world_id, claim.turn_id.value)
+                )
+                if execution is not None:
+                    execution.state = "completed"
                 await session.flush()
         return await self.group_turn(claim.conversation_id, claim.turn_id, claim.player_id)

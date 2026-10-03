@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Awaitable, Callable
-from contextlib import aclosing
+from contextlib import aclosing, asynccontextmanager
 from dataclasses import dataclass, field, replace
 from typing import Protocol
 from uuid import uuid4
+
+from anyio import CancelScope
 
 from livingworld.application.chat_context import DirectChatContextBuilder
 from livingworld.application.chat_event_annotations import (
@@ -67,6 +69,24 @@ class ChatReplyGenerationError(RuntimeError):
 
 class ChatReplyIntegrityError(RuntimeError):
     """Local accounting or budget integrity prevented reliable continuation."""
+
+
+@asynccontextmanager
+async def claimed_reply_execution(messages, sent):
+    """Only the caller which actually acquired the claim may mark its failure."""
+    try:
+        yield
+    except BaseException as error:
+        # A transport/accounting/cancellation result remains unknown. A complete
+        # but locally rejected dialogue can authorize a user-created new attempt.
+        with CancelScope(shield=True):
+            try:
+                await messages.fail_reply_execution(
+                    sent, isinstance(error, ChatReplyValidationError)
+                )
+            except Exception:
+                pass  # Remains running, and cannot authorize a retry in this process.
+        raise
 
 
 class ChatGateway(Protocol):
@@ -332,21 +352,22 @@ class DirectChatReplyService:
         ):
             raise ChatReplyBudgetError("turn_token_limit_exceeded")
         claim = await self._messages.claim_direct(sent.message.conversation_id, sent.turn_id)
-        if claim.player_message != sent.message or claim.token_ceiling != sent.token_ceiling:
-            raise ChatReplyValidationError("chat_send_changed")
-        budget = ChatTurnTokenBudget(claim.token_ceiling)
-        if progress is not None:
-            await progress(ChatProgress("replying", claim.character_id))
-        text = await dialogue_text(
-            self._gateway, request, budget, self._selection, progress, claim.character_id
-        )
-        message = (
-            await self._messages.complete_direct(
-                claim, text.text, events=text.events, memories=text.memories
+        async with claimed_reply_execution(self._messages, sent):
+            if claim.player_message != sent.message or claim.token_ceiling != sent.token_ceiling:
+                raise ChatReplyValidationError("chat_send_changed")
+            budget = ChatTurnTokenBudget(claim.token_ceiling)
+            if progress is not None:
+                await progress(ChatProgress("replying", claim.character_id))
+            text = await dialogue_text(
+                self._gateway, request, budget, self._selection, progress, claim.character_id
             )
-            if isinstance(text, AnnotatedDialogue)
-            else await self._messages.complete_direct(claim, text)
-        )
-        if progress is not None:
-            await progress(ChatProgress("message", message=message))
-        return message
+            message = (
+                await self._messages.complete_direct(
+                    claim, text.text, events=text.events, memories=text.memories
+                )
+                if isinstance(text, AnnotatedDialogue)
+                else await self._messages.complete_direct(claim, text)
+            )
+            if progress is not None:
+                await progress(ChatProgress("message", message=message))
+            return message

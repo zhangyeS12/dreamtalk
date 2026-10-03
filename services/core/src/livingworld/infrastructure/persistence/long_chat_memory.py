@@ -95,11 +95,13 @@ def _view(row):
     }
 
 
-async def record_chat_memories(session, reply, player, candidates, world_time=None):
+async def record_chat_memories(
+    session, reply, player, candidates, world_time=None, *, source_player=None
+):
     """Called only inside the completed-reply transaction after the claim checks."""
     if not candidates:
         return
-    source_player = await session.scalar(
+    source_player = source_player or await session.scalar(
         select(Message).where(
             Message.world_id == reply.world_id,
             Message.turn_id == reply.turn_id,
@@ -117,6 +119,31 @@ async def record_chat_memories(session, reply, player, candidates, world_time=No
             )
         )
     ).all()
+    # The selected speaker's permitted ID identifies a source, not another
+    # member's private record. Resolve each owner's copy by source fingerprint.
+    replacements = {}
+    for item in candidates[:4]:
+        if not item.replaces:
+            continue
+        try:
+            old_id = UUID(item.replaces)
+        except ValueError:
+            continue
+        source = source_player if item.source == "player" else reply
+        sender = source.sender_player_id or source.sender_character_id
+        old = await session.scalar(
+            select(Memory).where(
+                *_scope(reply.world_id, player.value, reply.sender_character_id),
+                Memory.entry_id == old_id,
+                Memory.state == "active",
+                or_(
+                    Memory.source_sender_id == sender,
+                    and_(item.source == "player", Memory.kind == "promise"),
+                ),
+            )
+        )
+        if old is not None:
+            replacements[item.replaces] = old.fingerprint
     for owner in owners:
         settings = await session.get(Settings, (reply.world_id, player.value, owner))
         if settings is not None and not settings.enabled:
@@ -147,38 +174,19 @@ async def record_chat_memories(session, reply, player, candidates, world_time=No
                 continue
             old = None
             if item.replaces:
-                try:
-                    old_id = UUID(item.replaces)
-                except ValueError:
+                old_fingerprint = replacements.get(item.replaces)
+                if old_fingerprint is None:
                     continue
                 old = await session.scalar(
                     select(Memory).where(
                         *_scope(reply.world_id, player.value, owner),
-                        Memory.entry_id == old_id,
-                        or_(
-                            Memory.source_sender_id == sender,
-                            and_(item.source == "player", Memory.kind == "promise"),
-                        ),
+                        Memory.fingerprint == old_fingerprint,
                         Memory.state == "active",
                     )
                 )
-                # A group annotation may reference only the speaking owner's old ID.
-                # Other members can still retain the same newly public source.
                 if old is None and owner == reply.sender_character_id:
                     continue
-            if old is None and item.kind in {"identity", "preference", "promise"}:
-                old = await session.scalar(
-                    select(Memory)
-                    .where(
-                        *_scope(reply.world_id, player.value, owner),
-                        Memory.state == "active",
-                        Memory.source_sender_id == sender,
-                        Memory.kind == item.kind,
-                        Memory.topic == item.topic.strip(),
-                    )
-                    .order_by(Memory.created_at.desc())
-                    .limit(1)
-                )
+            # A shared topic alone does not prove a correction. Supplements coexist.
             if old is not None:
                 old.state, old.revision = "superseded", old.revision + 1
             session.add(
@@ -217,8 +225,32 @@ class SqlAlchemyLongChatMemoryStore:
     def __init__(self, sessions, ranker):
         self.sessions, self.ranker = sessions, ranker
 
+    async def _queries(self, session, conversation, player, current):
+        # Current membership is authorized before this same-conversation read.
+        previous = (
+            await session.scalars(
+                select(Message.text)
+                .where(
+                    Message.world_id == conversation.world_id.value,
+                    Message.conversation_id == conversation.value,
+                    Message.position < current.position,
+                    func.length(cast(Message.text, LargeBinary)) <= 8192,
+                )
+                .order_by(Message.position.desc())
+                .limit(2)
+            )
+        ).all()
+        return tuple(dict.fromkeys([current.text[:2000], *(text[:1000] for text in previous)]))
+
+    async def _terms(self, queries):
+        terms = []
+        for query in queries[:3]:
+            terms.extend(await self.ranker.query_terms(query[:2000]))
+        return tuple(dict.fromkeys(terms))
+
     async def _matching(self, session, world, player, character, query, cutoff=None):
-        terms = await self.ranker.query_terms(query[:2000])
+        queries = (query,) if isinstance(query, str) else query
+        terms = await self._terms(queries)
         if not terms:
             return []
         predicates = [
@@ -252,12 +284,12 @@ class SqlAlchemyLongChatMemoryStore:
             if size > 512 * 1024:
                 break
             candidates.append(RecallCandidate(text, row))
-        ranked = await self.ranker.rank(query, tuple(candidates), limit=12)
+        ranked = await self.ranker.rank_queries(queries, tuple(candidates), limit=12)
         return [item.row for item in ranked]
 
-    async def _older_quotes(self, session, conversation, player, character, current):
+    async def _older_quotes(self, session, conversation, player, character, current, queries):
         """Authorized by the user on 2026-10-02; no background history export."""
-        terms = await self.ranker.query_terms(current.text[:2000])
+        terms = await self._terms(queries)
         if not terms:
             return []
         recent = (
@@ -317,7 +349,7 @@ class SqlAlchemyLongChatMemoryStore:
                 continue
             used += size
             candidates.append(RecallCandidate(row.text, row))
-        ranked = await self.ranker.rank(current.text[:2000], tuple(candidates), limit=4)
+        ranked = await self.ranker.rank_queries(queries, tuple(candidates), limit=4)
         result, used = [], 2
         for item in ranked:
             row = item.row
@@ -355,24 +387,57 @@ class SqlAlchemyLongChatMemoryStore:
                     .limit(8)
                 )
             ).all()
-            core = (
+            # SQLite's window function caps each kind/speaker separately. Many
+            # recent promises cannot evict the player's older identity/preference.
+            core_slots = (
+                select(
+                    Memory.entry_id,
+                    func.row_number()
+                    .over(
+                        partition_by=(Memory.kind, Memory.source_sender_id),
+                        order_by=(Memory.created_at.desc(), Memory.entry_id),
+                    )
+                    .label("slot"),
+                )
+                .where(
+                    *scope,
+                    Memory.kind.in_(("identity", "preference", "promise")),
+                    Memory.source_sender_id.in_((player.value, character.value)),
+                )
+                .subquery()
+            )
+            core_rows = (
                 await session.scalars(
                     select(Memory)
-                    .where(*scope, Memory.kind.in_(("identity", "preference", "promise")))
-                    .order_by(Memory.created_at.desc(), Memory.entry_id)
-                    .limit(12)
+                    .join(core_slots, core_slots.c.entry_id == Memory.entry_id)
+                    .where(*scope, core_slots.c.slot <= 4)
+                    .order_by(core_slots.c.slot, Memory.kind, Memory.source_sender_id)
                 )
             ).all()
+            buckets = {
+                (kind, sender): [
+                    row for row in core_rows if row.kind == kind and row.source_sender_id == sender
+                ]
+                for kind in ("identity", "preference", "promise")
+                for sender in (player.value, character.value)
+            }
+            core = [
+                bucket[index]
+                for index in range(4)
+                for bucket in buckets.values()
+                if len(bucket) > index
+            ]
+            queries = await self._queries(session, conversation, player, current)
             related = await self._matching(
                 session,
                 conversation.world_id.value,
                 player.value,
                 character.value,
-                current.text,
+                queries,
                 current.created_at_utc,
             )
             result, seen, size = [], set(), 2
-            for row in [*pinned, *related[:6], *core, *related[6:]]:
+            for row in [*pinned[:2], *core[:6], *related[:4], *pinned[2:], *core[6:], *related[4:]]:
                 if row.entry_id in seen:
                     continue
                 # Keep prompt facts compact; full source IDs stay in management views.
@@ -399,7 +464,7 @@ class SqlAlchemyLongChatMemoryStore:
                 seen.add(row.entry_id)
                 result.append(value)
             older_quotes = await self._older_quotes(
-                session, conversation, player, character, current
+                session, conversation, player, character, current, queries
             )
             return {
                 "long_term_original_quotes": older_quotes,

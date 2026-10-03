@@ -490,3 +490,13 @@ See [reuse and limits](../research/2026-09-29-observed-events-reuse.md).
 ## 长期聊天记忆与活动生命周期（2026-10-02，桌面0.1.7）
 
 同次JSON在reply/events后附memories，本地最多4条且验证原句，无效元数据忽略、不额外付费修复。完成回复事务同时保存应用记忆，按参与者隔离；旧记忆明确更正形成superseded来源链。当前绑定玩家可查看自己的共同对话记忆，不开放私有EpisodicMemory。相关原句跨该角色固定参与过的会话有界召回；新store存在时替代提示中旧近三页召回，避免重复输入和停用旁路。selector不消费私人记忆。活动快照改为最多6KiB，加入终止阶段及6条本人近期经历；Witness仍不能说成Actor。时段结束不表示成果，既有completed/预算校验不充当自然语言语义裁判。详见[说明](../LONG_TERM_MEMORY.md)。
+
+## 显式回复恢复与记忆可靠性（2026-10-03，桌面0.1.17）
+
+用户批准latest/no-character-reply的独立付费新尝试，见[方案](../proposals/2026-10-03-reply-recovery.md)。pending保留原领取/原额度；已记录校验失败或可靠本地中断可由用户确认当前额度创建retry Turn，source_turn_id关联原Player Turn，不复制Player ChatMessage。每attempt仍一次claim，内部选人/路由/发言共享其预算；原用量不重置。running/unknown与部分群聊不重放，legacy claimed没有执行结束记录时按unknown。创建CAS与领取/完成都核对来源及当前attempt，HTTP认证与当前玩家绑定沿用。
+
+0031新增chat_reply_executions与chat_reply_recoveries，不重写旧ChatTurn。执行失败只持久固定状态，保留原网关结算/预留；启动将仍running的本地工作标为interrupted，不自动调用模型、unknown不改。原源消息仍是真实来源，群聊仅在提示组装时把源问题归到当前尝试，事件/记忆落库继续本地原句和权限校验。前端幂等准备/读回与显式生成复用原stream路径；草稿保持，刷新只有GET。
+
+长期记忆核心分桶、关键词多查询RRF、明确更新且同主题补充共存，16条/8KiB和4原句/8KiB上限不变。现有jieba/SQLite/SQLAlchemy直接复用；不增加embedding或模型调用。详见[复用记录](../research/2026-10-03-memory-recovery-reuse.md)及[用户体验](../CHAT_FUNCTIONAL_EXPERIENCE.md)。
+
+恢复后的历史回复在提示层归到原问题，并有界补入其真实源问题，继续按完整回合裁剪，防止只留下回复。当前群聊尝试仍按当前尝试聚合；实际存档、消息ID、原句及时间不改，普通历史/原文读取保持真实attempt ID。

@@ -216,7 +216,7 @@ class DirectChatContextBuilder:
         if (
             conversation is None
             or sent.message.sender_id != conversation.player_id
-            or sent.message.turn_id != sent.turn_id
+            or sent.message.turn_id != (sent.source_turn_id or sent.turn_id)
         ):
             raise EntityNotFoundError("conversation_not_found")
         character = await self._conversations.current_direct_character(conversation_id)

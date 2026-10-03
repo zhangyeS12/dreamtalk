@@ -2,6 +2,7 @@ import { MessageTime } from "./MessageTime";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { CoreClient, CoreRequestError, type ChatReplyAvailability, type GroupChatConversation, type WorldContentItem } from "@dreamtalk/api-client";
 import { useReplyStream } from "./useReplyStream";
+import { ReplyRecoveryControls } from "./ReplyRecoveryControls";
 import { StreamingReplyBubble } from "./StreamingReplyBubble";
 import { useChatScroll } from "./useChatScroll";
 import { useTranscriptPages } from "./useTranscriptPages";
@@ -85,7 +86,9 @@ export function GroupChatDetails({ client, worldId, playerId, group, tokenCeilin
   const [draft, setDraft] = useState("");
   const [pending, setPending] = useState<{ text: string; ceiling: number; requestId: string } | null>(null);
   const [phase, setPhase] = useState<ChatRequestPhase>(null);
-  const sending = phase !== null;
+  const [recoveryBusy, setRecoveryBusy] = useState(false);
+  const actionLock = useRef(false);
+  const sending = phase !== null || recoveryBusy;
   useEffect(() => { onDirtyChange?.(Boolean(draft.trim() || pending || sending)); }, [draft, pending, sending, onDirtyChange]);
   useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
   const [feedback, setFeedback] = useState("");
@@ -113,23 +116,45 @@ export function GroupChatDetails({ client, worldId, playerId, group, tokenCeilin
   const visibleStreamDraft = stream.draft && (messages?.filter(message => message.turn_id === stream.draft?.turnId && message.sender_kind === "character").length ?? 0) <= stream.draft.index ? stream.draft : null;
   const latestPlayerMessage = messages?.filter(message => message.sender_kind === "player" && message.sender_id === playerId).at(-1);
   const checkReply = async () => {
-    if (sending || pending || !latestPlayerMessage) return;
+    if (actionLock.current || sending || pending || !latestPlayerMessage) return;
+    actionLock.current = true;
     setPhase("checking");
     setFeedback("");
     try {
-      const turn = await client.groupTurn(worldId, group.conversation_id, latestPlayerMessage.turn_id);
+      const recovery = await client.replyRecovery(worldId, group.conversation_id, latestPlayerMessage.turn_id);
+      const turn = await client.groupTurn(worldId, group.conversation_id, recovery.attempt_turn_id);
       setRefresh(value => value + 1);
       setFeedback(turn.state !== "completed" && replyFailure?.turnId === turn.turn_id
         ? replyFailure.message
         : chatReplyStateFeedback(turn.state, "group"));
     } catch { setFeedback(chatReplyStateFeedback(null, "group")); }
-    finally { setPhase(null); }
+    finally { actionLock.current = false; if (stream.isMounted()) setPhase(null); }
+  };
+
+  const generateSavedReply = async (turnId: string) => {
+    if (actionLock.current || pending || !available) return;
+    actionLock.current = true;
+    setPhase("replying"); setFeedback(""); setReplyFailure(null);
+    try {
+      await stream.run(client, worldId, group.conversation_id, turnId, "group", group.participants.map(item => item.character_id), acceptMessage);
+      if (stream.isMounted()) setRefresh(value => value + 1);
+    } catch (failure) {
+      if (!stream.isMounted()) return;
+      setPhase("checking");
+      const turn = await client.groupTurn(worldId, group.conversation_id, turnId).catch(() => null);
+      if (!stream.isMounted()) return;
+      setRefresh(value => value + 1);
+      const message = turn?.state === "completed" ? chatReplyStateFeedback(turn.state, "group") : chatReplyFailureFeedback(failure, "group");
+      setFeedback(message);
+      if (turn?.state !== "completed") setReplyFailure({ turnId, message });
+    } finally { actionLock.current = false; if (stream.isMounted()) setPhase(null); }
   };
 
   const send = async (event: FormEvent) => {
     event.preventDefault();
-    if (sending || !available || (!draft.trim() && !pending)) return;
+    if (actionLock.current || sending || !available || (!draft.trim() && !pending)) return;
     if (budgetFeedback && !pending) { setFeedback(budgetFeedback); return; }
+    actionLock.current = true;
     const current = pending ?? { text: draft, ceiling: tokenCeiling, requestId: crypto.randomUUID() };
     setPending(current);
     setPhase("saving");
@@ -165,7 +190,7 @@ export function GroupChatDetails({ client, worldId, playerId, group, tokenCeilin
       } else {
         setFeedback("消息保存结果尚未确认。可重试保存同一条消息，不会创建重复回合。");
       }
-    } finally { setPhase(null); }
+    } finally { actionLock.current = false; if (stream.isMounted()) setPhase(null); }
   };
 
   const insertMention = (name: string) => {
@@ -205,6 +230,7 @@ export function GroupChatDetails({ client, worldId, playerId, group, tokenCeilin
     })}{visibleStreamDraft ? <StreamingReplyBubble name={names.get(visibleStreamDraft.speakerId) ?? "角色"} text={visibleStreamDraft.text} /> : null}</ol></>}
     <form className="chat-composer" onSubmit={event => void send(event)}>
       {phase || feedback ? <p role="status" aria-live="polite" className="chat-feedback">{(phase === "replying" && stream.stage === "selecting" ? "正在选择下一位发言者…" : chatPhaseFeedback(phase, "group")) || feedback}</p> : null}
+      <ReplyRecoveryControls client={client} worldId={worldId} conversationId={group.conversation_id} sourceTurnId={latestPlayerMessage?.turn_id} refresh={refresh} tokenCeiling={tokenCeiling} blocked={!available || phase !== null || !!pending} onGenerate={generateSavedReply} onBusyChange={setRecoveryBusy} />
       {budgetFeedback ? <p className="chat-feedback" role="alert">{budgetFeedback}</p> : null}
       {!available ? <p className="chat-feedback">尚未配置可用的聊天模型或可信 Token 上限，暂时无法发送。</p> : null}
       <label htmlFor="group-chat-draft" className="sr-only">发送群聊消息</label>

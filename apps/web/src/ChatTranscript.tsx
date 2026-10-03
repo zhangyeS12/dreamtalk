@@ -3,6 +3,7 @@ import { MessageTime } from "./MessageTime";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { CoreClient, CoreRequestError, type ChatReplyAvailability, type ChatConversation } from "@dreamtalk/api-client";
 import { useReplyStream } from "./useReplyStream";
+import { ReplyRecoveryControls } from "./ReplyRecoveryControls";
 import { StreamingReplyBubble } from "./StreamingReplyBubble";
 import { useChatScroll } from "./useChatScroll";
 import { useTranscriptPages } from "./useTranscriptPages";
@@ -37,7 +38,9 @@ export function ChatTranscript({ client, worldId, playerId, conversation, tokenC
   const [draft, setDraft] = useState("");
   const [pendingSend, setPendingSend] = useState<{ text: string; ceiling: number; requestId: string } | null>(null);
   const [phase, setPhase] = useState<ChatRequestPhase>(null);
-  const sending = phase !== null;
+  const [recoveryBusy, setRecoveryBusy] = useState(false);
+  const actionLock = useRef(false);
+  const sending = phase !== null || recoveryBusy;
   useEffect(() => { onDirtyChange?.(Boolean(draft.trim() || pendingSend || sending)); }, [draft, pendingSend, sending, onDirtyChange]);
   useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
   const [feedback, setFeedback] = useState("");
@@ -91,23 +94,45 @@ export function ChatTranscript({ client, worldId, playerId, conversation, tokenC
   const visibleStreamDraft = stream.draft && (messages?.filter(message => message.turn_id === stream.draft?.turnId && message.sender_kind === "character").length ?? 0) <= stream.draft.index ? stream.draft : null;
   const latestPlayerMessage = messages?.filter(message => message.sender_kind === "player" && message.sender_id === playerId).at(-1);
   const checkReply = async () => {
-    if (sending || pendingSend || !latestPlayerMessage) return;
+    if (actionLock.current || sending || pendingSend || !latestPlayerMessage) return;
+    actionLock.current = true;
     setPhase("checking");
     setFeedback("");
     try {
-      const turn = await client.directTurn(worldId, conversation.conversation_id, latestPlayerMessage.turn_id);
+      const recovery = await client.replyRecovery(worldId, conversation.conversation_id, latestPlayerMessage.turn_id);
+      const turn = await client.directTurn(worldId, conversation.conversation_id, recovery.attempt_turn_id);
       setRefresh(value => value + 1);
       setFeedback(turn.state !== "completed" && replyFailure?.turnId === turn.turn_id
         ? replyFailure.message
         : chatReplyStateFeedback(turn.state, "direct"));
     } catch { setFeedback(chatReplyStateFeedback(null, "direct")); }
-    finally { setPhase(null); }
+    finally { actionLock.current = false; if (stream.isMounted()) setPhase(null); }
+  };
+
+  const generateSavedReply = async (turnId: string) => {
+    if (actionLock.current || pendingSend || !available) return;
+    actionLock.current = true;
+    setPhase("replying"); setFeedback(""); setReplyFailure(null);
+    try {
+      await stream.run(client, worldId, conversation.conversation_id, turnId, "direct", [conversation.character_id], acceptMessage);
+      if (stream.isMounted()) setRefresh(value => value + 1);
+    } catch (failure) {
+      if (!stream.isMounted()) return;
+      setPhase("checking");
+      const turn = await client.directTurn(worldId, conversation.conversation_id, turnId).catch(() => null);
+      if (!stream.isMounted()) return;
+      setRefresh(value => value + 1);
+      const message = turn?.state === "completed" ? chatReplyStateFeedback(turn.state, "direct") : chatReplyFailureFeedback(failure, "direct");
+      setFeedback(message);
+      if (turn?.state !== "completed") setReplyFailure({ turnId, message });
+    } finally { actionLock.current = false; if (stream.isMounted()) setPhase(null); }
   };
 
   const send = async (event: FormEvent) => {
     event.preventDefault();
-    if (sending || !available || (!draft.trim() && !pendingSend)) return;
+    if (actionLock.current || sending || !available || (!draft.trim() && !pendingSend)) return;
     if (budgetFeedback && !pendingSend) { setFeedback(budgetFeedback); return; }
+    actionLock.current = true;
     const current = pendingSend ?? { text: draft, ceiling: tokenCeiling, requestId: crypto.randomUUID() };
     setPendingSend(current);
     setPhase("saving");
@@ -145,7 +170,8 @@ export function ChatTranscript({ client, worldId, playerId, conversation, tokenC
         setFeedback("消息保存结果尚未确认。可重试保存同一条消息，不会创建重复回合。");
       }
     } finally {
-      setPhase(null);
+      actionLock.current = false;
+      if (stream.isMounted()) setPhase(null);
     }
   };
 
@@ -180,6 +206,7 @@ export function ChatTranscript({ client, worldId, playerId, conversation, tokenC
           })}{visibleStreamDraft ? <StreamingReplyBubble name={conversation.character_name} text={visibleStreamDraft.text} /> : null}</ol></>}
     <form className="chat-composer" onSubmit={event => void send(event)}>
       {phase || feedback ? <p role="status" aria-live="polite" className="chat-feedback">{(phase === "replying" && stream.stage === "preparing" ? "消息已保存，正在准备角色回复…" : chatPhaseFeedback(phase, "direct")) || feedback}</p> : null}
+      <ReplyRecoveryControls client={client} worldId={worldId} conversationId={conversation.conversation_id} sourceTurnId={latestPlayerMessage?.turn_id} refresh={refresh} tokenCeiling={tokenCeiling} blocked={!available || phase !== null || !!pendingSend} onGenerate={generateSavedReply} onBusyChange={setRecoveryBusy} />
       {budgetFeedback ? <p className="chat-feedback" role="alert">{budgetFeedback}</p> : null}
       {!available ? <p className="chat-feedback">尚未配置可用的聊天模型或路由及可信 Token 上限，暂时无法发送。</p> : null}
       <label htmlFor="direct-chat-draft" className="sr-only">发送给{conversation.character_name}的消息</label>

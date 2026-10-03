@@ -23,6 +23,7 @@ from livingworld.application.chat_reply import (
     ChatReplyIntegrityError,
     ChatReplyUnavailableError,
     ChatReplyValidationError,
+    claimed_reply_execution,
     dialogue_request,
     dialogue_text,
 )
@@ -297,53 +298,59 @@ class GroupChatReplyService:
             selection = await self._context.build_selection(sent)
             first_request = await self._selection_request(selection.messages, budget.remaining)
         claim = await self._messages.claim_group(sent.message.conversation_id, sent.turn_id)
-        if claim.player_message != sent.message or claim.token_ceiling != sent.token_ceiling:
-            raise ChatReplyValidationError("chat_send_changed")
-        if mentioned is None:
-            assert first_request is not None
-            if progress is not None:
-                await progress(ChatProgress("selecting"))
-            choice = await self._generate(first_request, budget)
-            speaker = self._selection_result(choice, claim, allow_stop=False)
-            assert speaker is not None
-            if budget.closed or budget.remaining < 1:
-                raise ChatReplyBudgetError("turn_token_limit_exceeded")
-            first_request = None
-        else:
-            speaker = mentioned
-            if speaker not in claim.character_ids:
-                raise ChatReplyValidationError("group_selection_invalid")
-        for ordinal in range(_MAX_GROUP_REPLIES):
-            try:
-                text = await self._reply(
-                    claim,
-                    speaker,
-                    budget,
-                    prepared=first_request if ordinal == 0 else None,
-                    progress=progress,
-                )
-            except ChatReplyBudgetError:
-                if ordinal:
-                    return await self._messages.finish_group(claim)
-                raise
-            message = (
-                await self._messages.complete_group_reply(
-                    claim, speaker, ordinal, text.text, events=text.events, memories=text.memories
-                )
-                if isinstance(text, AnnotatedDialogue)
-                else await self._messages.complete_group_reply(claim, speaker, ordinal, text)
-            )
-            if progress is not None:
-                await progress(ChatProgress("message", message=message))
-            if budget.closed or budget.remaining < 1 or ordinal + 1 == _MAX_GROUP_REPLIES:
-                return await self._messages.finish_group(claim)
-            try:
+        async with claimed_reply_execution(self._messages, sent):
+            if claim.player_message != sent.message or claim.token_ceiling != sent.token_ceiling:
+                raise ChatReplyValidationError("chat_send_changed")
+            if mentioned is None:
+                assert first_request is not None
                 if progress is not None:
                     await progress(ChatProgress("selecting"))
-                next_speaker = await self._select(claim, budget)
-            except ChatReplyBudgetError:
-                return await self._messages.finish_group(claim)
-            if next_speaker is None:
-                return await self._messages.finish_group(claim)
-            speaker = next_speaker
-        raise AssertionError("group_reply_loop_unreachable")
+                choice = await self._generate(first_request, budget)
+                speaker = self._selection_result(choice, claim, allow_stop=False)
+                assert speaker is not None
+                if budget.closed or budget.remaining < 1:
+                    raise ChatReplyBudgetError("turn_token_limit_exceeded")
+                first_request = None
+            else:
+                speaker = mentioned
+                if speaker not in claim.character_ids:
+                    raise ChatReplyValidationError("group_selection_invalid")
+            for ordinal in range(_MAX_GROUP_REPLIES):
+                try:
+                    text = await self._reply(
+                        claim,
+                        speaker,
+                        budget,
+                        prepared=first_request if ordinal == 0 else None,
+                        progress=progress,
+                    )
+                except ChatReplyBudgetError:
+                    if ordinal:
+                        return await self._messages.finish_group(claim)
+                    raise
+                message = (
+                    await self._messages.complete_group_reply(
+                        claim,
+                        speaker,
+                        ordinal,
+                        text.text,
+                        events=text.events,
+                        memories=text.memories,
+                    )
+                    if isinstance(text, AnnotatedDialogue)
+                    else await self._messages.complete_group_reply(claim, speaker, ordinal, text)
+                )
+                if progress is not None:
+                    await progress(ChatProgress("message", message=message))
+                if budget.closed or budget.remaining < 1 or ordinal + 1 == _MAX_GROUP_REPLIES:
+                    return await self._messages.finish_group(claim)
+                try:
+                    if progress is not None:
+                        await progress(ChatProgress("selecting"))
+                    next_speaker = await self._select(claim, budget)
+                except ChatReplyBudgetError:
+                    return await self._messages.finish_group(claim)
+                if next_speaker is None:
+                    return await self._messages.finish_group(claim)
+                speaker = next_speaker
+            raise AssertionError("group_reply_loop_unreachable")

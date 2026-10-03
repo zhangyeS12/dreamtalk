@@ -23,7 +23,7 @@ export function chatSaveFailureFeedback(failure: CoreRequestError): string {
 export function chatReplyFailureFeedback(failure: unknown, kind: ChatKind): string {
   const code = failure instanceof CoreRequestError ? failure.code : null;
   const prefix = kind === "group" ? "这一轮未能完整结束。已有发言仍会保留。" : "这轮回复未完成。消息已保存。";
-  const noReplay = "系统不会自动重试模型调用；你可以检查回复状态，或继续发送新消息。";
+  const noReplay = "系统不会自动重试模型调用；你可以检查回复状态；允许恢复时可手动重新生成，或继续发送新消息。";
   if (code === "chat_turn_token_limit_exceeded") return "聊天额度不足，无法预留输入和回复。请提高设置中的每轮 Token 上限后发送新消息；这条消息已保存，系统不会自动重试。";
   if (code === "chat_input_bound_unavailable") return "无法确认本次模型调用的可信 Token 上界。请核对模型及路由设置后发送新消息；这条消息已保存，系统不会自动重试。";
   if (failure instanceof CoreRequestError && failure.status === 422) return kind === "group"
@@ -50,7 +50,7 @@ export function chatReplyStateFeedback(state: DirectTurnView["state"] | null, ki
   if (state === "completed") return kind === "group"
     ? "本轮已结束，已保存的发言已更新。"
     : "角色回复已保存，聊天记录已更新。";
-  if (state === "pending") return "消息已保存，这轮尚未开始生成回复。请先核对聊天额度和模型设置；修正后发送新消息。系统不会自动重新发起这轮生成。";
+  if (state === "pending") return "消息已保存，这轮尚未开始生成回复。可以手动生成这条消息的回复，沿用保存时的额度。系统不会自动调用模型。";
   if (state === "claimed") return kind === "group"
     ? "这轮已开始处理，尚未确认结束。已保存的发言会保留；可以稍后再次检查状态。"
     : "这轮已开始处理，尚未确认完成。可以稍后再次检查状态。";
