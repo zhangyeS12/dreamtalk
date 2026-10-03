@@ -2,7 +2,16 @@
 
 更新日期：2026-10-03。此文件记录当前开发现场与接续工作，不替代 [AGENTS.md](AGENTS.md)。先读 AGENTS，再读本文，最后核对实际 Git 状态和相关代码；不能把下面的基线哈希当作永远不变的当前 HEAD。
 
-## 最新接续：2026-10-03 设置管理手册与通讯录角色入口（桌面0.1.15）
+## 最新接续：2026-10-03 状态提示与世界书公开范围修复（桌面0.1.16）
+
+- 从干净1108998adc6c3d087cf9a8bd388b39580c9ed1ee / codex/world-archive接续，正式D:\LivingWorld。用户截图反馈已放置角色仍被提示缺角色、离线offline_reason_used刷新仍红色、范围保存跳顶且再更新世界书后隐藏；用户进一步确认范围公开后又执行了预览/确认内容更新。未读取用户存档或聊天/密钥，前两项由现有状态语义和源码定位，第三项旧更新清空范围路径已确认。
+- **前序行为冲突已修复：** 原所有新版本默认隐藏导致未改条目授权也丢失。原生编辑在既有dreamtalk.edit扩展记录服务器验证的旧/新条目对应，保存同一事务仅读当前旧授权，逐条完整内容/条件/兼容字段及书级条件完全未变才保留；新增、修改、无法明确对应及文件替换仍隐藏，不按标题/相似文本匹配，不从历史回填。commit响应读回真实公共范围。无新schema/表/迁移，沿用0030；不改变WorldTruth/知识/预算/模型调用规则。
+- 前端范围选择一写后读回核对，丢响应只读不重写，确认后原位提示，不触发顶部scrollIntoView；失败可只读刷新。编辑/预览/替换与范围写互斥，旧会话读/写结果不能覆盖新会话，返回书架原离开保护保留。原生内容更新返回真实范围；旧版已清空范围需用户重新公开一次，不能猜测隐藏意图。
+- 活动区复用CharacterActivitySetup已有目录结果（只读初始化布尔，不枚举当前隐藏位置），按当前客户端/玩家区分旧规划失败与已确认地点；显式“重新规划（调用模型）”启动新任务，不自动付费重试。offline_reason_used/offline_no_contact的skipped显示普通状态，设置仍开启；刷新不删除去重或重新发送。世界动态错误说明更新为书架入口，公共范围和常驻/关键词触发继续分开。
+- 复用既有SQLAlchemy写事务、accepted snapshot、WorldCommonLore表、稳定JSON、已确认原生编辑关系及现有React/HTTP读取，不新增依赖。未新增/修改测试或CI；ESLint/TypeScript、修改Core的Ruff lint/format、diff检查通过；build-portable --build-only --output-name settings-feedback完成Core/PyInstaller约40.8s、Vite235模块/189ms（JS627.84kB、gzip189.15）与Rust release26.41s。完整目录artifacts/portable/settings-feedback/dreamtalk；核对215份Python AST/冻结源码哈希、471份Core文件、26份许可证、15份指南及513份ZIP文件逐字节一致，676个本地文档目标无缺失。Desktop13,224,448 bytes / A9E3D3F9094DE9B043318FBD45B85CD40031544774C7F7CB24D7C1931E39A1C8；Core14,617,963 / 53A9CFE3247202C092A23017766B2A8446465B7D331D1DE876C134441FB34734；ZIP50,744,244 / 58D86A1D779B40D9E7DA02EEE14101C60A93DA00041B4F24F4955DDBA1970C3E。日志artifacts/settings-feedback-build.log，清单artifacts/settings-feedback-package.json。保留Vite主chunk>500kB、STATIC_VCRUNTIME弃用及既有可选tzdata/pysqlite2/MySQLdb/numpy/olefile/defusedxml缺失警告，没有运行验收其影响；旧完整包保留，不启动GUI/应用或真实API，不读写原存档/凭据/系统自启动，不push/发布。
+- **接下来：** 用户退出旧托盘，运行完整0.1.16，按[修复说明](docs/SETTINGS_FEEDBACK.md)核对地点与重新规划、离线跳过、范围保存/重开/未改编辑保留/修改重确认及事件池生成。暂无新产品问题；旧测试的“更新全部隐藏”预期等需用户另行授权维护，不修改/skip。验收后继续聊天视觉。
+
+## 前序切片：2026-10-03 设置管理手册与通讯录角色入口（桌面0.1.15）
 
 - 从干净c2eee7b1fd56cd5de24c24076e7b498e137b3a19 / codex/world-archive接续，实际仓库D:\LivingWorld。用户批准世界管理手册方案，并要求添加角色卡移到通讯录。本轮仅完成设置视觉/分类、角色卡入口迁移及相关只读诊断，不扩展聊天功能。
 - [复用调查](docs/research/2026-10-03-settings-handbook-reuse.md)核对Microsoft NavigationView、Fluent2 Nav/Tablist、Radix Tabs1.1.18及MIT许可。采用现有React与原生nav/button/details/summary，不引入新库/框架或自写Tabs键盘机制；复用当前组件/Token/BookFaces/受认证Blob封面。设置显示当前世界小书、白灰纸面、七类书签目录与右页；窄窗口目录横向滚动，内容单栏，减少动态效果与键盘焦点保持。

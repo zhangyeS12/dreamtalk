@@ -12,10 +12,12 @@ const errors: Record<string, string> = {
   world_runtime_unavailable: "当前世界暂时不可修改，请稍后用原请求重试。",
   valid_request_id_required: "保存请求无效，请刷新列表后重新设置。",
 };
+const ignoreReadiness = () => undefined;
 interface PendingSetup { characterId: string; locationId: string; requestId: string; name: string; locationName: string }
 
-export function CharacterActivitySetup({ client, worldId, playerId, visible, onDirtyChange }: {
+export function CharacterActivitySetup({ client, worldId, playerId, visible, onDirtyChange, onReadinessChange = ignoreReadiness }: {
   client: CoreClient; worldId: string; playerId: string; visible: boolean; onDirtyChange: (dirty: boolean) => void;
+  onReadinessChange?: (ready: boolean | null) => void;
 }) {
   const [characters, setCharacters] = useState<ActivityCharacter[] | null>(null);
   const [locations, setLocations] = useState<ActivityLocation[] | null>(null);
@@ -34,6 +36,7 @@ export function CharacterActivitySetup({ client, worldId, playerId, visible, onD
   }, [characterId, locationId, pending, onDirtyChange]);
   useEffect(() => () => { serial.current++; }, []);
 
+  useEffect(() => { onReadinessChange(null); }, [client, worldId, playerId, onReadinessChange]);
   const refresh = useCallback(async () => {
     const job = ++serial.current;
     busyRef.current = true; setBusy(true); setError("");
@@ -43,22 +46,23 @@ export function CharacterActivitySetup({ client, worldId, playerId, visible, onD
       ]);
       if (job !== serial.current) return;
       if (directory.player_id !== playerId) {
-        setCharacters(null); setLocations(null); setError(errors.activity_player_changed); return;
+        setCharacters(null); setLocations(null); onReadinessChange(null); setError(errors.activity_player_changed); return;
       }
       setCharacters(directory.items); setLocations(places);
+      onReadinessChange(directory.items.some(item => item.initialized));
       const unresolved = pendingRef.current;
       if (unresolved) setNotice(directory.items.some(item => item.character_id === unresolved.characterId && item.initialized)
         ? "角色已有初始地点。可用原请求重试确认本次提交结果；不会再次放置或移动角色。"
         : "已刷新列表。原请求仍保留，可用原请求重试。");
     } catch (failure) {
       if (job !== serial.current) return;
-      setCharacters(null); setLocations(null);
+      setCharacters(null); setLocations(null); onReadinessChange(null);
       setError(failure instanceof CoreRequestError && errors[failure.code ?? ""]
         ? errors[failure.code ?? ""] : "未能读取角色和地点，请检查核心连接后刷新。选择和原请求仍保留。");
     } finally {
       if (job === serial.current) { busyRef.current = false; setBusy(false); }
     }
-  }, [client, worldId, playerId]);
+  }, [client, worldId, playerId, onReadinessChange]);
   useEffect(() => {
     if (visible && !busyRef.current) void refresh();
   }, [visible, refresh]);
@@ -81,6 +85,7 @@ export function CharacterActivitySetup({ client, worldId, playerId, visible, onD
       await client.initializeCharacterActivity(worldId, playerId, request.characterId, request.locationId, request.requestId);
       if (job !== serial.current) return;
       setCharacters(items => items?.map(item => item.character_id === request.characterId ? { ...item, initialized: true } : item) ?? null);
+      onReadinessChange(true);
       pendingRef.current = null; setPending(null); setCharacterId(""); setLocationId("");
       setNotice(`已为${request.name}设置初始地点：${request.locationName}。自动活动按已有开关和正常规划批次运行。`);
     } catch (failure) {

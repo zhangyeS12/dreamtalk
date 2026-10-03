@@ -13,6 +13,7 @@ from livingworld.application.imports import (
     ImportPreview,
 )
 from livingworld.domain.content.models import CanonicalContent, LoreCollection, LoreEntry
+from livingworld.domain.content.serialization import json_value, stable_json
 from livingworld.domain.identifiers import WorldId
 
 ImportKind = Literal["character", "lorebook"]
@@ -26,6 +27,61 @@ class AcceptedWorldContent:
     kind: ImportKind
     contents: tuple[CanonicalContent, ...]
     replaces_import_id: UUID | None = None
+
+
+def unchanged_lore_entry_pairs(
+    previous: AcceptedWorldContent, current: AcceptedWorldContent
+) -> tuple[tuple[UUID, UUID], ...]:
+    """Retain only server-tracked, unchanged entries from this native edit."""
+    if (
+        previous.world_id != current.world_id
+        or previous.kind != "lorebook"
+        or current.kind != "lorebook"
+        or current.replaces_import_id != previous.import_id
+    ):
+        return ()
+    books = [root for root in current.contents if isinstance(root, LoreCollection)]
+    if len(books) != 1 or books[0].provenance.source_format != "dreamtalk-editor":
+        return ()
+    edit = json_value(books[0].extensions.get("dreamtalk.edit", {}))
+    if not isinstance(edit, dict) or edit.get("previous_import_id") != str(previous.import_id):
+        return ()
+    lineage = edit.get("lore_entry_predecessors")
+    if not isinstance(lineage, dict):
+        return ()
+    # No title/text guessing: new or externally replaced entries have no trusted
+    # native-edit predecessor. Duplicate source targets must not widen exposure.
+    predecessors = [value for value in lineage.values() if isinstance(value, str)]
+    old_entries = {
+        root.content_id.value: root for root in previous.contents if isinstance(root, LoreEntry)
+    }
+    old_books = {
+        root.content_id: root for root in previous.contents if isinstance(root, LoreCollection)
+    }
+    pairs = []
+    for entry in current.contents:
+        if not isinstance(entry, LoreEntry) or not entry.enabled:
+            continue
+        predecessor = lineage.get(str(entry.content_id.value))
+        if not isinstance(predecessor, str) or predecessors.count(predecessor) != 1:
+            continue
+        try:
+            original = old_entries.get(UUID(predecessor))
+        except ValueError:
+            continue
+        if original is None or (collection := old_books.get(original.collection_id)) is None:
+            continue
+        if collection.activation_metadata != books[0].activation_metadata:
+            continue
+        old, new = json_value(original), json_value(entry)
+        # IDs/provenance change in every independent graph; all authored fields,
+        # opaque conditions and extensions must still match exactly.
+        for field in ("content_id", "revision", "provenance", "collection_id"):
+            old.pop(field)
+            new.pop(field)
+        if stable_json(old) == stable_json(new):
+            pairs.append((original.content_id.value, entry.content_id.value))
+    return tuple(pairs)
 
 
 @dataclass(frozen=True)

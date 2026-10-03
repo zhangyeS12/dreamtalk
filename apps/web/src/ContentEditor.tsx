@@ -228,7 +228,7 @@ export function ContentEditor({ client, worldId, kind, editing, onSaved, onCance
     {error && <p ref={errorNotice} tabIndex={-1} className="app-alert editor-feedback" role="alert">{error}</p>}
     {preview ? <div className="editor-review"><h3 ref={previewHeading} tabIndex={-1} className="editor-feedback">保存预览</h3>
       <p className="app-notice" role="status">预览已准备好，内容尚未保存。请核对下方内容，再点击“确认{editing ? "更新" : "加入"}当前世界”。</p>
-      <p className="inline-hint">{kind === "character" ? "确认后将在当前世界的通讯录中显示。" : "世界书条目默认隐藏，保存后可逐条设为公共背景。"}{editing && "更新后，请重新确认世界书的可见范围。"}</p>
+      <p className="inline-hint">{kind === "character" ? "确认后将在当前世界的通讯录中显示。" : editing ? "更新后显示实际保存的可见范围。" : "世界书条目默认隐藏，保存后可逐条设为公共背景。"}{editing && kind === "lorebook" && "完全未变且唯一对应的条目会保留原范围；新增或修改正文、触发条件的条目需要重新确认公开。"}</p>
       {reviewActions}
       <ContentDetails item={preview} />
       {reviewActions}

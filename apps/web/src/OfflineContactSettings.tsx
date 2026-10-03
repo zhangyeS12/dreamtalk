@@ -33,8 +33,9 @@ export function OfflineContactSettings({ status, busy, refreshing, error, onRefr
   const labels: Record<OfflineContactStatus["state"], string> = {
     off: "尚未开启。", idle: "已开启，等待下一次离线恢复。", waiting: "本次恢复已记录，正在等待模型就绪。",
     planning: "正在选择合适的联系角色和时段……", writing: "角色正在写消息……",
-    delivered: "本次离线消息已送达。", skipped: "本次恢复没有发起联系。", attention: "本次任务已停止，需要查看原因。",
+    delivered: "本次离线消息已送达。", skipped: "离线联系已开启；本次恢复已跳过。", attention: "本次任务已停止，需要查看原因。",
   };
+  const expectedSkip = status?.state === "skipped" && (status.error === "offline_reason_used" || status.error === "offline_no_contact");
   return <section className="settings-section">
     <div className="section-heading"><h2>离线期间的消息</h2><p>回来时，可能收到角色在离线期间留下的一条问候或邀请。</p></div>
     <p role="status">{error ? "暂未能核对最新状态。" : status ? labels[status.state] : "正在读取设置……"}</p>
@@ -50,7 +51,7 @@ export function OfflineContactSettings({ status, busy, refreshing, error, onRefr
     </div>
     {!valid && <p role="alert">请输入1至168之间的整数小时。</p>}
     <p className="inline-hint">一次恢复最多一条，Busy或世界暂停时跳过；同一理由不会重复，未回复上条主动消息时不会继续催促。时长与聊天额度、自动活动的世界时间分别设置。</p>
-    {status?.error && <p className="error-banner" role="alert">{offlineContactErrorMessage(new CoreRequestError(409, status.error))}</p>}
+    {status?.error && <p className={expectedSkip ? "app-notice" : "error-banner"} role={expectedSkip ? "status" : "alert"}>{offlineContactErrorMessage(new CoreRequestError(409, status.error))}</p>}
     {error && <p className="error-banner" role="alert">{error}</p>}
     {consentOpen && <div className="editor-panel" role="group" aria-label="授权离线联系">
       <p>授权此世界恢复后使用当前模型选择角色并生成消息，后台调用会产生费用，遵循已有模型预算。</p>

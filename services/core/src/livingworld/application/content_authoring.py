@@ -266,6 +266,12 @@ async def authored_graph(fields: EditorDraft, previous, repository, research=Non
                 next(x for x in old if isinstance(x, type(root))).provenance
             ),
         }
+        if fields.kind == "lorebook":
+            extensions["dreamtalk.edit"]["lore_entry_predecessors"] = {
+                str(ids[original.content_id].value): str(original.content_id.value)
+                for field in fields.entries
+                if (original := old_entries.get(field.source_entry_id)) is not None
+            }
     root = replace(root, extensions=extensions)
     contents = (root, *copied)
     asset_ids = {a.asset_id for x in contents for a in getattr(x, "assets", ())}

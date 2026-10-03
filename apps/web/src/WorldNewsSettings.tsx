@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { CoreClient, CoreRequestError, type WorldNewsStatus } from "@dreamtalk/api-client";
 
 const errors: Record<string, string> = {
-  news_background_required: "尚无可用于生成动态的公共背景，本次未调用模型。请到“角色卡与世界书”确认世界书并逐条设为“公共背景”。若关键词未命中，可编辑一个适合公开的条目，将“提供条件”改为“常驻背景”，预览确认后重新设为公共背景，再生成。",
+  news_background_required: "尚无可用于生成动态的公共背景，本次未调用模型。请返回书架，在“管理 / 导入世界书”中确认世界书并逐条设为“公共背景”。若关键词未命中，可编辑一个适合公开的条目，将“提供条件”改为“常驻背景”，预览确认后重新设为公共背景，再生成。",
   news_background_invalid: "公共背景格式异常，请检查世界书。",
   news_background_capacity: "公共背景超过资料容量，请精简公开范围。",
   news_background_changed: "本批采用的背景已隐藏或更新，待发布内容已停止；可显式生成新的一批。",

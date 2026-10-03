@@ -141,7 +141,13 @@ def world_content_router(service: WorldContentService, authorize) -> APIRouter:
     @router.post("/{import_id}/commit")
     async def commit(world_id: UUID, import_id: UUID, body: Confirmation) -> dict:
         try:
-            return _view(await service.commit(WorldId(world_id), import_id, body.reviewed_hash))
+            identity = WorldId(world_id)
+            saved = await service.commit(identity, import_id, body.reviewed_hash)
+            common = {
+                (item.import_id, item.entry.content_id.value)
+                for item in await service.list_common_lore(identity)
+            }
+            return _view(saved, common)
         except ContentImportError as error:
             raise HTTPException(422, error.code) from None
         except EntityNotFoundError:

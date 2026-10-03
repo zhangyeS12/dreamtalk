@@ -9,7 +9,11 @@ from sqlalchemy.exc import IntegrityError
 from livingworld.application.content import ContentConflictError
 from livingworld.application.errors import EntityNotFoundError
 from livingworld.application.imports import ImportPreview
-from livingworld.application.world_content import AcceptedWorldContent, CommonLoreEntry
+from livingworld.application.world_content import (
+    AcceptedWorldContent,
+    CommonLoreEntry,
+    unchanged_lore_entry_pairs,
+)
 from livingworld.domain.content.models import CanonicalContent, LoreCollection, LoreEntry
 from livingworld.domain.content.serialization import (
     deserialize_content,
@@ -192,6 +196,7 @@ class SqlAlchemyWorldContentStore:
                     return _load(existing)
                 if await session.get(WorldRecord, item.world_id.value) is None:
                     raise EntityNotFoundError("world_not_found")
+                previous = None
                 if item.replaces_import_id is not None:
                     previous = await session.get(WorldContentImportRecord, item.replaces_import_id)
                     successor = await session.scalar(
@@ -224,6 +229,27 @@ class SqlAlchemyWorldContentStore:
                         accepted_at=datetime.now(UTC),
                     )
                 )
+                if previous is not None and item.kind == "lorebook":
+                    # Read the last confirmed grants in the same serialized write
+                    # transaction. Hiding during an open preview cannot be undone.
+                    public_ids = set(
+                        await session.scalars(
+                            select(WorldCommonLoreRecord.entry_id).where(
+                                WorldCommonLoreRecord.world_id == item.world_id.value,
+                                WorldCommonLoreRecord.import_id == previous.import_id,
+                            )
+                        )
+                    )
+                    await session.flush()
+                    for old_id, new_id in unchanged_lore_entry_pairs(_load(previous), item):
+                        if old_id in public_ids:
+                            session.add(
+                                WorldCommonLoreRecord(
+                                    world_id=item.world_id.value,
+                                    import_id=item.import_id,
+                                    entry_id=new_id,
+                                )
+                            )
         except IntegrityError:
             raise ContentConflictError("Import persistence conflict") from None
         return item

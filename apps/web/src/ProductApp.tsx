@@ -100,6 +100,7 @@ function WorldWorkspace({ client, initialWorldId, initialTab, onArchive }: {
   const [worldContentDirty, setWorldContentDirty] = useState(false);
   const [worldLocationsDirty, setWorldLocationsDirty] = useState(false);
   const [characterActivityDirty, setCharacterActivityDirty] = useState(false);
+  const [activityReadiness, setActivityReadiness] = useState<{ client: CoreClient; playerId: string | null; ready: boolean | null } | null>(null);
   const [worldProfileDirty, setWorldProfileDirty] = useState(false);
   const [worlds, setWorlds] = useState<WorldSettings[]>([]);
   const worldId = initialWorldId;
@@ -113,6 +114,7 @@ function WorldWorkspace({ client, initialWorldId, initialTab, onArchive }: {
   const [eventsOpen, setEventsOpen] = useState(false);
   const [players, setPlayers] = useState<SelectablePlayer[]>([]);
   const [selectedPlayer, setSelectedPlayer] = useState<string | null>(null);
+  const reportActivityReadiness = useCallback((ready: boolean | null) => { setActivityReadiness({ client, playerId: selectedPlayer, ready }); }, [client, selectedPlayer]);
   const [selectedPlayerState, setSelectedPlayerState] = useState<SelectedPlayerState | null>(null);
   const [playerChoice, setPlayerChoice] = useState("");
   const [knownEvents, setKnownEvents] = useState<{ worldId: string; playerId: string; items: KnownWorldEvent[] } | null>(null);
@@ -334,7 +336,7 @@ function WorldWorkspace({ client, initialWorldId, initialTab, onArchive }: {
           <div className="setting-row"><label className="field"><span>时间倍率</span><input type="number" min="0.01" max="1000" step="0.01" inputMode="decimal" value={scale} onChange={event => setScale(event.target.value)} /></label><button type="button" className="secondary-button" disabled={busy || !scale || Number(scale) <= 0 || Number(scale) > 1000} onClick={() => void act(() => client.scaleProductWorld(world.world_id, scale), "时间倍率已更新。")}>应用</button></div>
         </section>}</>,
           activities: <>{world && <WorldLocations key={`locations:${world.world_id}`} client={client} worldId={world.world_id} visible={tab === "settings" && settingsPage === "activities"} onDirtyChange={setWorldLocationsDirty} />}
-        {world && selectedPlayer && <CharacterActivitySetup key={`initial-activity:${world.world_id}:${selectedPlayer}`} client={client} worldId={world.world_id} playerId={selectedPlayer} visible={tab === "settings" && settingsPage === "activities"} onDirtyChange={setCharacterActivityDirty} />} {world && selectedPlayer && <WorldActivities key={`activities:${world.world_id}:${selectedPlayer}`} client={client} worldId={world.world_id} visible={tab === "settings" && settingsPage === "activities"} paused={world.clock_state === "paused"} />}{!selectedPlayer && <section className="settings-section"><p className="inline-hint">先在“我”中进入当前世界，再设置角色的初始活动位置和自动活动。</p><button type="button" className="text-action" onClick={() => setTab("me")}>前往我</button></section>}</>,
+        {world && selectedPlayer && <CharacterActivitySetup key={`initial-activity:${world.world_id}:${selectedPlayer}`} client={client} worldId={world.world_id} playerId={selectedPlayer} visible={tab === "settings" && settingsPage === "activities"} onDirtyChange={setCharacterActivityDirty} onReadinessChange={reportActivityReadiness} />} {world && selectedPlayer && <WorldActivities key={`activities:${world.world_id}:${selectedPlayer}`} client={client} worldId={world.world_id} visible={tab === "settings" && settingsPage === "activities"} paused={world.clock_state === "paused"} hasInitializedCharacters={activityReadiness?.client === client && activityReadiness.playerId === selectedPlayer ? activityReadiness.ready : null} />}{!selectedPlayer && <section className="settings-section"><p className="inline-hint">先在“我”中进入当前世界，再设置角色的初始活动位置和自动活动。</p><button type="button" className="text-action" onClick={() => setTab("me")}>前往我</button></section>}</>,
           offline: <>{world && selectedPlayer && selectedPlayerState?.availability && selectedPlayerState.presence_revision !== null && <section className="settings-section"><div className="section-heading"><h2>交流状态</h2><p>忙碌状态不会暂停世界运行，已开启的离线联系会跳过普通主动消息；设为可用不会立即补发。</p></div>
           <div className="setting-row"><span><strong>{selectedPlayerState.availability === "available" ? "可用" : "忙碌"}</strong><small>仅适用于当前世界绑定的玩家身份</small></span><button type="button" className="secondary-button" disabled={busy} onClick={() => {
             const next: PlayerAvailability = selectedPlayerState.availability === "available" ? "busy" : "available";

@@ -12,6 +12,7 @@ const errors: Record<string, string> = {
   offline_character_mapping_invalid: "角色与已确认资料的关联不完整，请检查角色卡。",
   offline_background_capacity: "公共背景超过读取容量，请精简公开条目或触发条件。",
   offline_background_invalid: "公共背景格式异常，请检查或重新确认世界书。",
+  offline_reason_used: "本次离线恢复已跳过：同一联系理由已处理，不会重复发送。无需重新保存或反复刷新；与角色继续聊天后，下次符合条件的离线恢复会重新判断。",
   offline_no_contact: "本次没有合适的联系理由，角色未发送消息。",
   offline_interrupted: "上次任务被中断，系统不会自动重试这次恢复。",
   offline_generation_failed: "本次生成未完成，可能已产生费用，系统不会自动重试。",
