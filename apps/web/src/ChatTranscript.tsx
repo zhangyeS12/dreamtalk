@@ -35,7 +35,9 @@ export function ChatTranscript({ client, worldId, playerId, conversation, tokenC
   const [referenceTurn, setReferenceTurn] = useState<string | null>(null);
   const [refresh, setRefresh] = useState(0);
   const [availability, setAvailability] = useState<ChatReplyAvailability | null>(null);
-  const available = availability?.available ?? false;
+  const [availabilityReading, setAvailabilityReading] = useState(true);
+  const [availabilityFailed, setAvailabilityFailed] = useState(false);
+  const available = availability?.available === true && !availabilityReading && !availabilityFailed;
   const budgetFeedback = chatTokenReservationFeedback(availability, tokenCeiling, "direct");
   const [draft, setDraft] = useState("");
   const [pendingSend, setPendingSend] = useState<{ text: string; ceiling: number; requestId: string } | null>(null);
@@ -86,12 +88,14 @@ export function ChatTranscript({ client, worldId, playerId, conversation, tokenC
 
   useEffect(() => {
     let active = true;
-    setAvailability(null);
-    void client.directReplyAvailability(worldId).then(result => {
-      if (active) setAvailability(result);
-    }).catch(() => { if (active) setAvailability(null); });
-    return () => { active = false; };
-  }, [client, worldId]);
+    const controller = new AbortController();
+    setAvailabilityReading(true); setAvailabilityFailed(false);
+    void client.directReplyAvailability(worldId, controller.signal)
+      .then(result => { if (active) setAvailability(result); })
+      .catch(() => { if (active) setAvailabilityFailed(true); })
+      .finally(() => { if (active) setAvailabilityReading(false); });
+    return () => { active = false; controller.abort(); };
+  }, [client, worldId, refresh]);
 
   const visibleStreamDraft = stream.draft && (messages?.filter(message => message.turn_id === stream.draft?.turnId && message.sender_kind === "character").length ?? 0) <= stream.draft.index ? stream.draft : null;
   const latestPlayerMessage = messages?.filter(message => message.sender_kind === "player" && message.sender_id === playerId).at(-1);
@@ -211,7 +215,9 @@ export function ChatTranscript({ client, worldId, playerId, conversation, tokenC
       {phase || feedback ? <p role="status" aria-live="polite" className="chat-feedback">{(phase === "replying" && stream.stage === "preparing" ? "消息已保存，正在准备角色回复…" : chatPhaseFeedback(phase, "direct")) || feedback}</p> : null}
       <ReplyRecoveryControls client={client} worldId={worldId} conversationId={conversation.conversation_id} sourceTurnId={latestPlayerMessage?.turn_id} refresh={refresh} tokenCeiling={tokenCeiling} blocked={!available || phase !== null || !!pendingSend} onGenerate={generateSavedReply} onBusyChange={setRecoveryBusy} />
       {budgetFeedback ? <p className="chat-feedback" role="alert">{budgetFeedback}</p> : null}
-      {!available ? <p className="chat-feedback">尚未配置可用的聊天模型或路由及可信 Token 上限，暂时无法发送。</p> : null}
+      {availabilityReading ? <p className="chat-feedback" role="status">正在核对聊天模型状态…</p>
+        : availabilityFailed ? <p className="chat-feedback" role="alert">未能读取聊天模型状态，请点击“刷新记录”重试；这不代表配置已丢失。</p>
+        : !available ? <p className="chat-feedback">当前聊天模型尚不可用，请在设置中核对模型与路由。</p> : null}
       <label htmlFor="direct-chat-draft" className="sr-only">发送给{conversation.character_name}的消息</label>
       <textarea ref={draftInput} id="direct-chat-draft" value={draft} onChange={event => setDraft(event.target.value)} onKeyDown={submitChatOnEnter} disabled={!available || sending || !!pendingSend} maxLength={65536} placeholder="输入消息…" rows={3} />
       <div className="chat-composer-actions"><small>回车发送 · Shift+回车换行 · 本轮输入与输出共用 {tokenCeiling.toLocaleString("zh-CN")} Token 上限</small>{latestPlayerMessage ? <button type="button" className="text-action" disabled={sending || !!pendingSend} onClick={() => void checkReply()}>检查回复状态</button> : null}{phase === "replying" ? <button type="button" className="text-action" disabled={stream.stopping} onClick={stream.stop}>{stream.stopping ? "正在停止…" : "停止生成"}</button> : null}<button type="submit" className="primary-button" disabled={!available || sending || (!!budgetFeedback && !pendingSend) || (!draft.trim() && !pendingSend)}>{phase === "saving" ? "正在保存…" : phase === "replying" ? "等待回复…" : phase === "checking" ? "检查中…" : pendingSend ? "重试保存" : "发送"}</button></div>

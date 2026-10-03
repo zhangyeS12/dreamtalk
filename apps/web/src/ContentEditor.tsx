@@ -27,6 +27,13 @@ const generationMessages: Record<string, string> = {
   builder_token_limit_exceeded: "上次请求被旧版额度检查拦截。新版资料生成已独立于聊天额度，请点击联网生成开始新请求；检查结果只读取上次请求。",
   builder_model_failed: "模型调用未完成，请检查密钥、模型额度和网络；本次可能已产生费用。",
   builder_output_invalid: "模型返回的草稿不完整或格式不符，尚未保存。重新生成将发起新的模型调用。",
+  builder_output_empty: "模型未返回草稿正文，尚未保存；可能已产生费用。不会自动重试。",
+  builder_output_limit: "草稿输出被截断，尚未保存。请核对回复长度，再决定是否重新生成。",
+  builder_context_limit: "生成资料超过模型的上下文容量，请精简描述或检索范围。",
+  builder_model_timeout: "模型请求超时，结果未确认，可能已产生费用；不会自动重发。",
+  builder_model_rate_limited: "模型服务暂时限流，请稍后再决定是否重新生成。",
+  builder_model_quota: "模型服务额度不足，请检查服务余额或额度。",
+  builder_model_refused: "模型没有接受本次生成任务，尚未保存。可以继续手动编辑。",
   builder_interrupted: "上次生成已中断，可能已产生费用。可以重新生成，也可以手动填写。",
   builder_capacity_reached: "已有生成正在处理，请稍后再试。",
 };

@@ -8,8 +8,6 @@ import sys
 from collections import OrderedDict
 from pathlib import Path
 
-from anyio import CancelScope
-
 from livingworld.infrastructure.chat_retrieval import Fts5ChatRecallRanker
 from livingworld.infrastructure.local_vector_cache import LocalVectorCache
 
@@ -35,7 +33,7 @@ def model_directory():
 class HybridChatRecallRanker(Fts5ChatRecallRanker):
     def __init__(self, cache_directory=None):
         super().__init__()
-        self._semantic_slot = asyncio.Semaphore(1)
+        self._semantic_job = None
         self._model = None
         self._unavailable = False
         self._vectors = OrderedDict()
@@ -43,18 +41,32 @@ class HybridChatRecallRanker(Fts5ChatRecallRanker):
         self._cache = LocalVectorCache(cache_directory)
 
     async def _worker(self, method, *args):
-        async with self._semantic_slot:
-            job = asyncio.create_task(asyncio.to_thread(method, *args))
-            try:
-                return await asyncio.shield(job)
-            except asyncio.CancelledError:
-                with CancelScope(shield=True):
-                    await job
-                raise
+        # A slow cold model/cache cannot queue every conversation behind it.
+        # Keep one worker until it really finishes; cancelled/expired callers
+        # never use its late result or start another concurrent model load.
+        if self._semantic_job is not None and not self._semantic_job.done():
+            return None
+        job = asyncio.create_task(asyncio.to_thread(method, *args))
+        self._semantic_job = job
+
+        def completed(task):
+            if self._semantic_job is task:
+                self._semantic_job = None
+            if not task.cancelled():
+                task.exception()  # Consume failures even after the caller timed out.
+
+        job.add_done_callback(completed)
+        try:
+            return await asyncio.wait_for(asyncio.shield(job), timeout=3.0)
+        except TimeoutError:
+            return None
 
     async def historical(self, queries, references, *, limit=24):
         """References contain IDs only, after the caller's SQL permission filtering."""
-        return await self._worker(self._historical, queries, references, limit)
+        if not references:
+            return (), (), False
+        result = await self._worker(self._historical, queries, references, limit)
+        return result if result is not None else ((), (), True)
 
     async def rank_with_mode(self, queries, candidates, *, limit):
         lexical = await super().rank_queries(queries, candidates, limit=max(32, limit * 4))

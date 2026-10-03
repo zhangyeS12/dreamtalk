@@ -11,12 +11,13 @@ const actions: Record<BackgroundDestination, string> = {
 export function taskErrorGuidance(code: string | null, message: string, title = "本次任务已停止"): Guidance {
   const suffix = code?.replace(/^(director|news|offline)_/, "");
   const destination: BackgroundDestination | undefined = suffix?.startsWith("background_") ? "lore"
-    : suffix === "model_unavailable" || suffix === "model_failed" || suffix === "generation_failed" ? "model"
+    : suffix === "model_unavailable" || suffix === "model_failed" || suffix === "generation_failed" && code !== "news_generation_failed" ? "model"
     : suffix === "player_required" ? "me"
     : suffix === "characters_required" ? code?.startsWith("director_") ? "locations" : "contacts"
     : suffix === "character_mapping_invalid" || suffix === "input_unavailable" || suffix === "input_capacity" ? "contacts"
     : suffix === "world_capacity" ? "locations"
     : suffix === "pending_capacity" ? "events"
+    : suffix === "token_bound_unavailable" || suffix === "model_quota" || suffix === "context_limit" ? "model"
     : suffix === "execution_failed" ? "about" : undefined;
   return { tone: "error", title, detail: message, destination };
 }

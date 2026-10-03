@@ -83,7 +83,9 @@ export function GroupChatDetails({ client, worldId, playerId, group, tokenCeilin
   const [referenceTurn, setReferenceTurn] = useState<string | null>(null);
   const [refresh, setRefresh] = useState(0);
   const [availability, setAvailability] = useState<ChatReplyAvailability | null>(null);
-  const available = availability?.available ?? false;
+  const [availabilityReading, setAvailabilityReading] = useState(true);
+  const [availabilityFailed, setAvailabilityFailed] = useState(false);
+  const available = availability?.available === true && !availabilityReading && !availabilityFailed;
   const budgetFeedback = chatTokenReservationFeedback(availability, tokenCeiling, "group");
   const [draft, setDraft] = useState("");
   const [pending, setPending] = useState<{ text: string; ceiling: number; requestId: string } | null>(null);
@@ -108,12 +110,14 @@ export function GroupChatDetails({ client, worldId, playerId, group, tokenCeilin
 
   useEffect(() => {
     let active = true;
-    setAvailability(null);
-    void client.groupReplyAvailability(worldId)
+    const controller = new AbortController();
+    setAvailabilityReading(true); setAvailabilityFailed(false);
+    void client.groupReplyAvailability(worldId, controller.signal)
       .then(result => { if (active) setAvailability(result); })
-      .catch(() => { if (active) setAvailability(null); });
-    return () => { active = false; };
-  }, [client, worldId]);
+      .catch(() => { if (active) setAvailabilityFailed(true); })
+      .finally(() => { if (active) setAvailabilityReading(false); });
+    return () => { active = false; controller.abort(); };
+  }, [client, worldId, refresh]);
 
   const visibleStreamDraft = stream.draft && (messages?.filter(message => message.turn_id === stream.draft?.turnId && message.sender_kind === "character").length ?? 0) <= stream.draft.index ? stream.draft : null;
   const latestPlayerMessage = messages?.filter(message => message.sender_kind === "player" && message.sender_id === playerId).at(-1);
@@ -235,7 +239,9 @@ export function GroupChatDetails({ client, worldId, playerId, group, tokenCeilin
       {phase || feedback ? <p role="status" aria-live="polite" className="chat-feedback">{(phase === "replying" && stream.stage === "selecting" ? "正在选择下一位发言者…" : chatPhaseFeedback(phase, "group")) || feedback}</p> : null}
       <ReplyRecoveryControls client={client} worldId={worldId} conversationId={group.conversation_id} sourceTurnId={latestPlayerMessage?.turn_id} refresh={refresh} tokenCeiling={tokenCeiling} blocked={!available || phase !== null || !!pending} onGenerate={generateSavedReply} onBusyChange={setRecoveryBusy} />
       {budgetFeedback ? <p className="chat-feedback" role="alert">{budgetFeedback}</p> : null}
-      {!available ? <p className="chat-feedback">尚未配置可用的聊天模型或可信 Token 上限，暂时无法发送。</p> : null}
+      {availabilityReading ? <p className="chat-feedback" role="status">正在核对聊天模型状态…</p>
+        : availabilityFailed ? <p className="chat-feedback" role="alert">未能读取聊天模型状态，请点击“刷新记录”重试；这不代表配置已丢失。</p>
+        : !available ? <p className="chat-feedback">当前聊天模型尚不可用，请在设置中核对模型与路由。</p> : null}
       <label htmlFor="group-chat-draft" className="sr-only">发送群聊消息</label>
       <textarea ref={draftInput} id="group-chat-draft" value={draft} onChange={event => setDraft(event.target.value)} onKeyDown={submitChatOnEnter} disabled={!available || sending || !!pending} maxLength={65536} placeholder="输入消息，或用 @角色名 指定下一位发言者…" rows={3} />
       {mentionable.length > 0 ? <div className="chat-mention-actions"><span>指定下一位</span>{mentionable.map(item => <button key={item.character_id} type="button" disabled={!available || sending || !!pending} onClick={() => insertMention(item.character_name)}>@{item.character_name}</button>)}</div> : null}

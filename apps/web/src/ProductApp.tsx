@@ -127,6 +127,8 @@ function WorldWorkspace({ client, initialWorldId, initialTab, onArchive }: {
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
   const [groupSetupOpen, setGroupSetupOpen] = useState(false);
   const [conversationsLoading, setConversationsLoading] = useState(false);
+  const [conversationsFailed, setConversationsFailed] = useState(false);
+  const [conversationsRefresh, setConversationsRefresh] = useState(0);
   const [tokenCeiling, setTokenCeiling] = useState(savedTokenCeiling);
   const [tokenCeilingInput, setTokenCeilingInput] = useState(() => String(savedTokenCeiling()));
   const offlineContact = useOfflineContact(client, worldId, selectedPlayer);
@@ -137,10 +139,23 @@ function WorldWorkspace({ client, initialWorldId, initialTab, onArchive }: {
     setWorlds(items);
   }, [client]);
   useEffect(() => {
-    void refresh().catch(() => setError("无法读取世界，请检查核心连接。"));
-    const timer = window.setInterval(() => void refresh().catch(() => setError("世界状态暂时无法更新。")), 2_000);
-    return () => window.clearInterval(timer);
-  }, [refresh]);
+    let active = true;
+    let timer: number | undefined;
+    let failures = 0;
+    const controller = new AbortController();
+    const read = async () => {
+      try {
+        const items = await client.listProductWorlds(controller.signal);
+        if (active) { setWorlds(items); failures = 0; setError(current => current === "世界状态暂时无法更新，请检查核心连接。" ? "" : current); }
+      } catch {
+        if (active) { ++failures; setError("世界状态暂时无法更新，请检查核心连接。"); }
+      } finally {
+        if (active) timer = window.setTimeout(() => void read(), failures > 0 ? 10_000 : 2_000);
+      }
+    };
+    void read();
+    return () => { active = false; window.clearTimeout(timer); controller.abort(); };
+  }, [client]);
   const world = useMemo(() => worlds.find(item => item.world_id === worldId), [worlds, worldId]);
   useEffect(() => {
     if (!world) return;
@@ -191,8 +206,9 @@ function WorldWorkspace({ client, initialWorldId, initialTab, onArchive }: {
   useEffect(() => {
     let active = true;
     if (!worldId || !selectedPlayer || tab !== "chats") return;
-    setConversationsLoading(true);
-    void client.conversations(worldId).then(items => {
+    const controller = new AbortController();
+    setConversationsLoading(true); setConversationsFailed(false);
+    const directRead = client.conversations(worldId, controller.signal).then(items => {
       if (active) setConversationDirectory(current => {
         const justOpened = current?.worldId === worldId && current.playerId === selectedPlayer ? current.items : [];
         return { worldId, playerId: selectedPlayer, items: [
@@ -200,9 +216,8 @@ function WorldWorkspace({ client, initialWorldId, initialTab, onArchive }: {
           ...justOpened.filter(local => !items.some(remote => remote.conversation_id === local.conversation_id)),
         ] };
       });
-    }).catch(() => { if (active) setError("无法读取当前世界的会话。"); })
-      .finally(() => { if (active) setConversationsLoading(false); });
-    void client.groupConversations(worldId).then(items => {
+    }).catch(() => { if (active) { setConversationsFailed(true); setError("无法读取当前世界的会话，请重新读取或检查核心连接。"); } });
+    const groupRead = client.groupConversations(worldId, controller.signal).then(items => {
       if (active) setGroupDirectory(current => {
         const justCreated = current?.worldId === worldId && current.playerId === selectedPlayer ? current.items : [];
         return { worldId, playerId: selectedPlayer, items: [
@@ -210,9 +225,10 @@ function WorldWorkspace({ client, initialWorldId, initialTab, onArchive }: {
           ...justCreated.filter(local => !items.some(remote => remote.conversation_id === local.conversation_id)),
         ] };
       });
-    }).catch(() => { if (active) setError("无法读取当前世界的群聊。"); });
-    return () => { active = false; };
-  }, [client, worldId, selectedPlayer, tab]);
+    }).catch(() => { if (active) { setConversationsFailed(true); setError("无法读取当前世界的群聊，请重新读取或检查核心连接。"); } });
+    void Promise.allSettled([directRead, groupRead]).finally(() => { if (active) setConversationsLoading(false); });
+    return () => { active = false; controller.abort(); };
+  }, [client, worldId, selectedPlayer, tab, conversationsRefresh]);
   useEffect(() => {
     let active = true;
     setKnownEvents(null);
@@ -302,7 +318,8 @@ function WorldWorkspace({ client, initialWorldId, initialTab, onArchive }: {
           <span className="pin-label">置顶</span>
         </button>
         {selectedPlayer ? <button type="button" className="group-create-link" onClick={() => { setGroupSetupOpen(true); setSelectedGroupId(null); setSelectedConversationId(null); setEventsOpen(false); }}>＋ 新建群聊</button> : null}
-        {conversationsLoading ? <p className="thread-hint">正在读取会话…</p> : conversations.length === 0 && groups.length === 0 ? <div className="empty-state"><h2>还没有会话</h2><p>在通讯录中选择角色，打开与他的会话。</p><button type="button" className="text-action" onClick={() => setTab("contacts")}>前往通讯录</button></div> : <>
+        {conversationsFailed && <div className="thread-hint" role="alert"><p>会话读取未完成，已读取的会话仍保留。</p><button type="button" className="text-action" disabled={conversationsLoading} onClick={() => setConversationsRefresh(value => value + 1)}>重新读取会话</button></div>}
+        {conversationsLoading && conversations.length === 0 && groups.length === 0 ? <p className="thread-hint">正在读取会话…</p> : conversationsFailed && conversations.length === 0 && groups.length === 0 ? null : conversations.length === 0 && groups.length === 0 ? <div className="empty-state"><h2>还没有会话</h2><p>在通讯录中选择角色，打开与他的会话。</p><button type="button" className="text-action" onClick={() => setTab("contacts")}>前往通讯录</button></div> : <>
           {groups.map(item => <button key={item.conversation_id} type="button" className={`conversation-row ${!eventsOpen && selectedGroupId === item.conversation_id ? "selected" : ""}`} aria-pressed={!eventsOpen && selectedGroupId === item.conversation_id} onClick={() => { setDraftSuggestion(null); setSelectedGroupId(item.conversation_id); setSelectedConversationId(null); setGroupSetupOpen(false); setEventsOpen(false); }}><span className="avatar event-avatar" aria-hidden="true">群</span><span className="row-copy"><strong>{item.participants.map(member => member.character_name).join("、")}</strong><small>群聊 · {item.participants.length} 位角色</small></span></button>)}
           {conversations.map(item => <button key={item.conversation_id} type="button" className={`conversation-row ${!eventsOpen && selectedConversationId === item.conversation_id ? "selected" : ""}`} aria-pressed={!eventsOpen && selectedConversationId === item.conversation_id} onClick={() => { setDraftSuggestion(null); setSelectedConversationId(item.conversation_id); setSelectedGroupId(null); setGroupSetupOpen(false); setEventsOpen(false); }}><span className="avatar event-avatar" aria-hidden="true">{Array.from(item.character_name)[0]}</span><span className="row-copy"><strong>{item.character_name}</strong><small>{offlineContact.status?.unread.some(message => message.conversation_id === item.conversation_id) ? "新消息 · 离线期间" : "私聊"}</small></span></button>)}
         </>}

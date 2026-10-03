@@ -43,9 +43,16 @@ class StructuredLogger:
         reasoning_output_tokens: int | None = None,
         max_output_tokens: int | None = None,
         http_status: int | None = None,
+        validator_keyword: str | None = None,
+        instance_path: tuple[str | int, ...] = (),
+        schema_path: tuple[str | int, ...] = (),
     ) -> None:
         """Fixed enums and counters only; no model, prompt, answer or private IDs."""
-        from livingworld.application.llm import FinishReason, StructuredFailureReason
+        from livingworld.application.llm import (
+            FinishReason,
+            StructuredFailureDetail,
+            StructuredFailureReason,
+        )
         from livingworld.domain.contracts import RequestId
 
         if event not in {"chat_structured_failure_facts", "chat_annotation_response_facts"}:
@@ -68,6 +75,16 @@ class StructuredLogger:
         }
         if reason is not None:
             record["reason"] = reason
+        if reason is not None and (validator_keyword is not None or instance_path or schema_path):
+            detail = StructuredFailureDetail(
+                StructuredFailureReason(reason), instance_path, schema_path, validator_keyword
+            )
+            if detail.validator_keyword is not None:
+                record["validator_keyword"] = detail.validator_keyword
+            if detail.instance_path:
+                record["instance_path"] = list(detail.instance_path)
+            if detail.schema_path:
+                record["schema_path"] = list(detail.schema_path)
         if finish_reason is not None:
             record["finish_reason"] = finish_reason
         for name, value in {

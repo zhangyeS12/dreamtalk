@@ -2,6 +2,18 @@
 
 更新日期：2026-10-03。此文件记录当前开发现场与接续工作，不替代 [AGENTS.md](AGENTS.md)。先读 AGENTS，再读本文，最后核对实际 Git 状态和相关代码；不能把下面的基线哈希当作永远不变的当前 HEAD。
 
+## 最新接续：2026-10-03 事件格式失败与聊天读取等待（桌面0.1.22）
+
+- 从干净650f64e/codex/world-archive、正式D:\LivingWorld接续，用户明确要求同时修复事件生成和发消息后的全页“读取中”。[复用调查](docs/research/2026-10-03-generation-read-reliability.md)直接采用DeepSeek JSON示例指南、Python asyncio和标准AbortController，不加依赖、不复制第三方项目实现。
+- 只读安全日志的限定错误元数据：22:00:24+09:00 HTTP200、正常STOP、输入1804/输出1142、max8192，随后schema_validation_failed。此前“缺公共背景”是另一阶段；此日志说明本次已发起请求，旧日志没有约束字段，不能推断具体字段。22:08:43收到shutdown_requested/core_shutdown_started但没有完成记录；进程路径查询被系统拒绝，不能证明当前EXE或语义模型导致卡顿。
+- 新闻任务补完整10条JSON示例，内部窗口字段可省略默认0/1440分钟，提供字段仍严格校验；标题/正文/数量/重复/时间原话及Kernel发布、预算、claim不变。LLMError固定分类传递到后台/联网编辑器，分别提示格式、空输出、截断、超时/限流/额度/容量；日志只增加既有严格脱敏的约束类型/路径，不存原始失败输出。
+- 本地GET含body读取15秒截止，可传播页面取消；世界状态串行刷新，失败减频，会话失败可手动重读且保留已有列表。模型读取中/失败/真实不可用分别显示，“刷新记录”重读本地模型状态。写入/付费请求不套读取超时，不自动重放。
+- 本地语义工作等待3秒，超时/繁忙回退现有关键词，持有一个工作直到实际完成，迟到结果不入过期请求；不清空历史、不新增外发/费用。空历史引用不加载模型。超时不会杀死原生线程，真正造成用户全页卡顿的运行原因仍未完全证实，实际效果由用户验收。
+- 无主库迁移/HTTP合同/测试或CI修改；五处桌面版本同步0.1.22。[体验说明](docs/GENERATION_READ_RECOVERY.md)记录旧失败显式新批与费用、自启动路径由用户在新版保存。本轮未读取用户存档/密钥、运行自动测试/应用/GUI/推理/付费API；旧的一次性诊断授权不复用，不push/发布。
+- ESLint/TypeScript、5份Python Ruff lint/format、Git diff静态检查通过；build-only完成PyInstaller/Core、Vite239模块（JS655.64kB/gzip196.75kB、143ms）和Rust release27.78s。PE FileVersion/ProductVersion静态读取均0.1.22。保留主chunk>500kB、STATIC_VCRUNTIME弃用及既有PyInstaller可选依赖告警，未隐藏或据此宣称运行兼容。
+- 独立完整目录artifacts/portable/generation-read-fix/dreamtalk、ZIP同父目录，旧0.1.21保留；222份Python源码AST与冻结字节、1039份包/ZIP文件、242次文档/许可字节和80个本轮文档本地链接核对通过，固定模型哈希与五处版本声明一致。Desktop SHA256=bff347e451300b719c71297ef4d4ff668d42db2eadcc1d740ec634644830a041；Core=9445b8e9a5f2eea069a446be3681402a8d83fcae74db0b95b223fcef22b2cf12；ZIP=c83e02ab9f2655d634a53722afac6cc3181b0b34c28106533d77e4c7c7350aaf。日志artifacts/generation-read-fix-build.log，清单artifacts/generation-read-fix-audit.json。仅本地提交，见git log。
+- 代码、编译和包核对不等于真实聊天/事件批次成功，也没有把未证实的运行卡顿归因于ONNX。下一步优先由用户验收单聊冷启动、读取失败重读和显式事件新批；若仍失败按新版安全日志收窄诊断。暂无新的产品决策。
+
 ## 最新接续：2026-10-03 后台任务状态与操作入口（桌面0.1.21）
 
 - 从干净bdeb87e/codex/world-archive接续，正式D:\LivingWorld。用户在0.1.20之后要求“继续下一步”；按此前建议完成活动/离线/事件池的功能反馈，不改长期记忆或世界调度。[复用调查](docs/research/2026-10-03-background-feedback-reuse.md)参考Carbon文档及WCAG2.2，直接复用React/现有组件/认证API，未引入依赖或复制第三方实现。

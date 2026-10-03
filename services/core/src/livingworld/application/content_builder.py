@@ -14,10 +14,13 @@ from livingworld.application.content_authoring import EditorDraft
 from livingworld.application.llm import (
     FinishReason,
     InvocationId,
+    LLMError,
+    LLMErrorCode,
     LLMMessage,
     LLMPurpose,
     LLMRequest,
     MessageRole,
+    StructuredFailureReason,
     TextContent,
 )
 from livingworld.application.llm_budget import BoundGuarantee, prepare_usage_bound
@@ -50,8 +53,32 @@ async def generate_bounded_text(configured, request, *, include_bound=False):
         response = await gateway.generate(request, selection=selection, turn_budget=budget)
     except BuilderError:
         raise
+    except LLMError as error:
+        failure = error.failure
+        reason = failure.structured_detail.reason if failure.structured_detail else None
+        code = {
+            StructuredFailureReason.EMPTY_OUTPUT: "builder_output_empty",
+            StructuredFailureReason.OUTPUT_TRUNCATED: "builder_output_limit",
+            StructuredFailureReason.JSON_PARSE_FAILED: "builder_output_invalid",
+            StructuredFailureReason.SCHEMA_VALIDATION_FAILED: "builder_output_invalid",
+        }.get(reason)
+        if code is None:
+            code = {
+                LLMErrorCode.TIMEOUT: "builder_model_timeout",
+                LLMErrorCode.RATE_LIMITED: "builder_model_rate_limited",
+                LLMErrorCode.QUOTA_EXHAUSTED: "builder_model_quota",
+                LLMErrorCode.CONTEXT_LIMIT: "builder_context_limit",
+                LLMErrorCode.STRUCTURED_OUTPUT_FAILED: "builder_output_invalid",
+            }.get(failure.code, "builder_model_failed")
+        raise BuilderError(code) from None
     except Exception:
         raise BuilderError("builder_model_failed") from None
+    if response.finish_reason in {FinishReason.OUTPUT_LIMIT, FinishReason.CONTEXT_LIMIT}:
+        raise BuilderError("builder_output_limit")
+    if response.finish_reason is FinishReason.REFUSAL:
+        raise BuilderError("builder_model_refused")
+    if not response.text.strip():
+        raise BuilderError("builder_output_empty")
     if (
         budget.bound_violated
         or response.invocation_id != request.invocation_id

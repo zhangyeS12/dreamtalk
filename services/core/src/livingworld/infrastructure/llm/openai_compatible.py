@@ -623,6 +623,9 @@ class OpenAICompatibleChatGateway:
                     self._logger.emit_llm_reply_facts(
                         trace_id=str(request.invocation_id.value),
                         reason=structured_detail.reason.value,
+                        validator_keyword=structured_detail.validator_keyword,
+                        instance_path=structured_detail.instance_path,
+                        schema_path=structured_detail.schema_path,
                         finish_reason=attempt.finish_reason.value if attempt is not None else None,
                         input_tokens=usage.input_tokens if usage is not None else None,
                         output_tokens=usage.output_tokens if usage is not None else None,

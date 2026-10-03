@@ -28,12 +28,13 @@ export function useTranscriptPages(client: CoreClient, worldId: string, conversa
 
   useEffect(() => {
     let active = true;
+    const controller = new AbortController();
     let timer: number | undefined;
     let failures = 0;
     setState(current => current.key === key ? { ...current, failed: false } : initial(key));
     const readLatest = async () => {
       try {
-        const page = await client.conversationMessagePage(worldId, conversationId);
+        const page = await client.conversationMessagePage(worldId, conversationId, undefined, controller.signal);
         if (!active) return;
         failures = 0;
         setState(current => {
@@ -58,7 +59,7 @@ export function useTranscriptPages(client: CoreClient, worldId: string, conversa
       }
     };
     void readLatest();
-    return () => { active = false; window.clearTimeout(timer); };
+    return () => { active = false; window.clearTimeout(timer); controller.abort(); };
   }, [client, worldId, conversationId, key, refresh, poll]);
 
   const loadOlder = async (beforePrepend: () => void) => {

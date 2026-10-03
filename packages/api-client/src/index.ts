@@ -278,20 +278,41 @@ export class CoreClient {
   }
 
   private async productRequest<T>(path: string, init?: RequestInit): Promise<T> {
-    const response = await this.fetcher(new URL(`/api/v${API_PROTOCOL}${path}`, this.endpoint), {
-      ...init,
-      headers: { Authorization: `Bearer ${this.connection.token}`, ...init?.headers },
-      credentials: "omit", cache: "no-store",
-    });
-    if (!response.ok) {
-      // Keep only bounded machine labels; never expose arbitrary server details.
-      const body: unknown = await response.json().catch(() => null);
-      const code = typeof body === "object" && body !== null && "detail" in body
-        && typeof body.detail === "string" && /^[a-z][a-z0-9_]{0,95}$/.test(body.detail)
-        ? body.detail : null;
-      throw new CoreRequestError(response.status, code);
+    // Bound read-only requests, including body reads. Mutations and paid reply
+    // requests retain their existing outcome/claim handling and are not replayed.
+    const read = !init?.method || init.method.toUpperCase() === "GET";
+    const controller = read ? new AbortController() : null;
+    const timer = controller ? setTimeout(() => controller.abort(), 15_000) : undefined;
+    // AbortController also works on older installed WebView2 runtimes.
+    const externalSignal = init?.signal;
+    const abortRead = () => controller?.abort();
+    if (controller) {
+      externalSignal?.addEventListener("abort", abortRead, { once: true });
+      if (externalSignal?.aborted) controller.abort();
     }
-    return await response.json() as T;
+    const signal = controller?.signal ?? externalSignal;
+    try {
+      const response = await this.fetcher(new URL(`/api/v${API_PROTOCOL}${path}`, this.endpoint), {
+        ...init, signal,
+        headers: { Authorization: `Bearer ${this.connection.token}`, ...init?.headers },
+        credentials: "omit", cache: "no-store",
+      });
+      if (!response.ok) {
+        // Keep only bounded machine labels; never expose arbitrary server details.
+        const body: unknown = await response.json().catch(() => null);
+        const code = typeof body === "object" && body !== null && "detail" in body
+          && typeof body.detail === "string" && /^[a-z][a-z0-9_]{0,95}$/.test(body.detail)
+          ? body.detail : null;
+        throw new CoreRequestError(response.status, code);
+      }
+      return await response.json() as T;
+    } catch (failure) {
+      if (controller?.signal.aborted && !init?.signal?.aborted) throw new CoreRequestError(504, "core_read_timeout");
+      throw failure;
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+      if (controller) externalSignal?.removeEventListener("abort", abortRead);
+    }
   }
 
   async streamChatReply(
@@ -399,11 +420,11 @@ export class CoreClient {
       method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ common }),
     });
   }
-  conversations(worldId: string): Promise<ChatConversation[]> {
-    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations`);
+  conversations(worldId: string, signal?: AbortSignal): Promise<ChatConversation[]> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations`, { signal });
   }
-  groupConversations(worldId: string): Promise<GroupChatConversation[]> {
-    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/groups`);
+  groupConversations(worldId: string, signal?: AbortSignal): Promise<GroupChatConversation[]> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/groups`, { signal });
   }
   createGroupConversation(worldId: string, importIds: string[], requestId: string): Promise<GroupChatConversation> {
     return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/groups`, {
@@ -414,9 +435,9 @@ export class CoreClient {
   conversationMessages(worldId: string, conversationId: string): Promise<ChatMessage[]> {
     return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/${encodeURIComponent(conversationId)}/messages`);
   }
-  conversationMessagePage(worldId: string, conversationId: string, beforePosition?: number): Promise<ChatMessagePage> {
+  conversationMessagePage(worldId: string, conversationId: string, beforePosition?: number, signal?: AbortSignal): Promise<ChatMessagePage> {
     const path = `/worlds/${encodeURIComponent(worldId)}/conversations/${encodeURIComponent(conversationId)}/messages/page`;
-    return this.productRequest(`${path}${beforePosition === undefined ? "" : `?before_position=${beforePosition}`}`);
+    return this.productRequest(`${path}${beforePosition === undefined ? "" : `?before_position=${beforePosition}`}`, { signal });
   }
   searchChatHistory(worldId: string, conversationId: string, query: string, beforePosition?: number, signal?: AbortSignal): Promise<ChatHistoryMatches> {
     return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/${encodeURIComponent(conversationId)}/messages/search`, {
@@ -469,8 +490,8 @@ export class CoreClient {
       body: JSON.stringify({ text, token_ceiling: tokenCeiling }),
     });
   }
-  directReplyAvailability(worldId: string): Promise<ChatReplyAvailability> {
-    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/reply-availability`);
+  directReplyAvailability(worldId: string, signal?: AbortSignal): Promise<ChatReplyAvailability> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/reply-availability`, { signal });
   }
   chatContextReports(worldId: string, conversationId: string, turnId: string, signal?: AbortSignal): Promise<ChatContextReports> {
     return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/${encodeURIComponent(conversationId)}/context-reports/${encodeURIComponent(turnId)}`, { signal });
@@ -490,8 +511,8 @@ export class CoreClient {
   generateDirectReply(worldId: string, conversationId: string, turnId: string): Promise<DirectTurnView> {
     return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/${encodeURIComponent(conversationId)}/turns/${encodeURIComponent(turnId)}/reply`, { method: "POST" });
   }
-  groupReplyAvailability(worldId: string): Promise<ChatReplyAvailability> {
-    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/group-reply-availability`);
+  groupReplyAvailability(worldId: string, signal?: AbortSignal): Promise<ChatReplyAvailability> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/group-reply-availability`, { signal });
   }
   sendGroupMessage(worldId: string, conversationId: string, text: string, tokenCeiling: number, requestId: string): Promise<PendingPlayerSend> {
     return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/${encodeURIComponent(conversationId)}/group-messages`, {
@@ -583,7 +604,7 @@ export class CoreClient {
     if (!response.ok) throw new CoreRequestError(response.status, "cover_image_unavailable");
     return response.blob();
   }
-  listProductWorlds(): Promise<WorldSettings[]> { return this.productRequest("/worlds"); }
+  listProductWorlds(signal?: AbortSignal): Promise<WorldSettings[]> { return this.productRequest("/worlds", { signal }); }
   createWorld(name: string, requestId: string): Promise<{ world_id: string }> {
     return this.productRequest("/worlds", {
       method: "POST", headers: { "Content-Type": "application/json", "X-Request-Id": requestId },
