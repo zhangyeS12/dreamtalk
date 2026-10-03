@@ -1,5 +1,7 @@
 # dreamtalk Windows 便携版
 
+最新完整包0.1.18包含本地中文语义模型。请保留整个目录，先退出旧版，再打开新目录的 dreamtalk-desktop.exe。参考 [上下文与记忆体验](CONTEXT_AND_RECALL.md) 验收；本轮只完成编译与静态检查。
+
 将整个 `dreamtalk` 文件夹解压后运行 `dreamtalk-desktop.exe`。请勿只复制 exe：`core/` 文件夹包含随附的 Python Core 和迁移脚本。使用 Windows 10/11，并确保系统有 WebView2 Runtime。无需另行安装 Python、uv、Node 或 Rust。
 
 应用数据保存在本机用户的 Tauri app-data 目录，不会写入解压目录。此版没有代码签名或自动更新；Windows 可能显示未知发布者提示。请先在非重要数据上试用，并保留自己的应用数据备份。

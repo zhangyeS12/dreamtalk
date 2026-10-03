@@ -472,6 +472,9 @@ export class CoreClient {
   directReplyAvailability(worldId: string): Promise<ChatReplyAvailability> {
     return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/reply-availability`);
   }
+  chatContextReports(worldId: string, conversationId: string, turnId: string, signal?: AbortSignal): Promise<ChatContextReports> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/${encodeURIComponent(conversationId)}/context-reports/${encodeURIComponent(turnId)}`, { signal });
+  }
   replyRecovery(worldId: string, conversationId: string, sourceTurnId: string, signal?: AbortSignal): Promise<ReplyRecoveryView> {
     return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/${encodeURIComponent(conversationId)}/reply-recovery/${encodeURIComponent(sourceTurnId)}`, { signal });
   }
@@ -701,3 +704,10 @@ export class CoreClient {
     return this.developerRequest(`/developer/worlds/${worldId}/memories`, { method: "POST", body: JSON.stringify({ owner_character_id: ownerCharacterId, observation_id: observationId, content }) });
   }
 }
+
+export type ChatContextReports = { turn_id: string; reports: {
+  speaker_id: string; version: number; input_upper_bound: number; output_upper_bound: number;
+  remaining_before_call: number; retrieval: string; context_reduced: boolean; references_omitted: number;
+  categories: { label: string; included: number; omitted: number }[];
+  references: { kind: string; id: string | null; text: string; source: string; time: string; source_kind: string; source_sender_id: string }[];
+}[] };

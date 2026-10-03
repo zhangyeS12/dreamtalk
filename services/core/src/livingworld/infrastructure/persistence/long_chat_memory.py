@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import LargeBinary, and_, cast, exists, func, or_, select
+from sqlalchemy import LargeBinary, and_, cast, exists, false, func, or_, select
 
 from livingworld.application.errors import EntityNotFoundError
 from livingworld.application.long_chat_memory import LongMemoryError
@@ -219,6 +219,7 @@ async def record_chat_memories(
 class RecallCandidate:
     text: str
     row: object
+    scope_key: str = ""
 
 
 class SqlAlchemyLongChatMemoryStore:
@@ -248,15 +249,14 @@ class SqlAlchemyLongChatMemoryStore:
             terms.extend(await self.ranker.query_terms(query[:2000]))
         return tuple(dict.fromkeys(terms))
 
-    async def _matching(self, session, world, player, character, query, cutoff=None):
+    async def _matching(self, session, world, player, character, query, cutoff=None, modes=None):
         queries = (query,) if isinstance(query, str) else query
         terms = await self._terms(queries)
-        if not terms:
-            return []
         predicates = [
             *_scope(world, player, character),
             Memory.state == "active",
             or_(
+                false(),
                 *(
                     or_(
                         Memory.content.contains(term, autoescape=True),
@@ -264,7 +264,7 @@ class SqlAlchemyLongChatMemoryStore:
                         Memory.quote.contains(term, autoescape=True),
                     )
                     for term in terms
-                )
+                ),
             ),
         ]
         if cutoff is not None:
@@ -277,21 +277,37 @@ class SqlAlchemyLongChatMemoryStore:
                 .limit(500)
             )
         ).all()
-        candidates, size = [], 0
-        for row in rows:
-            text = row.topic + " " + row.content + " " + row.quote
-            size += len(text.encode("utf-8"))
-            if size > 512 * 1024:
-                break
-            candidates.append(RecallCandidate(text, row))
-        ranked = await self.ranker.rank_queries(queries, tuple(candidates), limit=12)
+        independent = (
+            await session.scalars(
+                select(Memory)
+                .where(
+                    *_scope(world, player, character),
+                    Memory.state == "active",
+                    *([Memory.created_at <= cutoff] if cutoff is not None else []),
+                )
+                .order_by(Memory.created_at.desc(), Memory.entry_id)
+                .limit(256)
+            )
+        ).all()
+        candidates, seen = [], set()
+        for pool in (independent, rows):
+            size = 0
+            for row in pool:
+                text = row.topic + " " + row.content + " " + row.quote
+                amount = len(text.encode("utf-8"))
+                if row.entry_id in seen or size + amount > 256 * 1024:
+                    continue
+                candidates.append(RecallCandidate(text, row, f"{world}:{player}:{character}"))
+                size += amount
+                seen.add(row.entry_id)
+        ranked = await self._rank(queries, candidates, 12, modes)
         return [item.row for item in ranked]
 
-    async def _older_quotes(self, session, conversation, player, character, current, queries):
+    async def _older_quotes(
+        self, session, conversation, player, character, current, queries, modes=None
+    ):
         """Authorized by the user on 2026-10-02; no background history export."""
         terms = await self._terms(queries)
-        if not terms:
-            return []
         recent = (
             select(Message.message_id)
             .where(
@@ -300,7 +316,7 @@ class SqlAlchemyLongChatMemoryStore:
                 Message.position <= current.position,
             )
             .order_by(Message.position.desc())
-            .limit(32)
+            .limit(128)
         )
         hidden = exists(
             select(Memory.entry_id).where(
@@ -311,45 +327,63 @@ class SqlAlchemyLongChatMemoryStore:
                 Memory.state.in_(("forgotten", "superseded")),
             )
         )
-        rows = (
-            await session.scalars(
-                select(Message)
-                .join(
-                    Conversation,
-                    and_(
-                        Conversation.world_id == Message.world_id,
-                        Conversation.conversation_id == Message.conversation_id,
-                    ),
-                )
-                .join(
-                    Participant,
-                    and_(
-                        Participant.world_id == Conversation.world_id,
-                        Participant.conversation_id == Conversation.conversation_id,
-                    ),
-                )
-                .where(
-                    Message.world_id == conversation.world_id.value,
-                    Conversation.player_id == player.value,
-                    Participant.character_id == character.value,
-                    Message.created_at_utc < current.created_at_utc,
-                    Message.message_id.not_in(recent),
-                    ~hidden,
-                    func.length(cast(Message.text, LargeBinary)) <= 8192,
-                    or_(*(Message.text.contains(term, autoescape=True) for term in terms)),
-                )
-                .order_by(Message.created_at_utc.desc(), Message.message_id)
-                .limit(200)
+        authorized = (
+            select(Message)
+            .join(
+                Conversation,
+                and_(
+                    Conversation.world_id == Message.world_id,
+                    Conversation.conversation_id == Message.conversation_id,
+                ),
             )
-        ).all()
-        candidates, used = [], 0
-        for row in rows:
-            size = len(row.text.encode("utf-8"))
-            if used + size > 96 * 1024:
-                continue
-            used += size
-            candidates.append(RecallCandidate(row.text, row))
-        ranked = await self.ranker.rank_queries(queries, tuple(candidates), limit=4)
+            .join(
+                Participant,
+                and_(
+                    Participant.world_id == Conversation.world_id,
+                    Participant.conversation_id == Conversation.conversation_id,
+                ),
+            )
+            .where(
+                Message.world_id == conversation.world_id.value,
+                Conversation.player_id == player.value,
+                Participant.character_id == character.value,
+                Message.created_at_utc < current.created_at_utc,
+                Message.message_id.not_in(recent),
+                ~hidden,
+                func.length(cast(Message.text, LargeBinary)) <= 8192,
+            )
+            .order_by(Message.created_at_utc.desc(), Message.message_id)
+        )
+        lexical = (
+            (
+                await session.scalars(
+                    authorized.where(
+                        or_(*(Message.text.contains(term, autoescape=True) for term in terms))
+                    ).limit(200)
+                )
+            ).all()
+            if terms
+            else []
+        )
+        independent = (await session.scalars(authorized.limit(256))).all()
+        # Give both channels space; a large keyword corpus cannot evict all semantic candidates.
+        candidates, seen = [], set()
+        for rows in (independent, lexical):
+            used = 0
+            for row in rows:
+                size = len(row.text.encode("utf-8"))
+                if row.message_id in seen or used + size > 96 * 1024:
+                    continue
+                used += size
+                seen.add(row.message_id)
+                candidates.append(
+                    RecallCandidate(
+                        row.text,
+                        row,
+                        f"{conversation.world_id.value}:{player.value}:{character.value}",
+                    )
+                )
+        ranked = await self._rank(queries, candidates, 4, modes)
         result, used = [], 2
         for item in ranked:
             row = item.row
@@ -366,6 +400,15 @@ class SqlAlchemyLongChatMemoryStore:
                 continue
             used += size + 1
             result.append(value)
+        return result
+
+    async def _rank(self, queries, candidates, limit, modes):
+        method = getattr(self.ranker, "rank_with_mode", None)
+        if method is None:
+            return await self.ranker.rank_queries(queries, tuple(candidates), limit=limit)
+        result, mode = await method(queries, tuple(candidates), limit=limit)
+        if modes is not None:
+            modes.append(mode)
         return result
 
     async def for_character(self, conversation, player, character, current):
@@ -428,6 +471,7 @@ class SqlAlchemyLongChatMemoryStore:
                 if len(bucket) > index
             ]
             queries = await self._queries(session, conversation, player, current)
+            modes = []
             related = await self._matching(
                 session,
                 conversation.world_id.value,
@@ -435,6 +479,7 @@ class SqlAlchemyLongChatMemoryStore:
                 character.value,
                 queries,
                 current.created_at_utc,
+                modes,
             )
             result, seen, size = [], set(), 2
             for row in [*pinned[:2], *core[:6], *related[:4], *pinned[2:], *core[6:], *related[4:]]:
@@ -464,9 +509,16 @@ class SqlAlchemyLongChatMemoryStore:
                 seen.add(row.entry_id)
                 result.append(value)
             older_quotes = await self._older_quotes(
-                session, conversation, player, character, current, queries
+                session, conversation, player, character, current, queries, modes
             )
             return {
+                "_retrieval_mode": "hybrid_partial"
+                if "hybrid_partial" in modes
+                else "hybrid"
+                if "hybrid" in modes
+                else "keyword_fallback"
+                if "keyword_fallback" in modes
+                else "keyword",
                 "long_term_original_quotes": older_quotes,
                 "long_memory_capture_enabled": settings is None or settings.enabled,
                 "long_term_dialogue_memories": result,

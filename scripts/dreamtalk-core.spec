@@ -6,6 +6,8 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules, copy
 
 ROOT = Path(SPECPATH).parent
 PACKAGE = ROOT / "services" / "core" / "src"
+if not (ROOT / "artifacts/semantic-model/manifest.json").is_file():
+    raise SystemExit("Run scripts/prepare-semantic-model.py before packaging.")
 
 analysis = Analysis(
     [str(ROOT / "scripts" / "core-entry.py")],
@@ -30,9 +32,15 @@ analysis = Analysis(
     + copy_metadata("ddgs")
     + copy_metadata("primp")
     + copy_metadata("lxml")
+    + copy_metadata("fastembed", recursive=True)
+    + copy_metadata("onnxruntime")
+    + copy_metadata("tokenizers")
+    + collect_data_files("fastembed", include_py_files=True)
+    + [(str(ROOT / "artifacts/semantic-model"), "semantic-model")]
     + collect_data_files("ddgs", include_py_files=True),
     hiddenimports=["aiosqlite", "ddgs.ddgs"]
     + collect_submodules("ddgs.engines")
+    + collect_submodules("fastembed")
     + collect_submodules("livingworld.infrastructure.persistence.migrations.versions"),
     hookspath=[str(ROOT / "scripts" / "pyinstaller-hooks")],
     hooksconfig={},

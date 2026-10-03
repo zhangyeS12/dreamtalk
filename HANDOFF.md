@@ -2,6 +2,19 @@
 
 更新日期：2026-10-03。此文件记录当前开发现场与接续工作，不替代 [AGENTS.md](AGENTS.md)。先读 AGENTS，再读本文，最后核对实际 Git 状态和相关代码；不能把下面的基线哈希当作永远不变的当前 HEAD。
 
+## 最新接续：2026-10-03 上下文容量与中文混合召回（桌面0.1.18）
+
+- 从干净2984c91109e5bd0e73bc35bb9e5b4c2f7c74848f / codex/world-archive接续，正式D:\LivingWorld。用户在讨论上下文/长短期记忆后明确“同意，按你说的优化”。本轮将统一上下文分配、来源查看、中文语义检索、时间来源和摘要整理落实为可体验切片，没有推断额外后台收费或跨角色历史外发授权。
+- [复用调查](docs/research/2026-10-03-context-semantic-reuse.md)：FastEmbed0.8.1 Apache-2.0内置BGE-small-zh-v1.5 MIT，使用Qdrant固定ONNX导出46fbe35fd4374a00fee7de77dfddaeb6dd6a2c59，权重约95MB，SHA256 1294ea4b6331115a353d81f96b85e8c8d7fdcc284453d5b2fab5b016230aad38。CPU/ONNX无GPU/PyTorch服务，运行时specific_model_path+local_files_only，不下载、不外发embedding文本。直接保留jieba/SQLite FTS5/BM25和既有RRF，多渠道合并；不复制SillyTavern AGPL代码。uv.lock及轮子许可证/notice清单已补齐。
+- 权限/状态过滤在候选检索前；语义独立读取最近256条当前角色获准有效记忆与256条获准旧原句，关键词可另筛更早500/200条，两路各留正文空间。每次最多新增128个向量，4096个摘要键/向量LRU缓存按world/player/character作用域；后续显式聊天/搜索渐进缓存，无后台导出。相似度0.8仅初始启发式，未实测；512输入Token会截断编码较长资料。失败/模型缺失回退关键词并说明，不阻断聊天。长期条目16/8KiB、旧原句4/8KiB外发边界不扩大；不是全历史无限语义检索。
+- chat_capacity统一处理单聊、选人和角色群聊的容量：保留系统规则、人物/玩家信息、当前完整回合、当前活动；按优先级整条去除旁支和较早完整回合。候选近期读取上限32→128，仍96KiB/整轮限制。布局按真实消息索引支持并发交错和恢复回合；annotation插入系统消息后的索引偏移被保留。请求必须经原可信保守上界检查，输出随本次剩余额度收缩；无请求级可信计数时不假装裁剪可降低固定模型级预留。packing_feedback只暴露既有可信计数与容量，不替换费用准入。
+- 每次角色回复下方有“本次参考内容”，保存生成前的有限来源记录：候选采用/省略数、检索方式、预留上界、共同聊天长期记忆与原句的实际说话者/记录时间。不会展示私有episodic或活动快照。只是准备记录，不等于模型理解或真实账单。认证GET、selected Player所有权和固定成员过滤；面板按世界/会话/回合隔离并取消旧读取、自动定位。0032仅增加chat_reply_executions.context_reports可空列；保留旧0031形状检查和各历史迁移，不运行存档迁移诊断。
+- 时间规则明确created_at/world_time来源、旧“现在/明天”不能套用当前时间、旧工作/位置不覆盖当前活动、过期约定无证据保持待确认。手动会话摘要继续复用旧摘要+增量原句、预览确认；提示按身份偏好/约定/经历/未解决事项组织，不新开逐句摘要/裁判API。不自动补写经历或改Kernel真值。
+- Ruff/Core静态检查、ESLint/TypeScript、223份AST解析、diff检查通过。最终PyInstaller/Core、Vite237模块（JS638.87kB/gzip191.98）、Rust release24.28s完成；PE FileVersion/ProductVersion=0.1.18。221份冻结Python源码与源文件一致，1022份包文件/65份许可证/168份文档和ZIP逐字节核对。冻结依赖元数据递归打包，包含ONNX本地DLL和tokenizer。构建保留>500kB前端体积与STATIC_VCRUNTIME弃用警告；PyInstaller另有可选机器学习/平台模块提示，未把这些提示说成已运行兼容性。
+- **最终交付仅使用** artifacts/portable/context-memory-ready/dreamtalk 与 dreamtalk.zip；context-memory是首轮中间包，旧0.1.17保留。Desktop SHA256=faf75a3edb444d020e0d6beb53d2c74b801084a7e3e34d2020cb88597fd81460；Core=d83b911af8109a21ecdf0b57c9029b061e6412fa45df3ff0f6d2da319707bf60；ZIP=843e8b76e2374c3022712a9a5b063965fe59cb6d5ed1804bd2994a5f5a86ab21。产物核对清单 artifacts/context-memory-audit.json、构建日志 artifacts/context-memory-build.log，均被Git忽略。最新源码已作本地Git保存，具体提交以git log为准；未push或发布。
+- **未运行**自动测试、应用/浏览器/桌面smoke、模型推理或付费API；未读密钥、真实配置、用户聊天存档或系统自启动设置；未实际迁移用户数据库。用户退出旧版再打开完整最终目录验收，见[体验说明](docs/CONTEXT_AND_RECALL.md)。首次CPU耗时、语义阈值/召回质量、升级运行与群聊恢复仍待真实体验，不能以打包冒充验收。
+- 下一步：优先根据同义问法、更正偏好、旧约定和群聊来源的体验校准；有证据需要时继续做更大历史的渐进持久索引与分页，不无界扫描或增加每句费用。前端代码拆分与桌面运行库配置弃用也已记录；未因构建提示擅自扩展本轮改造。
+
 ## 最新接续：2026-10-03 记忆可靠性与显式回复恢复（桌面0.1.17）
 
 - 从干净8303d32a26d585524d20ffaa0751da8cf312ab75 / codex/world-archive接续，正式D:\LivingWorld。用户要求先查成熟实现、推进功能体验，并明确批准已领取失败回复采用“独立新尝试，点击时明确费用”。[批准方案](docs/proposals/2026-10-03-reply-recovery.md)与AGENTS第25节记录对第23节同消息额度的有限例外；没有推断后台自动重试授权。此前第23节一条消息共享同额度与新决定存在冲突，按用户本次明确决定，仅手动新attempt采用独立额度，内部重试/回退/选人/多角色仍共享该attempt额度。

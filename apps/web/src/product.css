@@ -309,3 +309,8 @@
   .world-journal .news-item { flex-direction: column; }
   .news-marks { flex-direction: row; flex-wrap: wrap; }
 }
+
+.context-references { padding: 20px 28px; background: #f3f6f4; border-bottom: 1px solid #d7dfda; max-height: 55vh; overflow: auto; }
+.context-references article { border-top: 1px solid #d7dfda; padding: 12px 0; }
+.context-references blockquote { margin: 12px 0; padding: 8px 16px; border-left: 3px solid #8eaa98; background: white; overflow-wrap: anywhere; }
+.message-reference { display: block; margin-top: 8px; font-size: 12px; }

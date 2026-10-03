@@ -12,6 +12,7 @@ from livingworld.application.character_activity_context import (
     CharacterActivityContextReader,
     character_activity_context,
 )
+from livingworld.application.chat_capacity import ContextLayout
 from livingworld.application.chat_context import (
     card_greeting_example,
     common_chat_lore,
@@ -70,6 +71,7 @@ _REPLY_SYSTEM = (
 @dataclass(frozen=True, slots=True)
 class GroupChatContext:
     messages: tuple[LLMMessage, ...] = field(repr=False)
+    layout: ContextLayout | None = None
 
 
 class GroupChatContextBuilder:
@@ -198,6 +200,12 @@ class GroupChatContextBuilder:
                 for item in transcript
             ),
         }
+        retrieval = data.pop("_retrieval_mode", "keyword")
+        quote_ids = {str(item.message_id.value) for item in transcript}
+        if "long_term_original_quotes" in data:
+            data["long_term_original_quotes"] = [
+                q for q in data["long_term_original_quotes"] if q.get("message_id") not in quote_ids
+            ]
         return GroupChatContext(
             (
                 LLMMessage(MessageRole.SYSTEM, (TextContent(_SELECT_SYSTEM),)),
@@ -205,7 +213,20 @@ class GroupChatContextBuilder:
                     MessageRole.USER,
                     (TextContent(json.dumps(data, ensure_ascii=False, separators=(",", ":"))),),
                 ),
-            )
+            ),
+            ContextLayout(
+                group_turns=tuple(
+                    tuple(
+                        index for index, item in enumerate(transcript) if item.turn_id == identity
+                    )
+                    for identity in dict.fromkeys(item.turn_id for item in transcript)
+                ),
+                current_turn=list(dict.fromkeys(item.turn_id for item in transcript)).index(
+                    source.turn_id
+                ),
+                message_ids=tuple(str(item.message_id.value) for item in transcript),
+                retrieval=retrieval,
+            ),
         )
 
     async def build_reply(
@@ -294,6 +315,12 @@ class GroupChatContextBuilder:
             data["character_activity_context"] = activity
         if greeting := card_greeting_example(persona):
             data["character"]["opening_style_example"] = greeting
+        retrieval = data.pop("_retrieval_mode", "keyword")
+        quote_ids = {str(item.message_id.value) for item in transcript}
+        if "long_term_original_quotes" in data:
+            data["long_term_original_quotes"] = [
+                q for q in data["long_term_original_quotes"] if q.get("message_id") not in quote_ids
+            ]
         return GroupChatContext(
             (
                 LLMMessage(MessageRole.SYSTEM, (TextContent(_REPLY_SYSTEM),)),
@@ -301,5 +328,18 @@ class GroupChatContextBuilder:
                     MessageRole.USER,
                     (TextContent(json.dumps(data, ensure_ascii=False, separators=(",", ":"))),),
                 ),
-            )
+            ),
+            ContextLayout(
+                group_turns=tuple(
+                    tuple(
+                        index for index, item in enumerate(transcript) if item.turn_id == identity
+                    )
+                    for identity in dict.fromkeys(item.turn_id for item in transcript)
+                ),
+                current_turn=list(dict.fromkeys(item.turn_id for item in transcript)).index(
+                    source.turn_id
+                ),
+                message_ids=tuple(str(item.message_id.value) for item in transcript),
+                retrieval=retrieval,
+            ),
         )

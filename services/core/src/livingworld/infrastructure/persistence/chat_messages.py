@@ -32,6 +32,7 @@ from livingworld.domain.identifiers import (
     PlayerId,
     WorldId,
 )
+from livingworld.infrastructure.persistence.chat_context_report import ChatContextReportMixin
 from livingworld.infrastructure.persistence.chat_reply_recovery import ChatReplyRecoveryMixin
 from livingworld.infrastructure.persistence.long_chat_memory import record_chat_memories
 from livingworld.infrastructure.persistence.mapping import to_domain
@@ -69,7 +70,7 @@ def _message(row: ChatMessageRecord) -> ChatMessage:
     )
 
 
-class SqlAlchemyChatMessageStore(ChatReplyRecoveryMixin):
+class SqlAlchemyChatMessageStore(ChatContextReportMixin, ChatReplyRecoveryMixin):
     def __init__(self, sessions, time_source=None) -> None:
         self._sessions, self._time_source = sessions, time_source
 

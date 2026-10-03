@@ -1192,6 +1192,7 @@ class ChatReplyExecutionRecord(Base):
     """Local generation lifecycle; uncertainty never authorizes an automatic replay."""
 
     __tablename__ = "chat_reply_executions"
+    context_reports: Mapped[str | None] = mapped_column(Text)
     world_id: Mapped[UUID] = mapped_column(UUIDStorage(), primary_key=True)
     turn_id: Mapped[UUID] = mapped_column(UUIDStorage(), primary_key=True)
     state: Mapped[str] = mapped_column(String(16), nullable=False)

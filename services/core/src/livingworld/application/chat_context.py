@@ -11,6 +11,7 @@ from livingworld.application.character_activity_context import (
     CharacterActivityContextReader,
     character_activity_context,
 )
+from livingworld.application.chat_capacity import ContextLayout
 from livingworld.application.chat_conversations import ChatConversationService
 from livingworld.application.chat_messages import (
     MAX_PROMPT_TRANSCRIPT_MESSAGES,
@@ -179,6 +180,7 @@ def recent_chat_transcript(
 class DirectChatContext:
     messages: tuple[LLMMessage, ...] = field(repr=False)
     character_id: CharacterId | None = None
+    layout: ContextLayout | None = None
 
 
 class DirectChatContextBuilder:
@@ -263,6 +265,13 @@ class DirectChatContextBuilder:
                     conversation_id, conversation.player_id, conversation.character_id, sent.message
                 )
             )
+        retrieval = persona.pop("_retrieval_mode", "keyword")
+        quote_ids = {str(item.message_id.value) for item in visible}
+        persona["long_term_original_quotes"] = [
+            q
+            for q in persona.get("long_term_original_quotes", [])
+            if q.get("message_id") not in quote_ids
+        ]
         observations = await character_observed_events(
             self._observed_event_reader, conversation.character_id
         )
@@ -299,6 +308,7 @@ class DirectChatContextBuilder:
         activity = await character_activity_context(
             self._activity_reader, conversation.character_id
         )
+        prompt_turns = {}
         for item in visible:
             if item == sent.message and activity is not None:
                 # Refresh transient context near the current question, preserving the user's turn.
@@ -322,8 +332,18 @@ class DirectChatContextBuilder:
                 role = MessageRole.ASSISTANT
             else:
                 raise EntityNotFoundError("chat_sender_invalid")
+            prompt_turns.setdefault(item.turn_id, []).append(len(result))
             result.append(LLMMessage(role, (TextContent(item.text),)))
-        return DirectChatContext(tuple(result), conversation.character_id)
+        return DirectChatContext(
+            tuple(result),
+            conversation.character_id,
+            ContextLayout(
+                direct_turns=tuple(tuple(indexes) for indexes in prompt_turns.values()),
+                current_turn=list(prompt_turns).index(sent.message.turn_id),
+                message_ids=tuple(str(item.message_id.value) for item in visible),
+                retrieval=retrieval,
+            ),
+        )
 
     @staticmethod
     def _recent_transcript(

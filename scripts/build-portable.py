@@ -97,6 +97,7 @@ def main() -> None:
     shutil.copy2(root / "docs" / "licenses" / "jieba-0.42.1.txt", package / "JIEBA_LICENSE.txt")
     shutil.copytree(root / "docs" / "licenses", package / "third-party-licenses")
     shutil.copy2(root / "docs" / "PORTABLE_WINDOWS.md", package / "README.md")
+    shutil.copytree(root / "docs", package / "docs")
     if not args.build_only:
         environment = os.environ.copy()
         environment["DREAMTALK_PACKAGED_CORE_ROOT"] = str(package)

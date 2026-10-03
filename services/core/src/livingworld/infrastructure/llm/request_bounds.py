@@ -67,6 +67,33 @@ class ProviderRequestUsageBounder:
             if preset is not None:
                 self._profiles[model] = (preset["bound_encoding"], gateway)
 
+    def packing_feedback(self, request):
+        """Raw trustworthy count and configured input ceiling, solely for packing."""
+        fallback = self._fallback.bound(request)
+        if fallback is None:
+            return None
+        if request.model in self._count_gateways:
+            prepared = self._count_payload(request)
+            cached = self._counts.get(prepared[2]) if prepared is not None else None
+            if cached is not None and cached[0] > monotonic() and cached[1] is not None:
+                return cached[1], fallback.input_tokens
+            return None
+        profile = self._profiles.get(request.model)
+        if profile is None:
+            return None
+        try:
+            encoding, gateway = profile
+            payload = gateway.token_reservation_payload(request)
+            data = json.dumps(
+                {"encoding": encoding, "payload": payload},
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ).encode("utf-8")
+            count = self._cache.get(hashlib.sha256(data).digest())
+            return (count, fallback.input_tokens) if count is not None else None
+        except (ValueError, TypeError, LLMContractError, LLMError):
+            return None
+
     def supports_request_bound(self, model) -> bool:
         return model in self._count_gateways or (model in self._profiles and self._helper.is_file())
 

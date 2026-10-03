@@ -10,6 +10,7 @@ from uuid import uuid4
 
 from anyio import CancelScope
 
+from livingworld.application.chat_capacity import ContextCapacityError, fit_chat_context
 from livingworld.application.chat_context import DirectChatContextBuilder
 from livingworld.application.chat_event_annotations import (
     AnnotatedDialogue,
@@ -39,11 +40,9 @@ from livingworld.application.llm import (
 )
 from livingworld.application.llm_accounting import AccountingInfrastructureError
 from livingworld.application.llm_budget import (
-    BoundGuarantee,
     BudgetAdmissionError,
     BudgetIntegrityError,
     PreflightUsageBounder,
-    prepare_usage_bound,
 )
 from livingworld.application.llm_chat_turn_budget import ChatTurnTokenBudget, TurnTokenBudgetError
 from livingworld.application.llm_execution import ExecutionDeadlineError
@@ -323,38 +322,25 @@ class DirectChatReplyService:
             request = annotate_request(request)
         request = dialogue_request(self._gateway, request, self._selection, progress)
         try:
-            plan = self._gateway.plan(request, selection=self._selection)
+            self._gateway.plan(request, selection=self._selection)
         except RoutingError:
             raise ChatReplyUnavailableError("chat_model_unavailable") from None
-        bounds = [
-            await prepare_usage_bound(self._token_bounder, replace(request, model=model))
-            for model in plan.candidates
-        ]
-        if not bounds or any(
-            bound is None or bound.guarantee is not BoundGuarantee.HARD_UPPER_BOUND
-            for bound in bounds
-        ):
-            raise ChatReplyBudgetError("turn_input_bound_unavailable")
-        remaining_for_output = sent.token_ceiling - max(bound.input_tokens for bound in bounds)
-        if remaining_for_output < 1:
-            raise ChatReplyBudgetError("turn_token_limit_exceeded")
-        if request.max_output_tokens > remaining_for_output:
-            request = replace(request, max_output_tokens=remaining_for_output)
-            bounds = [
-                await prepare_usage_bound(self._token_bounder, replace(request, model=model))
-                for model in plan.candidates
-            ]
-        if any(
-            bound is None
-            or bound.guarantee is not BoundGuarantee.HARD_UPPER_BOUND
-            or bound.input_tokens + bound.output_tokens > sent.token_ceiling
-            for bound in bounds
-        ):
-            raise ChatReplyBudgetError("turn_token_limit_exceeded")
+        try:
+            request, report = await fit_chat_context(
+                request,
+                context.layout,
+                self._gateway,
+                self._token_bounder,
+                self._selection,
+                sent.token_ceiling,
+            )
+        except ContextCapacityError as error:
+            raise ChatReplyBudgetError(str(error)) from None
         claim = await self._messages.claim_direct(sent.message.conversation_id, sent.turn_id)
         async with claimed_reply_execution(self._messages, sent):
             if claim.player_message != sent.message or claim.token_ceiling != sent.token_ceiling:
                 raise ChatReplyValidationError("chat_send_changed")
+            await self._messages.save_context_report(sent, claim.character_id, report)
             budget = ChatTurnTokenBudget(claim.token_ceiling)
             if progress is not None:
                 await progress(ChatProgress("replying", claim.character_id))

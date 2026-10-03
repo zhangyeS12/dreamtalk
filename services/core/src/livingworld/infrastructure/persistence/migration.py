@@ -63,7 +63,8 @@ OFFLINE_CONTACT_REVISION = "0027_offline_contact"
 STORY_REVISION = "0028_world_event_journal"
 LONG_MEMORY_REVISION = "0029_long_chat_memory"
 COVER_REVISION = "0030_world_covers"
-HEAD_REVISION = "0031_chat_reply_recovery"
+REPLY_RECOVERY_REVISION = "0031_chat_reply_recovery"
+HEAD_REVISION = "0032_chat_context_reports"
 REPLY_RECOVERY_TABLES = {"chat_reply_executions", "chat_reply_recoveries"}
 COVER_TABLES = {"world_covers", "world_cover_images"}
 LONG_MEMORY_TABLES = {"long_chat_memories", "long_chat_memory_settings"}
@@ -241,13 +242,20 @@ def _current_revision(connection: Connection) -> str:
 
 def _validate_managed_state(connection: Connection, revision: str) -> None:
     # Additive authored/job tables do not change the older runtime shapes.
-    pre_reply_recovery_revision = revision != HEAD_REVISION
-    pre_cover_revision = revision not in {COVER_REVISION, HEAD_REVISION}
-    pre_long_memory_revision = revision not in {LONG_MEMORY_REVISION, COVER_REVISION, HEAD_REVISION}
+    pre_context_report_revision = revision != HEAD_REVISION
+    pre_reply_recovery_revision = revision not in {REPLY_RECOVERY_REVISION, HEAD_REVISION}
+    pre_cover_revision = revision not in {COVER_REVISION, REPLY_RECOVERY_REVISION, HEAD_REVISION}
+    pre_long_memory_revision = revision not in {
+        LONG_MEMORY_REVISION,
+        COVER_REVISION,
+        REPLY_RECOVERY_REVISION,
+        HEAD_REVISION,
+    }
     pre_story_revision = revision not in {
         STORY_REVISION,
         LONG_MEMORY_REVISION,
         COVER_REVISION,
+        REPLY_RECOVERY_REVISION,
         HEAD_REVISION,
     }
     pre_offline_contact_revision = revision not in {
@@ -255,6 +263,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         STORY_REVISION,
         LONG_MEMORY_REVISION,
         COVER_REVISION,
+        REPLY_RECOVERY_REVISION,
         HEAD_REVISION,
     }
     pre_local_location_revision = revision not in {
@@ -263,6 +272,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         STORY_REVISION,
         LONG_MEMORY_REVISION,
         COVER_REVISION,
+        REPLY_RECOVERY_REVISION,
         HEAD_REVISION,
     }
     pre_director_revision = revision not in {
@@ -272,6 +282,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         STORY_REVISION,
         LONG_MEMORY_REVISION,
         COVER_REVISION,
+        REPLY_RECOVERY_REVISION,
         HEAD_REVISION,
     }
     pre_conversation_memory_revision = revision not in {
@@ -282,6 +293,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         STORY_REVISION,
         LONG_MEMORY_REVISION,
         COVER_REVISION,
+        REPLY_RECOVERY_REVISION,
         HEAD_REVISION,
     }
     pre_builder_revision = revision not in {
@@ -293,6 +305,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         STORY_REVISION,
         LONG_MEMORY_REVISION,
         COVER_REVISION,
+        REPLY_RECOVERY_REVISION,
         HEAD_REVISION,
     }
     pre_completion_revision = revision not in {
@@ -306,6 +319,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         STORY_REVISION,
         LONG_MEMORY_REVISION,
         COVER_REVISION,
+        REPLY_RECOVERY_REVISION,
         HEAD_REVISION,
     }
     pre_common_lore_revision = revision not in {
@@ -318,6 +332,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         STORY_REVISION,
         LONG_MEMORY_REVISION,
         COVER_REVISION,
+        REPLY_RECOVERY_REVISION,
         HEAD_REVISION,
     }
     if revision in {
@@ -331,6 +346,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         STORY_REVISION,
         LONG_MEMORY_REVISION,
         COVER_REVISION,
+        REPLY_RECOVERY_REVISION,
         HEAD_REVISION,
     }:
         revision = CHAT_DISPATCH_REVISION
@@ -522,6 +538,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
             pre_long_memory_revision=pre_long_memory_revision,
             pre_cover_revision=pre_cover_revision,
             pre_reply_recovery_revision=pre_reply_recovery_revision,
+            pre_context_report_revision=pre_context_report_revision,
         )
     if revision in {
         CONTENT_REVISION,
@@ -584,6 +601,7 @@ def _validate_domain_shape(
     pre_long_memory_revision: bool = True,
     pre_cover_revision: bool = True,
     pre_reply_recovery_revision: bool = True,
+    pre_context_report_revision: bool = True,
 ) -> None:
     """Detect partial/mismatched schemas; never infer a revision from them."""
 
@@ -757,6 +775,11 @@ def _validate_domain_shape(
                 else column.nullable,
             )
             for column in table.columns
+            if not (
+                pre_context_report_revision
+                and table.name == "chat_reply_executions"
+                and column.name == "context_reports"
+            )
             if not (
                 pre_offline_contact_revision
                 and (

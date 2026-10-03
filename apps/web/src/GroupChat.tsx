@@ -1,3 +1,4 @@
+import { ContextReferencePanel } from "./ContextReferencePanel";
 import { MessageTime } from "./MessageTime";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { CoreClient, CoreRequestError, type ChatReplyAvailability, type GroupChatConversation, type WorldContentItem } from "@dreamtalk/api-client";
@@ -79,6 +80,7 @@ export function GroupChatDetails({ client, worldId, playerId, group, tokenCeilin
   const [historyOpen, setHistoryOpen] = useState(false);
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [longMemoryOpen, setLongMemoryOpen] = useState(false);
+  const [referenceTurn, setReferenceTurn] = useState<string | null>(null);
   const [refresh, setRefresh] = useState(0);
   const [availability, setAvailability] = useState<ChatReplyAvailability | null>(null);
   const available = availability?.available ?? false;
@@ -213,6 +215,7 @@ export function GroupChatDetails({ client, worldId, playerId, group, tokenCeilin
   const mentionable = group.participants.filter(item => nameCounts.get(item.character_name) === 1);
   return <section ref={thread} className="chat-thread" aria-label="群聊">
     <div className="thread-heading"><button type="button" className="text-action" onClick={onBack}>返回聊天</button><h2>{group.participants.map(item => item.character_name).join("、")}</h2><span>群聊</span><button type="button" className="text-action transcript-refresh" onClick={() => setLongMemoryOpen(true)}>长期记忆</button><button type="button" className="text-action transcript-refresh" onClick={() => setMemoryOpen(true)}>会话摘要</button><button type="button" className="text-action transcript-refresh" onClick={() => setHistoryOpen(true)}>聊天回忆</button><button type="button" className="text-action transcript-refresh" onClick={() => setRefresh(value => value + 1)}>刷新记录</button></div>
+    {referenceTurn ? <ContextReferencePanel key={`${worldId}:${group.conversation_id}:${referenceTurn}`} client={client} worldId={worldId} conversationId={group.conversation_id} turnId={referenceTurn} names={names} onClose={() => setReferenceTurn(null)} /> : null}
     {longMemoryOpen ? <LongChatMemoryPanel client={client} worldId={worldId} conversationId={group.conversation_id} characters={group.participants} onClose={() => setLongMemoryOpen(false)} /> : null}
     {memoryOpen ? <ConversationMemoryPanel client={client} worldId={worldId} conversationId={group.conversation_id} senderName={message => message.sender_kind === "player" && message.sender_id === playerId ? "我" : names.get(message.sender_id) ?? "角色"} canGenerate={!sending && !pending} onClose={() => setMemoryOpen(false)} /> : null}
     {historyOpen ? <ChatHistoryPanel client={client} worldId={worldId} conversationId={group.conversation_id} senderName={message => message.sender_kind === "player" && message.sender_id === playerId ? "我" : names.get(message.sender_id) ?? "角色"} canQuote={available && !sending && !pending} onClose={() => setHistoryOpen(false)} onQuote={text => {
@@ -226,7 +229,7 @@ export function GroupChatDetails({ client, worldId, playerId, group, tokenCeilin
     {failed ? <p className="thread-hint" role="alert">无法读取群聊记录，请刷新后重试。</p> : null}
     {messages === null ? failed ? null : <p className="thread-hint">正在读取消息…</p> : messages.length === 0 ? <div className="conversation-placeholder"><h2>还没有消息</h2><p>发一条消息，开始群聊。</p></div> : <>{hasOlder ? <div className="transcript-history"><button type="button" className="text-action" disabled={loadingOlder} onClick={() => void loadOlder(beforePrepend)}>{loadingOlder ? "正在加载…" : "加载更早消息"}</button></div> : null}<ol className="message-list">{messages.map(message => {
       const own = message.sender_kind === "player" && message.sender_id === playerId;
-      return <li key={message.message_id} className={`message-row ${own ? "own" : ""}`}><div className="message-bubble"><span className="message-sender">{own ? "我" : names.get(message.sender_id) ?? "角色"}</span><ChatMessageBody text={message.text} /><MessageTime message={message} /></div></li>;
+      return <li key={message.message_id} className={`message-row ${own ? "own" : ""}`}><div className="message-bubble"><span className="message-sender">{own ? "我" : names.get(message.sender_id) ?? "角色"}</span><ChatMessageBody text={message.text} /><MessageTime message={message} />{!own ? <button type="button" className="text-action message-reference" onClick={() => setReferenceTurn(message.turn_id)}>本次参考内容</button> : null}</div></li>;
     })}{visibleStreamDraft ? <StreamingReplyBubble name={names.get(visibleStreamDraft.speakerId) ?? "角色"} text={visibleStreamDraft.text} /> : null}</ol></>}
     <form className="chat-composer" onSubmit={event => void send(event)}>
       {phase || feedback ? <p role="status" aria-live="polite" className="chat-feedback">{(phase === "replying" && stream.stage === "selecting" ? "正在选择下一位发言者…" : chatPhaseFeedback(phase, "group")) || feedback}</p> : null}

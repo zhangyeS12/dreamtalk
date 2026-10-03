@@ -1,0 +1,8 @@
+BAAI/bge-small-zh-v1.5 — MIT model license
+Authoritative model card: https://huggingface.co/BAAI/bge-small-zh-v1.5
+License text: https://github.com/FlagOpen/FlagEmbedding/blob/master/LICENSE
+ONNX export maintained by FastEmbed/Qdrant: https://huggingface.co/Qdrant/bge-small-zh-v1.5
+Pinned export revision: 46fbe35fd4374a00fee7de77dfddaeb6dd6a2c59
+Weight SHA256: 1294ea4b6331115a353d81f96b85e8c8d7fdcc284453d5b2fab5b016230aad38
+Bundled manifest records tokenizer/config hashes. Weights are not committed to Git.
+FastEmbed 0.8.1: Apache-2.0; library/wheel notices in semantic-runtime/.

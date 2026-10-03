@@ -19,7 +19,7 @@ from livingworld.domain.identifiers import (
     PlayerId,
 )
 
-MAX_PROMPT_TRANSCRIPT_MESSAGES = 32
+MAX_PROMPT_TRANSCRIPT_MESSAGES = 128
 
 
 @dataclass(frozen=True, slots=True)
@@ -92,6 +92,10 @@ class ClaimedGroupTurn:
 
 
 class ChatMessageStore(Protocol):
+    async def save_context_report(self, source, speaker, report) -> None: ...
+
+    async def context_reports(self, conversation, turn_id, player) -> dict: ...
+
     async def send_player(
         self,
         request_id: RequestId,
@@ -392,6 +396,14 @@ class ChatMessageService:
             await self._player(conversation_id),
             expected,
             ceiling,
+        )
+
+    async def save_context_report(self, source, speaker, report):
+        await self._store.save_context_report(source, speaker, report)
+
+    async def context_reports(self, conversation, turn):
+        return await self._store.context_reports(
+            conversation, turn, await self._player(conversation)
         )
 
     async def fail_reply_execution(self, sent, known_failure):

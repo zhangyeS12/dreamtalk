@@ -1,3 +1,4 @@
+import { ContextReferencePanel } from "./ContextReferencePanel";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { MessageTime } from "./MessageTime";
 import { useEffect, useRef, useState, type FormEvent } from "react";
@@ -31,6 +32,7 @@ export function ChatTranscript({ client, worldId, playerId, conversation, tokenC
   const [historyOpen, setHistoryOpen] = useState(false);
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [longMemoryOpen, setLongMemoryOpen] = useState(false);
+  const [referenceTurn, setReferenceTurn] = useState<string | null>(null);
   const [refresh, setRefresh] = useState(0);
   const [availability, setAvailability] = useState<ChatReplyAvailability | null>(null);
   const available = availability?.available ?? false;
@@ -181,6 +183,7 @@ export function ChatTranscript({ client, worldId, playerId, conversation, tokenC
       <h2>{conversation.character_name}</h2><span>私聊</span>
       <button type="button" className="text-action transcript-refresh" onClick={() => setLongMemoryOpen(true)}>长期记忆</button><button type="button" className="text-action transcript-refresh" onClick={() => setMemoryOpen(true)}>会话摘要</button><button type="button" className="text-action transcript-refresh" onClick={() => setHistoryOpen(true)}>聊天回忆</button><button type="button" className="text-action transcript-refresh" onClick={() => setRefresh(value => value + 1)}>刷新记录</button>
     </div>
+    {referenceTurn ? <ContextReferencePanel key={`${worldId}:${conversation.conversation_id}:${referenceTurn}`} client={client} worldId={worldId} conversationId={conversation.conversation_id} turnId={referenceTurn} names={new Map([[conversation.character_id, conversation.character_name]])} onClose={() => setReferenceTurn(null)} /> : null}
     {longMemoryOpen ? <LongChatMemoryPanel client={client} worldId={worldId} conversationId={conversation.conversation_id} characters={[{ character_id: conversation.character_id, character_name: conversation.character_name }]} onClose={() => setLongMemoryOpen(false)} /> : null}
     {memoryOpen ? <ConversationMemoryPanel client={client} worldId={worldId} conversationId={conversation.conversation_id} senderName={message => message.sender_kind === "player" && message.sender_id === playerId ? "我" : conversation.character_name} canGenerate={!sending && !pendingSend} onClose={() => setMemoryOpen(false)} /> : null}
     {historyOpen ? <ChatHistoryPanel client={client} worldId={worldId} conversationId={conversation.conversation_id} senderName={message => message.sender_kind === "player" && message.sender_id === playerId ? "我" : conversation.character_name} canQuote={available && !sending && !pendingSend} onClose={() => setHistoryOpen(false)} onQuote={text => {
@@ -200,7 +203,7 @@ export function ChatTranscript({ client, worldId, playerId, conversation, tokenC
               <div className="message-bubble">
                 <span className="message-sender">{own ? "我" : conversation.character_name}</span>
                 <ChatMessageBody text={message.text} />
-                <MessageTime message={message} />
+                <MessageTime message={message} />{!own ? <button type="button" className="text-action message-reference" onClick={() => setReferenceTurn(message.turn_id)}>本次参考内容</button> : null}
               </div>
             </li>;
           })}{visibleStreamDraft ? <StreamingReplyBubble name={conversation.character_name} text={visibleStreamDraft.text} /> : null}</ol></>}

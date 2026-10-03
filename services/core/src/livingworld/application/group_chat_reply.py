@@ -7,6 +7,7 @@ from collections.abc import Callable
 from dataclasses import replace
 from uuid import UUID, uuid4
 
+from livingworld.application.chat_capacity import ContextCapacityError, fit_chat_context
 from livingworld.application.chat_event_annotations import AnnotatedDialogue, annotate_request
 from livingworld.application.chat_messages import (
     ChatMessageService,
@@ -39,11 +40,9 @@ from livingworld.application.llm import (
 )
 from livingworld.application.llm_accounting import AccountingInfrastructureError
 from livingworld.application.llm_budget import (
-    BoundGuarantee,
     BudgetAdmissionError,
     BudgetIntegrityError,
     PreflightUsageBounder,
-    prepare_usage_bound,
 )
 from livingworld.application.llm_chat_turn_budget import ChatTurnTokenBudget, TurnTokenBudgetError
 from livingworld.application.llm_execution import ExecutionDeadlineError
@@ -125,37 +124,15 @@ class GroupChatReplyService:
             )
         return annotate_request(request) if self._event_capture else request
 
-    async def _preflight(self, request: LLMRequest, remaining: int) -> LLMRequest:
+    async def _preflight(self, request, remaining, layout=None):
         try:
-            plan = self._gateway.plan(request, selection=self._selection)
+            return await fit_chat_context(
+                request, layout, self._gateway, self._token_bounder, self._selection, remaining
+            )
         except RoutingError:
             raise ChatReplyUnavailableError("chat_model_unavailable") from None
-        bounds = [
-            await prepare_usage_bound(self._token_bounder, replace(request, model=model))
-            for model in plan.candidates
-        ]
-        if not bounds or any(
-            bound is None or bound.guarantee is not BoundGuarantee.HARD_UPPER_BOUND
-            for bound in bounds
-        ):
-            raise ChatReplyBudgetError("turn_input_bound_unavailable")
-        output_room = remaining - max(bound.input_tokens for bound in bounds)
-        if output_room < 1:
-            raise ChatReplyBudgetError("turn_token_limit_exceeded")
-        if request.max_output_tokens > output_room:
-            request = replace(request, max_output_tokens=output_room)
-            bounds = [
-                await prepare_usage_bound(self._token_bounder, replace(request, model=model))
-                for model in plan.candidates
-            ]
-        if any(
-            bound is None
-            or bound.guarantee is not BoundGuarantee.HARD_UPPER_BOUND
-            or bound.input_tokens + bound.output_tokens > remaining
-            for bound in bounds
-        ):
-            raise ChatReplyBudgetError("turn_token_limit_exceeded")
-        return request
+        except ContextCapacityError as error:
+            raise ChatReplyBudgetError(str(error)) from None
 
     async def _generate(self, request: LLMRequest, budget: ChatTurnTokenBudget) -> LLMResponse:
         try:
@@ -178,10 +155,11 @@ class GroupChatReplyService:
             raise ChatReplyValidationError("chat_reply_invalid")
         return response
 
-    async def _selection_request(self, messages, remaining: int) -> LLMRequest:
+    async def _selection_request(self, context, remaining: int) -> LLMRequest:
         return await self._preflight(
-            self._request(messages, min(_SELECT_OUTPUT_TOKENS, self._max_output_tokens)),
+            self._request(context.messages, min(_SELECT_OUTPUT_TOKENS, self._max_output_tokens)),
             remaining,
+            context.layout,
         )
 
     @staticmethod
@@ -233,7 +211,7 @@ class GroupChatReplyService:
         self, source: ClaimedGroupTurn, budget: ChatTurnTokenBudget
     ) -> CharacterId | None:
         context = await self._context.build_selection(source)
-        request = await self._selection_request(context.messages, budget.remaining)
+        request, _report = await self._selection_request(context, budget.remaining)
         response = await self._generate(request, budget)
         return self._selection_result(response, source, allow_stop=True)
 
@@ -243,14 +221,14 @@ class GroupChatReplyService:
         speaker: CharacterId,
         budget: ChatTurnTokenBudget,
         *,
-        prepared: LLMRequest | None = None,
+        prepared: tuple[LLMRequest, dict] | None = None,
         progress: ChatProgressSink | None = None,
     ) -> str | AnnotatedDialogue:
         if budget.closed or budget.remaining < 1:
             raise ChatReplyBudgetError("turn_token_limit_exceeded")
         if prepared is None:
             context = await self._context.build_reply(source, speaker)
-            prepared = await self._preflight(
+            prepared, report = await self._preflight(
                 dialogue_request(
                     self._gateway,
                     await self._dialogue(
@@ -260,7 +238,11 @@ class GroupChatReplyService:
                     progress,
                 ),
                 budget.remaining,
+                context.layout,
             )
+        else:
+            prepared, report = prepared
+        await self._messages.save_context_report(source, speaker, report)
         if progress is not None:
             await progress(ChatProgress("replying", speaker))
         return await dialogue_text(
@@ -292,11 +274,12 @@ class GroupChatReplyService:
                     progress,
                 ),
                 budget.remaining,
+                context.layout,
             )
         else:
             # A route/usage-bound failure must not consume the one-time claim.
             selection = await self._context.build_selection(sent)
-            first_request = await self._selection_request(selection.messages, budget.remaining)
+            first_request, _report = await self._selection_request(selection, budget.remaining)
         claim = await self._messages.claim_group(sent.message.conversation_id, sent.turn_id)
         async with claimed_reply_execution(self._messages, sent):
             if claim.player_message != sent.message or claim.token_ceiling != sent.token_ceiling:

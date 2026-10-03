@@ -487,6 +487,16 @@ def chat_message_router(
             raise HTTPException(409, "chat_turn_already_claimed")
         return _stream_response(current, group_reply_service)
 
+    @router.get("/{conversation_id}/context-reports/{turn_id}")
+    async def context_reports(world_id: UUID, conversation_id: UUID, turn_id: UUID):
+        world = WorldId(world_id)
+        try:
+            return await service.context_reports(
+                ConversationId(world, conversation_id), ChatTurnId(world, turn_id)
+            )
+        except EntityNotFoundError:
+            raise HTTPException(404, detail="chat_turn_not_found") from None
+
     @router.get("/{conversation_id}/reply-recovery/{source_turn_id}")
     async def get_reply_recovery(world_id: UUID, conversation_id: UUID, source_turn_id: UUID):
         try:
