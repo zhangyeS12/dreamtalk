@@ -102,7 +102,7 @@ export function CharacterActivitySetup({ client, worldId, playerId, visible, onD
     }
   }
 
-  return <section className="settings-section">
+  return <section className="settings-section" id="character-initial-activity" tabIndex={-1}>
     <div className="section-heading"><h2>角色初始活动地点</h2><p>为已打开私聊的角色选择第一次参与世界活动的地点。</p></div>
     <div className="setting-row"><span><strong>当前身份的角色</strong><small>这里仅显示是否已设置初始地点。</small></span><button type="button" className="secondary-button" disabled={busy} onClick={() => { if (!busyRef.current) void refresh(); }}>刷新角色与地点</button></div>
     {characters === null ? <p className="inline-hint">角色列表尚未读取。</p> : characters.length ? <ul className="activity-location-list">{characters.map(item => <li key={item.character_id}><span>{item.name}</span><small>{item.initialized ? "已设置初始地点" : "尚未设置"}</small></li>)}</ul> : <p className="inline-hint">先在通讯录打开希望参与活动的角色私聊，再返回这里刷新。无需发送消息。</p>}

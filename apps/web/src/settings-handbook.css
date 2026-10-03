@@ -95,3 +95,19 @@
 .handbook-panel input[type="checkbox"] { accent-color: var(--green); width: 18px; height: 18px; vertical-align: middle; margin-right: 8px; }
 .handbook-fold > summary:focus-visible, .contacts-management > summary:focus-visible, .handbook-page-heading h2:focus-visible { outline: 2px solid var(--green); outline-offset: 3px; }
 .contacts-management > summary:hover { background: var(--page); }
+
+.background-task-feedback { margin: 18px 0; padding: 16px 18px; background: var(--page); border-radius: 4px; overflow-wrap: anywhere; }
+.background-task-feedback strong { font-size: 1rem; font-weight: 650; }
+.background-task-feedback p { margin: 6px 0 0; font-size: .88rem; color: var(--ink); }
+.background-task-feedback.success { background: var(--green-soft); }
+.background-task-feedback.warning { background: oklch(.96 .025 85); }
+.background-task-feedback.error { background: oklch(.96 .025 25); }
+.background-task-feedback > button { margin-top: 8px; padding-inline: 0; }
+.background-readiness { padding: 18px 0 4px; margin-top: 20px; border-top: 1px solid var(--line); }
+.background-readiness-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.background-readiness h3 { margin: 0; font-size: .95rem; }
+.background-readiness p, .background-readiness summary { font-size: .86rem; overflow-wrap: anywhere; }
+.background-readiness small { color: var(--muted); }
+.background-readiness summary { cursor: pointer; padding-block: 12px; }
+.background-readiness li { margin-block: 12px; }
+.background-readiness li p { margin: 4px 0 0; color: var(--muted); }

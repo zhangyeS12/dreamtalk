@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { CoreClient, CoreRequestError, type DirectorStatus } from "@dreamtalk/api-client";
 
+import { BackgroundTaskFeedback, taskErrorGuidance, activityGuidance, type BackgroundNavigate } from "./BackgroundTaskFeedback";
+import { PublicBackgroundReadiness } from "./PublicBackgroundReadiness";
+
 const errors: Record<string, string> = {
   director_player_required: "请先选择你在当前世界的身份。",
   director_model_unavailable: "请先配置可用的聊天模型。",
@@ -19,15 +22,19 @@ const errors: Record<string, string> = {
   director_retry_unavailable: "当前无需重新规划，请刷新状态。",
 };
 
-export function WorldActivities({ client, worldId, visible, paused, hasInitializedCharacters = null }: {
-  client: CoreClient; worldId: string; visible: boolean; paused: boolean; hasInitializedCharacters?: boolean | null;
+export function WorldActivities({ client, worldId, visible, paused, hasInitializedCharacters = null, onNavigate }: {
+  client: CoreClient; worldId: string; visible: boolean; paused: boolean; hasInitializedCharacters?: boolean | null; onNavigate?: BackgroundNavigate;
 }) {
   const [status, setStatus] = useState<DirectorStatus | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [loadError, setLoadError] = useState("");
+  const [operationError, setOperationError] = useState("");
+  const [operationCode, setOperationCode] = useState<string | null>(null);
   const requestSerial = useRef(0);
   const busyRef = useRef(false);
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; ++requestSerial.current; }; }, []);
   const [consentOpen, setConsentOpen] = useState(false);
   useEffect(() => {
     if (!visible) return;
@@ -42,38 +49,37 @@ export function WorldActivities({ client, worldId, visible, paused, hasInitializ
     };
     void read();
     const timer = window.setInterval(() => void read(), 5000);
-    return () => { alive = false; window.clearInterval(timer); };
+    return () => { alive = false; ++requestSerial.current; window.clearInterval(timer); };
   }, [client, worldId, visible]);
 
   async function configure(enabled: boolean, consent = false, retry = false) {
-    if (!status || busy) return;
+    if (!status || busyRef.current) return;
     busyRef.current = true;
     ++requestSerial.current;
-    setBusy(true); setNotice("");
+    setBusy(true); setNotice(""); setOperationError(""); setOperationCode(null);
     try {
-      setStatus(await client.configureDirector(worldId, status, enabled, consent, retry));
+      const next = await client.configureDirector(worldId, status, enabled, consent, retry);
+      if (!mounted.current) return;
+      setStatus(next); setLoadError("");
       setConsentOpen(false);
-      setNotice(enabled ? (retry ? "新的规划已排队；暂停的世界恢复后才开始。" : "已开启，角色将根据计划活动。") : "已关闭后续规划和待执行活动。已经开始的模型请求仍可能产生用量。");
+      setNotice(enabled ? (retry ? "新的规划已排队；暂停的世界恢复后才开始。" : "开关已保存，请按上方状态查看规划进度；有了有效计划后才执行活动。") : "已关闭后续规划和待执行活动。已经开始的模型请求仍可能产生用量。");
     } catch (error) {
-      setNotice(error instanceof CoreRequestError && error.code && errors[error.code]
+      if (!mounted.current) return;
+      setOperationCode(error instanceof CoreRequestError ? error.code : null);
+      setOperationError(error instanceof CoreRequestError && error.code && errors[error.code]
         ? errors[error.code] : "未能更新设置，请读取最新状态后重试。");
-    } finally { busyRef.current = false; setBusy(false); }
+    } finally { busyRef.current = false; if (mounted.current) setBusy(false); }
   }
 
   const state = status?.state;
-  const charactersNowReady = status?.error === "director_characters_required" && hasInitializedCharacters === true;
-  const label = paused && status?.enabled ? "世界已暂停，活动与后续规划等待恢复。"
-    : state === "ready" ? "活动计划已就绪；已经发生且获知的活动可在世界事件中查看。"
-    : state === "planning" ? "正在规划下一批活动……"
-    : state === "attention" ? charactersNowReady ? "角色初始地点已确认，上一批规划仍待重新开始。" : "上一批自动活动已停止，需要处理。"
-    : state === "idle" ? "已开启，正在等待规划。" : "尚未开启。";
+  const reason = status?.error ? errors[status.error] ?? "自动活动暂时无法继续，请刷新核对。" : "";
+  const guidance = activityGuidance(status, paused, hasInitializedCharacters, loadError, reason);
   return <section className="settings-section">
     <div className="section-heading"><h2>世界自动活动</h2><p>角色可以休息、工作或自由活动，并在已有地点之间移动。实际活动可以成为聊天话题。</p></div>
-    <p role="status">{label}</p>
+    <BackgroundTaskFeedback name="自动活动" guidance={guidance} onNavigate={onNavigate} disabled={busy} />
     <p className="inline-hint">每批覆盖6小时世界时间，采用当前模型{status?.model ? `「${status.model}」` : ""}，独立于聊天额度，后台规划会产生模型用量。应用关闭后不调用模型。</p>
     <p className="inline-hint">自动活动需要电脑保持开机且程序未退出，最小化或设置为关闭到托盘可继续运行。退出或关机后停止；重开会推进未暂停的世界时间，但目前不会完整补演错过的活动。离线主动消息可在“离线期间的消息”中单独开启。</p>
-    <p className="inline-hint">日常规划也会参考你在“角色卡与世界书”中公开的背景：条目按来源条件和背景容量参与，关键词匹配角色名和当前地点名。修改在下一批规划时生效。</p>
-    {status?.error && <p className={charactersNowReady ? "app-notice" : "error-banner"} role={charactersNowReady ? "status" : "alert"}>{charactersNowReady ? "至少一名角色已设置初始地点，无需重复设置。点击下方“重新规划”开始新的一批（会调用模型）；刷新只核对状态，不会自动重试。" : errors[status.error] ?? "自动活动暂时无法继续，请查看模型设置或重新读取状态。"}</p>}
+    <p className="inline-hint">日常规划也会参考你在书架世界管理中公开的背景：条目按来源条件和背景容量参与，关键词匹配角色名和当前地点名。修改在下一批规划时生效。</p>
     <div className="setting-row">
       <button type="button" disabled={!status || busy} onClick={() => {
         if (status?.enabled) void configure(false);
@@ -85,7 +91,7 @@ export function WorldActivities({ client, worldId, visible, paused, hasInitializ
       }}>重新规划（调用模型）</button>}
       <button type="button" disabled={busy} onClick={() => {
         const serial = ++requestSerial.current;
-        void client.directorStatus(worldId).then(next => { if (serial === requestSerial.current) { setStatus(next); setLoadError(""); } }).catch(() => { if (serial === requestSerial.current) setLoadError("未能读取状态，请检查核心连接。"); });
+        void client.directorStatus(worldId).then(next => { if (serial === requestSerial.current) { setStatus(next); setLoadError(""); setOperationError(""); setNotice("已读取最新状态，未发起模型调用或重新规划。"); } }).catch(() => { if (serial === requestSerial.current) setLoadError("未能读取状态，请检查核心连接。"); });
       }}>刷新状态</button>
     </div>
     {consentOpen && <div className="editor-panel" role="group" aria-label="授权后台规划">
@@ -94,7 +100,9 @@ export function WorldActivities({ client, worldId, visible, paused, hasInitializ
       <button type="button" className="primary-button" disabled={busy} onClick={() => void configure(true, true)}>同意后台模型用量并开启</button>
       <button type="button" disabled={busy} onClick={() => setConsentOpen(false)}>暂不开启</button>
     </div>}
+    <PublicBackgroundReadiness client={client} worldId={worldId} visible={visible} disabled={busy} onManage={onNavigate ? () => onNavigate("lore") : undefined} />
     {loadError && <p role="alert">{loadError}</p>}
+    {operationError && <BackgroundTaskFeedback name="更新自动活动" guidance={taskErrorGuidance(operationCode, operationError, "本次设置未能确认")} onNavigate={onNavigate} disabled={busy} />}
     {notice && <p role="status">{notice}</p>}
   </section>;
 }

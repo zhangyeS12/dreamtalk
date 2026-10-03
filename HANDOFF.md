@@ -2,6 +2,17 @@
 
 更新日期：2026-10-03。此文件记录当前开发现场与接续工作，不替代 [AGENTS.md](AGENTS.md)。先读 AGENTS，再读本文，最后核对实际 Git 状态和相关代码；不能把下面的基线哈希当作永远不变的当前 HEAD。
 
+## 最新接续：2026-10-03 后台任务状态与操作入口（桌面0.1.21）
+
+- 从干净bdeb87e/codex/world-archive接续，正式D:\LivingWorld。用户在0.1.20之后要求“继续下一步”；按此前建议完成活动/离线/事件池的功能反馈，不改长期记忆或世界调度。[复用调查](docs/research/2026-10-03-background-feedback-reuse.md)参考Carbon文档及WCAG2.2，直接复用React/现有组件/认证API，未引入依赖或复制第三方实现。
+- 统一行内状态展示原因及模型/初始地点/世界书/聊天/事件入口；暂停和失败分开，已设置地点后不再催重复设置。事件池无待发布且未达80%时说明还差几条，保持显式新批付费入口。离线开关与本次结果分开，重复理由/无联系为正常状态，合并错误码的未知具体原因不猜；显示在线基线并说明托盘运行不算离线。
+- 公共背景读取沿既有worldContent本地认证接口，前端只保留世界书统计及公开启用条目的参与条件，未显示隐藏正文或向外发送新资料。明确公开/启用数不等于本次触发/可用数，quiet/关键词/常驻/容量仍由Core判断，不自行实现筛选，不改变范围。页面进入与手动刷新读取，无后台高频全内容轮询。
+- 修正设置页隐藏被当作卸载导致保存busy不复位的源代码路径；保存生命周期与轮询分开，陈旧读取不覆盖保存。操作失败与成功提示分开，只有成功的显式读取可清除操作失败。无主库字段/迁移、API合同/Kernel/后台收费/预算/自启动改动。
+- ESLint/TypeScript、Git diff和629个文档本地链接检查通过。build-only完整打包完成：PyInstaller/Core、Vite239模块（651.47kB/gzip195.58、138ms）、Rust release23.70s；PE FileVersion/ProductVersion静态读取0.1.21。保留主chunk>500kB与STATIC_VCRUNTIME弃用告警，未提高阈值或隐藏提示。
+- 新完整目录artifacts/portable/background-feedback/dreamtalk，ZIP同父目录dreamtalk.zip，旧0.1.20保留。222份Core源码AST/冻结字节、1037份包/ZIP和240次文档/许可字节及固定模型哈希核对通过。Core字节与0.1.20相同，没有混入旧Core；Desktop SHA256=edd41c4488ca5332c690e422dcbc645e4003f4a58e6660c4e5f604c664945c07；Core=c985d96d7f20c847fe3718df41d71c89c361108d4bb77248ebd58e98d9b83749；ZIP=437b8a16e2c069c1a01005a51e65c35d5ec6614e756f7d44267ab053da412b3b。清单artifacts/background-feedback-audit.json，日志artifacts/background-feedback-build.log。
+- 本轮遵守AGENTS第20节，未运行自动测试、应用/GUI、模型推理/付费调用，不读取用户存档/凭据或系统注册；之前单次诊断不复用。静态/编译/字节检查不代表保存、切页或后台任务已实际验收。没有更改测试/CI/AGENTS/API合同/主库结构；仅五处桌面版本升级。保留旧包，不push/发布；本地提交见git log。退出旧托盘后直接打开新完整目录，使用自启动时在新版显式保存更新位置。体验说明见[后台任务状态](docs/BACKGROUND_TASK_FEEDBACK.md)。
+- 下一步先收集新版状态/记忆的真实体验问题，再推进角色相遇与共同经历的具体方案；多人主动联系、关系推进、任务成果和完整离线世界仍未完成。当前切片无新的用户决策阻塞。
+
 ## 最新接续：2026-10-03 长历史渐进索引与持久缓存（桌面0.1.20）
 
 - 从干净d983565/codex/world-archive接续。用户在“完善长历史检索和重启后的缓存”建议后明确继续推进。先核对[成熟方案](docs/research/2026-10-03-persistent-recall-reuse.md)，直接集成DiskCache5.6.3/Apache-2.0；保留FTS/FastEmbed/NumPy/RRF，未加入向量服务、原生SQLite扩展或额外付费模型。

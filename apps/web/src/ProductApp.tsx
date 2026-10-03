@@ -11,6 +11,7 @@ import { WorldImports, WorldContacts } from "./WorldContent";
 import { WorldEventJournal } from "./WorldEventJournal";
 import { WorldNewsSettings } from "./WorldNewsSettings";
 import { WorldActivities } from "./WorldActivities";
+import type { BackgroundDestination } from "./BackgroundTaskFeedback";
 import { WorldLocations } from "./WorldLocations";
 import { CharacterActivitySetup } from "./CharacterActivitySetup";
 import { ProfileEditor } from "./ProfileEditor";
@@ -274,6 +275,18 @@ function WorldWorkspace({ client, initialWorldId, initialTab, onArchive }: {
       && !window.confirm("有尚未保存的编辑或正在处理的请求，是否返回书架？已发起的生成可能继续并产生用量。")) return;
     onArchive();
   };
+  const navigateBackgroundTask = (destination: BackgroundDestination) => {
+    if (destination === "lore") { returnArchive(); return; }
+    if (destination === "contacts" || destination === "me") { setTab(destination); return; }
+    if (destination === "events" || destination === "chats") {
+      setEventsOpen(destination === "events"); setTab("chats"); return;
+    }
+    setSettingsPage(destination === "locations" ? "activities" : destination);
+    if (destination === "locations") window.requestAnimationFrame(() => {
+      const section = document.getElementById("character-initial-activity");
+      section?.scrollIntoView({ block: "start" }); section?.focus({ preventScroll: true });
+    });
+  };
   return <div className="product-shell world-workspace">
     <header className="app-header"><span className="app-brand">dreamtalk</span><span role="status" className="sr-only">核心已就绪</span><span className="workspace-header-actions"><span className="world-context">{world?.name ?? "正在读取世界…"}</span><button type="button" className="text-action" onClick={returnArchive}>返回书架</button></span></header>
     <main className="app-content" id="main-content">
@@ -336,7 +349,7 @@ function WorldWorkspace({ client, initialWorldId, initialTab, onArchive }: {
           <div className="setting-row"><label className="field"><span>时间倍率</span><input type="number" min="0.01" max="1000" step="0.01" inputMode="decimal" value={scale} onChange={event => setScale(event.target.value)} /></label><button type="button" className="secondary-button" disabled={busy || !scale || Number(scale) <= 0 || Number(scale) > 1000} onClick={() => void act(() => client.scaleProductWorld(world.world_id, scale), "时间倍率已更新。")}>应用</button></div>
         </section>}</>,
           activities: <>{world && <WorldLocations key={`locations:${world.world_id}`} client={client} worldId={world.world_id} visible={tab === "settings" && settingsPage === "activities"} onDirtyChange={setWorldLocationsDirty} />}
-        {world && selectedPlayer && <CharacterActivitySetup key={`initial-activity:${world.world_id}:${selectedPlayer}`} client={client} worldId={world.world_id} playerId={selectedPlayer} visible={tab === "settings" && settingsPage === "activities"} onDirtyChange={setCharacterActivityDirty} onReadinessChange={reportActivityReadiness} />} {world && selectedPlayer && <WorldActivities key={`activities:${world.world_id}:${selectedPlayer}`} client={client} worldId={world.world_id} visible={tab === "settings" && settingsPage === "activities"} paused={world.clock_state === "paused"} hasInitializedCharacters={activityReadiness?.client === client && activityReadiness.playerId === selectedPlayer ? activityReadiness.ready : null} />}{!selectedPlayer && <section className="settings-section"><p className="inline-hint">先在“我”中进入当前世界，再设置角色的初始活动位置和自动活动。</p><button type="button" className="text-action" onClick={() => setTab("me")}>前往我</button></section>}</>,
+        {world && selectedPlayer && <CharacterActivitySetup key={`initial-activity:${world.world_id}:${selectedPlayer}`} client={client} worldId={world.world_id} playerId={selectedPlayer} visible={tab === "settings" && settingsPage === "activities"} onDirtyChange={setCharacterActivityDirty} onReadinessChange={reportActivityReadiness} />} {world && selectedPlayer && <WorldActivities key={`activities:${world.world_id}:${selectedPlayer}`} client={client} worldId={world.world_id} visible={tab === "settings" && settingsPage === "activities"} paused={world.clock_state === "paused"} onNavigate={navigateBackgroundTask} hasInitializedCharacters={activityReadiness?.client === client && activityReadiness.playerId === selectedPlayer ? activityReadiness.ready : null} />}{!selectedPlayer && <section className="settings-section"><p className="inline-hint">先在“我”中进入当前世界，再设置角色的初始活动位置和自动活动。</p><button type="button" className="text-action" onClick={() => setTab("me")}>前往我</button></section>}</>,
           offline: <>{world && selectedPlayer && selectedPlayerState?.availability && selectedPlayerState.presence_revision !== null && <section className="settings-section"><div className="section-heading"><h2>交流状态</h2><p>忙碌状态不会暂停世界运行，已开启的离线联系会跳过普通主动消息；设为可用不会立即补发。</p></div>
           <div className="setting-row"><span><strong>{selectedPlayerState.availability === "available" ? "可用" : "忙碌"}</strong><small>仅适用于当前世界绑定的玩家身份</small></span><button type="button" className="secondary-button" disabled={busy} onClick={() => {
             const next: PlayerAvailability = selectedPlayerState.availability === "available" ? "busy" : "available";
@@ -346,8 +359,8 @@ function WorldWorkspace({ client, initialWorldId, initialTab, onArchive }: {
               setSelectedPlayerState(state);
             }, next === "available" ? "当前状态已设为可用。" : "当前状态已设为忙碌。");
           }}>{selectedPlayerState.availability === "available" ? "设为忙碌" : "设为可用"}</button></div>
-        </section>} {world && selectedPlayer && <OfflineContactSettings key={`offline:${world.world_id}:${selectedPlayer}`} status={offlineContact.status} busy={offlineContact.busy} refreshing={offlineContact.refreshing} error={offlineContact.error} onRefresh={offlineContact.refresh} onSave={offlineContact.save} />}{!selectedPlayer && <section className="settings-section"><p className="inline-hint">先在“我”中进入当前世界，再设置离线联系。</p><button type="button" className="text-action" onClick={() => setTab("me")}>前往我</button></section>}</>,
-          news: <>{world && selectedPlayer && <WorldNewsSettings key={`news:${world.world_id}:${selectedPlayer}`} client={client} worldId={world.world_id} visible={tab === "settings" && settingsPage === "news"} paused={world.clock_state === "paused"} />}{!selectedPlayer && <section className="settings-section"><p className="inline-hint">先在“我”中进入当前世界，再设置世界动态。</p><button type="button" className="text-action" onClick={() => setTab("me")}>前往我</button></section>}</>,
+        </section>} {world && selectedPlayer && <OfflineContactSettings key={`offline:${world.world_id}:${selectedPlayer}`} status={offlineContact.status} busy={offlineContact.busy} refreshing={offlineContact.refreshing} error={offlineContact.error} onRefresh={offlineContact.refresh} onSave={offlineContact.save} paused={world.clock_state === "paused"} availability={selectedPlayerState?.availability ?? null} onNavigate={navigateBackgroundTask} />}{!selectedPlayer && <section className="settings-section"><p className="inline-hint">先在“我”中进入当前世界，再设置离线联系。</p><button type="button" className="text-action" onClick={() => setTab("me")}>前往我</button></section>}</>,
+          news: <>{world && selectedPlayer && <WorldNewsSettings key={`news:${world.world_id}:${selectedPlayer}`} client={client} worldId={world.world_id} visible={tab === "settings" && settingsPage === "news"} paused={world.clock_state === "paused"} onNavigate={navigateBackgroundTask} />}{!selectedPlayer && <section className="settings-section"><p className="inline-hint">先在“我”中进入当前世界，再设置世界动态。</p><button type="button" className="text-action" onClick={() => setTab("me")}>前往我</button></section>}</>,
           about: <SettingsDiagnostics client={client} visible={tab === "settings" && settingsPage === "about"} desktop={desktopStatus} onBackground={() => setSettingsPage("background")} />,
         }} />
 

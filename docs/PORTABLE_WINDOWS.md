@@ -1,6 +1,6 @@
 # dreamtalk Windows 便携版
 
-最新完整包0.1.20包含本地中文语义模型。请保留整个目录，先退出旧版，再打开新目录的 dreamtalk-desktop.exe。参考 [上下文与记忆体验](CONTEXT_AND_RECALL.md) 验收。0.1.19修正0.1.18新增上下文报告字段时的结构检查顺序，避免正常存档在升级后被误判而无法启动。不要删除存档，也不要混用旧Core目录；实际启动仍需用户验收。
+最新完整包0.1.21包含本地中文语义模型，并完善自动活动、离线联系和事件池的状态与导航，见[后台任务状态体验](BACKGROUND_TASK_FEEDBACK.md)。请保留整个目录，先退出旧版，再打开新目录的 dreamtalk-desktop.exe。参考 [上下文与记忆体验](CONTEXT_AND_RECALL.md) 验收。0.1.19修正0.1.18新增上下文报告字段时的结构检查顺序，避免正常存档在升级后被误判而无法启动。不要删除存档，也不要混用旧Core目录；实际启动仍需用户验收。
 
 将整个 `dreamtalk` 文件夹解压后运行 `dreamtalk-desktop.exe`。请勿只复制 exe：`core/` 文件夹包含随附的 Python Core 和迁移脚本。使用 Windows 10/11，并确保系统有 WebView2 Runtime。无需另行安装 Python、uv、Node 或 Rust。
 
