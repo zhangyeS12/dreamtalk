@@ -65,14 +65,15 @@ export function WorldImports({ client, worldId, onlyKind, onSaved, onDirtyChange
   const [accepted, setAccepted] = useState<WorldContentItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
+  const [reload, setReload] = useState(0);
   const [changingEntry, setChangingEntry] = useState<string | null>(null);
   useEffect(() => {
-    let mounted = true;
+    let mounted = true; setLoading(true); setLoadFailed(false);
     void client.worldContent(worldId).then(items => { if (mounted) setAccepted(items); })
-      .catch(() => { if (mounted) { setLoadFailed(true); setError("无法读取当前世界的已导入内容，请重新打开管理页面。"); } })
+      .catch(() => { if (mounted) { setLoadFailed(true); setError("无法读取当前世界的已保存内容，请点击“重新读取已保存内容”后再试。"); } })
       .finally(() => { if (mounted) setLoading(false); });
     return () => { mounted = false; };
-  }, [client, worldId]);
+  }, [client, worldId, reload]);
   useEffect(() => { onDirtyChange(!!editor || !!preview || !!replacement || busy || !!changingEntry); }, [editor, preview, replacement, busy, changingEntry, onDirtyChange]);
   useEffect(() => () => onDirtyChange(false), [onDirtyChange]);
   const upload = async (file: File) => {
@@ -130,7 +131,7 @@ export function WorldImports({ client, worldId, onlyKind, onSaved, onDirtyChange
     {replacement && <p className="inline-hint">正在更新：{replacement.characters[0]?.name ?? replacement.lorebooks[0]?.name} <button type="button" className="text-action" disabled={busy || !!preview} onClick={() => setReplacement(null)}>取消更新</button></p>}
     {!onlyKind && <label className="field"><span>内容类型</span><select value={kind} disabled={busy || !!preview || !!replacement || !!editor} onChange={event => setKind(event.target.value as typeof kind)}><option value="character">角色卡（PNG / JSON）</option><option value="lorebook">世界书（JSON）</option></select></label>}
     <label className="field import-file"><span>选择文件</span><input type="file" disabled={loading || loadFailed || busy || !!editor} accept={kind === "character" ? ".png,.json" : ".json"} onChange={event => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void upload(file); }} /></label>
-    </details>{loading && <p role="status">正在读取已保存的内容…</p>}{busy && <p role="status">正在处理…</p>}{error && <p role="alert" className="app-alert">{error}</p>}{message && <p ref={savedNotice} tabIndex={-1} role="status" className="app-notice editor-feedback">{message}</p>}
+    </details>{loading && <p role="status">正在读取已保存的内容…</p>}{busy && <p role="status">正在处理…</p>}{error && <p role="alert" className="app-alert">{error}</p>}{loadFailed && <button type="button" className="secondary-button" disabled={loading || busy || !!editor || !!preview} onClick={() => { setError(""); setReload(value => value + 1); }}>重新读取已保存内容</button>}{message && <p ref={savedNotice} tabIndex={-1} role="status" className="app-notice editor-feedback">{message}</p>}
     {preview && <div className="import-preview"><h3>导入预览</h3><ContentDetails item={preview} />
       {!!preview.warnings?.length && <div className="compatibility-notice"><p>部分来源内容无法完整映射，原始数据仍会保留。确认前请检查以下提示。</p><ul>{preview.warnings.map((warning, index) => <li key={index}>{warning.code === "lore_activation_metadata_preserved_inert" ? "导入不会执行触发设定；聊天支持范围见各条目说明。" : warning.code.includes("blank_tags") ? "空白标签已从角色标签中省略。" : warning.code.includes("empty_content") ? "空白条目已从世界书中省略。" : warning.code.includes("secondary_keys") ? "存在含义不明确的次级关键词，未作猜测转换。" : "存在兼容性差异，请核对预览内容。"}</li>)}</ul></div>}
       <div className="profile-actions"><button className="primary-button" type="button" disabled={busy} onClick={() => void commit()}>{replacement ? "确认更新当前世界" : "确认加入当前世界"}</button><button className="secondary-button" type="button" disabled={busy} onClick={() => { pendingId.current = null; void client.discardWorldContent(worldId, preview.import_id).catch(() => undefined); setPreview(null); }}>取消</button></div>
@@ -139,7 +140,7 @@ export function WorldImports({ client, worldId, onlyKind, onSaved, onDirtyChange
   </section>;
 }
 
-export function WorldContacts({ client, worldId, onSettings, onIdentity, onOpenChat, canOpenChat, openingChat }: {
+export function WorldContacts({ client, worldId, onSettings, onIdentity, onOpenChat, canOpenChat, openingChat, refreshKey = 0, visible = true }: {
   client: CoreClient;
   worldId: string;
   onSettings: () => void;
@@ -147,18 +148,22 @@ export function WorldContacts({ client, worldId, onSettings, onIdentity, onOpenC
   onOpenChat: (importId: string) => Promise<void>;
   canOpenChat: boolean;
   openingChat: boolean;
+  refreshKey?: number;
+  visible?: boolean;
 }) {
   const [items, setItems] = useState<WorldContentItem[]>([]);
   const [selected, setSelected] = useState<WorldContentItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
+    if (!visible) return;
     let active = true;
-    void client.worldContent(worldId).then(result => { if (active) setItems(result); }).catch(() => { if (active) setFailed(true); }).finally(() => { if (active) setLoading(false); });
+    setLoading(true); setFailed(false);
+    void client.worldContent(worldId).then(result => { if (active) { setItems(result); setSelected(current => current ? result.find(item => item.import_id === current.import_id) ?? null : null); } }).catch(() => { if (active) setFailed(true); }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [client, worldId]);
+  }, [client, worldId, refreshKey, visible]);
   const characters = items.filter(item => item.characters.length > 0);
   return <div className={`chat-workspace contacts-workspace ${selected ? "thread-open" : ""}`}><aside className="conversation-list" aria-label="当前世界角色">
-    {loading ? <p className="thread-hint">正在读取角色…</p> : failed ? <p className="app-alert" role="alert">无法读取通讯录，请重新进入此页面。</p> : characters.length === 0 ? <div className="empty-state"><h2>当前世界还没有角色</h2><p>在设置中新建或导入角色卡，确认后显示在这里。</p><button className="text-action" onClick={onSettings}>前往设置</button></div> : characters.map(item => <button key={item.import_id} className={`conversation-row ${selected?.import_id === item.import_id ? "selected" : ""}`} onClick={() => setSelected(item)}><span className="avatar event-avatar" aria-hidden="true">{Array.from(item.characters[0].name)[0]}</span><span className="row-copy"><strong>{item.characters[0].name}</strong><small>查看角色资料</small></span></button>)}
+    {loading ? <p className="thread-hint">正在读取角色…</p> : failed ? <p className="app-alert" role="alert">无法读取通讯录，请重新进入此页面。</p> : characters.length === 0 ? <div className="empty-state"><h2>当前世界还没有角色</h2><p>在这里新建、联网生成或导入角色卡，确认后加入当前世界。</p><button className="text-action" onClick={onSettings}>添加角色卡</button></div> : characters.map(item => <button key={item.import_id} className={`conversation-row ${selected?.import_id === item.import_id ? "selected" : ""}`} onClick={() => setSelected(item)}><span className="avatar event-avatar" aria-hidden="true">{Array.from(item.characters[0].name)[0]}</span><span className="row-copy"><strong>{item.characters[0].name}</strong><small>查看角色资料</small></span></button>)}
   </aside><div className="conversation-detail">{selected ? <><div className="thread-heading"><button className="text-action" onClick={() => setSelected(null)}>返回通讯录</button><h2>角色资料</h2></div><div className="contact-chat-action">{canOpenChat ? <button type="button" className="primary-button" disabled={openingChat} onClick={() => void onOpenChat(selected.import_id)}>{openingChat ? "正在打开…" : "打开会话"}</button> : <button type="button" className="text-action" onClick={onIdentity}>先进入世界，再打开会话</button>}</div><ContentDetails item={selected} /></> : <div className="conversation-placeholder"><h2>当前世界的角色</h2><p>选择左侧角色，查看已确认的资料。</p></div>}</div></div>;
 }

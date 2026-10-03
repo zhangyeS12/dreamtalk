@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
-interface DesktopStatus {
+export interface DesktopStatus {
   autostart: boolean;
   close_to_tray: boolean;
   window_visible: boolean;
@@ -16,7 +16,7 @@ function saveError(error: unknown): string {
     default: return "未能完整保存，请刷新设置核对自启动和托盘状态后重试。";
   }
 }
-export function BackgroundSettings() {
+export function BackgroundSettings({ onStatusChange, onDirtyChange }: { onStatusChange?: (status: DesktopStatus | null) => void; onDirtyChange?: (dirty: boolean) => void } = {}) {
   const [status, setStatus] = useState<DesktopStatus | null>(null);
   const [autostart, setAutostart] = useState(false);
   const [closeToTray, setCloseToTray] = useState(false);
@@ -25,6 +25,10 @@ export function BackgroundSettings() {
   const generation = useRef(0);
   const [notice, setNotice] = useState("");
   const [failed, setFailed] = useState(false);
+  const dirty = Boolean(status && (status.autostart !== autostart || status.close_to_tray !== closeToTray));
+  useEffect(() => { onStatusChange?.(status); }, [status, onStatusChange]);
+  useEffect(() => { onDirtyChange?.(dirty || busy); }, [dirty, busy, onDirtyChange]);
+  useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
   const refresh = useCallback(async () => {
     const job = ++generation.current;
     lock.current = true; setBusy(true); setNotice(""); setFailed(false);
@@ -68,8 +72,9 @@ export function BackgroundSettings() {
       </div>}
       <div className="setting-row"><label><input type="checkbox" checked={autostart} disabled={!status || busy} onChange={e => setAutostart(e.target.checked)} /> 登录电脑后自动启动，保持窗口隐藏</label></div>
       <div className="setting-row"><label><input type="checkbox" checked={closeToTray} disabled={!status || busy} onChange={e => setCloseToTray(e.target.checked)} /> 关闭窗口后继续在托盘运行</label></div>
-      <button type="button" disabled={!status || busy || (!autostart && !status.autostart && status.close_to_tray === closeToTray)} onClick={() => void save()}>{busy ? "处理中……" : autostart ? "保存并更新启动位置" : "保存后台设置"}</button>
-      <button type="button" disabled={busy} onClick={() => { if (!lock.current) void refresh(); }}>刷新设置</button>
+      <p className="inline-hint" role="status">{busy ? "正在处理后台设置…" : !status ? "尚未读取已保存设置。" : dirty ? "有尚未保存的后台选项。" : "选项与已保存配置一致。"}</p>
+      <button type="button" className="primary-button" disabled={!status || busy || (!autostart && !status.autostart && status.close_to_tray === closeToTray)} onClick={() => void save()}>{busy ? "处理中……" : autostart ? "保存并更新启动位置" : "保存后台设置"}</button>
+      <button type="button" className="secondary-button" disabled={busy} onClick={() => { if (!lock.current) void refresh(); }}>刷新设置</button>
       <p className="inline-hint">更换便携包后，打开新版并在勾选自启动时点击“保存并更新启动位置”，即可登记当前程序，无需先关闭再开启。刷新只读取已保存设置，会恢复上面的选项。</p>
     </>}
     <p className="inline-hint">双击托盘图标可打开窗口；右键选择“退出并停止后台运行”可彻底退出。关机时不会调用模型，重开后才恢复。便携版启用自启动后，请保留当前程序文件夹的位置。</p>

@@ -34,15 +34,19 @@ const statusText: Record<LLMRuntimeStatus, string> = {
   degraded: "模型配置或凭据状态异常。世界和已有聊天记录仍可使用。",
 };
 
-export function ModelSetup({ client, turnTokenCeiling, onConfigured = () => window.location.reload(), onDirtyChange }: {
+export type ModelSetupSummary = { status: LLMRuntimeStatus | null; model: string | null; replyTokens: number | null };
+
+export function ModelSetup({ client, turnTokenCeiling, onConfigured = () => window.location.reload(), onDirtyChange, onSummaryChange }: {
   client: CoreClient;
   turnTokenCeiling?: number;
   onConfigured?: () => void;
   onDirtyChange?: (dirty: boolean) => void;
+  onSummaryChange?: (summary: ModelSetupSummary) => void;
 }) {
   const [status, setStatus] = useState<LLMRuntimeStatus | null>(null);
   const [managed, setManaged] = useState<ChatModelSetup | null>(null);
   const [managedUnsupported, setManagedUnsupported] = useState(false);
+  useEffect(() => { onSummaryChange?.({ status, model: managed?.model_id ?? null, replyTokens: managed?.max_output_tokens ?? null }); }, [status, managed, onSummaryChange]);
   const [providerKind, setProviderKind] = useState<ProviderKind>("openai-responses");
   const [modelId, setModelId] = useState("");
   const [baseUrl, setBaseUrl] = useState("");

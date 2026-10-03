@@ -1,12 +1,12 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
-import { BackgroundSettings } from "./BackgroundSettings";
+import { BackgroundSettings, type DesktopStatus } from "./BackgroundSettings";
 import { OfflineContactSettings } from "./OfflineContactSettings";
 import { useOfflineContact } from "./useOfflineContact";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { CoreClient, type ChatConversation, type GroupChatConversation, type KnownWorldEvent, type PlayerAvailability, type SelectablePlayer, type SelectedPlayerState, type WorldSettings } from "@dreamtalk/api-client";
 import { ChatTranscript } from "./ChatTranscript";
 import { GroupChatDetails, GroupChatSetup } from "./GroupChat";
-import { ModelSetup } from "./ModelSetup";
+import { ModelSetup, type ModelSetupSummary } from "./ModelSetup";
 import { WorldImports, WorldContacts } from "./WorldContent";
 import { WorldEventJournal } from "./WorldEventJournal";
 import { WorldNewsSettings } from "./WorldNewsSettings";
@@ -15,6 +15,8 @@ import { WorldLocations } from "./WorldLocations";
 import { CharacterActivitySetup } from "./CharacterActivitySetup";
 import { ProfileEditor } from "./ProfileEditor";
 import { WorldArchivePage } from "./WorldArchivePage";
+import { SettingsHandbook, SettingsFold, type SettingsPage } from "./SettingsHandbook";
+import { SettingsDiagnostics } from "./SettingsDiagnostics";
 import "./product.css";
 
 type Tab = "chats" | "contacts" | "settings" | "me";
@@ -87,6 +89,14 @@ function WorldWorkspace({ client, initialWorldId, initialTab, onArchive }: {
   const entryHeading = useRef<HTMLHeadingElement>(null);
   useEffect(() => { entryHeading.current?.focus(); }, []);
   const [meVisited, setMeVisited] = useState(false);
+  const [contactsVisited, setContactsVisited] = useState(initialTab === "contacts");
+  const [contactsManagementOpen, setContactsManagementOpen] = useState(false);
+  const [contactsRefresh, setContactsRefresh] = useState(0);
+  const contactsManager = useRef<HTMLElement>(null);
+  const [settingsPage, setSettingsPage] = useState<SettingsPage>("model");
+  const [desktopStatus, setDesktopStatus] = useState<DesktopStatus | null>(null);
+  const [backgroundDirty, setBackgroundDirty] = useState(false);
+  const [modelSummary, setModelSummary] = useState<ModelSetupSummary | null>(null);
   const [worldContentDirty, setWorldContentDirty] = useState(false);
   const [worldLocationsDirty, setWorldLocationsDirty] = useState(false);
   const [characterActivityDirty, setCharacterActivityDirty] = useState(false);
@@ -134,7 +144,8 @@ function WorldWorkspace({ client, initialWorldId, initialTab, onArchive }: {
     try { window.localStorage.setItem(LAST_WORLD_KEY, world.world_id); }
     catch { /* The current world remains selected for this session. */ }
   }, [world?.world_id]);
-  useEffect(() => { if (tab === "me") setMeVisited(true); }, [tab]);
+  useEffect(() => { if (tab === "me") setMeVisited(true); if (tab === "contacts") setContactsVisited(true); }, [tab]);
+  const openContactsManager = () => { setContactsManagementOpen(true); window.requestAnimationFrame(() => { contactsManager.current?.scrollIntoView({ block: "start" }); contactsManager.current?.focus({ preventScroll: true }); }); };
   useEffect(() => { if (world) setScale(world.time_scale); }, [world?.world_id, world?.time_scale]);
   const loadIdentity = useCallback(async (id: string) => {
     return await Promise.all([client.listPlayers(id), client.selectedPlayer(id)] as const);
@@ -257,7 +268,7 @@ function WorldWorkspace({ client, initialWorldId, initialTab, onArchive }: {
   };
   const suggestedFor = (conversationId: string) => draftSuggestion?.worldId === worldId && draftSuggestion.playerId === selectedPlayer && draftSuggestion.conversationId === conversationId ? draftSuggestion.text : null;
   const returnArchive = () => {
-    if ((worldProfileDirty || generalProfileDirty || worldContentDirty || worldLocationsDirty || characterActivityDirty || chatDirty || modelDirty || busy)
+    if ((worldProfileDirty || generalProfileDirty || worldContentDirty || worldLocationsDirty || characterActivityDirty || chatDirty || modelDirty || backgroundDirty || offlineContact.busy || Number(tokenCeilingInput) !== tokenCeiling || busy)
       && !window.confirm("有尚未保存的编辑或正在处理的请求，是否返回书架？已发起的生成可能继续并产生用量。")) return;
     onArchive();
   };
@@ -291,18 +302,40 @@ function WorldWorkspace({ client, initialWorldId, initialTab, onArchive }: {
         </div>
       </div>}
 
-      {tab === "contacts" && (world ? <WorldContacts key={world.world_id} client={client} worldId={world.world_id} onSettings={() => setTab("settings")} onIdentity={() => setTab("me")} onOpenChat={openChat} canOpenChat={!!selectedPlayer} openingChat={busy} /> : <div className="page-section"><div className="empty-state"><h2>先创建一个世界</h2><p>在世界档案库创建世界，然后新建或导入角色卡。</p><button className="text-action" onClick={returnArchive}>前往世界档案库</button></div></div>)}
+      {(tab === "contacts" || contactsVisited) && <div className="contacts-page" hidden={tab !== "contacts"}>
+        {world ? <>
+          <div className="contacts-toolbar"><div><h2>「{world.name}」的角色</h2><p>已确认的角色卡只加入当前世界。</p></div><button type="button" className="primary-button" onClick={openContactsManager}>＋ 添加角色卡</button></div>
+          <details className="contacts-management" open={contactsManagementOpen} onToggle={event => setContactsManagementOpen(event.currentTarget.open)}>
+            <summary ref={contactsManager}><strong>添加与编辑角色卡</strong><span>{worldContentDirty ? "有未保存的编辑 · 草稿保留中" : "新建、联网生成或从文件导入"}</span></summary>
+            <WorldImports key={`content:${world.world_id}`} client={client} worldId={world.world_id} onlyKind="character" onDirtyChange={setWorldContentDirty} onSaved={() => setContactsRefresh(value => value + 1)} />
+          </details>
+          <WorldContacts key={world.world_id} client={client} worldId={world.world_id} refreshKey={contactsRefresh} visible={tab === "contacts"} onSettings={openContactsManager} onIdentity={() => setTab("me")} onOpenChat={openChat} canOpenChat={!!selectedPlayer} openingChat={busy} />
+        </> : <div className="page-section"><div className="empty-state"><h2>先创建一个世界</h2><p>在世界档案库创建世界，然后新建或导入角色卡。</p><button className="text-action" onClick={returnArchive}>前往世界档案库</button></div></div>}
+      </div>}
 
-      {<div className="settings-page" hidden={tab !== "settings"}>
-        <section className="settings-section"><div className="section-heading"><h2>世界</h2><p>每个世界有独立的角色、聊天和身份。</p></div>
-          <p className="inline-hint">当前世界：{world?.name ?? "正在读取…"}。世界档案与世界书在书架中管理。</p>
-          <button type="button" className="secondary-button" onClick={returnArchive}>返回世界档案库</button>
+      <SettingsHandbook client={client} world={world} visible={tab === "settings"} page={settingsPage} onPage={setSettingsPage} onArchive={returnArchive}
+        dirtyPages={{ model: modelDirty || Number(tokenCeilingInput) !== tokenCeiling, background: backgroundDirty, activities: worldLocationsDirty || characterActivityDirty }}
+        panels={{
+          model: <>
+            <SettingsFold title="模型服务与回复" summary={modelSummary?.model ? `${modelSummary.model} · 单次回复上限 ${modelSummary.replyTokens?.toLocaleString("zh-CN") ?? "待核对"} Token` : modelSummary?.status === "unconfigured" ? "尚未配置，展开完成首次设置" : modelSummary?.status ? "已读取配置状态，展开查看模型设置" : "正在读取模型配置…"} open>
+              <ModelSetup client={client} turnTokenCeiling={tokenCeiling} onDirtyChange={setModelDirty} onSummaryChange={setModelSummary} />
+            </SettingsFold>
+            <SettingsFold title="聊天额度" summary={`已应用 ${tokenCeiling.toLocaleString("zh-CN")} Token / 轮${Number(tokenCeilingInput) !== tokenCeiling ? " · 新数值尚未应用" : ""}`}>
+              <section className="settings-section"><div className="section-heading"><h2>聊天额度</h2><p>每轮输入和输出共用上限。系统按可信上界预留，额度不足时不会开始下一次模型调用。</p></div>
+          <div className="setting-row"><label className="field"><span>每轮 Token 上限</span><input type="number" min="1" max={Number.MAX_SAFE_INTEGER} step="1" value={tokenCeilingInput} onChange={event => setTokenCeilingInput(event.target.value)} /></label><button type="button" className="secondary-button" disabled={!tokenCeilingValid} onClick={() => { const next = Number(tokenCeilingInput); setTokenCeiling(next); try { window.localStorage.setItem(TOKEN_CEILING_KEY, String(next)); } catch { /* Session setting remains active. */ } setNotice("聊天额度已更新。"); }}>应用</button></div>
+          {!tokenCeilingValid ? <p className="app-alert" role="alert">请输入 1 至 {Number.MAX_SAFE_INTEGER.toLocaleString("zh-CN")} 之间的整数聊天额度。</p> : null}
+          <p className="inline-hint" role="status">当前已应用的聊天额度：{tokenCeiling.toLocaleString("zh-CN")} Token。{Number(tokenCeilingInput) !== tokenCeiling ? "输入的新数值尚未应用，请点击应用。" : "该额度仅用于聊天，不限制角色卡或世界书生成；额度是预留上限，实际费用以提供商报告的用量为准。"}</p>
         </section>
-        {world && <section className="settings-section"><div className="section-heading"><h2>世界时间</h2><p>{displayTime(world.world_time)}</p></div>
+            </SettingsFold>
+          </>,
+          background: <BackgroundSettings onStatusChange={setDesktopStatus} onDirtyChange={setBackgroundDirty} />,
+          time: <>{world && <section className="settings-section"><div className="section-heading"><h2>世界时间</h2><p>{displayTime(world.world_time)}</p></div>
           <div className="setting-row"><span><strong>时间状态</strong><small>{world.clock_state === "running" ? "运行中" : "已暂停"}{world.runtime_state === "degraded" ? " · 运行异常" : ""}</small></span><button type="button" className="secondary-button" disabled={busy || world.runtime_state === "degraded"} onClick={() => void act(() => world.clock_state === "running" ? client.pauseProductWorld(world.world_id) : client.resumeProductWorld(world.world_id), world.clock_state === "running" ? "世界已暂停。" : "世界已恢复。")}>{world.clock_state === "running" ? "暂停" : "恢复"}</button></div>
           <div className="setting-row"><label className="field"><span>时间倍率</span><input type="number" min="0.01" max="1000" step="0.01" inputMode="decimal" value={scale} onChange={event => setScale(event.target.value)} /></label><button type="button" className="secondary-button" disabled={busy || !scale || Number(scale) <= 0 || Number(scale) > 1000} onClick={() => void act(() => client.scaleProductWorld(world.world_id, scale), "时间倍率已更新。")}>应用</button></div>
-        </section>}
-        {world && selectedPlayer && selectedPlayerState?.availability && selectedPlayerState.presence_revision !== null && <section className="settings-section"><div className="section-heading"><h2>交流状态</h2><p>忙碌状态不会暂停世界运行，已开启的离线联系会跳过普通主动消息；设为可用不会立即补发。</p></div>
+        </section>}</>,
+          activities: <>{world && <WorldLocations key={`locations:${world.world_id}`} client={client} worldId={world.world_id} visible={tab === "settings" && settingsPage === "activities"} onDirtyChange={setWorldLocationsDirty} />}
+        {world && selectedPlayer && <CharacterActivitySetup key={`initial-activity:${world.world_id}:${selectedPlayer}`} client={client} worldId={world.world_id} playerId={selectedPlayer} visible={tab === "settings" && settingsPage === "activities"} onDirtyChange={setCharacterActivityDirty} />} {world && selectedPlayer && <WorldActivities key={`activities:${world.world_id}:${selectedPlayer}`} client={client} worldId={world.world_id} visible={tab === "settings" && settingsPage === "activities"} paused={world.clock_state === "paused"} />}{!selectedPlayer && <section className="settings-section"><p className="inline-hint">先在“我”中进入当前世界，再设置角色的初始活动位置和自动活动。</p><button type="button" className="text-action" onClick={() => setTab("me")}>前往我</button></section>}</>,
+          offline: <>{world && selectedPlayer && selectedPlayerState?.availability && selectedPlayerState.presence_revision !== null && <section className="settings-section"><div className="section-heading"><h2>交流状态</h2><p>忙碌状态不会暂停世界运行，已开启的离线联系会跳过普通主动消息；设为可用不会立即补发。</p></div>
           <div className="setting-row"><span><strong>{selectedPlayerState.availability === "available" ? "可用" : "忙碌"}</strong><small>仅适用于当前世界绑定的玩家身份</small></span><button type="button" className="secondary-button" disabled={busy} onClick={() => {
             const next: PlayerAvailability = selectedPlayerState.availability === "available" ? "busy" : "available";
             void act(async () => {
@@ -311,21 +344,10 @@ function WorldWorkspace({ client, initialWorldId, initialTab, onArchive }: {
               setSelectedPlayerState(state);
             }, next === "available" ? "当前状态已设为可用。" : "当前状态已设为忙碌。");
           }}>{selectedPlayerState.availability === "available" ? "设为忙碌" : "设为可用"}</button></div>
-        </section>}
-        {world && <WorldLocations key={`locations:${world.world_id}`} client={client} worldId={world.world_id} visible={tab === "settings"} onDirtyChange={setWorldLocationsDirty} />}
-        {world && selectedPlayer && <CharacterActivitySetup key={`initial-activity:${world.world_id}:${selectedPlayer}`} client={client} worldId={world.world_id} playerId={selectedPlayer} visible={tab === "settings"} onDirtyChange={setCharacterActivityDirty} />}
-        <BackgroundSettings />
-        <ModelSetup client={client} turnTokenCeiling={tokenCeiling} onDirtyChange={setModelDirty} />
-        {world && selectedPlayer && <OfflineContactSettings key={`offline:${world.world_id}:${selectedPlayer}`} status={offlineContact.status} busy={offlineContact.busy} refreshing={offlineContact.refreshing} error={offlineContact.error} onRefresh={offlineContact.refresh} onSave={offlineContact.save} />}
-        {world && selectedPlayer && <WorldActivities key={`activities:${world.world_id}:${selectedPlayer}`} client={client} worldId={world.world_id} visible={tab === "settings"} paused={world.clock_state === "paused"} />}
-        {world && selectedPlayer && <WorldNewsSettings key={`news:${world.world_id}:${selectedPlayer}`} client={client} worldId={world.world_id} visible={tab === "settings"} paused={world.clock_state === "paused"} />}
-        <section className="settings-section"><div className="section-heading"><h2>聊天额度</h2><p>每轮输入和输出共用上限。系统按可信上界预留，额度不足时不会开始下一次模型调用。</p></div>
-          <div className="setting-row"><label className="field"><span>每轮 Token 上限</span><input type="number" min="1" max={Number.MAX_SAFE_INTEGER} step="1" value={tokenCeilingInput} onChange={event => setTokenCeilingInput(event.target.value)} /></label><button type="button" className="secondary-button" disabled={!tokenCeilingValid} onClick={() => { const next = Number(tokenCeilingInput); setTokenCeiling(next); try { window.localStorage.setItem(TOKEN_CEILING_KEY, String(next)); } catch { /* Session setting remains active. */ } setNotice("聊天额度已更新。"); }}>应用</button></div>
-          {!tokenCeilingValid ? <p className="app-alert" role="alert">请输入 1 至 {Number.MAX_SAFE_INTEGER.toLocaleString("zh-CN")} 之间的整数聊天额度。</p> : null}
-          <p className="inline-hint" role="status">当前已应用的聊天额度：{tokenCeiling.toLocaleString("zh-CN")} Token。{Number(tokenCeilingInput) !== tokenCeiling ? "输入的新数值尚未应用，请点击应用。" : "该额度仅用于聊天，不限制角色卡或世界书生成；额度是预留上限，实际费用以提供商报告的用量为准。"}</p>
-        </section>
-        {world ? <WorldImports key={`content:${world.world_id}`} client={client} worldId={world.world_id} onlyKind="character" onDirtyChange={setWorldContentDirty} /> : <section className="settings-section"><h2>导入内容</h2><p className="inline-hint">创建世界后即可导入。</p></section>}
-      </div>}
+        </section>} {world && selectedPlayer && <OfflineContactSettings key={`offline:${world.world_id}:${selectedPlayer}`} status={offlineContact.status} busy={offlineContact.busy} refreshing={offlineContact.refreshing} error={offlineContact.error} onRefresh={offlineContact.refresh} onSave={offlineContact.save} />}{!selectedPlayer && <section className="settings-section"><p className="inline-hint">先在“我”中进入当前世界，再设置离线联系。</p><button type="button" className="text-action" onClick={() => setTab("me")}>前往我</button></section>}</>,
+          news: <>{world && selectedPlayer && <WorldNewsSettings key={`news:${world.world_id}:${selectedPlayer}`} client={client} worldId={world.world_id} visible={tab === "settings" && settingsPage === "news"} paused={world.clock_state === "paused"} />}{!selectedPlayer && <section className="settings-section"><p className="inline-hint">先在“我”中进入当前世界，再设置世界动态。</p><button type="button" className="text-action" onClick={() => setTab("me")}>前往我</button></section>}</>,
+          about: <SettingsDiagnostics client={client} visible={tab === "settings" && settingsPage === "about"} desktop={desktopStatus} onBackground={() => setSettingsPage("background")} />,
+        }} />
 
       {(tab === "me" || meVisited) && <div className="settings-page profile-page" hidden={tab !== "me"}><ProfileEditor client={client} onDirtyChange={setGeneralProfileDirty} /><section className="settings-section"><div className="section-heading"><h2>我在当前世界</h2><p>每个世界选择一个自己的玩家身份；世界事件按此身份的已知范围显示。</p></div>
         {!world ? <p className="inline-hint">先在书架中创建世界。</p> : <>

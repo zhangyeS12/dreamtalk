@@ -1,0 +1,97 @@
+.settings-handbook { display: grid; grid-template-columns: 244px minmax(0, 1fr); max-width: 1380px; margin: 0 auto; min-height: 620px; background: var(--surface); border: 1px solid var(--line); border-radius: 4px; }
+.settings-handbook[hidden], .handbook-panel[hidden], .contacts-page[hidden] { display: none; }
+.handbook-index { min-width: 0; padding: 24px 0 18px; background: oklch(.946 .003 160); border-right: 1px solid var(--line); display: flex; flex-direction: column; }
+.handbook-world { display: flex; align-items: center; gap: 8px; padding: 0 20px 22px; border-bottom: 1px solid var(--line); }
+.handbook-world > div:last-child { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.handbook-world strong { font-size: 1rem; overflow-wrap: anywhere; }
+.handbook-world span, .handbook-world small { font-size: .78rem; color: var(--muted); }
+.handbook-mini-book { --book-width: 196px; --book-height: 286px; --book-depth: 42px; --archive-muted: var(--muted); position: relative; width: 60px; height: 84px; flex: 0 0 60px; perspective: 600px; }
+.handbook-mini-book .book-volume { left: 8px; top: 6px; transform-origin: top left; transform: scale(.25) rotateY(24deg) rotateX(4deg); }
+.handbook-index nav { display: flex; flex-direction: column; gap: 6px; padding: 18px 0 18px 16px; }
+.handbook-index nav button { display: flex; flex-direction: column; gap: 5px; text-align: left; min-height: 64px; padding: 12px 20px 12px 16px; margin-right: 12px; border: 1px solid transparent; border-radius: 3px; color: var(--ink); background: transparent; font-size: .9rem; font-weight: 550; transition: transform 180ms ease-out, background 180ms ease-out; }
+.handbook-index nav button > span { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.handbook-index nav button > small { color: var(--muted); font-size: .74rem; font-weight: 400; }
+.handbook-index nav button:hover { background: oklch(.917 .008 153); }
+.handbook-index nav button[aria-current="page"] { background: var(--surface); border-color: var(--line); color: var(--green-hover); transform: translateX(6px); }
+.handbook-index nav button[aria-current="page"] > small { color: var(--green-hover); }
+.handbook-dirty { font-size: .68rem; font-weight: 500; color: oklch(.4 .09 55); }
+.handbook-return { align-self: flex-start; margin: auto 14px 0; font-size: .8rem; }
+.handbook-cover-error { font-size: .75rem; line-height: 1.5; margin: 0 20px 16px; color: var(--muted); }
+.handbook-sheet { min-width: 0; padding: 32px 36px 40px; }
+.handbook-page-heading { display: flex; align-items: flex-start; flex-wrap: wrap; justify-content: space-between; gap: 14px; padding-bottom: 28px; border-bottom: 1px solid var(--line); }
+.handbook-page-heading h2 { margin: 0 0 8px; font-size: 1.4rem; font-weight: 650; letter-spacing: -.02em; }
+.handbook-page-heading p { margin: 0; color: var(--muted); font-size: .86rem; line-height: 1.6; }
+.handbook-scope { max-width: 100%; padding: 7px 10px; font-size: .75rem; color: var(--green-hover); background: var(--green-soft); border-radius: 3px; overflow-wrap: anywhere; }
+.handbook-panel { max-width: 940px; }
+.handbook-panel > .settings-section { padding: 28px 0; }
+.handbook-panel .settings-section { background: transparent; }
+.handbook-panel .settings-section p { line-height: 1.65; max-width: 75ch; }
+.handbook-panel .settings-section p + p { margin-top: 12px; }
+.handbook-panel .settings-section button { min-height: 40px; }
+.handbook-panel .settings-section input, .handbook-panel .settings-section select, .handbook-panel .settings-section textarea { border-radius: 4px; }
+.handbook-panel .profile-actions { flex-wrap: wrap; }
+.handbook-panel .settings-section > button + button { margin-left: 12px; }
+.handbook-panel .settings-section > p:last-child { margin-top: 16px; }
+.handbook-panel .settings-section > [role="status"] { margin-block: 14px; }
+.handbook-panel .settings-section > [role="status"]:not(.inline-hint) { padding: 12px 16px; background: var(--page); color: var(--ink); border-radius: 3px; }
+.handbook-panel .settings-section > [role="alert"] { padding: 12px 16px; border-radius: 3px; background: oklch(.96 .03 25); color: oklch(.35 .1 25); }
+.handbook-fold { border-bottom: 1px solid var(--line); }
+.handbook-fold > summary { padding: 24px 0; display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 16px; cursor: pointer; font-size: .93rem; }
+.handbook-fold > summary::before { content: "＋"; color: var(--green-hover); }
+.handbook-fold[open] > summary::before { content: "－"; }
+.handbook-fold > summary strong { margin-right: auto; font-weight: 600; }
+.handbook-fold > summary > span { font-size: .79rem; color: var(--muted); }
+.handbook-fold > .settings-section { padding: 0 0 28px; border: 0; }
+.handbook-diagnostics dl { margin: 0 0 24px; }
+.handbook-diagnostics dl > div { display: grid; grid-template-columns: 124px minmax(0, 1fr); gap: 16px; padding: 16px 0; border-top: 1px solid var(--line); font-size: .9rem; }
+.handbook-diagnostics dt { color: var(--muted); }
+.handbook-diagnostics dd { margin: 0; overflow-wrap: anywhere; }
+.contacts-toolbar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 20px; }
+.contacts-toolbar h2 { margin: 0 0 6px; font-size: 1.08rem; font-weight: 650; }
+.contacts-toolbar p { margin: 0; color: var(--muted); font-size: .85rem; }
+.contacts-management { background: var(--surface); margin-bottom: 20px; border: 1px solid var(--line); border-radius: 4px; }
+.contacts-management > summary { display: flex; flex-wrap: wrap; gap: 10px 20px; align-items: center; padding: 18px 24px; cursor: pointer; }
+.contacts-management > summary::before { content: "＋"; color: var(--green-hover); }
+.contacts-management[open] > summary::before { content: "－"; }
+.contacts-management > summary strong { font-size: .94rem; }
+.contacts-management > summary span { font-size: .8rem; color: var(--muted); }
+.contacts-management[open] > summary { border-bottom: 1px solid var(--line); }
+.contacts-page .import-section { border: 0; }
+.contacts-page .profile-actions { flex-wrap: wrap; }
+.contacts-page .contacts-workspace { min-height: 400px; }
+@media (max-width: 920px) {
+  .settings-handbook { grid-template-columns: 200px minmax(0, 1fr); }
+  .handbook-world { padding-inline: 14px; }
+  .handbook-sheet { padding: 28px 24px; }
+  .handbook-index nav { padding-left: 8px; }
+  .handbook-index nav button { padding-left: 12px; }
+}
+@media (max-width: 700px) {
+  .settings-handbook { grid-template-columns: minmax(0, 1fr); }
+  .handbook-index { padding: 16px 0 0; border-right: 0; border-bottom: 1px solid var(--line); }
+  .handbook-world { border-bottom: 0; padding-bottom: 8px; }
+  .handbook-mini-book { width: 40px; height: 58px; flex-basis: 40px; }
+  .handbook-mini-book .book-volume { transform: scale(.17) rotateY(24deg) rotateX(4deg); }
+  .handbook-index nav { flex-direction: row; overflow-x: auto; padding: 12px; gap: 8px; }
+  .handbook-index nav button { min-width: 108px; margin: 0; min-height: 60px; padding: 10px 12px; }
+  .handbook-index nav button[aria-current="page"] { transform: none; }
+  .handbook-return { margin-bottom: 12px; }
+  .handbook-sheet { padding: 24px 18px 28px; }
+  .handbook-page-heading { padding-bottom: 20px; }
+  .handbook-page-heading h2 { font-size: 1.2rem; }
+  .handbook-fold > summary { align-items: flex-start; }
+  .handbook-panel .setting-row { flex-wrap: wrap; }
+  .handbook-panel .setting-row .field { width: min(220px, 100%); }
+  .handbook-diagnostics dl > div { grid-template-columns: 100px minmax(0, 1fr); gap: 12px; }
+  .contacts-management > summary { padding: 16px; }
+}
+@media (prefers-reduced-motion: reduce) { .handbook-index nav button { transition: none; } }
+
+.handbook-panel button { color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 4px; }
+.handbook-panel button:hover:not(:disabled) { background: var(--page); }
+.handbook-panel button.primary-button { background: var(--green); border-color: var(--green); color: var(--surface); }
+.handbook-panel button.primary-button:hover:not(:disabled) { background: var(--green-hover); }
+.handbook-panel button.text-action { background: transparent; border: 0; color: var(--green-hover); }
+.handbook-panel input[type="checkbox"] { accent-color: var(--green); width: 18px; height: 18px; vertical-align: middle; margin-right: 8px; }
+.handbook-fold > summary:focus-visible, .contacts-management > summary:focus-visible, .handbook-page-heading h2:focus-visible { outline: 2px solid var(--green); outline-offset: 3px; }
+.contacts-management > summary:hover { background: var(--page); }
