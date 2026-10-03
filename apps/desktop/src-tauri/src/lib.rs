@@ -425,7 +425,7 @@ pub fn run() {
             let config = LaunchConfig {
                 project_root,
                 app_data: app_data.clone(),
-                startup_timeout: Duration::from_secs(12),
+                startup_timeout: Duration::from_secs(30),
                 llm_config_path: app_data.join("config").join("llm.json"),
             };
             let supervisor = app.state::<SharedSupervisor>().inner().clone();

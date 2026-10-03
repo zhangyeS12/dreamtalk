@@ -100,6 +100,17 @@ async def run(
     config.bootstrap_secret = type(config.bootstrap_secret)("")
     config.log_dir.mkdir(parents=True, exist_ok=True)
     logger = StructuredLogger(logfile=config.log_dir / f"core-{generation}.jsonl")
+    # Native DLL imports must precede the blocking host-control stdin reader
+    # and database/executor threads. Load no model and touch no user cache here.
+    from livingworld.infrastructure.semantic_chat_retrieval import prepare_native_recall
+
+    logger.emit("chat_retrieval", "native_runtime_initializing")
+    native_ready = prepare_native_recall()
+    logger.emit(
+        "chat_retrieval",
+        "native_runtime_ready" if native_ready else "native_runtime_unavailable",
+        level="INFO" if native_ready else "WARNING",
+    )
     shutdown = ShutdownRequests()
     ready_path = bootstrap_path.parent / "ready.json"
     ready_path.unlink(missing_ok=True)

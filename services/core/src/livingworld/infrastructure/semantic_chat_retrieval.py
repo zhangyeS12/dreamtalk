@@ -15,6 +15,28 @@ MODEL = "BAAI/bge-small-zh-v1.5"
 MODEL_SHA = "1294ea4b6331115a353d81f96b85e8c8d7fdcc284453d5b2fab5b016230aad38"
 MAX_INDEX_REFERENCES = 8192
 PREFIX = "为这个句子生成表示以用于检索相关文章："
+_native_ready: bool | None = None
+
+
+def prepare_native_recall() -> bool:
+    """Import native libraries before any desktop stdin reader or worker starts.
+
+    Windows NumPy DLL initialization can hang behind a concurrent stdin read.
+    A thread timeout cannot rescue an event loop blocked starting another worker.
+    This imports libraries only: no model load, inference, cache or network.
+    """
+    global _native_ready
+    if _native_ready is None:
+        try:
+            import numpy  # noqa: F401
+            from fastembed import TextEmbedding  # noqa: F401
+        except Exception:
+            # A failed native runtime is optional; do not retry its imports after
+            # the control pipe starts. Keyword recall and the Core still work.
+            _native_ready = False
+        else:
+            _native_ready = True
+    return _native_ready
 
 
 def reference_key(scope, kind, identity, version=""):
@@ -35,7 +57,7 @@ class HybridChatRecallRanker(Fts5ChatRecallRanker):
         super().__init__()
         self._semantic_job = None
         self._model = None
-        self._unavailable = False
+        self._unavailable = _native_ready is False
         self._vectors = OrderedDict()
         self._query_vectors = OrderedDict()
         self._cache = LocalVectorCache(cache_directory)
@@ -65,6 +87,8 @@ class HybridChatRecallRanker(Fts5ChatRecallRanker):
         """References contain IDs only, after the caller's SQL permission filtering."""
         if not references:
             return (), (), False
+        if self._unavailable:
+            return (), (), True
         result = await self._worker(self._historical, queries, references, limit)
         return result if result is not None else ((), (), True)
 

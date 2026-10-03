@@ -2,6 +2,17 @@
 
 更新日期：2026-10-03。此文件记录当前开发现场与接续工作，不替代 [AGENTS.md](AGENTS.md)。先读 AGENTS，再读本文，最后核对实际 Git 状态和相关代码；不能把下面的基线哈希当作永远不变的当前 HEAD。
 
+## 最新接续：2026-10-03 Windows原生库首次导入阻塞（桌面0.1.23）
+
+- 用户报告0.1.22又卡住，明确窗口可点击、所有页面读取或连接失败。实际Get-Process.Path确认Core/Desktop来自generation-read-fix目录，排除本次旧包猜测；CPU停在2.65625，端口仍监听，大量CLOSE_WAIT。最新安全日志core-82817d3a...在22:37:00 core_ready/credential_sync_complete后停止；不带凭据的/system/live一次4秒只读故障诊断超时，没有读取数据库或服务商API。
+- 使用独立临时目录中的py-spy0.4.1 dump --pid --json，不使用--locals、不注入代码或做内存转储。栈文件保存在可写诊断目录tools/hang-diagnosis/core-stack.json：MainThread为ThreadPoolExecutor.submit/_adjust_thread_count/thread.start等待；asyncio_0为历史检索_decode/_historical → numpy multiarray扩展create_module；host-control线程在stdin decode_frame。属于首次原生导入阻塞现场，上一轮3秒等待只能限制正常事件循环，无法救活同步Thread.start卡住。
+- [调查](docs/research/2026-10-03-windows-native-import-hang.md)发现NumPy#24290报告Windows管道子进程的stdin读取与首次NumPy导入并存会永久卡住。现场与本项目顺序吻合，未获取原生DLL内部栈，不冒充已直接证实某个CRT锁。本次不是DeepSeek配置或Token额度问题。
+- Core在数据库/工作线程与host-control.stdin监听启动前准备NumPy/FastEmbed原生库，写固定安全阶段日志；只导入库，模型/缓存仍延迟、无推理/联网/历史读取。准备失败后本次只用关键词，历史语义页也不重试原生导入。保留单工作/3秒等待/原权限与数据边界。桌面生产启动发现12→30秒，现有测试原样保留。
+- 五处版本0.1.23，无依赖/主库迁移/HTTP合同/模型费用或外发范围改动。[体验说明](docs/CORE_NATIVE_STARTUP.md)。Ruff两份Python lint/format和Git diff静态检查通过；build-only PyInstaller/Core、Vite239模块（655.64kB/gzip196.75、141ms）、Rust release26.88s完成；PE FileVersion/ProductVersion静态读取均0.1.23。保留>500kB chunk、STATIC_VCRUNTIME弃用和tzdata/pysqlite2/MySQLdb可选依赖、jieba转义告警，不隐藏提示。
+- 用户本次明确允许单次临时空目录Core冷启动诊断。新包子进程2.313秒就绪；native_runtime_ready先于core_ready和credential_sync_complete_accepted，控制管道继续阻塞读取期间/system/live和认证/system/health均200并确认ready、模型unconfigured；认证shutdown后关闭诊断自己的stdin，exit0且core_shutdown_completed。没有启动桌面、推理、付费API或现有存档/密钥访问；没有运行测试套件。实际角色聊天、语义推理及现有存档仍待用户验收。仅终止/退出本次创建的临时子进程，没有停止或重启用户原应用。
+- 新独立完整目录artifacts/portable/native-import-fix/dreamtalk及同父ZIP，所有旧包保留。222份源码AST/冻结字节、1041份包/ZIP、244次文档许可字节、82个本轮文档链接及固定模型/五处版本核对通过。第一次静态ZIP核对误在压缩完成前启动，报BadZipFile；等待构建正常exit0后核对通过，没有损坏或修补ZIP。Desktop SHA256=9a327ed2c61e4aec8360787db89f5e9d03c0d9d91f7f9d8010d7969085bbe71c；Core=271d6805f7040bc81207aa5d7ec4f3a639d33f77641be548b069009ad248c83e；ZIP=b3f63ff0f222b1e3a51610ed89bac6a176c74908032c56403fae5b12fb31fd73。日志artifacts/native-import-fix-build.log、清单native-import-fix-audit.json、单次诊断native-import-fix-cold-start.json。py-spy0.4.1 wheel许可证实际为MIT，仅在临时诊断目录，没有并入产品。
+- 仅本地提交，见git log；不push/发布，不改自启动路径。下一步先从托盘退出旧进程并运行完整0.1.23，验收首次聊天后切页/刷新、记忆和事件生成；使用自启动由用户在新版显式保存启动位置。现场阻塞位置已确认，上游并发条件吻合且新启动顺序通过单次诊断，但不冒充所有原生锁细节或真实聊天效果已验证。
+
 ## 最新接续：2026-10-03 事件格式失败与聊天读取等待（桌面0.1.22）
 
 - 从干净650f64e/codex/world-archive、正式D:\LivingWorld接续，用户明确要求同时修复事件生成和发消息后的全页“读取中”。[复用调查](docs/research/2026-10-03-generation-read-reliability.md)直接采用DeepSeek JSON示例指南、Python asyncio和标准AbortController，不加依赖、不复制第三方项目实现。

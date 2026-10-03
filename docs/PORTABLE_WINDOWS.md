@@ -1,6 +1,6 @@
 # dreamtalk Windows 便携版
 
-最新完整包0.1.22修复聊天读取的等待和状态误报，限制本地语义检索等待，并改善事件生成格式及失败提示，见[生成与读取修复说明](GENERATION_READ_RECOVERY.md)。包含本地中文语义模型与[后台任务状态入口](BACKGROUND_TASK_FEEDBACK.md)。请保留整个目录，先退出旧版，再打开新目录的 dreamtalk-desktop.exe；不要删除存档或混用旧Core。参考[上下文与记忆体验](CONTEXT_AND_RECALL.md)验收；静态检查与构建不代表实际启动、聊天或生成已通过验收。
+最新完整包0.1.23修正Windows首次导入语义检索原生库时与控制管道读取并发的卡顿，见[核心卡顿修复说明](CORE_NATIVE_STARTUP.md)。保留0.1.22的[读取超时和事件格式修复](GENERATION_READ_RECOVERY.md)，包含本地中文模型。先从托盘退出旧版，再运行完整新目录的 dreamtalk-desktop.exe；不要删存档或拆换Core。编译、包核对和临时诊断不等于真实存档/聊天已通过验收。
 
 将整个 `dreamtalk` 文件夹解压后运行 `dreamtalk-desktop.exe`。请勿只复制 exe：`core/` 文件夹包含随附的 Python Core 和迁移脚本。使用 Windows 10/11，并确保系统有 WebView2 Runtime。无需另行安装 Python、uv、Node 或 Rust。
 
