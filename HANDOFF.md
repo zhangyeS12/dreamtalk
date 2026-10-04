@@ -5,7 +5,7 @@
 
 ## 1. 当前任务、范围与结论
 
-当前任务为用户批准的新Logo和真实三维流星漩涡启动，Desktop0.1.34源码、静态检查及build-only便携构建已完成；实际画面/启动/后台与设备流畅度由用户验收。正常启动不显示核心连接文字；真实核心health/generation确认、世界列表和有界封面准备后，约900ms相机推进并进入背后的原书架。隐藏自启动不创建WebGL，减少动态效果/不可用时静态回退；失败有明确重试。Core、迁移、模型调用及系统启动注册不变。详见[启动说明](docs/CELESTIAL_STARTUP.md)与[成熟实现调查](docs/research/2026-10-04-celestial-startup-reuse.md)。
+当前任务为修复主动联系无法开启与快速启动跳过动画，Desktop0.1.35源码已完成，源码检查及build-only构建结果见第6节。设置请求缺JSON头且后端strict UUID拒绝正常JSON字符串；两处一起修复，只对该UUID字段使用标准解析，保留其他严格字段及身份/revision核对。页面保留失败原因、显示已保存，未读取状态不冒充已关闭；不读取或改写用户存档开关、不自动启用付费功能。前台从三维首帧至少展示1.5秒，核心/书架并行加载，真实就绪后约900ms进入原书架；隐藏启动不强制展示，静态回退保留。协议/迁移/生成规则/自启动注册不变。0.1.34提交未改Core或开关逻辑，源码没有人为核心连接等待。详见[启动说明](docs/CELESTIAL_STARTUP.md)与[主动联系设置修复](docs/proposals/2026-10-04-proactive-contact.md)。
 
 此前0.1.33真三维关系网和宽表单已交付源码/便携包，用户这轮转向启动体验；不据此标成全量关系网验收。0.1.30红点修复已获用户“问题已解决”反馈；0.1.31主动/离线联动仍待体验，不阻挡当前明确需求。
 - 当前世界通讯录可创建、重命名、迁移、删除空阵营；子阵营不限制层级，角色可多重归属。同一个阵营的直接成员在单写事务中建立持久相识；父子和多跳关系不扩大熟人范围，撤出阵营只改变归属、不抹去已建立的相识。
@@ -20,9 +20,9 @@
 | --- | --- |
 | 正式仓库 | `D:\LivingWorld`；当前用户工作目录 `C:\Users\zhang\Documents\ChatGPT\LivingWorld` 是受限环境可写工作目录，不据此推断正式仓库/构建产物已搬迁。 |
 | 分支 | `codex/world-archive`。 |
-| 本轮开始 HEAD | `167d5e8`，0.1.33三维关系网优化提交；开始工作区干净。此前文档整理基线为1221c18，后续以实际git log为准。 |
+| 本轮开始 HEAD | `42e675c`，0.1.34星梦启动提交；开始工作区干净。此前文档整理基线为1221c18，后续以实际git log为准。 |
 | 此前功能提交 | `844259a`：离线恢复门禁状态提示；`ed5f844`：在线主动联系与未读红点；前序 `9939579` 授权活动终态召回去重、`ee17ed6` 共同休闲/来源回看。 |
-| 桌面版本 | `0.1.34`（package/Tauri/Cargo；交付 EXE 元数据以本轮构建核对）。根 npm/Core package 的 `0.1.0` 是已有独立包版本，不误改成桌面版本。 |
+| 桌面版本 | `0.1.35`（package/Tauri/Cargo；交付 EXE 元数据以本轮构建核对）。根 npm/Core package 的 `0.1.0` 是已有独立包版本，不误改成桌面版本。 |
 | Core API | `services/core/src/livingworld/domain/api_contract.json`：`api_protocol = 1`、loopback `127.0.0.1`；随机 Core 端口，UI 不硬编码。 |
 | Alembic head | `0036_character_factions`，前序 `0035_proactive_contact`。此次不运行升级或读取真实存档。 |
 | Git remote | `origin = https://github.com/zhangyeS12/dreamtalk.git`；只读本地配置，不表示本地最新提交已推送。 |
@@ -96,6 +96,12 @@
 不要用旧包打开已升级存档；不要把代码核对称为真实存档升级验证。
 
 ## 6. 交付与证据
+
+### 0.1.35 主动联系保存和启动最低展示
+
+源码修复及范围见第1节，版本同步package/Tauri/Cargo/npm锁文件。前端ESLint/tsc、目标Python Ruff lint/格式、文档链接（0断链）及Git差异检查通过；`--build-only --output-name startup-proactive-fix`完成。Desktop ProductVersion/FileVersion均为0.1.35，新包`artifacts/portable/startup-proactive-fix/dreamtalk`与同级`dreamtalk.zip`；旧包保留。Core HTTP适配源码与包内原文件核对；根规则/交接/产品及docs随包同步，静态清单位于`artifacts/startup-proactive-fix-source-audit.json`。未运行产品、自动测试、模型或真实存档；保存持久性、至少1.5秒画面和主动联系仍待用户体验。
+
+Desktop SHA256 `aa81b23dcc2795efac06e72453b59a94abe1318a5922fdb097e382088674dd38`；Core SHA256 `2d7bc064f1af15e7525108e4465bb492ea89e308889e95b8c9e152f3a43baa94`。本轮仅Core HTTP请求字段适配改变，无持久化/迁移/生成规则修改。构建有非阻塞大chunk告警（主709.62kB、共享Three.js587.98kB、关系网817.51kB）及STATIC_VCRUNTIME弃用；不隐藏告警或声称帧率已验收。
 
 ### 0.1.34 星梦启动与新Logo
 
@@ -179,9 +185,9 @@ git diff --check
 
 ## 8. 下一步、限制与疑问
 
-当前Logo与真三维流星启动已交付；下一步按[启动说明](docs/CELESTIAL_STARTUP.md)体验近远光尾、球体遮挡、相机穿越到书架、失败重试、隐藏后台与减少动态效果。三维关系网仍按[验收说明](docs/CHARACTER_FACTIONS.md)体验；根据具体反馈修复，不自动扩充玩法或新社交动作。
+先验收0.1.35主动联系同意开启、刷新与重开保持状态，以及快速启动至少1.5秒三维展示/相机推进。按[启动说明](docs/CELESTIAL_STARTUP.md)核对隐藏后台、静态回退和失败重试；自动联系真正送达仍需合法活动/许可/间隔/回复门禁。三维关系网按[验收说明](docs/CHARACTER_FACTIONS.md)继续体验，不扩充玩法。
 
-1. 星梦启动0.1.34和三维关系网0.1.33均已有源码/便携包，运行与画面仍待用户体验；没有必需新产品决定。
+1. 启动/保存修复0.1.35和三维关系网0.1.33已有源码；0.1.35源码检查及便携build-only已完成，运行与画面待用户体验。没有必需新产品决定。
 2. 主动联系仍有待验收：同一真实共同休闲的两名角色是否同目的邀请、未回复是否阻断跨角色后续联系、回复后是否在下一合法机会恢复。已有相识不代表一定会主动联系；活动、许可、冷却和门禁仍有效。
 3. 以前经历终态/身份隔离、共同休闲生命周期和来源回看仍待体验，缺少验收不表示没实现。0.1.30红点清除已获用户确认。
 4. 最终发行等待用户验收和明确批准；本轮只本地提交，不push/Release、不修改自启动或现有存档。

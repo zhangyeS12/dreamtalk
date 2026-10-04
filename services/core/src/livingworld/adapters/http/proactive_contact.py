@@ -12,7 +12,9 @@ from livingworld.domain.identifiers import WorldId
 
 class SettingsRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
-    expected_player_id: UUID
+    # FastAPI validates an already-decoded dict; UUIDs arrive as JSON strings.
+    # Keep booleans, intervals and revisions strict; parse only the UUID field.
+    expected_player_id: UUID = Field(strict=False)
     enabled: bool
     interval_minutes: int = Field(ge=15, le=1440)
     consent_background_usage: bool = False

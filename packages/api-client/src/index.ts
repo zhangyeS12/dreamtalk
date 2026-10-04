@@ -701,6 +701,7 @@ export class CoreClient {
   }
   configureProactiveContact(worldId: string, status: ProactiveContactStatus, enabled: boolean, minutes: number, consent = false): Promise<ProactiveContactStatus> {
     return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/proactive-contact`, { method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ enabled, interval_minutes: minutes, consent_background_usage: consent, expected_revision: status.revision, expected_player_id: status.player_id }) });
   }
   chatUnread(worldId: string, signal?: AbortSignal): Promise<ChatUnreadStatus> {

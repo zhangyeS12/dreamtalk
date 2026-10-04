@@ -13,3 +13,11 @@
 - 增量迁移 0035 保持旧结构校验。构建/静态检查不代表真实存档升级或模型体验验收；测试仍由用户负责。
 
 复用调查见 `docs/research/2026-10-04-proactive-contact-reuse.md`。当前公开接口维持 API protocol 1，新增独立路由。首次在线开启仍在界面明确后台费用。
+
+## 0.1.35 开启设置保存修复
+
+源码确认两处适配问题：configureProactiveContact 缺少application/json请求头；FastAPI将JSON解析为dict再validate_python，而strict=True的expected_player_id: UUID不接受正常JSON字符串。客户端补齐请求头，仅该UUID字段使用Field(strict=False)作标准UUID校验，开关、间隔、版本等字段仍严格校验，玩家一致性和revision并发门禁保留。复用已有Pydantic能力，不自写解析器；依据[Pydantic UUID文档](https://docs.pydantic.dev/latest/api/standard_library_types/#uuid)及[严格模式字段覆盖](https://docs.pydantic.dev/latest/concepts/strict_mode/)。
+
+页面读取未完成不再显示为未开启；保存失败不会被自动刷新清除，成功收到核心保存结果后明确显示已保存，身份/模型/校验失败分别提示。只修设置适配，不改变已有存档开关、不自动启用或重放模型调用；启动恢复只将writing标为attention，不设置enabled=False。0.1.34提交没有改Core/开关逻辑；没有读取真实存档，因此不声称核实了用户以前的保存值。
+
+用户验收：退出托盘旧程序，打开0.1.35配套包，在原世界/原玩家点击同意开启，确认已开启并保存；刷新、切页、正常退出重开应仍为开启。保存状态和实际发出邀请分开验收，仍需自动活动、许可、间隔、真实理由及无未回复联系。不由工程端运行测试或调用模型。
