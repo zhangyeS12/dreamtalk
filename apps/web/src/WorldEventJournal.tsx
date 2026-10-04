@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CoreClient, CoreRequestError, type ChatStoryEntry, type KnownWorldEvent, type NewsMark, type PublicNewsEntry, type WorldStoryEntries } from "@dreamtalk/api-client";
 
+import { SourceMessageDialog } from "./SourceMessageDialog";
+
 const kinds = { activity: "活动", plan: "计划", rumor: "传闻", invitation: "邀请", change: "变更" };
 const marks = { pending: "未经历", experienced: "已经历", skipped: "跳过" };
 
@@ -16,6 +18,7 @@ export function WorldEventJournal({ client, worldId, witnessed, onTopic, display
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState<ChatStoryEntry | null>(null);
   const [correction, setCorrection] = useState("");
+  const [source, setSource] = useState<ChatStoryEntry | null>(null);
   const busyRef = useRef(false);
   const serial = useRef(0);
   const alive = useRef(true);
@@ -79,7 +82,7 @@ export function WorldEventJournal({ client, worldId, witnessed, onTopic, display
         {entries.chat.some(newer => newer.updates_entry_id === item.entry_id) && <small>后来有变更记录；此条保留当时的信息。</small>}
         {item.updates_entry_id && <small>关联旧记录：{entries.chat.find(old => old.entry_id === item.updates_entry_id)?.title || "较早的计划"}；旧记录保留。</small>}
         {item.correction && <p className="inline-hint">我的批注：{item.correction}</p>}
-        <details><summary>来源原话</summary><p>会话 {item.conversation_id} · 消息 {item.message_id}</p>{item.source_event_id && <p>已授权事件引用：{item.source_event_id}</p>}<p>这是角色当时告诉你的说法，计划或传闻不代表已发生或已证实。</p></details>
+        <details><summary>来源原话</summary><p>这是角色当时告诉你的说法，计划或传闻不代表已发生或已证实。</p>{item.source_event_id && <p className="inline-hint">这段原话关联已有的授权经历，不代表你在现场亲历。</p>}<button type="button" className="text-action" disabled={busy} onClick={() => setSource(item)}>查看原文前后文</button></details>
         <div className="journal-entry-actions"><button type="button" className="text-action" disabled={busy} onClick={() => { setEditing(item); setCorrection(item.correction || ""); }}>批注／纠正</button><button type="button" className="text-action" disabled={busy} onClick={() => { if (window.confirm("从事件列表移除此条记录？聊天原文会保留。")) void act(() => client.correctChatStory(worldId, item, item.correction, true), item.entry_id); }}>移除记录</button></div>
         {editing?.entry_id === item.entry_id && <form onSubmit={event => { event.preventDefault(); void act(() => client.correctChatStory(worldId, item, correction.trim() || null), undefined, { ...item, correction: correction.trim() || null, revision: item.revision + 1 }); }}><label className="field"><span>补充或纠正（保留原话，不修改原始聊天）</span><textarea maxLength={500} value={correction} onChange={event => setCorrection(event.target.value)} /></label><button type="submit" className="primary-button" disabled={busy}>保存批注</button><button type="button" className="text-action" disabled={busy} onClick={() => setEditing(null)}>取消</button></form>}
       </li>)}</ol>}
@@ -92,5 +95,6 @@ export function WorldEventJournal({ client, worldId, witnessed, onTopic, display
         <div className="news-marks" role="group" aria-label={`经历状态：${item.title}`}>{(["pending", "experienced", "skipped"] as NewsMark[]).map(mark => <button type="button" key={mark} className={`news-mark mark-${mark}`} aria-pressed={item.state === mark} disabled={busy || item.state === mark} onClick={() => void act(() => client.markWorldNews(worldId, item, mark))}>{marks[mark]}</button>)}</div>
       </li>)}</ol>}
     </section>
+    {source && <SourceMessageDialog key={`${worldId}:${source.conversation_id}:${source.message_id}`} client={client} worldId={worldId} conversationId={source.conversation_id} messageId={source.message_id} characters={[{ character_id: source.character_id, character_name: source.character_name }]} onClose={() => setSource(null)} />}
   </div>;
 }

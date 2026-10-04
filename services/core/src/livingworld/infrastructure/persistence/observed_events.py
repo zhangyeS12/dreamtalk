@@ -21,7 +21,9 @@ from livingworld.infrastructure.persistence.models import (
 
 _ROUTINE_TYPES = ("CharacterRoutineStarted", "CharacterRoutineEnded", "CharacterRoutineInterrupted")
 _CHARACTER_TYPES = ("CharacterPlaced", *_ROUTINE_TYPES)
-_SUPPORTED_TYPES = ("PlayerMoved", "PlayerPlaced", "CharactersMet", *_CHARACTER_TYPES)
+_SHARED_TYPES = ("SharedActivityStarted", "SharedActivityEnded", "SharedActivityInterrupted")
+_PAIR_TYPES = ("CharactersMet", *_SHARED_TYPES)
+_SUPPORTED_TYPES = ("PlayerMoved", "PlayerPlaced", *_PAIR_TYPES, *_CHARACTER_TYPES)
 
 
 def witnessed_occurrence():
@@ -76,20 +78,31 @@ async def project_observed_events(
             event.ledger_position,
             seen.c.observed_at,
             reference("$.player_id", ("PlayerMoved", "PlayerPlaced")).label("player_id"),
-            reference("$.first_character_id", ("CharactersMet",)).label("first_character_id"),
-            reference("$.second_character_id", ("CharactersMet",)).label("second_character_id"),
+            reference("$.first_character_id", _PAIR_TYPES).label("first_character_id"),
+            reference("$.second_character_id", _PAIR_TYPES).label("second_character_id"),
             case((eligible, func.json_extract(safe_body, "$.purpose")), else_=None).label(
                 "purpose"
             ),
             reference("$.character_id", _CHARACTER_TYPES).label("character_id"),
             case(
                 (
+                    and_(
+                        eligible,
+                        event.event_type.in_(_SHARED_TYPES),
+                        func.json_extract(safe_body, "$.activity").in_(
+                            ("shared_rest", "shared_leisure")
+                        ),
+                    ),
+                    func.json_extract(safe_body, "$.activity"),
+                ),
+                else_=None,
+            ).label("shared_activity"),
+            case(
+                (
                     event.event_type == "PlayerMoved",
                     reference("$.to_location_id", ("PlayerMoved",)),
                 ),
-                else_=reference(
-                    "$.location_id", ("PlayerPlaced", "CharactersMet", *_CHARACTER_TYPES)
-                ),
+                else_=reference("$.location_id", ("PlayerPlaced", *_PAIR_TYPES, *_CHARACTER_TYPES)),
             ).label("destination"),
             case(
                 (
@@ -155,7 +168,7 @@ async def project_observed_events(
     location_names = await names(LocationRecord, LocationRecord.location_id, locations)
 
     def description(row) -> str | None:
-        if row.event_type == "CharactersMet":
+        if row.event_type in _PAIR_TYPES:
             first, second, location = (
                 _uuid(row.first_character_id),
                 _uuid(row.second_character_id),
@@ -166,9 +179,25 @@ async def project_observed_events(
                 or first not in character_names
                 or second not in character_names
                 or location not in location_names
-                or row.purpose != "brief_greeting"
+                or (row.event_type == "CharactersMet" and row.purpose != "brief_greeting")
+                or (
+                    row.event_type in _SHARED_TYPES
+                    and row.shared_activity not in {"shared_rest", "shared_leisure"}
+                )
             ):
                 return None
+            if row.event_type in _SHARED_TYPES:
+                activity = "共同休息" if row.shared_activity == "shared_rest" else "共同自由活动"
+                phase = {
+                    "SharedActivityStarted": "已开始",
+                    "SharedActivityEnded": "已正常结束",
+                    "SharedActivityInterrupted": "已中断",
+                }[row.event_type]
+                return (
+                    f"角色「{character_names[first]}」与角色「{character_names[second]}」"
+                    f"在「{location_names[location]}」的{activity}{phase}；"
+                    "未记录谈话内容、物品或关系成果。"
+                )
             return (
                 f"角色「{character_names[first]}」与角色「{character_names[second]}」"
                 f"在「{location_names[location]}」短暂碰面，打过招呼。"
@@ -210,7 +239,7 @@ async def project_observed_events(
         if detailed_only and text is None:
             continue
         subject = None
-        if text is not None and row.event_type != "CharactersMet":
+        if text is not None and row.event_type not in _PAIR_TYPES:
             identity = _uuid(
                 row.character_id if row.event_type in _CHARACTER_TYPES else row.player_id
             )
@@ -234,7 +263,7 @@ async def project_observed_events(
                     CharacterId(world_id, identity)
                     for identity in (_uuid(row.first_character_id), _uuid(row.second_character_id))
                 )
-                if text is not None and row.event_type == "CharactersMet"
+                if text is not None and row.event_type in _PAIR_TYPES
                 else (),
             )
         )

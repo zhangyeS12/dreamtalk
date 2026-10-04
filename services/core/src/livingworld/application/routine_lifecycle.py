@@ -20,8 +20,11 @@ from livingworld.domain.values import WorldTime
 async def settle_routines(uow, world_id, now, created_at, *, character=None, interrupt=False):
     # Imported here to reuse the existing authority resolver without a module cycle.
     from livingworld.application.action_resolution import AudienceResolver
+    from livingworld.application.shared_activities import settle_shared_activities
 
-    next_time = None
+    next_time = await settle_shared_activities(
+        uow, world_id, now, created_at, character=character, interrupt=interrupt
+    )
     for row in await uow.director.active(world_id, character):
         owner = CharacterId(world_id, row.character_id)
         presence = await uow.characters.state(owner)

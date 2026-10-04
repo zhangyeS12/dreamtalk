@@ -507,3 +507,7 @@ See [reuse and limits](../research/2026-09-29-observed-events-reuse.md).
 沿用现有FTS/FastEmbed/NumPy和角色权限边界，集成DiskCache5.6.3作为可重建派生缓存。每通道读取最多8192条SQL授权后的源ID/版本，使用已缓存向量排序，再读回命中正文及64条待编码历史页；最近与关键词候选仍独立保留。新候选每通道最多128条编码，只有显式聊天/搜索触发，外发上限、Kernel真值、主库及Alembic结构不变。
 
 缓存键包括模型/编码规则、world/player/character、源ID和记忆版本；缓存不承载权限，失效或遗忘来源不得参与排名。向量和摘要存于app-data/data/cache/chat-recall-v2，目标256MiB，按写入顺序淘汰，不复制正文、不使用pickle；内存LRU4096条，查询向量只在内存中复用。磁盘失败回退内存且说明，模型失败回退关键词。大规模耗时与语义质量待验收。详见[复用调查](../research/2026-10-03-persistent-recall-reuse.md)及[体验说明](../CONTEXT_AND_RECALL.md)。
+
+## Bounded original-message source view (0.1.27)
+
+Authenticated GET `/worlds/{world_id}/conversations/{conversation_id}/messages/{message_id}/source` resolves a stable MessageId under the selected local Player and owned original conversation before reading text. It returns the existing message-page DTO, at most the target and three positions on each side, ordered by position, without a pagination cursor. The current local binding is included in both source and body queries. Foreign, missing or inaccessible sources have the same fixed 404 label; missing Player selection is 409. No history search, semantic model, message/knowledge/world write, model dispatch or read-mark mutation occurs. The UI cancels obsolete reads, preserves the saved quote and editing state, reuses ChatMessageBody/MessageTime, and reads the source conversation rather than the currently open conversation.

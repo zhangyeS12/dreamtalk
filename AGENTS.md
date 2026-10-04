@@ -864,3 +864,19 @@ independently authorized familiarity is preserved; formal new actions remain out
 slice. Reuse investigation and exact policy are in
 [encounter pacing research](docs/research/2026-10-04-encounter-pacing-reuse.md).
 Section 20's testing restrictions remain unchanged.
+
+## Later approved shared leisure lifecycle (2026-10-04)
+
+The user explicitly approved [the shared leisure proposal](docs/proposals/2026-10-04-shared-activities.md).
+This narrowly extends sections 24/26: an independent per-world default-off opt-in permits
+two previously actually greeted Characters to share 15–30 WorldTime minutes of overlapping
+same-kind rest/leisure routines at one existing location in the same Director batch. Ordinary
+greetings and shared starts together consume at most two social opportunities per plan;
+each Character may start one shared activity per rolling 24 hours, with a six-hour pair cooldown.
+Kernel atomically records SharedActivityStarted/Ended/Interrupted v1 with observations and
+receipts. Normal completion requires actual continuous presence/activity and elapsed duration;
+departure, routine change, withdrawal, plan replacement or unconfirmed offline continuity
+interrupts it. Missed completion is not backfilled. No per-activity API, Player movement,
+dialogue/task/asset results or relationship changes are authorized. Planning uses the existing
+approved input, not new encounter-history or private-memory export. Observation and chat
+isolation and limits remain unchanged. Section 20 testing responsibility still applies.

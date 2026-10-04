@@ -128,6 +128,13 @@ class ChatMessageStore(Protocol):
         before_position: int | None,
     ) -> ChatMessagePage: ...
 
+    async def source_for_player(
+        self,
+        conversation_id: ConversationId,
+        player_id: PlayerId,
+        message_id: MessageId,
+    ) -> ChatMessagePage: ...
+
     async def context_for_player(
         self,
         conversation_id: ConversationId,
@@ -270,6 +277,15 @@ class ChatMessageService:
             raise ValueError("chat_page_cursor_invalid")
         return await self._store.page_for_player(
             conversation_id, await self._player(conversation_id), limit, before_position
+        )
+
+    async def message_source(
+        self, conversation_id: ConversationId, message_id: MessageId
+    ) -> ChatMessagePage:
+        if message_id.world_id != conversation_id.world_id:
+            raise EntityNotFoundError("chat_world_mismatch")
+        return await self._store.source_for_player(
+            conversation_id, await self._player(conversation_id), message_id
         )
 
     async def context_messages(

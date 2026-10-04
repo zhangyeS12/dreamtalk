@@ -100,6 +100,17 @@ async def character_observed_events(
             if event.event_type == "CharactersMet":
                 item["encounter_stage"] = "brief_greeting"
                 item["relationship_effect"] = "none"
+            if event.event_type in {
+                "SharedActivityStarted",
+                "SharedActivityEnded",
+                "SharedActivityInterrupted",
+            }:
+                item["shared_activity_phase"] = {
+                    "SharedActivityStarted": "started",
+                    "SharedActivityEnded": "ended",
+                    "SharedActivityInterrupted": "interrupted",
+                }[event.event_type]
+                item["relationship_effect"] = "none"
         size = len(json.dumps(item, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
         if used + size + 1 > MAX_CHARACTER_EVENT_BYTES:
             continue

@@ -67,4 +67,15 @@ def director_router(service, authorize):
             )
         )
 
+    @router.post("/shared-activities")
+    async def configure_shared_activities(world_id: UUID, body: EncounterSettingRequest):
+        return await execute(
+            service.configure_shared_activities(
+                WorldId(world_id),
+                body.enabled,
+                body.consent_background_usage,
+                body.expected_revision,
+            )
+        )
+
     return router

@@ -149,3 +149,7 @@ Director 仍未接入运行时。独立群聊 selector、聊天回忆、可确�
 ## 桌面0.1.26用户批准的相遇节奏
 
 每批可选0～2条普通问候，Kernel也限制同plan_id已成功数；每角色滚动24小时WorldTime最多一个首次实际记录的见面对象，曾成功问候的旧对象不花新增额度。原6小时pair冷却之外，持续同一地点停留只记一次普通问候；账本中一方实际离开才可再考虑。只取消不合格相遇，不补选、不计日常半批失效；旧事实和CharactersMet v1重放保持。聊天明确问候阶段及无关系效果，不新增正式介绍/任务/关系动作。没有新表/迁移/依赖或私人历史给Director。规则与复用依据见[调查](../research/2026-10-04-encounter-pacing-reuse.md)及[使用说明](../CHARACTER_ENCOUNTERS.md)。
+
+## Approved shared leisure (0.1.27)
+
+The [approved concrete proposal](../proposals/2026-10-04-shared-activities.md) permits optional joint_activities in the existing batch, independent default-off consent and strict shared rest/leisure lifecycle. Typed proposal validation precedes admission; the Kernel checks actual prior greetings, active routines, presence revisions, consent/binding/current plan, rolling limits and ledger continuity, then atomically records v1 start/ended/interrupted events and authorized observations with receipts. No additional history export, per-activity model invocation, Player movement or relationship/task-result mutation. See [product guide](../SHARED_LEISURE.md).

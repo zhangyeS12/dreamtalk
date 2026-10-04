@@ -38,6 +38,14 @@ from livingworld.infrastructure.persistence.models import (
     WorldContentImportRecord,
     WorldRecord,
 )
+from livingworld.infrastructure.persistence.shared_activity_authority import SharedKernelMixin
+from livingworld.infrastructure.persistence.shared_activity_models import (
+    SharedActivityRecord as Shared,
+)
+from livingworld.infrastructure.persistence.shared_activity_models import (
+    SharedActivitySettingsRecord as SharedSettings,
+)
+from livingworld.infrastructure.persistence.shared_activity_store import SharedDirectorMixin
 
 
 async def _write(session):
@@ -52,6 +60,11 @@ async def _binding(session, world):
 
 async def _pending_cancel(session, world, state="cancelled"):
     await session.execute(
+        update(Shared)
+        .where(Shared.world_id == world.value, Shared.state == "pending")
+        .values(state=state)
+    )
+    await session.execute(
         update(Encounter)
         .where(Encounter.world_id == world.value, Encounter.state == "pending")
         .values(state=state)
@@ -63,7 +76,7 @@ async def _pending_cancel(session, world, state="cancelled"):
     )
 
 
-class SqlAlchemyDirectorStore:
+class SqlAlchemyDirectorStore(SharedDirectorMixin):
     def __init__(self, sessions, clocks):
         self.sessions, self._clocks = sessions, clocks
 
@@ -81,6 +94,8 @@ class SqlAlchemyDirectorStore:
             owned = config is not None and config.player_id == bound
             encounters = await session.get(EncounterSettings, world.value)
             encounter_owned = encounters is not None and encounters.player_id == bound
+            shared = await session.get(SharedSettings, world.value)
+            shared_owned = shared is not None and shared.player_id == bound
             return {
                 "enabled": bool(owned and config.enabled),
                 "revision": config.revision if config else 0,
@@ -90,6 +105,9 @@ class SqlAlchemyDirectorStore:
                 "encounters_enabled": bool(encounter_owned and encounters.enabled),
                 "encounter_revision": encounters.revision if encounters else 0,
                 "encounters_consented": bool(encounter_owned),
+                "shared_activities_enabled": bool(shared_owned and shared.enabled),
+                "shared_activity_revision": shared.revision if shared else 0,
+                "shared_activities_consented": bool(shared_owned),
             }
 
     async def configure(self, world, player, enabled, consent, revision, retry):
@@ -149,6 +167,9 @@ class SqlAlchemyDirectorStore:
                 update(Settings)
                 .where(Settings.state == "planning")
                 .values(state="attention", error="director_interrupted")
+            )
+            await session.execute(
+                update(Shared).where(Shared.state == "active").values(continuity_lost=True)
             )
             await session.commit()
 
@@ -361,6 +382,14 @@ class SqlAlchemyDirectorStore:
             and encounter_settings.player_id == await _binding(session, world)
         )
         snapshot["encounter_revision"] = encounter_settings.revision if encounter_settings else 0
+        shared = await session.get(SharedSettings, world.value)
+        snapshot["shared_activities_enabled"] = bool(
+            shared
+            and shared.enabled
+            and snapshot["encounters_enabled"]
+            and shared.player_id == await _binding(session, world)
+        )
+        snapshot["shared_activity_revision"] = shared.revision if shared else 0
         snapshot["common_world_background"] = select_common_background(
             await read_director_background(session, world),
             (planning_text,),
@@ -463,7 +492,7 @@ class SqlAlchemyDirectorStore:
                 raise DirectorError("director_background_changed")
             return True
 
-    async def finish(self, world, request_id, generation, candidates, encounters=()):
+    async def finish(self, world, request_id, generation, candidates, encounters=(), shared=()):
         async with self.sessions() as session:
             await _write(session)
             config = await session.get(Settings, world.value)
@@ -517,6 +546,38 @@ class SqlAlchemyDirectorStore:
                             plan_id=request_id,
                             consent_revision=consent.revision,
                             state="pending",
+                            first_routine_id=uuid5(request_id, f"routine:{first}"),
+                            second_routine_id=uuid5(request_id, f"routine:{second}"),
+                            **values,
+                        )
+                    )
+            joint_consent = await session.get(SharedSettings, world.value)
+            if (
+                joint_consent
+                and joint_consent.enabled
+                and joint_consent.player_id == config.player_id
+                and joint_consent.revision == planned_input.get("shared_activity_revision")
+                and planned_input.get("shared_activities_enabled")
+                and consent
+                and consent.enabled
+                and consent.player_id == config.player_id
+                and consent.revision == planned_input.get("encounter_revision")
+            ):
+                for index, value in enumerate(shared):
+                    values = dict(value)
+                    first, second = (
+                        values.pop("first_routine_index"),
+                        values.pop("second_routine_index"),
+                    )
+                    session.add(
+                        Shared(
+                            world_id=world.value,
+                            candidate_id=uuid5(request_id, f"shared:{index}"),
+                            plan_id=request_id,
+                            consent_revision=joint_consent.revision,
+                            encounter_revision=consent.revision,
+                            state="pending",
+                            continuity_lost=False,
                             first_routine_id=uuid5(request_id, f"routine:{first}"),
                             second_routine_id=uuid5(request_id, f"routine:{second}"),
                             **values,
@@ -583,6 +644,11 @@ class SqlAlchemyDirectorStore:
                 .where(Encounter.world_id == world.value, Encounter.state == "pending")
                 .values(state="cancelled")
             )
+            await session.execute(
+                update(Shared)
+                .where(Shared.world_id == world.value, Shared.state == "pending")
+                .values(state="cancelled")
+            )
             # Separate consent revision never invalidates admitted daily activities.
             await session.commit()
 
@@ -633,7 +699,7 @@ class SqlAlchemyDirectorStore:
             return due, deadline
 
 
-class DirectorKernelRepository:
+class DirectorKernelRepository(SharedKernelMixin):
     """Only used inside the Kernel's physical writer transaction."""
 
     def __init__(self, session):

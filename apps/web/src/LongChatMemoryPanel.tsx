@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { CoreClient, CoreRequestError, type LongChatMemory, type LongChatMemorySnapshot } from "@dreamtalk/api-client";
 
+import { SourceMessageDialog } from "./SourceMessageDialog";
+
 const kinds = { identity: "身份与称呼", preference: "偏好", promise: "约定", experience: "经历" };
 const states = { active: "正在使用", forgotten: "已停用", superseded: "已有新记录" };
 
@@ -17,6 +19,7 @@ export function LongChatMemoryPanel({ client, worldId, conversationId, character
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [source, setSource] = useState<LongChatMemory | null>(null);
 
   useEffect(() => {
     const element = dialog.current; element?.showModal();
@@ -24,7 +27,7 @@ export function LongChatMemoryPanel({ client, worldId, conversationId, character
   }, []);
   useEffect(() => {
     const request = new AbortController(); lifetime.current = request; lock.current = true;
-    setBusy(true); setView(null); setError(""); setNotice(""); setQuery("");
+    setBusy(true); setView(null); setError(""); setNotice(""); setQuery(""); setSource(null);
     void client.longChatMemory(worldId, conversationId, characterId, "", undefined, request.signal)
       .then(result => { if (!request.signal.aborted) { setView(result); setError(""); setNotice(""); setQuery(""); } })
       .catch(failure => { if (!request.signal.aborted) setError(feedback(failure)); })
@@ -75,10 +78,11 @@ export function LongChatMemoryPanel({ client, worldId, conversationId, character
       <h3>{entry.topic} <small>{kinds[entry.kind]} · {states[entry.state]}{entry.pinned ? " · 已置顶" : ""}</small></h3>
       <p>{entry.content}</p>
       <p className="inline-hint">记录于 {new Date(entry.created_at).toLocaleString()} · {entry.source_kind === "player" ? "玩家原话" : "角色原话"}</p>
-      <details><summary>查看来源</summary><blockquote>{entry.quote}</blockquote><p className="inline-hint">来源保留于原会话；自述和约定仍可能变化。{entry.replaces ? "这条记录更新了此前的记忆。" : ""}</p></details>
+      <details><summary>查看来源</summary><blockquote>{entry.quote}</blockquote><p className="inline-hint">来源保留于原会话；自述和约定仍可能变化。{entry.replaces ? "这条记录更新了此前的记忆。" : ""}</p><button type="button" className="text-action" disabled={busy} onClick={() => setSource(entry)}>查看原文前后文</button></details>
       {entry.state !== "superseded" && <div className="controls"><button type="button" disabled={busy} onClick={() => mark(entry, entry.state === "active", !entry.pinned)}>{entry.pinned ? "取消置顶" : "置顶"}</button><button type="button" disabled={busy} onClick={() => mark(entry, entry.state !== "active", entry.pinned)}>{entry.state === "active" ? "停用此条" : "重新使用"}</button></div>}
     </article>)}
     {view?.next_cursor && <button type="button" disabled={busy} onClick={() => void run(signal => client.longChatMemory(worldId, conversationId, characterId, "", view.next_cursor ?? undefined, signal), true)}>加载更早记忆</button>}
     <p className="inline-hint">同一主题的补充信息可以并存；明确纠正时才更新旧记录。特别重要的偏好可置顶，保证长期取用优先；记错时也可停用该条。私聊记忆只供对方使用，群聊中的公开原话供固定成员使用。</p>
+    {source && <SourceMessageDialog key={`${worldId}:${source.conversation_id}:${source.message_id}`} client={client} worldId={worldId} conversationId={source.conversation_id} messageId={source.message_id} characters={characters} onClose={() => setSource(null)} />}
   </dialog>;
 }

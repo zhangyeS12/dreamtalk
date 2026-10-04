@@ -44,6 +44,7 @@ from livingworld.infrastructure.persistence.models import (
     ChatReplyRecoveryRecord,
     ChatTurnDispatchRecord,
     ChatTurnRecord,
+    LocalPlayerBindingRecord,
     WorldClockRecord,
 )
 from livingworld.infrastructure.persistence.world_story import record_chat_events
@@ -309,6 +310,46 @@ class SqlAlchemyChatMessageStore(ChatContextReportMixin, ChatReplyRecoveryMixin)
                 messages,
                 messages[0].position if has_older else None,
             )
+
+    async def source_for_player(
+        self,
+        conversation_id: ConversationId,
+        player_id: PlayerId,
+        message_id: MessageId,
+    ) -> ChatMessagePage:
+        if message_id.world_id != conversation_id.world_id:
+            raise EntityNotFoundError("chat_world_mismatch")
+        async with self._sessions() as session:
+            await self._conversation(session, conversation_id, player_id)
+            # Resolve the stable ID under the current binding before reading text.
+            scope = (
+                ChatMessageRecord.world_id == conversation_id.world_id.value,
+                ChatMessageRecord.conversation_id == conversation_id.value,
+                LocalPlayerBindingRecord.player_id == player_id.value,
+            )
+            binding = LocalPlayerBindingRecord.world_id == ChatMessageRecord.world_id
+            position = await session.scalar(
+                select(ChatMessageRecord.position)
+                .join(LocalPlayerBindingRecord, binding)
+                .where(*scope, ChatMessageRecord.message_id == message_id.value)
+            )
+            if position is None:
+                raise EntityNotFoundError("chat_message_source_unavailable")
+            rows = (
+                await session.scalars(
+                    select(ChatMessageRecord)
+                    .join(LocalPlayerBindingRecord, binding)
+                    .where(
+                        *scope,
+                        ChatMessageRecord.position.between(max(1, position - 3), position + 3),
+                    )
+                    .order_by(ChatMessageRecord.position)
+                    .limit(7)
+                )
+            ).all()
+            if not any(row.message_id == message_id.value for row in rows):
+                raise EntityNotFoundError("chat_message_source_unavailable")
+            return ChatMessagePage(tuple(_message(row) for row in rows), None)
 
     async def context_for_player(
         self,

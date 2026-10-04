@@ -2,7 +2,20 @@
 
 更新日期：2026-10-04。此文件记录当前开发现场与接续工作，不替代 [AGENTS.md](AGENTS.md)。先读 AGENTS，再读本文，最后核对实际 Git 状态和相关代码；不能把下面的基线哈希当作永远不变的当前 HEAD。
 
-## 最新接续：2026-10-04 相遇节奏与持续同场去重（桌面0.1.26）
+## 最新接续：2026-10-04 共同休闲与来源回看（桌面0.1.27）
+
+- 基线79f7d91/codex/world-archive，正式D:\LivingWorld，开始Git clean。先查[Generative Agents/SimPy/transitions/Zulip一手成熟实现](docs/research/2026-10-04-shared-experience-reuse.md)，直接复用既有Director、Kernel、WorldTime、候选、ledger、Observation、receipt和前端阅读组件，没有安装新框架或复制第三方源码。用户本轮明确批准[共同休闲具体方案](docs/proposals/2026-10-04-shared-activities.md)，AGENTS第26节追加狭窄授权；不扩成正式介绍、委托成果或关系进展。
+- 独立每世界默认关闭；前提自动活动/相遇已开启。下一正常批次joint_activities可为0，15～30分钟同类型rest/leisure同地点；与普通问候合计每plan成功至多2次，开始即消费，中断不补选。同角色滚动24小时至多一次共同开始、同对6小时冷却；旧普通问候新增对象/持续同场去重保持。是否之前碰面由本地核验，不向Director新增历史名单/私密内容外发，不因候选取消额外重规划/API。
+- Kernel使用既有物理写事务/temporal barrier，真实时间开始，核对授权revision、binding、current plan、实际地点/revision/active routine/剩余时间及日限额。SharedActivityStarted/Ended/Interrupted v1与event-time获准观察、候选和幂等回执原子保存。终态互斥；持续时长、源日常和账本连续核对，离开/换活动/关闭/计划变化中断；启动将遗留active连续性标为未确认，由Kernel恢复时实际记录中断，不倒填完成。暂停冻结世界时间。结束只证明共同休闲时段正常结束，无谈话/物品/任务胜利/关系成果。
+- 新事件严格重放源开始/日常/参与者/地点/时间/版本和终态，旧CharactersMet v1不追溯套新节奏。获准角色亲历投影复用近128候选、最多12条/8KiB，participant/witness和start/end/interrupted分清；玩家未知后台共同经历不广播，群聊不等于在场。
+- 长期记忆及聊天获知事件新增原文前后文对话框，认证GET按原conversation+message稳定ID定位，当前Player绑定及原会话owner先于文本，最多7条位置相邻消息，旧原句保留。复用安全Markdown、MessageTime、dialog/CSS，关闭/换源取消读取，迟到结果忽略，ESC不关闭底层记忆编辑；不写入任何记忆/世界事实、不发送消息/API。未知邻接群成员用其他角色标记，不错误归属。
+- 0034仅新增director_shared_settings/director_shared_activities，0033旧表/字段与事实保持，无历史回填；旧revision的严格shape白名单和新表跳过规则补齐。没有运行用户存档迁移或任何产品/模型/测试。五处版本0.1.27，独立新包shared-leisure，旧包保留，具体体验见[说明](docs/SHARED_LEISURE.md)。
+- 20份Python Ruff lint/format、前端ESLint/TypeScript、232份源码AST与Git diff静态检查通过；新迁移两表26字段的顺序/类型/可空性/PK、FK/check/index声明与ORM逐项比较，14组历史版本条件及749个README/AGENTS/HANDOFF/docs本地链接核对通过。315个外部URL只计数，复用的一手资料此前已联网查阅。0033源SHA256=018ccfa7e39e99e831876157006620ef81b6c2bb1038d0ce5c0a798eabd8f82a保持。静态声明核对不等于SQL升级执行或业务验收。
+- build-only exit0：PyInstaller/Core、Vite240模块（665.59kB/gzip199.01kB、141ms）、Rust release26.26s完成；Desktop PE FileVersion/ProductVersion均0.1.27，修改UTC时间2026-10-04T02:14:11。保留>500kB chunk、STATIC_VCRUNTIME弃用及既有PyInstaller可选依赖提示，不隐藏告警。未运行自动测试、产品/Core/GUI、迁移、推理/付费API或用户存档诊断。
+- 完整独立目录artifacts/portable/shared-leisure/dreamtalk及同父ZIP已生成，旧包保留。232份冻结Python源码、1059份包/ZIP文件、252次文档许可字节、145个本轮文档本地链接、固定模型哈希及五处版本核对通过。Desktop SHA256=2cb17c5b819a2c4e36468fae04c19ffbc0e68eded56461b93d21cd62b83c0123；Core=220913900ebdbeb0efa2e26bf2aafceccbcd9edf6eba5730521564ae0e71cc95；ZIP=994d4802760f60318647830839b624f04ffd116cf9d2e990ff12eb3d3580c35c。日志shared-leisure-build.log、静态清单shared-leisure-source-audit.json/shared-leisure-audit.json。没有替用户启动/替换运行应用或改自启动。
+- 本地提交见git log；不push/发布。无未决产品决定。下一步用户体验原文定位/ESC返回/批注保持/跨世界身份边界、共同休闲开始/结束/中断/暂停/重启及节奏。真实运行仍待验收；共同委托/资源成果需另行具体契约，不将本版休闲时段结束冒充任务成功。
+
+## 历史接续：2026-10-04 相遇节奏与持续同场去重（桌面0.1.26）
 
 - 用户担心短时间全员互相认识及持续同场刷见闻，并明确“可以”接受此前建议。基线d023535/codex/world-archive，正式D:\LivingWorld，开始Git clean；此前0.1.25首版事实与0033保持，0.1.23连接卡顿已用户验收。AGENTS第26节追加本次具体限制，不扩成正式介绍、共同任务、关系或自动测试授权。
 - [成熟方案调查](docs/research/2026-10-04-encounter-pacing-reuse.md)核对Generative Agents冷却/感知去重和Mesa调度，实际复用原Kernel单写事务、candidate账本、canonical ledger_position、scheduler和观察检索，不安装agent框架、复制上游代码或新增调用。

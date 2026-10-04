@@ -3,7 +3,7 @@
 from collections.abc import Callable, Mapping
 from datetime import datetime
 from decimal import Decimal
-from uuid import UUID
+from uuid import UUID, uuid5
 
 from livingworld.application.errors import (
     InvalidEventPayloadError,
@@ -88,6 +88,8 @@ class _EventFold:
         self._routine_ends = set()
         self._encounter_times = {}
         self._encounter_candidates = set()
+        self._shared_starts = {}
+        self._shared_ends = set()
         self._handlers = {
             ("WorldCreated", 1): self._world_created,
             ("LocationCreated", 1): self._location_created,
@@ -98,6 +100,9 @@ class _EventFold:
             ("CharacterCreated", 1): self._character_created,
             ("CharacterPlaced", 1): self._character_placed,
             ("CharactersMet", 1): self._characters_met,
+            ("SharedActivityStarted", 1): self._shared_activity_started,
+            ("SharedActivityEnded", 1): self._shared_activity_terminal,
+            ("SharedActivityInterrupted", 1): self._shared_activity_terminal,
             ("CharacterRoutineStarted", 1): self._character_routine_started,
             ("CharacterRoutineEnded", 1): self._character_routine_ended,
             ("CharacterRoutineInterrupted", 1): self._character_routine_ended,
@@ -382,6 +387,125 @@ class _EventFold:
         _check(candidate not in self._encounter_candidates, "Duplicate encounter candidate")
         self._encounter_candidates.add(candidate)
         self._encounter_times[pair] = event.occurred_at.microseconds
+
+    def _shared_presence(self, value, occurred):
+        first = self._id(CharacterId, value["first_character_id"])
+        second = self._id(CharacterId, value["second_character_id"])
+        place = self._id(LocationId, value["location_id"])
+        _check(
+            first.value.int < second.value.int and place in self.locations,
+            "Invalid shared pair/place",
+        )
+        _check(value["activity"] in {"shared_rest", "shared_leisure"}, "Invalid shared activity")
+        activity = "rest" if value["activity"] == "shared_rest" else "leisure"
+        for owner, routine_key, revision_key in (
+            (first, "first_routine_id", "first_revision"),
+            (second, "second_routine_id", "second_revision"),
+        ):
+            routine_id = _uuid(value[routine_key])
+            _check(
+                routine_id in self._routine_starts and routine_id not in self._routine_ends,
+                "Shared activity requires active routines",
+            )
+            _, actor, kind, target, end, start = self._routine_starts[routine_id]
+            presence = self.character_states.get(owner)
+            _check(
+                actor == owner
+                and kind == activity
+                and target == value["location_id"]
+                and start <= occurred
+                and value["started_at"] < end
+                and value["planned_end"] <= end
+                and presence is not None
+                and presence.location_id == place
+                and presence.revision.value == _integer(value[revision_key]),
+                "Shared presence/activity mismatch",
+            )
+        return first, second
+
+    def _shared_activity_started(self, event):
+        value = event.payload
+        _check(
+            set(value)
+            == {
+                "candidate_id",
+                "first_character_id",
+                "second_character_id",
+                "location_id",
+                "first_routine_id",
+                "second_routine_id",
+                "first_revision",
+                "second_revision",
+                "activity",
+                "started_at",
+                "planned_end",
+            },
+            "Invalid shared start fields",
+        )
+        began, end = _integer(value["started_at"]), _integer(value["planned_end"])
+        _check(
+            began == event.occurred_at.microseconds and 900_000_000 <= end - began <= 1_800_000_000,
+            "Invalid shared interval",
+        )
+        pair = self._shared_presence(value, event.occurred_at)
+        _check(
+            pair in self._encounter_times and began - self._encounter_times[pair] >= 21_600_000_000,
+            "Shared activity needs prior meeting and cooldown",
+        )
+        candidate = _uuid(value["candidate_id"])
+        _check(
+            candidate not in self._shared_starts
+            and event.event_id.value
+            == uuid5(uuid5(candidate, "kernel-shared-start"), "shared-activity"),
+            "Invalid shared start identity",
+        )
+        self._shared_starts[candidate] = (event.event_id, dict(value))
+        self._encounter_times[pair] = began
+
+    def _shared_activity_terminal(self, event):
+        value = event.payload
+        candidate = _uuid(value["candidate_id"])
+        _check(
+            candidate in self._shared_starts and candidate not in self._shared_ends,
+            "Shared terminal requires unique start",
+        )
+        start, original = self._shared_starts[candidate]
+        _check(
+            set(value) == set(original) | {"start_event_id", "reason"}
+            and all(value[key] == original[key] for key in original),
+            "Shared terminal metadata mismatch",
+        )
+        _check(
+            self._id(EventId, value["start_event_id"]) == start
+            and event.event_id.value
+            == uuid5(uuid5(candidate, "kernel-shared-terminal"), "shared-activity"),
+            "Shared terminal source mismatch",
+        )
+        _check(
+            event.occurred_at.microseconds >= original["started_at"],
+            "Shared terminal predates start",
+        )
+        if event.event_type == "SharedActivityEnded":
+            _check(
+                value["reason"] == "interval_elapsed"
+                and original["planned_end"]
+                <= event.occurred_at.microseconds
+                <= original["planned_end"] + 300_000_000,
+                "Invalid shared completion",
+            )
+            self._shared_presence(value, event.occurred_at)
+        else:
+            _check(
+                value["reason"]
+                in {
+                    "presence_changed",
+                    "activity_changed",
+                    "consent_or_plan_changed",
+                    "continuity_unconfirmed",
+                },
+                "Invalid shared interruption",
+            )
+        self._shared_ends.add(candidate)
 
     def _character_routine_started(self, event):
         from livingworld.domain.actions import RoutineActivity

@@ -13,6 +13,9 @@ from livingworld.infrastructure.persistence.encounter_models import (
     EncounterCandidateRecord as Encounter,
 )
 from livingworld.infrastructure.persistence.models import WorldEventRecord as Event
+from livingworld.infrastructure.persistence.shared_activity_models import (
+    SharedActivityRecord as Shared,
+)
 
 
 async def pacing_rejection(session, row, now):
@@ -26,6 +29,28 @@ async def pacing_rejection(session, row, now):
             Encounter.plan_id == row.plan_id,
         )
     )
+    count += await session.scalar(
+        select(func.count())
+        .select_from(Shared)
+        .where(
+            Shared.world_id == row.world_id,
+            Shared.plan_id == row.plan_id,
+            Shared.started_at.is_not(None),
+        )
+    )
+    recent_joint = await session.scalar(
+        select(Shared.candidate_id)
+        .where(
+            Shared.world_id == row.world_id,
+            Shared.first_character_id == row.first_character_id,
+            Shared.second_character_id == row.second_character_id,
+            Shared.started_at > now - PAIR_COOLDOWN_US,
+            Shared.started_at <= now,
+        )
+        .limit(1)
+    )
+    if recent_joint is not None:
+        return "pair_cooldown"
     if count >= MAX_ENCOUNTERS_PER_BATCH:
         return "batch_encounter_limit"
     previous = await session.scalar(

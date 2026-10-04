@@ -39,6 +39,7 @@ export interface DirectorStatus {
   enabled: boolean; revision: number; state: "off" | "idle" | "planning" | "ready" | "attention";
   error: string | null; consented: boolean; model_available: boolean; model: string | null;
   encounters_enabled: boolean; encounter_revision: number; encounters_consented: boolean;
+  shared_activities_enabled: boolean; shared_activity_revision: number; shared_activities_consented: boolean;
 }
 export interface ChatStoryEntry {
   entry_id: string; character_id: string; character_name: string; conversation_id: string; message_id: string;
@@ -440,6 +441,9 @@ export class CoreClient {
     const path = `/worlds/${encodeURIComponent(worldId)}/conversations/${encodeURIComponent(conversationId)}/messages/page`;
     return this.productRequest(`${path}${beforePosition === undefined ? "" : `?before_position=${beforePosition}`}`, { signal });
   }
+  chatMessageSource(worldId: string, conversationId: string, messageId: string, signal?: AbortSignal): Promise<ChatMessagePage> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}/source`, { signal });
+  }
   searchChatHistory(worldId: string, conversationId: string, query: string, beforePosition?: number, signal?: AbortSignal): Promise<ChatHistoryMatches> {
     return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/${encodeURIComponent(conversationId)}/messages/search`, {
       method: "POST", headers: { "Content-Type": "application/json" },
@@ -704,6 +708,9 @@ export class CoreClient {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ enabled, consent_background_usage: consent, expected_revision: status.encounter_revision }),
     });
+  }
+  configureSharedActivities(worldId: string, status: DirectorStatus, enabled: boolean, consent = false): Promise<DirectorStatus> {
+    return this.productRequest(`/worlds/${worldId}/director/shared-activities`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled, consent_background_usage: consent, expected_revision: status.shared_activity_revision }) });
   }
   listWorlds(): Promise<WorldSummary[]> { return this.developerRequest("/developer/worlds"); }
   createDemoWorld(): Promise<{ world_id: string }> {

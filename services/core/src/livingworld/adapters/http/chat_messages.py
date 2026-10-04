@@ -36,7 +36,7 @@ from livingworld.application.errors import (
 )
 from livingworld.application.group_chat_reply import GroupChatReplyService
 from livingworld.domain.contracts import API_PROTOCOL, RequestId
-from livingworld.domain.identifiers import ChatTurnId, ConversationId, PlayerId, WorldId
+from livingworld.domain.identifiers import ChatTurnId, ConversationId, MessageId, PlayerId, WorldId
 
 
 class PlayerMessageRequest(BaseModel):
@@ -273,6 +273,22 @@ def chat_message_router(
         return {
             "items": [_view(message) for message in page.messages],
             "next_before_position": page.next_before_position,
+        }
+
+    @router.get("/{conversation_id}/messages/{message_id}/source")
+    async def message_source(world_id: UUID, conversation_id: UUID, message_id: UUID) -> dict:
+        try:
+            page = await service.message_source(
+                ConversationId(WorldId(world_id), conversation_id),
+                MessageId(WorldId(world_id), message_id),
+            )
+        except EntityNotFoundError as error:
+            if str(error) == "selected_player_required":
+                raise HTTPException(409, "selected_player_required") from None
+            raise HTTPException(404, "chat_message_source_unavailable") from None
+        return {
+            "items": [_view(message) for message in page.messages],
+            "next_before_position": None,
         }
 
     @router.post("/{conversation_id}/messages/search")
