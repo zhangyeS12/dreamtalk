@@ -63,6 +63,7 @@ def create_app(
     world_locations=None,
     character_activity_setup=None,
     world_covers=None,
+    factions=None,
 ) -> FastAPI:
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
@@ -84,7 +85,7 @@ def create_app(
     app.add_middleware(
         CORSMiddleware,
         allow_origins=allowed_origins or [],
-        allow_methods=["GET", "POST", "PUT"],
+        allow_methods=["GET", "POST", "PUT", "DELETE"],
         allow_headers=["Authorization", "X-Request-Id"],
     )
     bearer = HTTPBearer(auto_error=False)
@@ -210,4 +211,8 @@ def create_app(
 
     if world_covers is not None:
         app.include_router(create_world_cover_router(world_covers, authorize))
+    if factions is not None:
+        from livingworld.adapters.http.factions import faction_router
+
+        app.include_router(faction_router(factions, authorize))
     return app

@@ -2,7 +2,7 @@
 
 import json
 from datetime import UTC, datetime
-from uuid import uuid5
+from uuid import UUID, uuid5
 
 from sqlalchemy import LargeBinary, case, cast, func, select, true, update
 
@@ -28,6 +28,7 @@ from livingworld.infrastructure.persistence.encounter_models import (
     EncounterSettingsRecord as EncounterSettings,
 )
 from livingworld.infrastructure.persistence.encounter_policy import pacing_rejection
+from livingworld.infrastructure.persistence.factions import known_pairs
 from livingworld.infrastructure.persistence.models import (
     CharacterRecord,
     CharacterStateRecord,
@@ -390,6 +391,15 @@ class SqlAlchemyDirectorStore(SharedDirectorMixin):
             and shared.player_id == await _binding(session, world)
         )
         snapshot["shared_activity_revision"] = shared.revision if shared else 0
+        snapshot["known_faction_pairs"] = (
+            await known_pairs(
+                session,
+                world.value,
+                {UUID(character["character_id"]) for character in characters},
+            )
+            if snapshot["shared_activities_enabled"]
+            else []
+        )
         snapshot["common_world_background"] = select_common_background(
             await read_director_background(session, world),
             (planning_text,),

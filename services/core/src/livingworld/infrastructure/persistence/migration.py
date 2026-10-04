@@ -25,6 +25,12 @@ from livingworld.infrastructure.persistence.encounter_models import (
     EncounterSettingsRecord,  # noqa: F401
 )
 from livingworld.infrastructure.persistence.errors import MigrationCompatibilityError
+from livingworld.infrastructure.persistence.faction_models import (
+    AcquaintanceRecord,  # noqa: F401
+    CharacterAvatarRecord,  # noqa: F401
+    FactionMemberRecord,  # noqa: F401
+    FactionRecord,  # noqa: F401
+)
 from livingworld.infrastructure.persistence.llm_models import AccountingBase
 from livingworld.infrastructure.persistence.long_memory_models import (
     LongChatMemoryRecord,  # noqa: F401
@@ -76,7 +82,14 @@ REPLY_RECOVERY_REVISION = "0031_chat_reply_recovery"
 CONTEXT_REPORT_REVISION = "0032_chat_context_reports"
 ENCOUNTER_REVISION = "0033_character_encounters"
 SHARED_REVISION = "0034_shared_activities"
-HEAD_REVISION = "0035_proactive_contact"
+PROACTIVE_REVISION = "0035_proactive_contact"
+HEAD_REVISION = "0036_character_factions"
+FACTION_TABLES = {
+    "character_factions",
+    "character_faction_members",
+    "character_avatars",
+    "character_acquaintances",
+}
 PROACTIVE_TABLES = {
     "proactive_contact_settings",
     "proactive_contact_episodes",
@@ -261,13 +274,20 @@ def _current_revision(connection: Connection) -> str:
 
 def _validate_managed_state(connection: Connection, revision: str) -> None:
     # Additive authored/job tables do not change the older runtime shapes.
-    pre_proactive_revision = revision != HEAD_REVISION
-    pre_shared_revision = revision not in {SHARED_REVISION, HEAD_REVISION}
-    pre_encounter_revision = revision not in {ENCOUNTER_REVISION, SHARED_REVISION, HEAD_REVISION}
+    pre_faction_revision = revision != HEAD_REVISION
+    pre_proactive_revision = revision not in {PROACTIVE_REVISION, HEAD_REVISION}
+    pre_shared_revision = revision not in {SHARED_REVISION, PROACTIVE_REVISION, HEAD_REVISION}
+    pre_encounter_revision = revision not in {
+        ENCOUNTER_REVISION,
+        SHARED_REVISION,
+        PROACTIVE_REVISION,
+        HEAD_REVISION,
+    }
     pre_context_report_revision = revision not in {
         CONTEXT_REPORT_REVISION,
         ENCOUNTER_REVISION,
         SHARED_REVISION,
+        PROACTIVE_REVISION,
         HEAD_REVISION,
     }
     pre_reply_recovery_revision = revision not in {
@@ -275,6 +295,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         CONTEXT_REPORT_REVISION,
         ENCOUNTER_REVISION,
         SHARED_REVISION,
+        PROACTIVE_REVISION,
         HEAD_REVISION,
     }
     pre_cover_revision = revision not in {
@@ -283,6 +304,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         CONTEXT_REPORT_REVISION,
         ENCOUNTER_REVISION,
         SHARED_REVISION,
+        PROACTIVE_REVISION,
         HEAD_REVISION,
     }
     pre_long_memory_revision = revision not in {
@@ -292,6 +314,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         CONTEXT_REPORT_REVISION,
         ENCOUNTER_REVISION,
         SHARED_REVISION,
+        PROACTIVE_REVISION,
         HEAD_REVISION,
     }
     pre_story_revision = revision not in {
@@ -302,6 +325,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         CONTEXT_REPORT_REVISION,
         ENCOUNTER_REVISION,
         SHARED_REVISION,
+        PROACTIVE_REVISION,
         HEAD_REVISION,
     }
     pre_offline_contact_revision = revision not in {
@@ -313,6 +337,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         CONTEXT_REPORT_REVISION,
         ENCOUNTER_REVISION,
         SHARED_REVISION,
+        PROACTIVE_REVISION,
         HEAD_REVISION,
     }
     pre_local_location_revision = revision not in {
@@ -325,6 +350,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         CONTEXT_REPORT_REVISION,
         ENCOUNTER_REVISION,
         SHARED_REVISION,
+        PROACTIVE_REVISION,
         HEAD_REVISION,
     }
     pre_director_revision = revision not in {
@@ -338,6 +364,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         CONTEXT_REPORT_REVISION,
         ENCOUNTER_REVISION,
         SHARED_REVISION,
+        PROACTIVE_REVISION,
         HEAD_REVISION,
     }
     pre_conversation_memory_revision = revision not in {
@@ -352,6 +379,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         CONTEXT_REPORT_REVISION,
         ENCOUNTER_REVISION,
         SHARED_REVISION,
+        PROACTIVE_REVISION,
         HEAD_REVISION,
     }
     pre_builder_revision = revision not in {
@@ -367,6 +395,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         CONTEXT_REPORT_REVISION,
         ENCOUNTER_REVISION,
         SHARED_REVISION,
+        PROACTIVE_REVISION,
         HEAD_REVISION,
     }
     pre_completion_revision = revision not in {
@@ -384,6 +413,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         CONTEXT_REPORT_REVISION,
         ENCOUNTER_REVISION,
         SHARED_REVISION,
+        PROACTIVE_REVISION,
         HEAD_REVISION,
     }
     pre_common_lore_revision = revision not in {
@@ -400,6 +430,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         CONTEXT_REPORT_REVISION,
         ENCOUNTER_REVISION,
         SHARED_REVISION,
+        PROACTIVE_REVISION,
         HEAD_REVISION,
     }
     if revision in {
@@ -417,6 +448,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         CONTEXT_REPORT_REVISION,
         ENCOUNTER_REVISION,
         SHARED_REVISION,
+        PROACTIVE_REVISION,
         HEAD_REVISION,
     }:
         revision = CHAT_DISPATCH_REVISION
@@ -567,6 +599,8 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         expected -= LOCAL_PROFILE_TABLES
     if revision != CHAT_DISPATCH_REVISION:
         expected -= {"world_content_imports"}
+    if pre_faction_revision:
+        expected -= FACTION_TABLES
     if pre_proactive_revision:
         expected -= PROACTIVE_TABLES
     if pre_shared_revision:
@@ -618,6 +652,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
             pre_encounter_revision=pre_encounter_revision,
             pre_shared_revision=pre_shared_revision,
             pre_proactive_revision=pre_proactive_revision,
+            pre_faction_revision=pre_faction_revision,
         )
     if revision in {
         CONTENT_REVISION,
@@ -684,6 +719,7 @@ def _validate_domain_shape(
     pre_encounter_revision: bool = True,
     pre_shared_revision: bool = True,
     pre_proactive_revision: bool = True,
+    pre_faction_revision: bool = True,
 ) -> None:
     """Detect partial/mismatched schemas; never infer a revision from them."""
 
@@ -709,6 +745,8 @@ def _validate_domain_shape(
         "ck_command_receipt_command_result",
     }
     for table in metadata.sorted_tables:
+        if pre_faction_revision and table.name in FACTION_TABLES:
+            continue
         if pre_proactive_revision and table.name in PROACTIVE_TABLES:
             continue
         if pre_shared_revision and table.name in SHARED_TABLES:

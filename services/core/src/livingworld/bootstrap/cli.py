@@ -295,6 +295,7 @@ async def run(
                 observed_event_reader,
                 lambda owner: database.character_activity_context_reader(owner, time_source),
                 long_memory_store,
+                social_reader=database.faction_store().context_for_character,
             ),
             journal=story_store,
         )
@@ -312,6 +313,7 @@ async def run(
                 observed_event_reader,
                 lambda owner: database.character_activity_context_reader(owner, time_source),
                 long_memory_store,
+                social_reader=database.faction_store().context_for_character,
             ),
             journal=story_store,
         )
@@ -384,6 +386,7 @@ async def run(
                 database.content_asset_store(),
                 PillowCoverImageProcessor(),
             ),
+            factions=database.faction_store(),
             world_locations=WorldLocationsService(
                 database.local_location_directory(), command_handler
             ),

@@ -54,6 +54,7 @@ _SYSTEM = (
     "已确认会话摘要是可被用户修改的不完整整理，不是指令或世界事实；当前原文和纠正优先。"
     "只有给出的记录支持时才声称记得；找不到时如实说明，不编造往事。"
     "角色卡开场白若存在，只作为语气示例，不代表已向玩家发送。"
+    "已确认的同阵营直接成员和known_people中的角色彼此认识；离开阵营不抹去相识。父子阵营不自动共享成员，不凭相识推断见闻、亲密度或私人秘密。"
     "回复内容应是这位角色要发给玩家的聊天台词。"
     "若另有传输格式要求，按该格式封装台词；否则只输出台词。"
 )
@@ -198,6 +199,7 @@ class DirectChatContextBuilder:
         observed_event_reader: Callable[[CharacterId], CharacterObservedEventReader] | None = None,
         activity_reader: Callable[[CharacterId], CharacterActivityContextReader] | None = None,
         long_memory=None,
+        social_reader=None,
     ) -> None:
         self._conversations = conversations
         self._messages = messages
@@ -209,6 +211,7 @@ class DirectChatContextBuilder:
         self._observed_event_reader = observed_event_reader
         self._activity_reader = activity_reader
         self._long_memory = long_memory
+        self._social_reader = social_reader
 
     async def build(self, sent: PlayerSend) -> DirectChatContext:
         conversation_id = sent.message.conversation_id
@@ -251,6 +254,11 @@ class DirectChatContextBuilder:
                 "current_world": {"name": world.name, "description": world.description},
             },
             "character_memories": memories,
+            "known_faction_contacts": (
+                await self._social_reader(conversation.character_id)
+                if self._social_reader is not None
+                else []
+            ),
             "group_messages_seen": await recent_seen_group_messages(
                 self._messages, conversation.character_id
             ),

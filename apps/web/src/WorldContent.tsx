@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { ContentEditor, ResearchDetails } from "./ContentEditor";
 import { CoreClient, CoreRequestError, type WorldContentItem } from "@dreamtalk/api-client";
+import { ContactAvatar, FactionManager, SocialGraph } from "./ContactSocial";
+import type { SocialSnapshot } from "@dreamtalk/api-client";
 
 function originalCardGreeting(authored: Record<string, unknown>): string | null {
   const card = authored.character_card;
@@ -182,17 +184,57 @@ export function WorldContacts({ client, worldId, onSettings, onIdentity, onOpenC
 }) {
   const [items, setItems] = useState<WorldContentItem[]>([]);
   const [selected, setSelected] = useState<WorldContentItem | null>(null);
+  const [social, setSocial] = useState<SocialSnapshot | null>(null);
+  const [mode, setMode] = useState<"profile" | "factions" | "graph">("profile");
+  const [graphRoot, setGraphRoot] = useState<string | null>(null);
+  const [urls, setUrls] = useState<Record<string, string>>({});
+  const [socialBusy, setSocialBusy] = useState(false);
+  const [socialError, setSocialError] = useState("");
+  const [reload, setReload] = useState(0);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
     if (!visible) return;
     let active = true;
     setLoading(true); setFailed(false);
-    void client.worldContent(worldId).then(result => { if (active) { setItems(result); setSelected(current => current ? result.find(item => item.import_id === current.import_id) ?? null : null); } }).catch(() => { if (active) setFailed(true); }).finally(() => { if (active) setLoading(false); });
+    void Promise.all([client.worldContent(worldId), client.socialSnapshot(worldId)]).then(([result, people]) => { if (active) { setItems(result); setSocial(people); setSelected(current => current ? result.find(item => item.import_id === current.import_id) ?? null : null); } }).catch(() => { if (active) setFailed(true); }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [client, worldId, refreshKey, visible]);
+  }, [client, worldId, refreshKey, reload, visible]);
+  const avatarDigests = [...new Set(social?.characters.map(person => person.avatar_digest).filter((digest): digest is string => !!digest) ?? [])].sort().join(",");
+  useEffect(() => {
+    if (!visible) return;
+    let active = true;
+    const created: string[] = [];
+    void Promise.all((avatarDigests ? avatarDigests.split(",") : []).map(async digest => {
+      try { const blob = await client.coverImage(worldId, digest); return [digest, URL.createObjectURL(blob)] as const; }
+      catch { return null; }
+    })).then(found => { for (const entry of found) if (entry) created.push(entry[1]); if (active) setUrls(Object.fromEntries(found.filter((entry): entry is readonly [string, string] => !!entry))); else created.forEach(URL.revokeObjectURL); });
+    return () => { active = false; created.forEach(URL.revokeObjectURL); };
+  }, [client, avatarDigests, visible, worldId]);
   const characters = items.filter(item => item.characters.length > 0);
-  return <div className={`chat-workspace contacts-workspace ${selected ? "thread-open" : ""}`}><aside className="conversation-list" aria-label="当前世界角色">
-    {loading ? <p className="thread-hint">正在读取角色…</p> : failed ? <p className="app-alert" role="alert">无法读取通讯录，请重新进入此页面。</p> : characters.length === 0 ? <div className="empty-state"><h2>当前世界还没有角色</h2><p>在这里新建、联网生成或导入角色卡，确认后加入当前世界。</p><button className="text-action" onClick={onSettings}>添加角色卡</button></div> : characters.map(item => <button key={item.import_id} className={`conversation-row ${selected?.import_id === item.import_id ? "selected" : ""}`} onClick={() => setSelected(item)}><span className="avatar event-avatar" aria-hidden="true">{Array.from(item.characters[0].name)[0]}</span><span className="row-copy"><strong>{item.characters[0].name}</strong><small>查看角色资料</small></span></button>)}
-  </aside><div className="conversation-detail">{selected ? <><div className="thread-heading"><button className="text-action" onClick={() => setSelected(null)}>返回通讯录</button><h2>角色资料</h2></div><div className="contact-chat-action">{canOpenChat ? <button type="button" className="primary-button" disabled={openingChat} onClick={() => void onOpenChat(selected.import_id)}>{openingChat ? "正在打开…" : "打开会话"}</button> : <button type="button" className="text-action" onClick={onIdentity}>先进入世界，再打开会话</button>}</div><ContentDetails item={selected} /></> : <div className="conversation-placeholder"><h2>当前世界的角色</h2><p>选择左侧角色，查看已确认的资料。</p></div>}</div></div>;
+  const current = social?.characters.find(person => person.current_import_id === selected?.import_id);
+  const selectedRoot = current?.root_import_id ?? null;
+  const selectedFactions = social?.memberships.filter(item => item.root_import_id === selectedRoot).map(item => social.factions.find(faction => faction.faction_id === item.faction_id)?.name).filter((name): name is string => !!name) ?? [];
+  const change = async (operation: () => Promise<unknown>) => {
+    if (socialBusy) return false;
+    setSocialBusy(true); setSocialError("");
+    try { await operation(); setSocial(await client.socialSnapshot(worldId)); return true; }
+    catch (failure) { setSocialError(failure instanceof CoreRequestError ? ({ faction_name_taken: "同层已有这个阵营名称。", faction_cycle: "不能把阵营移动到自己的子阵营。", faction_not_empty: "先移除成员和子阵营，再删除此阵营。", faction_character_not_found: "角色卡已更新，请刷新通讯录。", cover_image_size_limit: "头像不能超过 10 MB。", cover_image_format: "请选择 JPG、PNG 或 WebP 静态图片。", cover_image_invalid: "无法读取这张图片，请换一张图片。", cover_image_dimensions_limit: "图片尺寸超出允许范围，请缩小后上传。" } as Record<string, string>)[failure.code ?? ""] ?? "保存未完成，请检查核心连接后刷新。" : "保存未完成，请检查核心连接后刷新。"); return false; }
+    finally { setSocialBusy(false); }
+  };
+  const uploadAvatar = async (file?: File) => {
+    if (!file || !selectedRoot) return;
+    if (file.size > 10 * 1024 * 1024) { setSocialError("头像不能超过 10 MB。"); return; }
+    await change(async () => { const image = await client.uploadCoverImage(worldId, file); await client.setCharacterAvatar(worldId, selectedRoot, image.digest); });
+  };
+  return <div className={`chat-workspace contacts-workspace ${selected && mode === "profile" ? "thread-open" : ""}`}><aside className="conversation-list" aria-label="当前世界角色">
+    {loading ? <p className="thread-hint">正在读取角色…</p> : failed ? <><p className="app-alert" role="alert">无法读取通讯录或阵营。</p><button type="button" onClick={() => setReload(value => value + 1)}>重试读取</button></> : characters.length === 0 ? <div className="empty-state"><h2>当前世界还没有角色</h2><p>在这里新建、联网生成或导入角色卡，确认后加入当前世界。</p><button className="text-action" onClick={onSettings}>添加角色卡</button></div> : characters.map(item => { const person = social?.characters.find(value => value.current_import_id === item.import_id); return <button key={item.import_id} className={`conversation-row ${selected?.import_id === item.import_id ? "selected" : ""}`} onClick={() => { setSelected(item); setGraphRoot(person?.root_import_id ?? null); if (mode === "graph") setMode("profile"); }}><ContactAvatar name={item.characters[0].name} url={urls[person?.avatar_digest ?? ""]} /><span className="row-copy"><strong>{item.characters[0].name}</strong><small>查看角色资料与阵营</small></span></button>; })}
+  </aside><div className="conversation-detail"><div className="contacts-view-switch"><button type="button" className="secondary-button" aria-pressed={mode === "profile"} onClick={() => setMode("profile")}>角色资料</button><button type="button" className="secondary-button" aria-pressed={mode === "factions"} onClick={() => setMode("factions")}>编辑阵营</button><button type="button" className="secondary-button" aria-pressed={mode === "graph"} onClick={() => setMode("graph")}>人物关系网</button><button type="button" className="text-action" disabled={socialBusy || loading} onClick={() => setReload(value => value + 1)}>刷新</button></div>
+    {socialError && <p className="app-alert" role="alert">{socialError}</p>}
+    {mode === "graph" && social ? <SocialGraph social={social} urls={urls} selected={graphRoot} onSelect={root => { setGraphRoot(root); setSelected(items.find(item => item.import_id === social.characters.find(person => person.root_import_id === root)?.current_import_id) ?? null); }} onChat={importId => void onOpenChat(importId)} canChat={canOpenChat} openingChat={openingChat} />
+      : mode === "factions" && social ? <FactionManager social={social} selectedRoot={selectedRoot} busy={socialBusy} onSelect={root => { setSelected(items.find(item => item.import_id === social.characters.find(person => person.root_import_id === root)?.current_import_id) ?? null); }} onCreate={(name, parent) => change(() => client.createFaction(worldId, name, parent))} onEdit={(id, name, parent) => change(() => client.editFaction(worldId, id, name, parent))} onRemove={id => { if (window.confirm("确定删除这个空阵营吗？")) void change(() => client.removeFaction(worldId, id)); }} onMembership={(id, root, enabled) => void change(() => client.setFactionMember(worldId, id, root, enabled))} />
+      : selected ? <><div className="thread-heading"><button className="text-action" onClick={() => setSelected(null)}>返回通讯录</button><h2>角色资料</h2></div><div className="contact-chat-action">{canOpenChat ? <button type="button" className="primary-button" disabled={openingChat} onClick={() => void onOpenChat(selected.import_id)}>{openingChat ? "正在打开…" : "打开会话"}</button> : <button type="button" className="text-action" onClick={onIdentity}>先进入世界，再打开会话</button>}</div>
+        {current && <div className="contact-avatar-edit"><ContactAvatar name={current.name} url={urls[current.avatar_digest ?? ""]} /><label>上传角色头像（JPG、PNG 或 WebP，最大 10 MB）<input type="file" accept="image/jpeg,image/png,image/webp" disabled={socialBusy} onChange={event => { void uploadAvatar(event.target.files?.[0]); event.target.value = ""; }} /></label>{current.avatar_digest && <button type="button" className="text-action" disabled={socialBusy} onClick={() => void change(() => client.setCharacterAvatar(worldId, current.root_import_id, null))}>移除头像</button>}</div>}
+        <p className="inline-hint">所属阵营：{selectedFactions.length ? selectedFactions.join("、") : "尚未加入"}。同阵营直接成员默认相互认识；相遇仍可记录新见闻。</p><ContentDetails item={selected} /></> : <div className="conversation-placeholder"><h2>当前世界的角色</h2><p>选择左侧角色，查看资料、上传头像和编辑阵营。</p></div>}
+  </div></div>;
 }

@@ -165,7 +165,7 @@ export function WorldActivities({ client, worldId, visible, paused, hasInitializ
     </div>
     <div className="editor-panel" role="group" aria-label="共同休闲设置">
       <h3>共同休闲</h3>
-      <p>{status?.shared_activities_enabled ? status.enabled && status.encounters_enabled ? "已允许：有过实际碰面的两名角色，可以一起休息或自由活动。" : "已允许，自动活动或角色相遇关闭期间不执行。" : "尚未开启。让有过实际碰面的角色积累共同经历。"}</p>
+      <p>{status?.shared_activities_enabled ? status.enabled && status.encounters_enabled ? "已允许：已实际碰面或同属一个阵营的两名角色，可以一起休息或自由活动。" : "已允许，自动活动或角色相遇关闭期间不执行。" : "尚未开启。已实际碰面或同阵营的角色可以积累共同经历。"}</p>
       <p className="inline-hint">随下一批日常一起规划，两人在相同地点、相同休闲类型下共同活动15～30分钟世界时间。每位角色每24小时最多一次，同一对至少间隔6小时；与普通问候合计每批最多两次。</p>
       <p className="inline-hint">真实开始、正常结束或中断都会分别记录，角色聊天可自然提及自己的经历。不会自动改关系、移动你或编造谈话、购物和任务成果；退出后不补造已完成经历。</p>
       <button type="button" disabled={!status || busy || ((!status.enabled || !status.encounters_enabled) && !status.shared_activities_enabled)} onClick={() => {
@@ -173,7 +173,7 @@ export function WorldActivities({ client, worldId, visible, paused, hasInitializ
         else if (status?.shared_activities_consented) void configureShared(true);
         else setSharedConsentOpen(true);
       }}>{status?.shared_activities_enabled ? "关闭共同休闲" : "允许共同休闲"}</button>
-      {(!status?.enabled || !status.encounters_enabled) && <p className="inline-hint">先开启世界自动活动和角色相遇；角色还需有实际碰面的记录。</p>}
+      {(!status?.enabled || !status.encounters_enabled) && <p className="inline-hint">先开启世界自动活动和角色相遇；同阵营直接成员无需先完成实际碰面。</p>}
       {sharedConsentOpen && <div role="group" aria-label="授权共同休闲规划"><p>允许现有 Director 在同一日常批次安排共同休闲；只使用已有角色资料、地点和公共背景，同批输出可能增加用量。不会逐活动调用API，不发送私聊、私人记忆或新增的相遇历史。</p>
         <button type="button" className="primary-button" disabled={busy || !status?.enabled || !status.encounters_enabled} onClick={() => void configureShared(true, true)}>同意同批后台用量并开启</button>
         <button type="button" disabled={busy} onClick={() => setSharedConsentOpen(false)}>暂不开启</button>

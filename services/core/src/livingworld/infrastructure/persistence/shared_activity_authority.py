@@ -22,6 +22,7 @@ from livingworld.infrastructure.persistence.encounter_models import (
 from livingworld.infrastructure.persistence.encounter_models import (
     EncounterSettingsRecord as EncounterSettings,
 )
+from livingworld.infrastructure.persistence.factions import known_pair
 from livingworld.infrastructure.persistence.models import LocalPlayerBindingRecord
 from livingworld.infrastructure.persistence.models import WorldEventRecord as Event
 from livingworld.infrastructure.persistence.shared_activity_models import (
@@ -131,7 +132,9 @@ async def _pacing(session, row, now):
         )
         .limit(1)
     )
-    if met is None:
+    if met is None and not await known_pair(
+        session, row.world_id, row.first_character_id, row.second_character_id
+    ):
         return "previous_meeting_required"
     recent = await session.scalar(
         select(Shared.candidate_id)

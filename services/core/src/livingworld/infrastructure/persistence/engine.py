@@ -120,6 +120,11 @@ class Database:
 
         return SqlAlchemyWorldCoverRepository(self._sessions)
 
+    def faction_store(self):
+        from livingworld.infrastructure.persistence.factions import SqlAlchemyFactionStore
+
+        return SqlAlchemyFactionStore(self._sessions)
+
     def content_asset_store(self) -> ContentAssetStore:
         from livingworld.infrastructure.packages.asset_store import FileContentAssetStore
 

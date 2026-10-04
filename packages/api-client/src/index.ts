@@ -141,6 +141,12 @@ export interface WorldContentItem {
   warnings?: Array<{ code: string; path: string }>;
   research?: ContentResearch | null;
 }
+export interface SocialSnapshot {
+  factions: Array<{ faction_id: string; parent_id: string | null; name: string }>;
+  characters: Array<{ root_import_id: string; current_import_id: string; character_id: string; name: string; avatar_digest: string | null }>;
+  memberships: Array<{ faction_id: string; root_import_id: string }>;
+  connections: Array<{ first_root_import_id: string; second_root_import_id: string; faction_ids: string[] }>;
+}
 
 export interface ContentEditorEntry {
   source_entry_id: string | null; title: string; content: string; keywords: string[];
@@ -619,6 +625,24 @@ export class CoreClient {
     });
     if (!response.ok) throw new CoreRequestError(response.status, "cover_image_unavailable");
     return response.blob();
+  }
+  socialSnapshot(worldId: string, signal?: AbortSignal): Promise<SocialSnapshot> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/social`, { signal });
+  }
+  createFaction(worldId: string, name: string, parentId: string | null): Promise<{ faction_id: string }> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/social/factions`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, parent_id: parentId }) });
+  }
+  editFaction(worldId: string, factionId: string, name: string, parentId: string | null): Promise<{ saved: boolean }> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/social/factions/${encodeURIComponent(factionId)}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, parent_id: parentId }) });
+  }
+  removeFaction(worldId: string, factionId: string): Promise<{ saved: boolean }> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/social/factions/${encodeURIComponent(factionId)}`, { method: "DELETE" });
+  }
+  setFactionMember(worldId: string, factionId: string, rootId: string, enabled: boolean): Promise<{ saved: boolean }> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/social/factions/${encodeURIComponent(factionId)}/members/${encodeURIComponent(rootId)}`, { method: enabled ? "PUT" : "DELETE" });
+  }
+  setCharacterAvatar(worldId: string, rootId: string, digest: string | null): Promise<{ saved: boolean }> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/social/avatars/${encodeURIComponent(rootId)}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ digest }) });
   }
   listProductWorlds(signal?: AbortSignal): Promise<WorldSettings[]> { return this.productRequest("/worlds", { signal }); }
   createWorld(name: string, requestId: string): Promise<{ world_id: string }> {

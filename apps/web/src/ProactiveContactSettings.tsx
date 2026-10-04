@@ -58,7 +58,7 @@ export function ProactiveContactSettings({ client, worldId, playerId }: { client
     : status?.state === "attention" ? "本次任务已停止，不会自动重试模型调用。"
     : status?.enabled ? "已开启；达到间隔并有真实活动理由时才联系。" : "尚未开启在线主动联系。";
   return <section className="settings-section" aria-label="在线主动联系">
-    <h3>角色主动联系</h3><p>角色休息或自由活动时，可以主动邀你加入。两名角色必须正在一起参加同一次共同休闲，才能在同一个群聊共同邀请。</p>
+    <h3>角色主动联系</h3><p>角色休息或自由活动时，可以主动邀你加入。两名角色必须正在一起参加同一次共同休闲，才能在同一个群聊共同邀请；同阵营直接成员无需为确认相识而先碰面。</p>
     <p role="status">{label}</p>
     <div className="inline-form"><label>最短联系间隔（世界分钟）<input type="number" min={15} max={1440} step={1} value={minutes} disabled={busy} onChange={event => setMinutes(event.target.value)} /></label>
       <button type="button" className="secondary-button" disabled={!status || busy || (!status.enabled && !status.model_available)} onClick={() => status?.enabled ? void save(false) : status?.consented ? void save(true) : setConsenting(true)}>{status?.enabled ? "关闭主动联系" : "开启主动联系"}</button>

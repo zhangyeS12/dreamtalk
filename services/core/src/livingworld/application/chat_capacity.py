@@ -65,6 +65,8 @@ class ContextPacker:
                     # The reader orders pinned/core/related; first entries get priority.
                     score += max(0, 8 - index)
                 self.units.append((score, key, index))
+        if self.data.get("known_faction_contacts"):
+            self.units.append((70, "known_faction_contacts", None))
         if "confirmed_conversation_summary" in self.data:
             self.units.append((80, "confirmed_conversation_summary", None))
         character = self.data.get("character", {})
@@ -90,7 +92,7 @@ class ContextPacker:
         for key, indexes in omitted.items():
             if key == "opening_style_example":
                 data["character"].pop(key, None)
-            elif key == "confirmed_conversation_summary":
+            elif key in {"confirmed_conversation_summary", "known_faction_contacts"}:
                 data.pop(key, None)
             elif key == "group_history":
                 removed = {
@@ -131,6 +133,7 @@ class ContextPacker:
     def report(self, request, bound, remaining):
         categories = []
         labels = {
+            "known_faction_contacts": "已确认阵营与相识",
             "common_world_background": "公共世界背景",
             "long_term_dialogue_memories": "长期对话记忆",
             "long_term_original_quotes": "历史原句",
