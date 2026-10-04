@@ -1,5 +1,5 @@
+import { useConversationRead } from "./useChatUnread";
 import { ContextReferencePanel } from "./ContextReferencePanel";
-import { invoke, isTauri } from "@tauri-apps/api/core";
 import { MessageTime } from "./MessageTime";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { CoreClient, CoreRequestError, type ChatReplyAvailability, type ChatConversation } from "@dreamtalk/api-client";
@@ -53,31 +53,7 @@ export function ChatTranscript({ client, worldId, playerId, conversation, tokenC
   const { messages, failed, hasOlder, loadingOlder, loadOlder, acceptMessage } = useTranscriptPages(client, worldId, conversation.conversation_id, refresh, true);
   const { thread, beforePrepend } = useChatScroll(messages, stream.draft?.text);
 
-  const readAttempts = useRef(new Map<string, number>());
-  useEffect(() => {
-    let active = true;
-    let reading = false;
-    async function markRead() {
-      if (reading || !active || document.visibilityState !== "visible" || !document.hasFocus()) return;
-      const incoming = messages?.filter(message => message.story_sent_at_utc && (readAttempts.current.get(message.message_id) ?? 0) < 2) ?? [];
-      if (!incoming.length) return;
-      reading = true;
-      try {
-        if (isTauri() && !await invoke<boolean>("report_desktop_presence", { worldId, visible: true })) return;
-        if (!active || !document.hasFocus()) return;
-        for (const message of incoming) {
-          readAttempts.current.set(message.message_id, (readAttempts.current.get(message.message_id) ?? 0) + 1);
-          try { await client.markOfflineMessageRead(worldId, message.message_id);
-            readAttempts.current.set(message.message_id, 2);
-          } catch { /* One further visible-page read may retry acknowledgement; never model work. */ }
-        }
-      } catch { /* Hidden or disconnected UI never marks messages read. */ }
-      finally { reading = false; }
-    }
-    const focused = () => { void markRead(); };
-    window.addEventListener("focus", focused); void markRead();
-    return () => { active = false; window.removeEventListener("focus", focused); };
-  }, [client, worldId, messages]);
+  useConversationRead(client, worldId, conversation.conversation_id, messages);
 
   useEffect(() => {
     if (suggestedDraft) {
@@ -203,7 +179,7 @@ export function ChatTranscript({ client, worldId, playerId, conversation, tokenC
         : messages.length === 0 ? <div className="conversation-placeholder"><h2>还没有消息</h2><p>发一条消息，开始与角色聊天。</p></div>
           : <>{hasOlder ? <div className="transcript-history"><button type="button" className="text-action" disabled={loadingOlder} onClick={() => void loadOlder(beforePrepend)}>{loadingOlder ? "正在加载…" : "加载更早消息"}</button></div> : null}<ol className="message-list">{messages.map(message => {
             const own = message.sender_kind === "player" && message.sender_id === playerId;
-            return <li key={message.message_id} className={`message-row ${own ? "own" : ""}`}>
+            return <li key={message.message_id} data-message-id={message.message_id} className={`message-row ${own ? "own" : ""}`}>
               <div className="message-bubble">
                 <span className="message-sender">{own ? "我" : conversation.character_name}</span>
                 <ChatMessageBody text={message.text} />

@@ -29,6 +29,17 @@ export interface WorldSettings extends WorldSummary {
   time_scale: string;
   runtime_state: string;
 }
+export interface ProactiveContactStatus {
+  player_id: string;
+  enabled: boolean; consented: boolean; revision: number; interval_minutes: number;
+  state: "off" | "idle" | "writing" | "attention" | "waiting_reply";
+  error: string | null; model_available: boolean; waiting_conversation_id: string | null;
+}
+export interface ChatUnreadStatus {
+  player_id: string;
+  items: Array<{ conversation_id: string; latest_position: number; unread: number }>;
+  waiting_conversation_id: string | null;
+}
 export interface OfflineContactStatus {
   enabled: boolean; consented: boolean; revision: number; hours: number;
   state: "off" | "idle" | "waiting" | "planning" | "writing" | "delivered" | "skipped" | "attention";
@@ -661,6 +672,20 @@ export class CoreClient {
     });
   }
 
+  proactiveContactStatus(worldId: string, signal?: AbortSignal): Promise<ProactiveContactStatus> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/proactive-contact`, { signal });
+  }
+  configureProactiveContact(worldId: string, status: ProactiveContactStatus, enabled: boolean, minutes: number, consent = false): Promise<ProactiveContactStatus> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/proactive-contact`, { method: "POST",
+      body: JSON.stringify({ enabled, interval_minutes: minutes, consent_background_usage: consent, expected_revision: status.revision, expected_player_id: status.player_id }) });
+  }
+  chatUnread(worldId: string, signal?: AbortSignal): Promise<ChatUnreadStatus> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/chat-unread`, { signal });
+  }
+  markConversationRead(worldId: string, conversationId: string, position: number): Promise<{ read: boolean }> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/${encodeURIComponent(conversationId)}/read`, {
+      method: "POST", body: JSON.stringify({ position }) });
+  }
   offlineContactStatus(worldId: string): Promise<OfflineContactStatus> {
     return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/offline-contact`);
   }

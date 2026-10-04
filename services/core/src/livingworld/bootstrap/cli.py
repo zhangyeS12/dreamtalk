@@ -125,6 +125,7 @@ async def run(
     simulation_runtime = None
     director = None
     offline_contact = None
+    proactive_contact = None
     world_story = None
     try:
         trigger_registry = TriggerKindRegistry(
@@ -258,6 +259,20 @@ async def run(
             credentials_ready=lambda: not desktop or llm_session.credentials.sync_complete,
         )
         await offline_contact.start()
+        from livingworld.application.proactive_contact import ProactiveContactService
+        from livingworld.bootstrap.llm_runtime import configure_proactive_dialogue
+
+        proactive_configured, proactive_json = configure_proactive_dialogue(llm_session)
+
+        proactive_contact = ProactiveContactService(
+            database.proactive_contact_store(),
+            database.chat_unread_store(),
+            player_event_feed,
+            proactive_configured,
+            credentials_ready=lambda: not desktop or llm_session.credentials.sync_complete,
+            json_output=proactive_json,
+        )
+        await proactive_contact.start()
         from livingworld.application.long_chat_memory import LongChatMemoryService
 
         long_memory_store = database.long_chat_memory_store()
@@ -322,6 +337,7 @@ async def run(
                     lambda: (
                         director.credentials_changed(),
                         offline_contact.credentials_changed(),
+                        proactive_contact.credentials_changed(),
                         world_story.credentials_changed(),
                     )
                 ),
@@ -356,6 +372,7 @@ async def run(
             director=director,
             world_story=world_story,
             offline_contact=offline_contact,
+            proactive_contact=proactive_contact,
             character_activity_setup=CharacterActivitySetupService(
                 database.character_activity_directory(),
                 chat_conversations,
@@ -428,6 +445,8 @@ async def run(
         try:
             if world_story is not None:
                 await world_story.aclose()
+            if proactive_contact is not None:
+                await proactive_contact.aclose()
             if offline_contact is not None:
                 await offline_contact.aclose()
             if director is not None:

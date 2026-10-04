@@ -28,3 +28,6 @@ th, td { border-bottom: 1px solid #283449; padding: 8px; text-align: left; verti
 th { color: #91a0b8; font-weight: 600; }
 td { max-width: 380px; overflow-wrap: anywhere; }
 @media (max-width: 800px) { .status-grid, .panel-grid { grid-template-columns: 1fr; } main { padding: 12px; } }
+
+/* Read and reply are independent; dots identify incoming character messages. */
+.unread-dot { display:inline-block; width:9px; height:9px; border-radius:50%; background:#d43c3c; margin-left:8px; vertical-align:middle; flex-shrink:0; }

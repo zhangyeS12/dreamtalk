@@ -59,6 +59,7 @@ def create_app(
     director=None,
     world_story=None,
     offline_contact=None,
+    proactive_contact=None,
     world_locations=None,
     character_activity_setup=None,
     world_covers=None,
@@ -153,6 +154,10 @@ def create_app(
             chat_message_router(chat_messages, authorize, chat_reply, group_chat_reply, chat_recall)
         )
 
+    if proactive_contact is not None:
+        from livingworld.adapters.http.proactive_contact import proactive_contact_router
+
+        app.include_router(proactive_contact_router(proactive_contact, authorize, logger))
     if offline_contact is not None:
         from livingworld.adapters.http.offline_contact import (
             offline_contact_router,

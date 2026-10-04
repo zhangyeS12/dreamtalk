@@ -9,7 +9,7 @@ export const settingsPages = [
   { id: "background", label: "后台运行", scope: "应用设置", hint: "登录启动与系统托盘" },
   { id: "time", label: "世界时间", scope: "当前世界", hint: "时间状态与推进速度" },
   { id: "activities", label: "角色活动", scope: "当前世界", hint: "地点、初始位置与日常活动" },
-  { id: "offline", label: "离线联系", scope: "指定世界", hint: "交流状态与恢复后的主动消息" },
+  { id: "offline", label: "主动联系", scope: "当前世界", hint: "共同邀请、未回复限制与离线消息" },
   { id: "news", label: "世界动态", scope: "当前世界", hint: "批量事件池与发布状态" },
   { id: "about", label: "关于与诊断", scope: "应用设置", hint: "版本、程序位置与本机连接" },
 ] as const;

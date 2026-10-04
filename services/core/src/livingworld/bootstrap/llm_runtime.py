@@ -147,6 +147,10 @@ def configure_offline_dialogue(session: ProductionLLMSession):
     return configured[:6] if configured is not None else None
 
 
+def configure_proactive_dialogue(session: ProductionLLMSession):
+    return configure_offline_dialogue(session), _capture_available(session)
+
+
 def configure_director(session: ProductionLLMSession):
     configured = _chat_reply_configuration(session, "director_plan")
     return configured[:6] if configured is not None else None

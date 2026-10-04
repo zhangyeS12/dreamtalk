@@ -288,34 +288,10 @@ class SqlAlchemyOfflineContactStore:
         ]
         return _json(snapshot)
 
-    async def _unanswered(self, session, cfg):
-        ep = await session.scalar(
-            select(Episode)
-            .where(
-                Episode.world_id == cfg.world_id,
-                Episode.player_id == cfg.player_id,
-                Episode.state == "delivered",
-            )
-            .order_by(Episode.created_at_utc.desc(), Episode.episode_id.desc())
-            .limit(1)
-        )
-        if ep is None:
-            return False
-        message = await session.get(Message, (ep.world_id, ep.message_id))
-        if message is None:
-            return True
-        return not bool(
-            await session.scalar(
-                select(Message.message_id)
-                .where(
-                    Message.world_id == ep.world_id,
-                    Message.conversation_id == ep.conversation_id,
-                    Message.sender_player_id == ep.player_id,
-                    Message.position > message.position,
-                )
-                .limit(1)
-            )
-        )
+    async def _unanswered(self, session, cfg, exclude=None):
+        from livingworld.infrastructure.persistence.contact_gate import contact_blocked
+
+        return await contact_blocked(session, cfg.world_id, cfg.player_id, exclude_offline=exclude)
 
     async def interrupt_abandoned(self):
         async with self.sessions() as session:
@@ -419,7 +395,7 @@ class SqlAlchemyOfflineContactStore:
         data = json.loads(ep.input_json)
         if await self._epoch(session, ep.world_id, ep.player_id) != data.get("player_epoch"):
             return False
-        if await self._unanswered(session, cfg):
+        if await self._unanswered(session, cfg, exclude=ep.episode_id):
             return False
         if not await background_is_current(session, WorldId(ep.world_id), ep.input_json):
             return False

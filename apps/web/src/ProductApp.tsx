@@ -4,6 +4,8 @@ import { OfflineContactSettings } from "./OfflineContactSettings";
 import { useOfflineContact } from "./useOfflineContact";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { CoreClient, type ChatConversation, type GroupChatConversation, type KnownWorldEvent, type PlayerAvailability, type SelectablePlayer, type SelectedPlayerState, type WorldSettings } from "@dreamtalk/api-client";
+import { useChatUnread } from "./useChatUnread";
+import { ProactiveContactSettings } from "./ProactiveContactSettings";
 import { ChatTranscript } from "./ChatTranscript";
 import { GroupChatDetails, GroupChatSetup } from "./GroupChat";
 import { ModelSetup, type ModelSetupSummary } from "./ModelSetup";
@@ -132,6 +134,8 @@ function WorldWorkspace({ client, initialWorldId, initialTab, onArchive }: {
   const [tokenCeiling, setTokenCeiling] = useState(savedTokenCeiling);
   const [tokenCeilingInput, setTokenCeilingInput] = useState(() => String(savedTokenCeiling()));
   const offlineContact = useOfflineContact(client, worldId, selectedPlayer);
+  const unread = useChatUnread(client, worldId, selectedPlayer);
+  const unreadDirectoryKey = unread.value?.items.map(item => item.conversation_id).join(":") ?? "";
   const tokenCeilingValid = Number.isSafeInteger(Number(tokenCeilingInput)) && Number(tokenCeilingInput) >= 1;
 
   const refresh = useCallback(async () => {
@@ -228,7 +232,7 @@ function WorldWorkspace({ client, initialWorldId, initialTab, onArchive }: {
     }).catch(() => { if (active) { setConversationsFailed(true); setError("无法读取当前世界的群聊，请重新读取或检查核心连接。"); } });
     void Promise.allSettled([directRead, groupRead]).finally(() => { if (active) setConversationsLoading(false); });
     return () => { active = false; controller.abort(); };
-  }, [client, worldId, selectedPlayer, tab, conversationsRefresh]);
+  }, [client, worldId, selectedPlayer, tab, conversationsRefresh, unreadDirectoryKey]);
   useEffect(() => {
     let active = true;
     setKnownEvents(null);
@@ -318,10 +322,11 @@ function WorldWorkspace({ client, initialWorldId, initialTab, onArchive }: {
           <span className="pin-label">置顶</span>
         </button>
         {selectedPlayer ? <button type="button" className="group-create-link" onClick={() => { setGroupSetupOpen(true); setSelectedGroupId(null); setSelectedConversationId(null); setEventsOpen(false); }}>＋ 新建群聊</button> : null}
+        {unread.error && <div className="thread-hint" role="status">新消息提示暂未更新。<button type="button" className="text-action" onClick={unread.refresh}>重新读取消息提示</button></div>}
         {conversationsFailed && <div className="thread-hint" role="alert"><p>会话读取未完成，已读取的会话仍保留。</p><button type="button" className="text-action" disabled={conversationsLoading} onClick={() => setConversationsRefresh(value => value + 1)}>重新读取会话</button></div>}
         {conversationsLoading && conversations.length === 0 && groups.length === 0 ? <p className="thread-hint">正在读取会话…</p> : conversationsFailed && conversations.length === 0 && groups.length === 0 ? null : conversations.length === 0 && groups.length === 0 ? <div className="empty-state"><h2>还没有会话</h2><p>在通讯录中选择角色，打开与他的会话。</p><button type="button" className="text-action" onClick={() => setTab("contacts")}>前往通讯录</button></div> : <>
-          {groups.map(item => <button key={item.conversation_id} type="button" className={`conversation-row ${!eventsOpen && selectedGroupId === item.conversation_id ? "selected" : ""}`} aria-pressed={!eventsOpen && selectedGroupId === item.conversation_id} onClick={() => { setDraftSuggestion(null); setSelectedGroupId(item.conversation_id); setSelectedConversationId(null); setGroupSetupOpen(false); setEventsOpen(false); }}><span className="avatar event-avatar" aria-hidden="true">群</span><span className="row-copy"><strong>{item.participants.map(member => member.character_name).join("、")}</strong><small>群聊 · {item.participants.length} 位角色</small></span></button>)}
-          {conversations.map(item => <button key={item.conversation_id} type="button" className={`conversation-row ${!eventsOpen && selectedConversationId === item.conversation_id ? "selected" : ""}`} aria-pressed={!eventsOpen && selectedConversationId === item.conversation_id} onClick={() => { setDraftSuggestion(null); setSelectedConversationId(item.conversation_id); setSelectedGroupId(null); setGroupSetupOpen(false); setEventsOpen(false); }}><span className="avatar event-avatar" aria-hidden="true">{Array.from(item.character_name)[0]}</span><span className="row-copy"><strong>{item.character_name}</strong><small>{offlineContact.status?.unread.some(message => message.conversation_id === item.conversation_id) ? "新消息 · 离线期间" : "私聊"}</small></span></button>)}
+          {groups.map(item => <button key={item.conversation_id} type="button" className={`conversation-row ${!eventsOpen && selectedGroupId === item.conversation_id ? "selected" : ""}`} aria-pressed={!eventsOpen && selectedGroupId === item.conversation_id} onClick={() => { setDraftSuggestion(null); setSelectedGroupId(item.conversation_id); setSelectedConversationId(null); setGroupSetupOpen(false); setEventsOpen(false); }}><span className="avatar event-avatar" aria-hidden="true">群</span><span className="row-copy"><strong>{item.participants.map(member => member.character_name).join("、")}{unread.unread(item.conversation_id) && <span className="unread-dot" role="img" aria-label="有未读角色消息" />}</strong><small>群聊 · {item.participants.length} 位角色</small></span></button>)}
+          {conversations.map(item => <button key={item.conversation_id} type="button" className={`conversation-row ${!eventsOpen && selectedConversationId === item.conversation_id ? "selected" : ""}`} aria-pressed={!eventsOpen && selectedConversationId === item.conversation_id} onClick={() => { setDraftSuggestion(null); setSelectedConversationId(item.conversation_id); setSelectedGroupId(null); setGroupSetupOpen(false); setEventsOpen(false); }}><span className="avatar event-avatar" aria-hidden="true">{Array.from(item.character_name)[0]}</span><span className="row-copy"><strong>{item.character_name}{unread.unread(item.conversation_id) && <span className="unread-dot" role="img" aria-label="有未读角色消息" />}</strong><small>{unread.unread(item.conversation_id) ? "新消息" : "私聊"}</small></span></button>)}
         </>}
 
         </aside>
@@ -376,7 +381,7 @@ function WorldWorkspace({ client, initialWorldId, initialTab, onArchive }: {
               setSelectedPlayerState(state);
             }, next === "available" ? "当前状态已设为可用。" : "当前状态已设为忙碌。");
           }}>{selectedPlayerState.availability === "available" ? "设为忙碌" : "设为可用"}</button></div>
-        </section>} {world && selectedPlayer && <OfflineContactSettings key={`offline:${world.world_id}:${selectedPlayer}`} status={offlineContact.status} busy={offlineContact.busy} refreshing={offlineContact.refreshing} error={offlineContact.error} onRefresh={offlineContact.refresh} onSave={offlineContact.save} paused={world.clock_state === "paused"} availability={selectedPlayerState?.availability ?? null} onNavigate={navigateBackgroundTask} />}{!selectedPlayer && <section className="settings-section"><p className="inline-hint">先在“我”中进入当前世界，再设置离线联系。</p><button type="button" className="text-action" onClick={() => setTab("me")}>前往我</button></section>}</>,
+        </section>} {world && selectedPlayer && <><ProactiveContactSettings key={`proactive:${world.world_id}:${selectedPlayer}`} client={client} worldId={world.world_id} playerId={selectedPlayer} /><OfflineContactSettings key={`offline:${world.world_id}:${selectedPlayer}`} status={offlineContact.status} busy={offlineContact.busy} refreshing={offlineContact.refreshing} error={offlineContact.error} onRefresh={offlineContact.refresh} onSave={offlineContact.save} paused={world.clock_state === "paused"} availability={selectedPlayerState?.availability ?? null} onNavigate={navigateBackgroundTask} /></>}{!selectedPlayer && <section className="settings-section"><p className="inline-hint">先在“我”中进入当前世界，再设置离线联系。</p><button type="button" className="text-action" onClick={() => setTab("me")}>前往我</button></section>}</>,
           news: <>{world && selectedPlayer && <WorldNewsSettings key={`news:${world.world_id}:${selectedPlayer}`} client={client} worldId={world.world_id} visible={tab === "settings" && settingsPage === "news"} paused={world.clock_state === "paused"} onNavigate={navigateBackgroundTask} />}{!selectedPlayer && <section className="settings-section"><p className="inline-hint">先在“我”中进入当前世界，再设置世界动态。</p><button type="button" className="text-action" onClick={() => setTab("me")}>前往我</button></section>}</>,
           about: <SettingsDiagnostics client={client} visible={tab === "settings" && settingsPage === "about"} desktop={desktopStatus} onBackground={() => setSettingsPage("background")} />,
         }} />
@@ -389,6 +394,6 @@ function WorldWorkspace({ client, initialWorldId, initialTab, onArchive }: {
         {selectedPlayer ? <p className="inline-hint">已绑定：{players.find(item => item.player_id === selectedPlayer)?.name ?? "当前玩家"}</p> : null}
       </section>{world && <ProfileEditor key={world.world_id} client={client} worldId={world.world_id} onDirtyChange={setWorldProfileDirty} />}</div>}
     </main>
-    <nav className="bottom-nav" aria-label="主导航">{tabs.map(item => <button key={item.id} type="button" className={tab === item.id ? "nav-item active" : "nav-item"} aria-current={tab === item.id ? "page" : undefined} onClick={() => { if (tab !== item.id && chatDirty && !window.confirm("当前会话有未发送的草稿或正在处理的请求，是否离开会话？已发起的生成可能继续。")) return; setTab(item.id); }}><TabIcon name={item.id} /><span>{item.label}</span></button>)}</nav>
+    <nav className="bottom-nav" aria-label="主导航">{tabs.map(item => <button key={item.id} type="button" className={tab === item.id ? "nav-item active" : "nav-item"} aria-current={tab === item.id ? "page" : undefined} onClick={() => { if (tab !== item.id && chatDirty && !window.confirm("当前会话有未发送的草稿或正在处理的请求，是否离开会话？已发起的生成可能继续。")) return; setTab(item.id); }}><TabIcon name={item.id} /><span>{item.label}{item.id === "chats" && unread.hasUnread && <span className="unread-dot" role="img" aria-label="有未读角色消息" />}</span></button>)}</nav>
   </div>;
 }

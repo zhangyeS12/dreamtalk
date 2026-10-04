@@ -132,6 +132,20 @@ class Database:
 
         return SqlAlchemyOfflineContactStore(self._sessions, self.director_store())
 
+    def proactive_contact_store(self):
+        from livingworld.infrastructure.persistence.proactive_contact import (
+            SqlAlchemyProactiveContactStore,
+        )
+
+        return SqlAlchemyProactiveContactStore(
+            self._sessions, self.director_store(), self.offline_contact_store()
+        )
+
+    def chat_unread_store(self):
+        from livingworld.infrastructure.persistence.chat_unread import SqlAlchemyChatUnreadStore
+
+        return SqlAlchemyChatUnreadStore(self._sessions)
+
     def world_story_store(self):
         from livingworld.infrastructure.persistence.world_story import SqlAlchemyWorldStoryStore
 
