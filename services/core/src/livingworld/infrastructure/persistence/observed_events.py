@@ -8,6 +8,7 @@ from uuid import UUID
 
 from sqlalchemy import Text, and_, case, func, literal, select
 
+from livingworld.application.experience_lifecycle import group_activity_experiences
 from livingworld.application.observed_events import MAX_CHARACTER_EVENTS, CharacterEventRecall
 from livingworld.application.player_event_feed import KnownWorldEvent
 from livingworld.domain.identifiers import CharacterId, EventId, PlayerId, WorldId
@@ -22,6 +23,7 @@ from livingworld.infrastructure.persistence.models import (
 _ROUTINE_TYPES = ("CharacterRoutineStarted", "CharacterRoutineEnded", "CharacterRoutineInterrupted")
 _CHARACTER_TYPES = ("CharacterPlaced", *_ROUTINE_TYPES)
 _SHARED_TYPES = ("SharedActivityStarted", "SharedActivityEnded", "SharedActivityInterrupted")
+_TERMINAL_TYPES = (*_ROUTINE_TYPES[1:], *_SHARED_TYPES[1:])
 _PAIR_TYPES = ("CharactersMet", *_SHARED_TYPES)
 _SUPPORTED_TYPES = ("PlayerMoved", "PlayerPlaced", *_PAIR_TYPES, *_CHARACTER_TYPES)
 
@@ -77,6 +79,7 @@ async def project_observed_events(
             event.occurred_at,
             event.ledger_position,
             seen.c.observed_at,
+            reference("$.start_event_id", _TERMINAL_TYPES).label("activity_start_event_id"),
             reference("$.player_id", ("PlayerMoved", "PlayerPlaced")).label("player_id"),
             reference("$.first_character_id", _PAIR_TYPES).label("first_character_id"),
             reference("$.second_character_id", _PAIR_TYPES).label("second_character_id"),
@@ -259,6 +262,9 @@ async def project_observed_events(
                 text,
                 "witnessed" if text is not None else None,
                 subject=subject,
+                activity_start_event_id=EventId(world_id, start_id)
+                if text is not None and (start_id := _uuid(row.activity_start_event_id)) is not None
+                else None,
                 participants=tuple(
                     CharacterId(world_id, identity)
                     for identity in (_uuid(row.first_character_id), _uuid(row.second_character_id))
@@ -315,9 +321,10 @@ class SqlAlchemyCharacterObservedEventReader:
         owner = self._owner
         seen = character_witnessed_events(owner)
         async with self._sessions() as session:
-            return await project_observed_events(
-                session, owner.world_id, seen, limit=limit, detailed_only=True
+            pool = await project_observed_events(
+                session, owner.world_id, seen, limit=128, detailed_only=True
             )
+        return tuple(group[-1] for group in group_activity_experiences(pool)[-limit:])
 
     async def recall(self, queries: tuple[str, ...], *, limit: int) -> CharacterEventRecall:
         """Rank at most 128 owner-authorized projections, never the global ledger."""
@@ -340,13 +347,17 @@ class SqlAlchemyCharacterObservedEventReader:
                 detailed_only=True,
             )
         # Release the database transaction before the existing bounded FTS worker.
+        groups = group_activity_experiences(pool)
+        pool = tuple(group[-1] for group in groups)
         documents = []
         used = 0
-        for item in reversed(pool):
-            size = len(item.description.encode("utf-8"))
+        for group in reversed(groups):
+            # Search either authorized phase; return the actual known terminal.
+            text = "\n".join(item.description for item in group)
+            size = len(text.encode("utf-8"))
             if used + size > 256 * 1024:
                 continue
-            documents.append(_ExperienceDocument(item.description, item))
+            documents.append(_ExperienceDocument(text, group[-1]))
             used += size
         documents = tuple(documents)
         hits = await self._ranker.rank_queries(queries, documents, limit=16)

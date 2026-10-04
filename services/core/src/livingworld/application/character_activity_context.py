@@ -22,6 +22,7 @@ ACTIVITY_GROUNDING_INSTRUCTIONS = (
     "participation=witness 只表示目击他人，不能改说成我做过。缺少主体标记时不要自行认定是本人。"
     "以主体ID区分角色，名字相同或角色卡改名不能把别人的活动当自己的。"
     "开始活动的历史只证明当时开始，不证明现在仍在活动或已完成工作。"
+    "同一次活动若已有获准结束/中断记录，检索可只提供后续状态；以该实际事件类型和时间为准。"
     "CharactersMet中participant_character_ids列实际参与者，participation=participant才是本人碰面；"
     "witness表示目击双方碰面。只证明短暂见面/打招呼，不证明私下谈话内容、共同任务或关系变化。"
     "encounter_stage=brief_greeting只证明短暂问候，relationship_effect=none表示此记录没有改变关系。"

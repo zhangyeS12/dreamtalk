@@ -511,3 +511,8 @@ See [reuse and limits](../research/2026-09-29-observed-events-reuse.md).
 ## Bounded original-message source view (0.1.27)
 
 Authenticated GET `/worlds/{world_id}/conversations/{conversation_id}/messages/{message_id}/source` resolves a stable MessageId under the selected local Player and owned original conversation before reading text. It returns the existing message-page DTO, at most the target and three positions on each side, ordered by position, without a pagination cursor. The current local binding is included in both source and body queries. Foreign, missing or inaccessible sources have the same fixed 404 label; missing Player selection is 409. No history search, semantic model, message/knowledge/world write, model dispatch or read-mark mutation occurs. The UI cancels obsolete reads, preserves the saved quote and editing state, reuses ChatMessageBody/MessageTime, and reads the source conversation rather than the currently open conversation.
+
+
+## Source-linked experience state recall (0.1.28)
+
+Owner/world/event-time authorization still precedes projection and ranking. Within at most 128 authorized v1 observations, a unique terminal and its known start may group by stable start_event_id, event family, subjects, WorldTime and ledger order. The existing FTS ranker searches both descriptions but returns only the actual terminal projection, ID and time. Recent slots count distinct groups; the model receives at most12 actual events/8KiB. Missing/conflicting links remain separate, with no global/out-of-window completion lookup. HTTP DTOs, raw facts and migration0034 remain unchanged. See [guide](../EXPERIENCE_STATE_RECALL.md).

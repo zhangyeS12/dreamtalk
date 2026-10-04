@@ -2,7 +2,18 @@
 
 更新日期：2026-10-04。此文件记录当前开发现场与接续工作，不替代 [AGENTS.md](AGENTS.md)。先读 AGENTS，再读本文，最后核对实际 Git 状态和相关代码；不能把下面的基线哈希当作永远不变的当前 HEAD。
 
-## 最新接续：2026-10-04 共同休闲与来源回看（桌面0.1.27）
+## 最新接续：2026-10-04 活动经历后续状态召回（桌面0.1.28）
+
+- 从正式D:\LivingWorld干净ee17ed6/codex/world-archive接续。用户明确继续项目，先核对当前代码和文档，并查[LangChain父子资料关联、ink/Yarn/Spiff一手实现及许可](docs/research/2026-10-04-experience-state-reuse.md)。本轮直接复用既有jieba/FTS5检索、SQL授权投影及正常聊天，不添加检索/状态机框架、依赖或额外API。
+- 静态代码发现：活动开始与结束/中断分别排名，可能重复占名额或只提供较早开始；没有声称这是用户已遇到的运行故障。内部KnownWorldEvent增加可选activity_start_event_id，只从已授权v1终态标量投影；普通HTTP DTO保持，无新的外发类别、记忆写入、canonical事实或账本变更。
+- 新纯应用函数在同次最多128条owner/world/event_occurrence witnessed投影内，按稳定开始ID、事件族/本人或两名参与者、WorldTime/ledger顺序及唯一终态分组。已有后续状态替代同次较早开始作为召回依据，排名文本可含两个已授权阶段，模型仍只接收实际终态事件ID/描述/时间。同名/相近时间不猜关联，缺源/未见开始/多终态冲突保留独立；仅见开始的旁观者不取隐藏结束，不按ID跨窗口查全局账本或候选。原始历史保持。
+- 仍最近8个选择名额、最多4条旧话题候选、最终12条/8KiB；缺少匹配可填其他近期记录。无查询/检索器的fallback也在既有128窗口做状态去重并最多返回12条。自身当前活动快照/6KiB与长期记忆原句范围保持。正常结束仍不证明任务、物品或关系成果；没有新增表/迁移，0034保留。
+- 四份Python Ruff lint/format、前端ESLint/TypeScript、Git diff通过。首次Ruff lint因只读工作区不能写D盘缓存而未完成，改为--no-cache后通过，没有把第一次失败算通过。233份源码AST、既有0034两表26字段与ORM声明、14组历史revision条件及754个本地文档链接核对；324个外部URL只计数，复用调查的页面另已联网查阅。0033源SHA保持018ccfa7e39e99e831876157006620ef81b6c2bb1038d0ce5c0a798eabd8f82a。
+- build-only exit0：PyInstaller/Core、Vite240模块（665.59kB/gzip199.01kB、147ms）、Rust release27.85s。完整包PE FileVersion/ProductVersion0.1.28，修改UTC2026-10-04T02:39:28。保留主JS>500kB、STATIC_VCRUNTIME弃用与PyInstaller可选tzdata/pysqlite2/MySQLdb提示，未隐藏告警。没有运行自动测试、Core/桌面/GUI、数据库升级、推理/付费API或真实存档/密钥诊断。
+- 新独立完整目录artifacts/portable/experience-state/dreamtalk及同父ZIP，旧包保留，包含0.1.27全部功能。233份冻结Python源码、1062份包/ZIP文件、254次文档许可字节、153个相关文档本地链接、固定语义模型哈希与五处版本核对通过。Desktop SHA256=acafc250d5ab563f2474502be1686b2de125c1591209784de30b211134dc49bc；Core=6631bf0794d880c77cb0a08fc6eb97890b6f2bccc8af5e6a4b80fcee88dc1082；ZIP=55fb9bcfe8e28831aaf0a57964317e3619d35f2b9af60fa37d7c2320c92bc3b6。日志experience-state-build.log，静态清单experience-state-source-audit.json/experience-state-audit.json。未替用户启动/退出应用或修改自启动。
+- 本地提交见git log，不push/发布。当前实现、编译与源码核对完成，真实表达与跨角色/世界/旁观权限仍待用户验收，见[体验说明](docs/EXPERIENCE_STATE_RECALL.md)。0.1.27共同休闲与来源回看也未收到新的实际验收结论。下一步共同委托需明确可核验目标、失败/中断及成果契约；推荐先做共同巡查行程，仍不能把活动时段结束当作交付、胜利或报酬。本轮只做该方向调查，没有批准/实现新的Mission动作；AGENTS22/24/26边界保持。
+
+## 历史接续：2026-10-04 共同休闲与来源回看（桌面0.1.27）
 
 - 基线79f7d91/codex/world-archive，正式D:\LivingWorld，开始Git clean。先查[Generative Agents/SimPy/transitions/Zulip一手成熟实现](docs/research/2026-10-04-shared-experience-reuse.md)，直接复用既有Director、Kernel、WorldTime、候选、ledger、Observation、receipt和前端阅读组件，没有安装新框架或复制第三方源码。用户本轮明确批准[共同休闲具体方案](docs/proposals/2026-10-04-shared-activities.md)，AGENTS第26节追加狭窄授权；不扩成正式介绍、委托成果或关系进展。
 - 独立每世界默认关闭；前提自动活动/相遇已开启。下一正常批次joint_activities可为0，15～30分钟同类型rest/leisure同地点；与普通问候合计每plan成功至多2次，开始即消费，中断不补选。同角色滚动24小时至多一次共同开始、同对6小时冷却；旧普通问候新增对象/持续同场去重保持。是否之前碰面由本地核验，不向Director新增历史名单/私密内容外发，不因候选取消额外重规划/API。

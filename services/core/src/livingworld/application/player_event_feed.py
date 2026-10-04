@@ -34,6 +34,7 @@ class KnownWorldEvent:
     observation_channel: str | None = None
     subject: PrincipalId | None = None
     participants: tuple[CharacterId, ...] = ()
+    activity_start_event_id: EventId | None = None
 
 
 class PlayerEventFeedStore(Protocol):
