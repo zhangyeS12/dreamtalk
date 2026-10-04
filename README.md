@@ -2,6 +2,8 @@
 
 All engineering agents must read AGENTS.md before modifying the repository.
 
+当前逐项完成度、待验收、明确限制与接续顺序见 [当前状态清单](docs/PROJECT_STATUS.md)；工作规则见 [AGENTS.md](AGENTS.md)，现场与最新 0.1.28 产物见 [HANDOFF.md](HANDOFF.md)。以下架构介绍不替代当前进度清单。
+
 ## 项目定位
 
 dreamtalk 是持久化、事件驱动的多角色 AI 世界，不是普通聊天机器人。Director 负责世界与宏观剧情调度，Character Agent 主要负责自己拥有的记忆、人格表达和与玩家对话；世界真实事实、角色知识和玩家知识相互分离。项目计划在 GitHub 公开开发，源码采用 [Apache-2.0 许可证](LICENSE)。旧工程名及仍需兼容的内部标识见 [项目命名与兼容性](docs/architecture/PROJECT_IDENTITY.md)。

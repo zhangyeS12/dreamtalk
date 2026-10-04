@@ -1,899 +1,267 @@
 # dreamtalk — Codex Project Constitution
 
-This file is a permanent instruction for all Codex work in this repository.
+本文件是本仓库的持续工作规则。更新至 **2026-10-04**；用户后来的明确指令优先。
+公开项目名为 dreamtalk；`livingworld` 代码、协议、存储及应用 identifier 保持兼容，见 [项目身份](docs/architecture/PROJECT_IDENTITY.md)。
 
-The public project name is dreamtalk. Existing `livingworld` code, storage and protocol identifiers remain compatibility boundaries; see [PROJECT_IDENTITY.md](docs/architecture/PROJECT_IDENTITY.md). This naming change does not alter any product or architecture rule below.
+## 开工入口与证据顺序
 
-Last reconciled with the user's confirmed instructions: 2026-09-29. Later explicit user instructions take precedence over this file. Earlier numbered task restrictions describe those tasks, not a permanent prohibition on subsequently authorized product work.
+1. 完整阅读本文件、当前用户要求与 [HANDOFF.md](HANDOFF.md)。
+2. 阅读 [当前状态清单](docs/PROJECT_STATUS.md) 和与任务相关的产品、架构、批准方案。
+3. 核对实际仓库、`git status`、近期提交与相关代码，再决定改动。
+4. 证据优先级：最新用户决定 → 当前代码/当前运行证据 → 当前状态清单/交接 → 历史文档。代码与文档冲突必须指出；若代码违反已确认规则，不能把实现当作新授权。
+5. 新功能开始前调查成熟实现，记录来源、版本、许可、实际复用/不复用理由。优先效果与维护成本，不为独立实现重复造轮子。
+6. 按当前任务边界工作；文档整理不授权修改应用行为、版本、数据库或系统启动设置。“继续推进”只覆盖已确认需求，不授权自行增加产品方向。
 
-Before starting ANY dreamtalk engineering task:
+## 当前范围提醒
 
-1. Read this file completely.
-2. Read the current task specification completely and read `HANDOFF.md` when present.
-3. Read the architecture/product documents relevant to the task.
-4. Inspect the existing repository before modifying anything.
-5. Do not begin implementation until the task boundary is understood.
-6. Before starting a new feature, search for mature existing implementations. Compare reuse, integration and the existing code; choose the best product effect and maintenance cost. Record the investigated sources/version, licensing and the concrete reuse decision. Do not duplicate a solved capability merely to keep the implementation independent.
-
-Apply the user's latest explicit decisions when they supersede older rules. Stop the affected work only when an essential product/architecture decision remains genuinely undefined; do not ask the user to reconfirm decisions already made.
-
----
+- 长期聊天记忆、纠正/停用、中文混合检索、持久向量缓存、活动生命周期、经历召回和后续状态优先已实现；以状态清单的证据为准，不重新列成新功能。
+- “代码已实现”“构建成功”“用户已验收”必须分开。未验收不是尚未开发，也不是已知故障。
+- 共同委托、巡查任务、奖励、战斗等未获批准；旧交接/研究中的这些建议已撤回。
+- 后续改动必须说明具体缺口、已有实现为何不足、可观察的完成条件。不得用笼统的“继续优化记忆”重复安排工作。
 
 # 1. What dreamtalk is
 
-dreamtalk is NOT:
-
-- a chatbot wrapper;
-- a demo;
-- an MVP that will later be rewritten;
-- a collection of independent agents constantly talking to each other;
-- a project whose purpose is to accumulate trendy frameworks.
-
-dreamtalk is intended to become a production-grade, resume-level AI persistent-world product.
-
-The final product should allow a user to enter a persistent virtual world populated by characters that appear to continue living even when the player is not actively talking to them.
-
-The product must be usable by ordinary users who do not understand prompts, samplers, RAG, Agent frameworks, databases, or model APIs.
-
-The internal architecture may be sophisticated.
-
-The external experience must remain simple.
-
-The project is built as a real finished product from the beginning.
-
-We build the final architecture incrementally.
-
-We do NOT intentionally create disposable architecture merely to obtain a quick demo.
-
----
+dreamtalk 是面向普通用户的 AI 持久世界与沉浸角色聊天产品，目标为可交付、可维护的完整产品。
+角色、世界时间、事件、知识和记忆支持自然交流；普通用户不需要理解提示词、RAG、Agent 框架或数据库。
+逐步建设最终架构，不采用准备推倒重来的演示底座，不为技术名词堆框架。
 
 # 2. Core product vision
 
-The important illusion dreamtalk must create is:
-
-"The world continues to exist when I am not looking at it."
-
-Immersive roleplay chat is the core experience. World progression and player-known events support conversations and supply topics; they must not turn the ordinary interface into a simulation dashboard. Remote direct and group chat are allowed without moving participants.
-
-A player may be talking to Alice while elsewhere:
-
-- Belle is doing something;
-- Billy meets Banyue in a cafe;
-- two characters form a relationship;
-- an event develops;
-- another character learns something;
-- the player knows none of this yet.
-
-These hidden changes are NOT automatically exposed in the UI.
-
-The player may learn about them later through natural channels:
-
-- a character mentions what happened;
-- the player encounters the characters together;
-- a message arrives;
-- a news item appears;
-- the player witnesses an event.
-
-The player must NOT receive omniscient system notifications for hidden world events.
-
----
+核心体验是“我没看着的时候，世界仍然存在”。变化通过角色交流、消息、公共动态或亲历被用户获知。
+隐藏活动、关系和知识不自动暴露为全知通知；普通界面以聊天为中心，不变成模拟监控台。
+愿景中的关系机会、复杂剧情、完整离线演化不代表当前已经实现或已批准具体动作。
 
 # 3. Responsibility split
 
-dreamtalk has three major intelligence layers.
-
-## Director
-
-The Director manages the world.
-
-It is responsible for concepts such as:
-
-- macro world simulation;
-- character activities;
-- character encounters;
-- relationship opportunities;
-- events;
-- schedules;
-- world pacing;
-- story opportunities;
-- proactive contact opportunities;
-- planning future possibilities.
-
-The Director DOES NOT directly write final character dialogue.
-
-The Director DOES NOT directly mutate canonical world state.
-
-The Director produces proposals/plans.
-
-## Character Agent
-
-A Character Agent is deliberately narrower.
-
-Its primary responsibilities are:
-
-- maintaining and using that character's own memories;
-- using only information that character is allowed to know;
-- expressing the character's personality;
-- communicating naturally with the player;
-- proposing world-impacting consequences when necessary.
-
-A Character Agent is NOT responsible for continuously simulating its whole life.
-
-It does NOT independently run a permanent autonomous planner for every mundane action.
-
-The Director handles the miscellaneous world-simulation work.
-
-## Deterministic World Kernel
-
-The World Kernel is the authoritative executor.
-
-LLMs may propose.
-
-The Kernel decides what becomes real.
-
-Only the Kernel may commit canonical WorldEvents and update authoritative projections.
-
-Never allow an LLM response to directly write WorldTruth.
-
----
+| 层 | 职责与边界 |
+| --- | --- |
+| Director | 批量提出计划，统筹已批准的日常/相遇/共同休闲；不写最终台词，不直接改权威状态。更广世界规划是长期愿景，须遵守具体已批准契约。 |
+| Character Agent | 使用本角色有权知道的信息和记忆，表达性格、与玩家交流；不是每角色永久独立运行的生活规划器。 |
+| Deterministic World Kernel | 验证提案、执行确定性动作、提交 canonical WorldEvent 与权威投影。LLM 输出不能直接写 WorldTruth。 |
 
 # 4. Hidden knowledge is a core feature
 
-The following concepts MUST remain distinct:
-
-WorldTruth
-CharacterBelief
-PlayerKnowledge
-
-Example:
-
-WorldTruth:
-Billy met Banyue at a cafe.
-
-Billy:
-knows this.
-
-Banyue:
-knows this.
-
-Belle:
-may not know this.
-
-Player:
-may not know this.
-
-A Character Agent must never gain knowledge merely because the fact exists in the database.
-
-Permission filtering must happen BEFORE semantic retrieval or prompt assembly.
-
-Do NOT implement secrecy as:
-
-"give the model all information and tell it not to reveal secrets."
-
-That is architecturally unacceptable.
-
-Characters may also hold incorrect beliefs.
-
-A CharacterBelief is not automatically WorldTruth.
-
----
+WorldTruth、CharacterBelief、PlayerKnowledge 必须分开。角色可能持有错误信念；数据库有某事实，不代表该角色或玩家知道。
+权限与来源过滤必须先于语义检索和提示组装。禁止把全部秘密交给模型，再要求它“不泄露”。
+通信参与不等于物理在场；观察者、当事人、说话者与事件主体必须按稳定身份区分。
 
 # 5. Relationships
 
-Relationships exist internally but are NOT exposed to normal players as numerical game statistics.
-
-Do NOT design normal UI such as:
-
-Affinity: 82
-Trust: 76
-Relationship +5
-
-The real-world feeling is more important.
-
-Players should infer relationships from:
-
-- behavior;
-- tone;
-- willingness to help;
-- willingness to share information;
-- proactive contact;
-- conflict;
-- remembered experiences.
-
-Developer/debug tools may inspect internal relationship state.
-
-Relationships may be directional.
-
-A → B does not have to equal B → A.
-
----
+关系可在内部存在、可有方向差异，但普通玩家不看到亲密度/信任等数字或“关系 +5”。
+用户通过行为、语气、分享、联系和共同经历感受关系；开发者查看仍须遵守开发模式隔离。
+问候、共同休闲或聊天自述不自动推进关系，不证明交换姓名、完成正式介绍或取得任务成果。
 
 # 6. Player presence
 
-The player can physically exist in only ONE location at a time.
-
-This is a hard world invariant.
-
-Remote communication such as messaging is allowed regardless of location.
-
-Offline/inactive does not mean the player's physical location disappears.
-
-The player must not automatically become a witness to events merely because an event occurs at the location where the player was last stored while inactive.
-
----
+Player 同时只能位于一个地点；私聊/群聊可以远程进行，不移动参与者。
+离线/不活跃不清空玩家位置，也不能仅因位置相同就自动给离线玩家现场见证权限。
 
 # 7. Offline world behavior
 
-The world should feel as though time continues while the player is offline.
-
-However, a closed desktop application does NOT need to literally run a background AI process all night.
-
-The intended architecture is catch-up simulation:
-
-last known world state
-+
-elapsed real time
-+
-existing world plan
-+
-deterministic simulation
-+
-limited Director replanning when required
-
-= reconstructed world progression when the user returns.
-
-This must preserve the user experience:
-
-"I came back and things happened while I was away."
-
-without wasting API calls continuously while the app is closed.
-
----
+应用完全退出或电脑关机后，不执行本地模型任务。允许开机后台启动及关闭到托盘，但不是关机期间仍运行的云服务。
+世界时间恢复按既有 UTC bridge 与确定性调度处理；PAUSED 不推进，Busy/Available 不暂停世界时间。
+完整离线演化是长期 catch-up 愿景：旧状态、真实经过时间、已有计划和有限重规划；当前不补造未实际执行的活动、碰面、成果或公告。
+已批准的单角色离线补消息可使用离线区间内的剧情时间，但须保留真实创建/生成时间，见第 28 节。
 
 # 8. Proactive character contact
 
-The player has a state similar to:
-
-Busy
-Available
-
-When Busy:
-
-ordinary proactive character contact should not occur.
-
-The world itself may continue.
-
-When Available:
-
-the Director may decide that a character has a legitimate reason to contact the player.
-
-A proactive reason may initiate ONE unsolicited contact.
-
-If the player does not answer, the character must not repeatedly send:
-
-"Are you there?"
-"Hello?"
-"Why aren't you replying?"
-
-for the same reason.
-
-A materially new event may create a new reason.
-
-That is different.
-
-Multiple characters may proactively contact the player together.
-
-However, they MUST share the same purpose.
-
-Example:
-
-Nicole + Anby + Billy
-→ asking whether the player will accept one commission.
-
-Valid.
-
-Alice:
-asks to go shopping.
-
-Belle:
-asks about a Hollow emergency.
-
-Billy:
-asks about a movie.
-
-All sent together merely because the player became Available.
-
-Invalid.
-
-Multi-character proactive contact is represented conceptually as one Outreach Episode with one shared purpose.
-
----
+Busy 禁止普通主动联系；Available 仅允许有合法理由的联系。同理由只发一次，未回答不能反复催促。
+当前已批准的是第 28 节的有限单角色离线联系。
+多角色共享目的的 Outreach Episode 是原始愿景，生命周期和具体策略未冻结，不能从“继续推进”推断实现授权。
 
 # 9. Director API cost rule
 
-The Director MUST NOT use the LLM as a slot machine.
-
-Forbidden design:
-
-every 10 minutes
-→ call LLM
-→ "what happens now?"
-
-every character movement
-→ call LLM
-
-every possible encounter
-→ call LLM
-
-Instead:
-
-one Director planning call should solve many related planning questions for a Planning Window.
-
-A Director Plan may contain:
-
-- character activity blocks;
-- encounter opportunities;
-- relationship opportunities;
-- event candidates;
-- story hooks;
-- proactive contact opportunities;
-- contingencies.
-
-Candidates enter an Event Reservoir.
-
-Deterministic code later decides whether each candidate is:
-
-activated;
-deferred;
-cancelled;
-expired.
-
-Normal selection should consume zero LLM tokens.
-
-Replanning occurs only when:
-
-- the planning window is nearly exhausted; or
-- enough important assumptions have changed that a meaningful portion of the plan is invalid.
-
-Do NOT trigger a new LLM call for every minor deviation.
-
----
+一次批量规划覆盖多个相关候选；之后确定性选择/执行不逐移动、逐碰面或定时抽签调用模型。
+候选激活、延期、取消、过期与重规划遵守已批准窗口和阈值。普通偏差不得触发额外重规划。
+日常批次与世界动态池是不同任务，不能混用其 50% 失效和 80% 已处理规则。
 
 # 10. AI World Builder and Character Builder
 
-dreamtalk must eventually allow ordinary users to type things such as:
-
-"Create the Zenless Zone Zero world."
-
-or:
-
-"Create Hoshimi Miyabi from Zenless Zone Zero."
-
-The product should research relevant sources and construct usable world/character data automatically.
-
-The architecture is:
-
-Research
-→ Evidence
-→ Claims
-→ Conflict Detection
-→ Draft
-→ Preview
-→ User Confirmation
-→ Commit
-
-Never allow web research output to silently become canonical world truth.
-
-Sources and provenance matter.
-
-The system should eventually support updating a world when new source material appears.
-
----
+资料构建遵循 Research → Evidence → Claims/Conflicts → Draft → Preview → User Confirmation → Commit。
+手动创建/编辑、文件导入、联网摘要辅助生成角色卡/世界书已实现；网络结果和创作建议不能静默变为 canonical 世界事实。
+完整可运行世界自动构建、全文核验与新来源持续更新仍是未完成愿景，不重复开发已有资料生成流程。
 
 # 11. SillyTavern relationship
 
-SillyTavern is:
-
-- a reference product;
-- a source of useful UX lessons;
-- a compatible ecosystem target.
-
-The user no longer requires dreamtalk to implement every capability independently.
-Prefer a mature existing component when it fits the product, reduces maintenance,
-and preserves the Core's authority and privacy boundaries. SillyTavern may be
-evaluated as a reusable component or integration, not only as inspiration.
-
-We may independently implement compatibility with:
-
-- Character Card V2;
-- Character Card V3;
-- PNG/JSON cards;
-- Lorebooks.
-
-The current Apache-2.0 repository and SillyTavern's AGPL-3.0 code have different
-licensing obligations. Do not paste or incorporate its implementation into this
-repository without a concrete license and distribution decision. Reusing its
-public formats, documented behavior, or a separately integrated runtime is a
-different engineering choice; evaluate each against maintenance, licensing,
-security, and the existing World Kernel/knowledge invariants. See
-[ADR-0001](docs/architecture/ADR/0001_reuse_mature_projects.md).
-
----
+SillyTavern 是参考产品、兼容生态与可评估的成熟集成；不要求所有功能独立实现。
+角色卡 V2/V3、PNG/JSON、Lorebook 的格式兼容不代表完整酒馆行为兼容。
+本仓库 Apache-2.0 与酒馆 AGPL-3.0 义务不同；没有具体许可/分发决定不得粘贴或并入其源码。
+公开格式、文档行为、独立 runtime 集成应分别评估许可、维护、安全及 Kernel/知识边界。见 [ADR-0001](docs/architecture/ADR/0001_reuse_mature_projects.md)。
 
 # 12. Current architectural direction
 
-The project currently follows:
-
-React + TypeScript
-        ↓
-versioned HTTP/WebSocket API
-        ↓
-Python dreamtalk Core
-        ↓
-Application / Domain / Kernel
-        ↓
-Persistence
-
-Desktop:
-
-Tauri v2 Rust host
-→ supervises Python Core
-→ provides OS integration
-
-Desktop storage baseline:
-
-SQLite WAL + FTS5
-
-Future server/cloud baseline:
-
-PostgreSQL + pgvector
-
-Optional later deployment/benchmark profile:
-
-MySQL InnoDB + Qdrant
-Optional Redis only when distributed execution actually requires it.
-
-Do not introduce infrastructure because it looks impressive.
-
-Every dependency must solve an actual problem.
-
----
+React + TypeScript + Vite → versioned HTTP/WebSocket → Python/FastAPI Core → Application/Domain/Kernel → Persistence。
+Tauri v2 Rust host 负责 Core 监督和 OS 集成；桌面底座为 SQLite WAL + FTS5，Alembic 是唯一迁移 authority。
+PostgreSQL + pgvector 是未来服务端方向；MySQL InnoDB + Qdrant 是可选后续部署/基准方案，Redis 仅在真实分布式需求出现时评估。
+当前本地检索复用 jieba、FTS5、FastEmbed/BGE、NumPy 与 DiskCache；不要因愿景引入尚无实际需要的服务。
 
 # 13. Engineering philosophy
 
-The user does NOT want:
-
-"good enough."
-
-The user wants:
-
-"a strong final implementation."
-
-However, "final quality" does NOT mean unnecessary complexity.
-
-The desired standard is:
-
-correct
-maintainable
-explainable
-testable
-product-grade
-
-NOT:
-
-maximum number of libraries;
-maximum number of abstractions;
-maximum number of microservices;
-maximum number of files.
-
-Prefer the simplest architecture that satisfies the final product requirements.
-
----
+目标是正确、可维护、可解释、可验证、可交付；最终质量不等于最大依赖数或最多抽象层。
+选择满足已确认需求的简单方案，保留干净的必要扩展点，不做可抛弃架构或占位生产行为。
 
 # 14. User's working style
 
-The user has authorized autonomous progress toward a usable complete product and does not want to provide a separate prompt for every implementation step. Complete concrete product slices and continue other authorized, well-defined work; do not stop merely because one historical stage/task ended.
-
-The user delegates routine technical and component choices to the engineer and judges the achieved product effect. Choose and proceed within the confirmed product/Kernel/knowledge/budget boundaries; do not repeatedly request component-selection approval. Investigate mature implementations before each new feature and include the reuse decision in the completion report.
-
-An explicit current task boundary still applies. A request to only answer, only edit documentation, or stop after a particular task must be respected.
-
-For local uncertainty or a difficult implementation branch: record confirmed facts, the unresolved point and useful evidence; skip that branch and continue independent work that is clear. Do not guess unresolved semantics or repeatedly attack a blocked path.
-
-Stop the dependent work and report when a genuinely new product direction, public contract, persistence, security or financial decision requires the user's judgment, or a frozen architectural boundary would need to change. Ordinary implementation choices are the engineer's responsibility.
-
-Do not implement speculative features or placeholder production behavior that violates frozen architecture. Prioritize usable chat, real settings and configuration effects over extra architecture for its own sake.
-
-The user values:
-
-- understanding why something exists;
-- clear progress;
-- verifiable completion criteria;
-- avoiding unnecessary detours;
-- high final quality;
-- not wasting time repeatedly trying a broken path.
-
-Every technology that enters the final resume should be explainable.
-
-Therefore architecture should remain understandable, not artificially complicated.
-
----
+用户允许自主推进明确需求，把普通技术和组件选择交给工程端，不要求每一步再发提示。
+明确的“只讨论”“只文档”“先不修改代码”等当前任务边界仍优先。不能因历史阶段结束而停止后续已授权工作。
+局部不确定：记录事实、证据和未决点，继续独立明确工作；仅真正新的产品、契约、持久化、安全或财务选择未定义时停下依赖分支。
+不反复询问已作出的决定；缺少验收不能被说成全部完成，也不阻止无依赖的已授权工作。
 
 # 15. CRITICAL: Anti-stuck / anti-loop policy
 
-Codex MUST NOT repeatedly attack the same failing operation without new evidence.
-
-This is a hard project rule.
-
-## Same-action retry rule
-
-If exactly the same action fails twice for substantially the same reason:
-
-STOP repeating it.
-
-Do one of:
-
-- inspect logs/state;
-- use a different method;
-- reduce the problem;
-- verify assumptions;
-- report the blocker.
-
-A third identical retry is only justified if NEW evidence indicates the previous failure condition has changed.
-
-"Maybe it works this time" is not evidence.
-
-## GUI failure rule
-
-GUI automation is a last-mile tool, not a debugging strategy.
-
-If:
-
-- a window becomes unresponsive;
-- a button does not respond;
-- a GUI process hangs;
-- an installer/UI step behaves unexpectedly;
-
-do NOT repeatedly click it.
-
-Prefer:
-
-CLI
-logs
-process inspection
-configuration files
-direct API calls
-build output
-
-whenever equivalent verification is possible.
-
-Do not spend large amounts of task time fighting a frozen graphical window.
-
-## Blocker timebox
-
-If one implementation/debugging branch produces no meaningful new information for approximately 10 minutes:
-
-stop that branch and reassess.
-
-Ask:
-
-"What assumption am I currently making?"
-
-"What evidence would distinguish the likely causes?"
-
-"What cheaper diagnostic can I run?"
-
-If the same local blocker still cannot be resolved after approximately 20 minutes of focused diagnosis, stop that branch, record:
-
-- what is blocked;
-- exact error;
-- what was tried;
-- evidence collected;
-- likely causes;
-- recommended next action.
-
-Then continue independent, well-defined work. Ask the user only if their decision or intervention is necessary. These timeboxes are limits, not permission to keep hammering a problem that should already have been set aside.
-
-## Long-running command rule
-
-A legitimately long build command is different from being stuck.
-
-Long commands are allowed when:
-
-- the process is producing observable progress;
-- CPU/disk/network activity or logs indicate work;
-- its expected duration is reasonable.
-
-A silent/unresponsive process without evidence of progress must not be assumed healthy indefinitely.
-
-## Failure escalation
-
-When blocked, use this sequence:
-
-1. inspect the existing failure evidence;
-2. capture exact evidence;
-3. inspect logs/state;
-4. form a hypothesis;
-5. check the hypothesis with the cheapest authorized inspection or build step;
-6. try one alternative approach;
-7. if still blocked, record and skip the branch; report any required user decision or intervention.
-
-Never use:
-
-retry
-retry
-retry
-retry
-retry
-
-as a debugging method.
-
----
+- 同操作因同原因失败两次后停止重复；第三次须有条件已改变的新证据。
+- GUI 是最后一公里工具；无响应时不反复点击，优先日志、源码、进程/配置与授权范围内的 CLI/API。
+- 一条分支约 10 分钟无新信息就重评；约 20 分钟仍无解则记录错误、尝试、证据、假设和下一步，转向独立工作。
+- 有进度/日志的合理长构建不是卡住；沉默进程不得无限假定健康。
+- 顺序：读取失败证据 → 精确记录 → 核对状态 → 提出可区分假设 → 最便宜的已授权检查 → 一个替代方法 → 仍阻塞则记录/报告。
 
 # 16. Tool discipline
 
-Before using a GUI, ask whether CLI/API/file inspection can accomplish the same goal.
-
-Prefer deterministic tools.
-
-Examples:
-
-Prefer:
-git status/diff/log
-rg and source/configuration inspection
-logs
-process status
-filesystem inspection
-build output
-
-over:
-
-opening applications repeatedly
-clicking buttons repeatedly
-waiting for UI animations
-guessing whether a window "probably worked"
-
-Do not write or run automated tests or smoke checks unless the user explicitly requests them again; see section 20. GUI inspection is not evidence that unperformed acceptance tests passed.
-
----
+优先 `rg`、Git、源码、配置和构建输出；读取日志只保留必要脱敏证据，不输出密钥、bearer 或完整私聊。
+检查实际文件路径后再执行，不凭交接中旧路径猜文件。正式仓库、临时工作目录、用户 app-data 与产物必须分清。
+GUI/直接 API 不绕过第 20 节；静态核对不代表未执行的运行验收通过。
 
 # 17. Scope discipline
 
-Respect the current explicit task boundary. Historical task instructions to stop after C-003, C-004, etc. do not override the user's later authorization to continue the product autonomously.
-
-When the active request is to continue the project, complete the next useful, sufficiently specified slice. Do not ask for another stage prompt merely to proceed.
-
-If a future feature needs an interface now, create the smallest clean seam required.
-
-Do NOT implement the future feature itself.
-
-If you discover something that should be changed later:
-
-record it under:
-
-Future consideration
-
-or:
-
-Unresolved issue
-
-Do not expand a narrowly scoped current task. Under ongoing product authorization, recorded future work may be taken up when its requirements are clear and it advances the agreed product.
-
----
+“继续推进”应完成下一个已确认、足够明确的实际切片，不以历史 C-003/C-004 阶段停点要求再下指令。
+未来考虑与未决问题只是记录，不自动变成需求或授权；必要扩展点可以小范围建设，不顺手实现未批准功能。
+尊重窄任务范围，不夹带新玩法、重构或系统改动。
 
 # 18. No architecture invention without permission
 
-If an architectural decision has already been frozen:
-
-follow it.
-
-If a new problem requires changing a frozen architectural decision:
-
-STOP and report.
-
-Do not silently decide:
-
-"Redis would be easier so I added Redis."
-
-"LangGraph simplifies this so I rewrote the runtime."
-
-"Electron was easier so I replaced Tauri."
-
-"MongoDB fits this object better so I added MongoDB."
-
-These are architectural decisions and require review.
-
----
+遵守冻结架构。改变 Tauri、数据库、Kernel authority、知识隔离或引入新运行框架等需具体方案与用户决定。
+不能因 Redis、LangGraph、Electron 或 MongoDB “更方便”就更换已冻结方向；普通不改变边界的实现选择仍由工程端决定。
 
 # 19. Dependencies
 
-Before adding a dependency, answer:
-
-1. What exact problem does it solve?
-2. Can existing dependencies solve it adequately?
-3. Is it required by the currently authorized product work?
-4. What maintenance/runtime cost does it introduce?
-
-If there is no strong answer:
-
-do not add it.
-
----
+新依赖必须说明精确问题、现有组件是否足够、是否属于当前授权、维护/运行成本和许可。
+没有强理由就不引入；复用成熟方案不等于复制整套框架。
 
 # 20. Current verification responsibility
 
-The user explicitly assigned testing and acceptance to themselves. Until they change this instruction:
+用户负责测试与最终验收，直到用户明确改变：
 
-- Do not add or run automated tests, test suites, browser/desktop smoke checks, or live-provider smoke calls.
-- Preserve existing tests and CI; do not delete or weaken them to hide a failure.
-- Source inspection, Git diff review, formatting/lint/type checks and necessary compilation/packaging remain allowed. Report them as such, not as runtime acceptance.
-- Inspect build scripts for embedded tests. Use the existing `--build-only` portable-packaging option when producing an artifact without smoke checks.
-- Do not make paid model calls or probe API credentials merely to validate configuration without explicit authorization.
-- Clearly distinguish implemented code, successful compilation, historical test evidence and user-verified behavior. A build does not prove that chat, settings or lifecycle works.
+- 不添加或运行自动化测试、测试套件、浏览器/桌面 smoke、live-provider smoke。
+- 保留既有测试和 CI，不通过删除/弱化断言掩盖问题。
+- 允许源码、Git 差异、格式/lint/type、文档链接和必要编译/打包核对；如实标成这些检查。
+- 构建前检查脚本是否内含测试；便携包用既有 `--build-only`，不隐式 smoke。
+- 未获具体授权，不为验证配置调用付费模型或探测凭据。
+- 历史单次临时数据库/冷启动/只读诊断许可不扩大复用；需要新的诊断按具体范围处理。
+- 构建成功、产物存在、旧测试记录不证明当前聊天、设置、迁移或生命周期验收通过。
 
-Existing Kernel, knowledge-isolation, idempotency and budget invariants remain mandatory even while automated testing is delegated to the user.
-
----
+Kernel、知识隔离、幂等、预算不变量仍必须遵守。
 
 # 21. Completion reports
 
-At the end of a task report:
-
-1. 本轮做了什么 — concrete changes, why they help, actual checks/build results, and commit/status when applicable.
-2. 接下来要做什么 — the next useful work in priority order.
-3. 疑问和建议 — unresolved decisions, risks or required user actions; say none when there are none.
-
-Keep routine reports concise. An update is not a request to end ongoing authorized development or to ask for another prompt. Follow a current request for a different report format when one is given.
-
-Do NOT hide:
-
-- skipped tests;
-- environment limitations;
-- partially verified behavior;
-- warnings;
-- failures.
-
-If something was not verified, explicitly state that it was not verified.
-
----
+每轮汇报：**本轮做了什么 / 接下来要做什么 / 疑问和建议**；需要时列已完成、未完成、待用户验收。
+说明具体变化、原因、实际检查、提交/工作区状态；没有必需疑问就直说，无需强造问题。
+不隐藏未执行检查、警告、失败或环境限制。不把建议当批准需求，不把旧切片的验收扩大成最新版整体验收。
+例行汇报不意味着停止持续授权工作；当前用户指定的报告形式优先。
 
 # 22. Stop conditions
 
-STOP and ask/report instead of continuing when:
-
-- the task contradicts frozen architecture;
-- an essential new product, public-contract, persistence, security or financial choice is genuinely undefined;
-- a narrowly scoped current task cannot be completed without materially different work;
-- user data or Git history may be destroyed;
-- a migration may irreversibly modify real user data;
-- secrets/credentials would need unsafe handling;
-- the user must intervene to unblock the remaining work.
-
-Stop the affected branch; continue unrelated authorized work where safe. A local technical blocker or missing user acceptance is not permission to guess, falsely claim success, or spend two hours blindly retrying.
-
----
-
-# Final rule
-
-Optimize for:
-
-correct progress per unit time
-
-not:
-
-visible activity.
-
-Being busy is not the goal.
-
-Moving dreamtalk toward the finished product is the goal.
----
+仅停止受影响分支并报告/取得必要决定：违反冻结架构；真正新的关键产品/契约/持久化/安全/财务选择未定义；窄任务需实质扩展；可能毁损用户数据/Git 历史；不可逆真实存档迁移；不安全凭据处理；必须用户介入才能继续。
+继续安全独立工作。不能猜未定义语义、假报成功或无限重试。
 
 # 23. Confirmed product experience and release boundary
 
-The following later user decisions apply alongside the architecture above; details are in [PRODUCT.md](PRODUCT.md), [PRODUCT_SPEC.md](docs/product/PRODUCT_SPEC.md) and [CHAT_MODEL.md](docs/architecture/CHAT_MODEL.md):
-
-- PC-first, simple Chinese interface with four bottom tabs in order: 聊天 / 通讯录 / 设置 / 我. Use the available desktop width and familiar WeChat-style navigation, not a phone-sized frame.
-- Create/select a World before importing cards/books. Contacts and conversations are world-scoped; confirmed updates affect only the selected World. A runtime Character is created/reused on first opening chat, not by importing its card.
-- Bind one local Player per World; a newly entered World starts the Player at 家. “可用 / 忙碌” describes unsolicited-contact availability, not network connectivity.
-- Keep general self-description and world-specific identity separate; world-specific identity takes precedence. Put player-known world events at the top of the chat list as topics.
-- Public world background may be shared with all characters. Lorebook entries remain hidden by default until explicitly exposed in that World; imported hidden plot material must not leak into prompts.
-- Persisted group messages are visible to every fixed member, including silent members. Exposure is not WorldTruth, CharacterBelief or automatic EpisodicMemory.
-- Use an independent group speaker scheduler based on accepted personas and shared dialogue. A unique `@` selects the next speaker; the world Director remains the batch planner.
-- A player message starts one bounded turn. Input plus output for selection, every character, retry and fallback share the hard Token ceiling. Before every physical call, require a trustworthy conservative reservation; stop early rather than guess or exceed it.
-- Validated runtime dialogue sends directly. Persistent authored/generated content still requires Draft → Preview → Commit.
-- Prefer mature projects/components where they fit, subject to section 11; the user no longer requires independent implementation.
-- The repository is intended for GitHub open source under Apache-2.0. Do not push or publish before the user completes final acceptance and explicitly approves it. Keep `D:\LivingWorld` and existing app-data/protocol identifiers until a separately approved migration.
-
-This section and sections 14–22 replace the former blanket instruction to halt on every uncertainty and the former automatic-testing/stage-by-stage-stop workflow.
+- PC 优先，中文四入口顺序：聊天 / 通讯录 / 设置 / 我；熟悉清晰的通信布局，充分利用宽度。
+- 启动先世界书架：至少 12 个逻辑书位、`max(12, 世界数 + 1)`、空白书创建、循环横排/直接拖动、悬停轻抽/点击抽出；预览不进入世界或调用模型。
+- 文字正面/书脊同标题；本地正面/侧面/背面图片封面与裁剪已实现，图片标题可留空、透明标题底、保留 dreamtalk 标识。
+- 世界书创建/导入/编辑在书架；角色卡创建/导入/编辑在通讯录；模型/活动/后台等在设置手册；通用/世界身份在“我”。详见 [PRODUCT.md](PRODUCT.md)。
+- 先创建/选择 World，再确认卡/书；每世界内容独立。卡片定义不等于运行 Character，首次打开聊天才创建/复用稳定角色身份。
+- 每世界绑定一个本地 Player，初次从家进入。通用与世界专属身份分开，后者优先；可用/忙碌仅为主动联系许可。
+- 世界事件入口置顶。背景默认隐藏，当前世界逐条公共授权后仍须满足触发/容量条件；修改内容/条件的条目与文件替换须重新确认。界面编辑保留未改原条目的范围，不能扩大到新条目。
+- 固定群成员看到持久群消息，包括未发言成员；通信不自动写 Truth/Belief/EpisodicMemory。
+- 群聊选人器独立于 Director；唯一 `@` 指定下一位，无 `@` 也可选人。
+- 一个生成尝试内，所有选人、角色发言、物理 retry/fallback 的输入+输出共享硬 Token ceiling。每次调用前必须有可信保守预留，不猜上界。
+- 校验后的运行时台词直接发送；持久创作内容仍 Draft → Preview → Commit。第 25 节是同一原消息人工恢复采用新额度的有限例外。
+- DeepSeek 是当前优先适配方向，已有其他供应商 adapter 保留；实现存在不等于任意模型/代理已兼容验收。未知容量在高级设置明确核对，不按品牌名猜 model ID。
+- 仓库为 Apache-2.0，GitHub 发布/push 须用户完成最终验收并明确批准。可按授权本地保存，不擅自发布。
+- 保持 `D:\LivingWorld`、`app.livingworld.desktop`、app-data/协议/旧 localStorage 键；更改需另有批准迁移。
 
 # 24. Approved Director runtime boundary (2026-09-29)
 
-The user explicitly approved the recommended [Director proposal](docs/proposals/2026-09-29-director-runtime.md): per-world default off, first enable consents to background model usage, then compliant runtime batches are accepted automatically. Each window is six hours of WorldTime; replan at window end or when at least two candidates and at least half the original batch are invalid. Failed/interrupted/empty plans require an explicit new request, never an automatic provider replay.
-
-This resolves the runtime WorldPlan part of P-16 separately from authored cards/books and reviewed conversation summaries. DIRECTOR may propose only existing placed Characters' typed routine activities/movement, through Kernel consent, candidate, revision, location and occupancy checks; it never moves Player or writes final dialogue, private knowledge or relationships. Closing prevents new work/late result activation; already admitted provider work may charge. PAUSED does not execute candidates or admit a new plan. Outreach purpose/episode policy remains a later concrete decision. This supersedes the older C-006B Director prohibition only for this approved routine action.
-
+用户批准 [Director 方案](docs/proposals/2026-09-29-director-runtime.md)：每世界默认关闭，首次开启同意后台费用，之后合规批次自动接纳。
+每批 6 小时 WorldTime；到窗口结束或原批至少 2 条且达到 50% 日常候选失效才重规划。失败/中断/空计划须显式新请求，不自动重放 provider。
+Director 只提案已有放置角色的日常活动/移动；第 26 节有限扩展问候/共同休闲。Kernel 核验授权、candidate、revision、地点和占用；不移动 Player、写最终台词、私密知识或关系。
+暂停不接纳/执行；关闭停止新任务和迟到结果激活，在途已接纳调用可能收费。已开始日常仍按已批准生命周期处理。
+用户已授权当前世界已确认且逐条公共的世界书标题/正文参与日常规划；隐藏条目、私聊和私人记忆不发送。修改在下一常规批次生效，不逐编辑重规划。
 
 # 25. Approved manual reply recovery (2026-10-03)
 
-The user explicitly approved an independent paid generation attempt after a failed
-reply. It is limited to the latest player message with no persisted Character reply.
-The player explicitly confirms the current token ceiling and model usage; each new
-attempt has its own one-time claim and shares that attempt's ceiling across selection,
-retries/fallbacks and all speakers. The original message is not duplicated; original
-turns, usage and claims remain durable and are never reset. Running or unknown results
-cannot be replayed. A pending attempt may be manually dispatched using its saved ceiling.
-Only a recorded terminal validation failure or a known interrupted local execution may
-permit a new attempt; old untracked claimed turns remain unknown. No startup, refresh or
-background process automatically invokes the provider for reply recovery. This narrowly supersedes the
-single-ceiling-per-original-message clause in section 23 for this explicit new attempt.
+用户批准 [独立人工恢复尝试](docs/proposals/2026-10-03-reply-recovery.md)：仅最后一条尚无持久角色回复的玩家消息。
+点击时明确当前额度/费用；新 attempt 有独立一次性 claim 与额度，内部选人/多角色/retry/fallback 仍共用该额度。
+原消息不复制，原 turn、用量、claim 不重置；pending 可人工按保存额度派发。
+仅可靠记录的终端校验失败或本地中断可新建尝试；running、unknown、旧版无执行记录的 claimed 结果和部分群回复禁止重放。
+启动、刷新、后台不自动恢复付费调用。此有限例外覆盖第 23 节“同一原消息”的原额度约束。
 
 # 26. Approved character encounters (2026-10-03)
 
-The user explicitly approved [the first encounter slice](docs/proposals/2026-10-03-character-encounters.md).
-This narrowly extends section 24: a per-world default-off opt-in permits the existing
-six-hour Director batch to propose optional brief greetings between two placed
-Characters. The initial ceiling of eight is superseded by the later user-approved pacing below. Kernel admits only actual co-presence during both planned, active rest/leisure
-intervals, with unchanged presence revisions, current consent/binding/plan and an unpaused
-world. The execution window is at most five minutes; the same pair meets at most once in
-six continuous hours of WorldTime. No missed/offline encounter is backfilled.
+用户批准 [相遇首版](docs/proposals/2026-10-03-character-encounters.md) 及后续慢节奏/持续同场去重：
 
-Kernel atomically records CharactersMet v1, event-time observations, candidate outcome and
-idempotent receipt. Only participants and authorized physically present observers know it;
-remote group membership grants no physical observation. Chat can recall a brief meeting,
-never infer unrecorded private dialogue, task results or relationship changes. Players are
-not moved. Disabling cancels pending encounters while preserving facts. New encounters use
-the next normal batch, do not invoke a per-encounter API and do not change the existing
-routine invalidation/replanning threshold or budget. No automated/runtime/provider testing
-authorization is implied; section 20 still applies.
-
-## Later approved encounter pacing (2026-10-04)
-
-The user accepted slower encounters and continuous co-presence deduplication. Each
-accepted plan may propose and execute at most two ordinary brief greetings (zero is
-valid). Kernel admission also limits each Character to one first recorded counterpart
-in a rolling 24 hours of WorldTime; both participants must qualify. Previously greeted
-pairs do not spend the new-counterpart allowance, but still obey the per-plan ceiling,
-six-hour pair cooldown and continuous co-presence rule. One ordinary greeting is recorded
-per uninterrupted same-location stay; an actual canonical departure by either participant
-is needed before considering another. Same-location routine/revision changes, restart and
-disable/re-enable do not reset the policy. Preserve old facts, stable UUIDs, consent and
-CharactersMet v1 replay. Rejected encounters neither invoke a replacement provider call
-nor contribute to routine invalidation/replanning. A brief greeting does not imply name
-exchange, formal introduction, shared task results or relationship progression. Existing
-independently authorized familiarity is preserved; formal new actions remain outside this
-slice. Reuse investigation and exact policy are in
-[encounter pacing research](docs/research/2026-10-04-encounter-pacing-reuse.md).
-Section 20's testing restrictions remain unchanged.
+- 每世界独立默认关闭，随既有 6 小时 Director 批次提案，允许 0 次；旧首版 8 次上限已被当前 2 次替代。
+- 两名角色仅在已计划、实际同地点且双方 active rest/leisure 期间碰面；Kernel 复核 consent/binding/current plan、presence revision 和未暂停世界。
+- 问候执行窗口至多 5 分钟，同对至少 6 小时 WorldTime 冷却；每角色滚动 24 小时至多一个首次记录的见面对象，双方都须符合。
+- 老对象重逢不消耗新增对象额度，但仍受批次上限、冷却和持续同场限制。一段持续同场只记一次，须一方 canonical 真正离开后再考虑。
+- 同地点换活动/revision、重启、开关不重置限制。拒绝候选不补模型调用，也不计作日常失效重规划。
+- Kernel 原子保存 CharactersMet v1、获准当事/现场观察、结果和幂等回执。只知开始不自动获得后续秘密；群成员不等于现场观察者。
+- 不倒填错过/离线相遇；不移动玩家、不编造私人谈话/任务成果/关系；既有独立熟识不被抹除。
+- 保留旧事实、稳定 ID 与 v1 replay；新准入策略不追溯否决旧事实。具体节奏见 [调查](docs/research/2026-10-04-encounter-pacing-reuse.md)。
 
 ## Later approved shared leisure lifecycle (2026-10-04)
 
-The user explicitly approved [the shared leisure proposal](docs/proposals/2026-10-04-shared-activities.md).
-This narrowly extends sections 24/26: an independent per-world default-off opt-in permits
-two previously actually greeted Characters to share 15–30 WorldTime minutes of overlapping
-same-kind rest/leisure routines at one existing location in the same Director batch. Ordinary
-greetings and shared starts together consume at most two social opportunities per plan;
-each Character may start one shared activity per rolling 24 hours, with a six-hour pair cooldown.
-Kernel atomically records SharedActivityStarted/Ended/Interrupted v1 with observations and
-receipts. Normal completion requires actual continuous presence/activity and elapsed duration;
-departure, routine change, withdrawal, plan replacement or unconfirmed offline continuity
-interrupts it. Missed completion is not backfilled. No per-activity API, Player movement,
-dialogue/task/asset results or relationship changes are authorized. Planning uses the existing
-approved input, not new encounter-history or private-memory export. Observation and chat
-isolation and limits remain unchanged. Section 20 testing responsibility still applies.
+用户批准 [共同休闲方案](docs/proposals/2026-10-04-shared-activities.md)：
 
+- 每世界独立默认关闭，已有自动活动/相遇且双方实际碰面过；同批在既有地点执行同类型 rest/leisure 15～30 世界分钟，允许 0 次。
+- 普通问候与共同开始合计每 plan 最多 2 次；每角色滚动 24 小时最多一次共同开始，同对 6 小时冷却。开始消耗名额，中断不补选。
+- Kernel 原子记录 SharedActivityStarted/Ended/Interrupted v1、Observation 和回执；完成要求真实持续地点/活动和时长。
+- 离开、换活动、撤回授权、计划替换或离线连续性未确认则中断，不倒填完成。暂停冻结 WorldTime。
+- 不逐活动调用 API、不移动 Player、不创建台词/任务/资产成果或关系。Director 沿现有批准输入，不新增相遇史/私密记忆外发。
+- 观察/聊天隔离、数量和费用边界保持；第 20 节仍适用。
 
 # 27. Confirmed scope correction (2026-10-04)
 
-The user explicitly rejected the unsolicited "shared commissions" direction and said
-"不要乱加东西". Only advance already confirmed product requirements and their fixes,
-reliability and usability improvements. A general "continue the project" instruction
-does not authorize inventing new product goals or treating the engineer's suggestions
-as the user's requirements. Discuss a genuinely new product direction before implementation.
+用户明确拒绝工程端自行提出的共同委托方向，并说“不要乱加东西”。
+只推进已确认需求及其修复、可靠性/体验改善；新产品方向先讨论，不把工程建议等同用户要求。
+共同委托、巡查、quest/reward/combat 不是默认下一步。历史交接、研究或领域对象有相关名称也不构成授权。
+普通技术选择仍交给工程端，不重新询问已有日常/相遇/共同休闲/记忆/事件/离线许可。
 
-Shared commissions, patrol missions, quest/reward/combat systems are not approved and
-must not be the default next step. References to these as future recommendations in
-older handoff/research documents are withdrawn recommendations, not authorization.
-Preserve the explicitly approved routine/encounter/shared-leisure boundaries and existing
-chat, memory, world-event and offline-contact requirements. Ordinary technical choices
-and well-defined improvements within those requirements remain delegated; do not ask
-the user to reconfirm settled decisions. Section 20 testing responsibility is unchanged.
+# 28. Confirmed memory, event and offline-contact boundaries
+
+## 聊天记忆与 RAG
+
+- 正常完整回复同次附带重要记忆，最多 4 条；优先已适配的官方 DeepSeek 路径，不逐句额外提取/裁判 API。合法普通台词可成功而没有新元数据，不自动补提取。
+- 长期条目按世界/玩家/角色/来源隔离，提示最多 16 条/8KiB；明确纠正写新版本，旧记录 superseded，停用/更新在检索前过滤，不隐式覆盖同主题。
+- 用户已明确授权其发起正常聊天时，相关原句从该角色参与过的当前世界/当前玩家私聊与固定成员群聊选择，最多 4 条/8KiB，发往已配置模型；不后台批量外发、不读取其他角色私聊/隐藏世界书、不额外 API。
+- 本地语义+词法检索属于有界 RAG；缓存/向量不扩大权限，不保证全历史或所有同义表达命中。检索失败回退关键词，原文依原存档授权。
+- 会话摘要仍需用户生成、预览确认，不自动反思/整合私密 EpisodicMemory。EpisodicMemory 必须有真实同世界 owner-authorized Observation，普通自述不能伪造证据。
+- 角色本人活动与已亲历经历分别有界（本人近期最多 6 条/6KiB，亲历召回最多 12 条/8KiB）；最新真实活动优先，旧开始已有获准终态时优先终态。时段结束不等于任务成果。
+
+## 两块世界事件
+
+- 聊天获知：正常回复同次至多 3 条具体活动/计划/传闻/邀请/变化，保留说话者、原句、获知时间与事件时间；不逐句额外 API，不把所有闲聊记成事件。
+- 世界动态：每世界独立默认关闭、首次同意后台费用，依已确认且可触发公共背景一次生成 10 条进入池，通常间隔 15～45 世界分钟随机逐条发布。
+- 用户手动标红未经历/绿已经历/灰跳过；最近批次已处理达到 8/10 自动补一次新批，旧未处理保留。标记不是物理成果或模型判定。
+- 无候选但未达阈值可显式新批；失败/中断不自动付费重放，暂停不发布，错过/过期不补造历史。与聊天额度/Director 分别治理，沿财务预算。
+- 公开发布只证明这条消息已发布，不认证传闻或角色自述为 WorldTruth。查看来源按会话/当前身份授权，不外发新增历史。
+
+## 单角色离线联系与桌面后台
+
+- 用户批准 [离线联系方案](docs/proposals/2026-09-29-offline-contact.md)：一个指定 World/Player 默认关闭，首次开启同意后台费用；默认真实离线阈值 6 小时，首次开启不立即生成。
+- 恢复最多一条自然问候/邀请；Busy/暂停跳过，同理由跨角色不重复，未回复上次主动消息不继续催促。
+- 仅使用已确认角色资料、公共背景和已有活动意图；不外发私聊正文、摘要、隐藏材料或私人记忆。已计划不表示已发生。
+- 剧情时间可在离线区间，真实创建/模型时间另存；失败/中断/未知结果不自动重放。
+- Tauri 原生托盘、single-instance、autostart 的隐藏启动可用；开机后程序运行才处理恢复。更换便携目录须用户在新版显式保存并更新自启动位置，启动时不擅自改注册。
+- 多人 Outreach、在线持续主动联系、完整离线活动重建未实现，不能扩大本次授权。
+
+# 29. Status maintenance and next-step discipline
+
+[PROJECT_STATUS.md](docs/PROJECT_STATUS.md) 是当前能力/验收/限制清单，[HANDOFF.md](HANDOFF.md) 是当前工作现场；历史原文在 [归档索引](docs/history/README.md)，不是待办。
+每次更新应修改当前条目而不是叠加多个“最新接续”；标明日期、基线、实际证据、范围与验收结论。
+已实现功能不得重新登记为新开发。若要改进，先给出具体源码缺口、用户反馈或测量证据，以及与已实现部分的差别。
+目前长期记忆和活动相关切片已交付代码/包，模型表现和新版运行仍有待用户验收项；不虚报完工或安排没有缺口依据的重复重构。
+
+# Final rule
+
+优化单位时间内的正确进展，而不是可见忙碌；让已确认的产品更接近交付，不以额外功能数量代表进度。
