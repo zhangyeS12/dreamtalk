@@ -52,6 +52,7 @@ export function ProfileEditor({ client, worldId, onDirtyChange }: {
   }
 
   return <section className="settings-section">
+    {!worldId && saved && <div className="profile-signature"><span className="profile-monogram" aria-hidden="true">{Array.from(saved.name.trim())[0] ?? "我"}</span><div><strong>{saved.name || "我的身份"}</strong><small>跨世界通用资料</small></div></div>}
     <div className="section-heading"><h2>{worldId ? "世界专属描述" : "通用个人信息"}</h2><p>{worldId ? "填写你在当前世界的身份。与通用描述冲突时，以这里为准。" : "例如你的称呼、性别和爱好，适用于所有世界。"}</p></div>
     {error && <div className="profile-feedback"><p role="alert">{error}</p><button type="button" className="text-action" disabled={saving} onClick={() => { if (!dirty || window.confirm("重新读取会放弃尚未保存的输入，是否继续？")) setReload(value => value + 1); }}>重新读取</button></div>}
     {saved ? <form className="profile-form" onSubmit={event => void save(event)}>

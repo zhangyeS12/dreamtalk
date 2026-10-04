@@ -1,7 +1,7 @@
 import { useConversationRead } from "./useChatUnread";
 import { ContextReferencePanel } from "./ContextReferencePanel";
 import { MessageTime } from "./MessageTime";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { Fragment, useEffect, useRef, useState, type FormEvent } from "react";
 import { CoreClient, CoreRequestError, type ChatReplyAvailability, type ChatConversation } from "@dreamtalk/api-client";
 import { useReplyStream } from "./useReplyStream";
 import { ReplyRecoveryControls } from "./ReplyRecoveryControls";
@@ -15,11 +15,15 @@ import { ConversationMemoryPanel } from "./ConversationMemoryPanel";
 import { submitChatOnEnter } from "./chatComposerKeys";
 import { chatTokenReservationFeedback, chatPhaseFeedback, chatReplyFailureFeedback, chatReplyStateFeedback, chatSaveFailureFeedback, type ChatRequestPhase } from "./chatFeedback";
 
+import { ConversationHeading, transcriptDay } from "./ConversationHeading";
+import { ContactAvatar } from "./ContactSocial";
+
 interface Props {
   client: CoreClient;
   worldId: string;
   playerId: string;
   conversation: ChatConversation;
+  avatarUrl?: string;
   tokenCeiling: number;
   suggestedDraft?: string | null;
   onSuggestionUsed?: () => void;
@@ -27,7 +31,7 @@ interface Props {
   onDirtyChange?: (dirty: boolean) => void;
 }
 
-export function ChatTranscript({ client, worldId, playerId, conversation, tokenCeiling, suggestedDraft, onSuggestionUsed, onBack, onDirtyChange }: Props) {
+export function ChatTranscript({ client, worldId, playerId, conversation, avatarUrl, tokenCeiling, suggestedDraft, onSuggestionUsed, onBack, onDirtyChange }: Props) {
   const draftInput = useRef<HTMLTextAreaElement>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [memoryOpen, setMemoryOpen] = useState(false);
@@ -158,11 +162,9 @@ export function ChatTranscript({ client, worldId, playerId, conversation, tokenC
   };
 
   return <section ref={thread} className="chat-thread" aria-label={`${conversation.character_name}的会话`}>
-    <div className="thread-heading">
-      <button type="button" className="text-action" onClick={onBack}>返回聊天</button>
-      <h2>{conversation.character_name}</h2><span>私聊</span>
-      <button type="button" className="text-action transcript-refresh" onClick={() => setLongMemoryOpen(true)}>长期记忆</button><button type="button" className="text-action transcript-refresh" onClick={() => setMemoryOpen(true)}>会话摘要</button><button type="button" className="text-action transcript-refresh" onClick={() => setHistoryOpen(true)}>聊天回忆</button><button type="button" className="text-action transcript-refresh" onClick={() => setRefresh(value => value + 1)}>刷新记录</button>
-    </div>
+    <ConversationHeading title={conversation.character_name} kind="私聊" portrait={<ContactAvatar name={conversation.character_name} url={avatarUrl} />}
+      onBack={onBack} onRefresh={() => setRefresh(value => value + 1)} onLongMemory={() => setLongMemoryOpen(true)}
+      onMemory={() => setMemoryOpen(true)} onHistory={() => setHistoryOpen(true)} />
     {referenceTurn ? <ContextReferencePanel key={`${worldId}:${conversation.conversation_id}:${referenceTurn}`} client={client} worldId={worldId} conversationId={conversation.conversation_id} turnId={referenceTurn} names={new Map([[conversation.character_id, conversation.character_name]])} onClose={() => setReferenceTurn(null)} /> : null}
     {longMemoryOpen ? <LongChatMemoryPanel client={client} worldId={worldId} conversationId={conversation.conversation_id} characters={[{ character_id: conversation.character_id, character_name: conversation.character_name }]} onClose={() => setLongMemoryOpen(false)} /> : null}
     {memoryOpen ? <ConversationMemoryPanel client={client} worldId={worldId} conversationId={conversation.conversation_id} senderName={message => message.sender_kind === "player" && message.sender_id === playerId ? "我" : conversation.character_name} canGenerate={!sending && !pendingSend} onClose={() => setMemoryOpen(false)} /> : null}
@@ -178,16 +180,19 @@ export function ChatTranscript({ client, worldId, playerId, conversation, tokenC
     {readReceipt.error ? <p className="thread-hint" role="alert">消息已显示，但未能保存已读状态。<button type="button" className="text-action" onClick={readReceipt.retry}>重新确认已读</button></p> : null}
     {messages === null ? failed ? null : <p className="thread-hint">正在读取消息…</p>
         : messages.length === 0 ? <div className="conversation-placeholder"><h2>还没有消息</h2><p>发一条消息，开始与角色聊天。</p></div>
-          : <>{hasOlder ? <div className="transcript-history"><button type="button" className="text-action" disabled={loadingOlder} onClick={() => void loadOlder(beforePrepend)}>{loadingOlder ? "正在加载…" : "加载更早消息"}</button></div> : null}<ol className="message-list">{messages.map(message => {
+          : <>{hasOlder ? <div className="transcript-history"><button type="button" className="text-action" disabled={loadingOlder} onClick={() => void loadOlder(beforePrepend)}>{loadingOlder ? "正在加载…" : "加载更早消息"}</button></div> : null}<ol className="message-list">{messages.map((message, index) => {
             const own = message.sender_kind === "player" && message.sender_id === playerId;
-            return <li key={message.message_id} data-message-id={message.message_id} className={`message-row ${own ? "own" : ""}`}>
+            const day = transcriptDay(message.story_sent_at_utc ?? message.created_at_utc);
+            const previous = messages[index - 1];
+            return <Fragment key={message.message_id}>{!previous || transcriptDay(previous.story_sent_at_utc ?? previous.created_at_utc) !== day ? <li className="message-day">{day}</li> : null}<li data-message-id={message.message_id} className={`message-row ${own ? "own" : ""}`}>
+              {!own && <ContactAvatar name={conversation.character_name} url={avatarUrl} className="message-portrait" />}
               <div className="message-bubble">
                 <span className="message-sender">{own ? "我" : conversation.character_name}</span>
                 <ChatMessageBody text={message.text} />
                 <MessageTime message={message} />{!own ? <button type="button" className="text-action message-reference" onClick={() => setReferenceTurn(message.turn_id)}>本次参考内容</button> : null}
               </div>
-            </li>;
-          })}{visibleStreamDraft ? <StreamingReplyBubble name={conversation.character_name} text={visibleStreamDraft.text} /> : null}</ol></>}
+            </li></Fragment>;
+          })}{visibleStreamDraft ? <StreamingReplyBubble name={conversation.character_name} avatarUrl={avatarUrl} text={visibleStreamDraft.text} /> : null}</ol></>}
     <form className="chat-composer" onSubmit={event => void send(event)}>
       {phase || feedback ? <p role="status" aria-live="polite" className="chat-feedback">{(phase === "replying" && stream.stage === "preparing" ? "消息已保存，正在准备角色回复…" : chatPhaseFeedback(phase, "direct")) || feedback}</p> : null}
       <ReplyRecoveryControls client={client} worldId={worldId} conversationId={conversation.conversation_id} sourceTurnId={latestPlayerMessage?.turn_id} refresh={refresh} tokenCeiling={tokenCeiling} blocked={!available || phase !== null || !!pendingSend} onGenerate={generateSavedReply} onBusyChange={setRecoveryBusy} />

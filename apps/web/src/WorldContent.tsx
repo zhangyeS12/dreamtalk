@@ -13,8 +13,9 @@ function originalCardGreeting(authored: Record<string, unknown>): string | null 
 
 type ExposureFeedback = { entryId: string; message: string; error: boolean };
 
-export function ContentDetails({ item, onCommonChange, changingEntry, commonDisabled = false, exposureFeedback, onCommonRefresh }: {
+export function ContentDetails({ item, onCommonChange, changingEntry, commonDisabled = false, exposureFeedback, onCommonRefresh, hideCharacterTitle = false }: {
   item: WorldContentItem;
+  hideCharacterTitle?: boolean;
   onCommonChange?: (entryId: string, common: boolean) => void;
   changingEntry?: string | null;
   commonDisabled?: boolean; exposureFeedback?: ExposureFeedback | null; onCommonRefresh?: () => void;
@@ -22,7 +23,7 @@ export function ContentDetails({ item, onCommonChange, changingEntry, commonDisa
   return <div className="content-details">
     {item.characters.map(character => {
       const greeting = originalCardGreeting(character.authored_instructions);
-      return <section key={character.id}><h2>{character.name}</h2>{([
+      return <section key={character.id}>{!hideCharacterTitle && <h2>{character.name}</h2>}{([
       ["角色描述", character.description], ["性格", character.personality],
       ["背景", character.background], ["情境", character.scenario],
       ["说话方式", character.speech_guidance], ["创作者备注", character.creator_notes],
@@ -227,14 +228,19 @@ export function WorldContacts({ client, worldId, onSettings, onIdentity, onOpenC
     if (file.size > 10 * 1024 * 1024) { setSocialError("头像不能超过 10 MB。"); return; }
     await change(async () => { const image = await client.uploadCoverImage(worldId, file); await client.setCharacterAvatar(worldId, selectedRoot, image.digest); });
   };
-  return <div className={`chat-workspace contacts-workspace ${selected && mode === "profile" ? "thread-open" : ""}`}><aside className="conversation-list" aria-label="当前世界角色">
+  return <div className={`chat-workspace contacts-workspace ${selected && mode === "profile" ? "thread-open" : ""}`}><aside className="conversation-list" aria-label="当前世界角色"><div className="directory-heading"><strong>角色档案</strong><small>{loading ? "读取中" : failed ? "读取未完成" : `${characters.length} 位角色`}</small></div>
     {loading ? <p className="thread-hint">正在读取角色…</p> : failed ? <><p className="app-alert" role="alert">无法读取通讯录或阵营。</p><button type="button" onClick={() => setReload(value => value + 1)}>重试读取</button></> : characters.length === 0 ? <div className="empty-state"><h2>当前世界还没有角色</h2><p>在这里新建、联网生成或导入角色卡，确认后加入当前世界。</p><button className="text-action" onClick={onSettings}>添加角色卡</button></div> : characters.map(item => { const person = social?.characters.find(value => value.current_import_id === item.import_id); return <button key={item.import_id} className={`conversation-row ${selected?.import_id === item.import_id ? "selected" : ""}`} onClick={() => { setSelected(item); setGraphRoot(person?.root_import_id ?? null); }}><ContactAvatar name={item.characters[0].name} url={urls[person?.avatar_digest ?? ""]} /><span className="row-copy"><strong>{item.characters[0].name}</strong><small>查看角色资料与阵营</small></span></button>; })}
   </aside><div className="conversation-detail"><div className="contacts-view-switch"><button type="button" className="secondary-button" aria-pressed={mode === "profile"} onClick={() => setMode("profile")}>角色资料</button><button type="button" className="secondary-button" aria-pressed={mode === "factions"} onClick={() => setMode("factions")}>编辑阵营</button><button type="button" className="secondary-button" aria-pressed={mode === "graph"} onClick={() => setMode("graph")}>人物关系网</button><button type="button" className="text-action" disabled={socialBusy || loading} onClick={() => setReload(value => value + 1)}>刷新</button></div>
     {socialError && <p className="app-alert" role="alert">{socialError}</p>}
     {mode === "graph" && social ? <SocialGraph visible={visible} social={social} urls={urls} selected={graphRoot} onSelect={root => { setGraphRoot(root); setSelected(items.find(item => item.import_id === social.characters.find(person => person.root_import_id === root)?.current_import_id) ?? null); }} onChat={importId => void onOpenChat(importId)} canChat={canOpenChat} openingChat={openingChat} />
       : mode === "factions" && social ? <FactionManager social={social} selectedRoot={selectedRoot} busy={socialBusy} onSelect={root => { setSelected(items.find(item => item.import_id === social.characters.find(person => person.root_import_id === root)?.current_import_id) ?? null); }} onCreate={(name, parent) => change(() => client.createFaction(worldId, name, parent))} onEdit={(id, name, parent) => change(() => client.editFaction(worldId, id, name, parent))} onRemove={id => { if (window.confirm("确定删除这个空阵营吗？")) void change(() => client.removeFaction(worldId, id)); }} onMembership={(id, root, enabled) => void change(() => client.setFactionMember(worldId, id, root, enabled))} />
-      : selected ? <><div className="thread-heading"><button className="text-action" onClick={() => setSelected(null)}>返回通讯录</button><h2>角色资料</h2></div><div className="contact-chat-action">{canOpenChat ? <button type="button" className="primary-button" disabled={openingChat} onClick={() => void onOpenChat(selected.import_id)}>{openingChat ? "正在打开…" : "打开会话"}</button> : <button type="button" className="text-action" onClick={onIdentity}>先进入世界，再打开会话</button>}</div>
-        {current && <div className="contact-avatar-edit"><ContactAvatar name={current.name} url={urls[current.avatar_digest ?? ""]} /><label>上传角色头像（JPG、PNG 或 WebP，最大 10 MB）<input type="file" accept="image/jpeg,image/png,image/webp" disabled={socialBusy} onChange={event => { void uploadAvatar(event.target.files?.[0]); event.target.value = ""; }} /></label>{current.avatar_digest && <button type="button" className="text-action" disabled={socialBusy} onClick={() => void change(() => client.setCharacterAvatar(worldId, current.root_import_id, null))}>移除头像</button>}</div>}
-        <p className="inline-hint">所属阵营：{selectedFactions.length ? selectedFactions.join("、") : "尚未加入"}。同阵营直接成员默认相互认识；相遇仍可记录新见闻。</p><ContentDetails item={selected} /></> : <div className="conversation-placeholder"><h2>当前世界的角色</h2><p>选择左侧角色，查看资料、上传头像和编辑阵营。</p></div>}
+      : selected ? <><div className="thread-heading"><button className="text-action" onClick={() => setSelected(null)}>返回通讯录</button><h2>角色档案</h2></div>
+        <div className="contact-dossier"><header className="dossier-hero">
+          <ContactAvatar name={selected.characters[0].name} url={urls[current?.avatar_digest ?? ""]} className="dossier-portrait" />
+          <div className="dossier-title"><h2>{selected.characters[0].name}</h2><p>所属阵营：{selectedFactions.length ? selectedFactions.join("、") : "尚未加入"}</p></div>
+          {canOpenChat ? <button type="button" className="primary-button" disabled={openingChat} onClick={() => void onOpenChat(selected.import_id)}>{openingChat ? "正在打开…" : "打开会话"}</button> : <button type="button" className="text-action" onClick={onIdentity}>先进入世界，再打开会话</button>}
+        </header>
+        {current && <details className="dossier-avatar-options"><summary>编辑角色头像</summary><div className="contact-avatar-edit"><label>上传角色头像（JPG、PNG 或 WebP，最大 10 MB）<input type="file" accept="image/jpeg,image/png,image/webp" disabled={socialBusy} onChange={event => { void uploadAvatar(event.target.files?.[0]); event.target.value = ""; }} /></label>{current.avatar_digest && <button type="button" className="text-action" disabled={socialBusy} onClick={() => void change(() => client.setCharacterAvatar(worldId, current.root_import_id, null))}>移除头像</button>}</div></details>}
+        <p className="inline-hint">同阵营直接成员默认相互认识；相遇仍可记录新见闻。</p><ContentDetails item={selected} hideCharacterTitle /></div></> : <div className="conversation-placeholder"><h2>当前世界的角色</h2><p>选择左侧角色，查看资料、上传头像和编辑阵营。</p></div>}
   </div></div>;
 }

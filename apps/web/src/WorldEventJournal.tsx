@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { CoreClient, CoreRequestError, type ChatStoryEntry, type KnownWorldEvent, type NewsMark, type PublicNewsEntry, type WorldStoryEntries } from "@dreamtalk/api-client";
 
+import { transcriptDay } from "./ConversationHeading";
 import { SourceMessageDialog } from "./SourceMessageDialog";
 
 const kinds = { activity: "活动", plan: "计划", rumor: "传闻", invitation: "邀请", change: "变更" };
@@ -75,8 +76,8 @@ export function WorldEventJournal({ client, worldId, witnessed, onTopic, display
   return <div className="world-journal">
     <div className="journal-refresh"><p>历史记录有时间范围，旧消息不代表角色此刻仍在做同一件事。</p><button type="button" className="secondary-button" disabled={busy} onClick={() => void refresh()}>刷新事件</button></div>
     {(error || loadError) && <p role="alert" className="product-error">{error || loadError}</p>}
-    <section aria-labelledby="chat-events-title"><h3 id="chat-events-title">聊天获知</h3><p className="inline-hint">在角色回复的同一次请求中提取具体活动、计划、传闻和邀请。先适配 DeepSeek；原话保留，AI 的归类需要你核对。</p>
-      {!entries ? <p>正在读取……</p> : entries.chat.length === 0 ? <p className="thread-hint">还没有从聊天中记录事件。普通寒暄不会记录，旧聊天不会自动补录。</p> : <ol className="event-list">{entries.chat.map(item => <li key={item.entry_id} className="event-item">
+    <section aria-labelledby="chat-events-title"><h3 id="chat-events-title">聊天获知</h3><p className="inline-hint">来自角色告诉你的活动、计划、传闻和邀请。保留原话与获知时间；计划和传闻需要你核对。</p>
+      {!entries ? <p>正在读取……</p> : entries.chat.length === 0 ? <p className="thread-hint">还没有从聊天中记录事件。普通寒暄不会记录，旧聊天不会自动补录。</p> : <ol className="event-list">{entries.chat.map((item, index) => <Fragment key={item.entry_id}>{index === 0 || transcriptDay(entries.chat[index - 1].learned_at) !== transcriptDay(item.learned_at) ? <li className="journal-day"><h4>{transcriptDay(item.learned_at)}</h4></li> : null}<li className="event-item">
         <div className="journal-entry-heading"><strong>{item.title}</strong><span>{kinds[item.kind]} · {item.character_name}</span></div>
         <blockquote>{item.quote}</blockquote><small>获知时间：<time dateTime={item.learned_at}>{new Date(item.learned_at).toLocaleString()}</time></small><small>获知时的世界时间：{item.learned_world_time !== null ? displayTime(item.learned_world_time) : "未记录"}</small><small>事件时间（原话）：{item.time_text || "原话未明确时间"}</small>
         {entries.chat.some(newer => newer.updates_entry_id === item.entry_id) && <small>后来有变更记录；此条保留当时的信息。</small>}
@@ -85,7 +86,7 @@ export function WorldEventJournal({ client, worldId, witnessed, onTopic, display
         <details><summary>来源原话</summary><p>这是角色当时告诉你的说法，计划或传闻不代表已发生或已证实。</p>{item.source_event_id && <p className="inline-hint">这段原话关联已有的授权经历，不代表你在现场亲历。</p>}<button type="button" className="text-action" disabled={busy} onClick={() => setSource(item)}>查看原文前后文</button></details>
         <div className="journal-entry-actions"><button type="button" className="text-action" disabled={busy} onClick={() => { setEditing(item); setCorrection(item.correction || ""); }}>批注／纠正</button><button type="button" className="text-action" disabled={busy} onClick={() => { if (window.confirm("从事件列表移除此条记录？聊天原文会保留。")) void act(() => client.correctChatStory(worldId, item, item.correction, true), item.entry_id); }}>移除记录</button></div>
         {editing?.entry_id === item.entry_id && <form onSubmit={event => { event.preventDefault(); void act(() => client.correctChatStory(worldId, item, correction.trim() || null), undefined, { ...item, correction: correction.trim() || null, revision: item.revision + 1 }); }}><label className="field"><span>补充或纠正（保留原话，不修改原始聊天）</span><textarea maxLength={500} value={correction} onChange={event => setCorrection(event.target.value)} /></label><button type="submit" className="primary-button" disabled={busy}>保存批注</button><button type="button" className="text-action" disabled={busy} onClick={() => setEditing(null)}>取消</button></form>}
-      </li>)}</ol>}
+      </li></Fragment>)}</ol>}
       {entries?.next_before && <button type="button" className="secondary-button" disabled={busy} onClick={() => void older()}>读取更早记录</button>}
       <details className="witnessed-events"><summary>我亲历的活动记录（{witnessed.length}）</summary><ol className="event-list">{witnessed.map(item => <li key={item.event_id} className="event-item"><time>{displayTime(item.occurred_at)}</time><strong>{item.title}</strong>{item.description && <p>{item.description}</p>}<small>获知于 {displayTime(item.observed_at)}</small><button type="button" className="text-action" onClick={() => onTopic(item)}>聊聊这件事</button></li>)}</ol></details>
     </section>

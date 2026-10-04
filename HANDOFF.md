@@ -5,11 +5,13 @@
 
 ## 1. 当前任务、范围与结论
 
-当前任务为修复主动联系无法开启与快速启动跳过动画，Desktop0.1.35源码已完成，源码检查及build-only构建结果见第6节。设置请求缺JSON头且后端strict UUID拒绝正常JSON字符串；两处一起修复，只对该UUID字段使用标准解析，保留其他严格字段及身份/revision核对。页面保留失败原因、显示已保存，未读取状态不冒充已关闭；不读取或改写用户存档开关、不自动启用付费功能。前台从三维首帧至少展示1.5秒，核心/书架并行加载，真实就绪后约900ms进入原书架；隐藏启动不强制展示，静态回退保留。协议/迁移/生成规则/自启动注册不变。0.1.34提交未改Core或开关逻辑，源码没有人为核心连接等待。详见[启动说明](docs/CELESTIAL_STARTUP.md)与[主动联系设置修复](docs/proposals/2026-10-04-proactive-contact.md)。
+当前任务为进入世界后的前端优化，Desktop0.1.36源码已接线：深蓝灰外壳、月白阅读面与纸面目录，四个入口沿用既有结构。聊天共享已上传头像、日期分隔和会话工具；通讯录大头像/姓名/阵营/聊天入口组成连续角色档案；设置/个人资料与事件改用统一字级、留白和轻量分隔。CSS仅作用于world-workspace，保留书架、1.5秒启动、真三维关系网、草稿/已读/恢复/费用授权和所有Core规则。没有新运行依赖、迁移或模型调用；不读取真实存档、不修改自启动注册。实际复用与验收入口见[世界内界面](docs/WORLD_TERMINAL.md)。本轮检查/构建结果见第6节，不能代替视觉及运行验收。
+
+此前0.1.35已修复主动联系请求JSON头、标准UUID字段解析与失败反馈，并保持前台首帧至少1.5秒。0.1.35基线8d56c99已按用户要求推送到GitHub的codex/world-archive分支；后续0.1.36界面改动没有新的推送指令，仅在本地继续。详见[启动说明](docs/CELESTIAL_STARTUP.md)与[主动联系设置修复](docs/proposals/2026-10-04-proactive-contact.md)。
 
 此前0.1.33真三维关系网和宽表单已交付源码/便携包，用户这轮转向启动体验；不据此标成全量关系网验收。0.1.30红点修复已获用户“问题已解决”反馈；0.1.31主动/离线联动仍待体验，不阻挡当前明确需求。
 - 当前世界通讯录可创建、重命名、迁移、删除空阵营；子阵营不限制层级，角色可多重归属。同一个阵营的直接成员在单写事务中建立持久相识；父子和多跳关系不扩大熟人范围，撤出阵营只改变归属、不抹去已建立的相识。
-- 头像复用已有世界封面图片校验、资产存储及授权读取，绑定稳定角色卡根ID。关系网改用3d-force-graph1.80.1 / Three.js0.186.1：真正三维头像球、明暗/透视/遮挡、稀疏星点、静置和聚焦后缓慢漂浮、连线同步；直接点击约260ms聚焦、左键平移/右键旋转/滚轮缩放，右侧完整姓名/阵营路径/聊天跳转。底部定位与键盘操作、暂停漂浮/减少动态效果、按需加载、切页释放及后台暂停均接线。旧全局input90px由表单字段样式覆盖，React Flow关闭交互造成的点击阻断随二维库移除；左侧选人不退出星图。当前头像用于通讯录及关系网。
+- 头像复用已有世界封面图片校验、资产存储及授权读取，绑定稳定角色卡根ID。关系网改用3d-force-graph1.80.1 / Three.js0.186.1：真正三维头像球、明暗/透视/遮挡、稀疏星点、静置和聚焦后缓慢漂浮、连线同步；直接点击约260ms聚焦、左键平移/右键旋转/滚轮缩放，右侧完整姓名/阵营路径/聊天跳转。底部定位与键盘操作、暂停漂浮/减少动态效果、按需加载、切页释放及后台暂停均接线。旧全局input90px由表单字段样式覆盖，React Flow关闭交互造成的点击阻断随二维库移除；左侧选人不退出星图。当前头像还在聊天目录、标题、角色消息和流式草稿中复用。
 - 私聊/群聊仅提供发言者本人有界阵营与相识数据，最多8个阵营、每阵营16名同伴和24名相识，合计4KiB；容量不足可整体移除，“本次参考内容”显示保留/省略。相识不证明共同经历、秘密或亲密度。
 - 同阵营已确认相识满足共同休闲此前碰面的前提；仍要求已有放置角色、许可、实际同地点/活动、冷却和Kernel核验。见闻继续按真实执行记录。Director只在原批次收到有界相识ID，不额外调用模型、不立即重规划；同目的双人联系和跨路径未回复门禁保持。
 - 0036只新增四张authored表；不写旧数值关系、不补造事件。不扩充委托、任务、奖励、战斗或三人以上新行动。详情见[说明](docs/CHARACTER_FACTIONS.md)和[批准方案](docs/proposals/2026-10-04-character-factions.md)。
@@ -20,9 +22,9 @@
 | --- | --- |
 | 正式仓库 | `D:\LivingWorld`；当前用户工作目录 `C:\Users\zhang\Documents\ChatGPT\LivingWorld` 是受限环境可写工作目录，不据此推断正式仓库/构建产物已搬迁。 |
 | 分支 | `codex/world-archive`。 |
-| 本轮开始 HEAD | `42e675c`，0.1.34星梦启动提交；开始工作区干净。此前文档整理基线为1221c18，后续以实际git log为准。 |
+| 本轮开始 HEAD | `8d56c99`，0.1.35主动联系/启动修复提交；开始工作区干净。此前文档整理基线为1221c18，后续以实际git log为准。 |
 | 此前功能提交 | `844259a`：离线恢复门禁状态提示；`ed5f844`：在线主动联系与未读红点；前序 `9939579` 授权活动终态召回去重、`ee17ed6` 共同休闲/来源回看。 |
-| 桌面版本 | `0.1.35`（package/Tauri/Cargo；交付 EXE 元数据以本轮构建核对）。根 npm/Core package 的 `0.1.0` 是已有独立包版本，不误改成桌面版本。 |
+| 桌面版本 | `0.1.36`（package/Tauri/Cargo；交付 EXE 元数据以本轮构建核对）。根 npm/Core package 的 `0.1.0` 是已有独立包版本，不误改成桌面版本。 |
 | Core API | `services/core/src/livingworld/domain/api_contract.json`：`api_protocol = 1`、loopback `127.0.0.1`；随机 Core 端口，UI 不硬编码。 |
 | Alembic head | `0036_character_factions`，前序 `0035_proactive_contact`。此次不运行升级或读取真实存档。 |
 | Git remote | `origin = https://github.com/zhangyeS12/dreamtalk.git`；只读本地配置，不表示本地最新提交已推送。 |
@@ -97,9 +99,15 @@
 
 ## 6. 交付与证据
 
+### 0.1.36 世界内界面
+
+前端ESLint/TypeScript、静态CSS语法/288条规则范围、9组基础文字色值（最低6.25:1）、本地文档链接和Git差异检查通过。`--build-only --output-name world-terminal`完成，Desktop ProductVersion/FileVersion为0.1.36。新包`artifacts/portable/world-terminal/dreamtalk`及同级`dreamtalk.zip`；旧包保留。根规则/交接/产品与docs随包同步，编译CSS和JS含实际接线，源码/产物/文档/ZIP核对记录为`artifacts/world-terminal-source-audit.json`。没有运行产品、自动测试、模型或真实存档；真实视觉、鼠标/键盘交互、草稿与已读仍待用户体验。
+
+Desktop SHA256 `80051e373bd316f41dac2e6c242129481d574d6074093f96abf0f252d6c4299f`；Core SHA256 `2d7bc064f1af15e7525108e4465bb492ea89e308889e95b8c9e152f3a43baa94`。本轮未改Core源码/契约/迁移/开关或启动注册；构建保留非阻塞告警：主chunk713.56kB（gzip212.57kB）、共享Three.js587.98kB、关系网817.51kB以及STATIC_VCRUNTIME弃用。字体和数据均沿用现有本地来源，未添加运行依赖；不把静态对比度计算当作完整WCAG或画面验收。
+
 ### 0.1.35 主动联系保存和启动最低展示
 
-源码修复及范围见第1节，版本同步package/Tauri/Cargo/npm锁文件。前端ESLint/tsc、目标Python Ruff lint/格式、文档链接（0断链）及Git差异检查通过；`--build-only --output-name startup-proactive-fix`完成。Desktop ProductVersion/FileVersion均为0.1.35，新包`artifacts/portable/startup-proactive-fix/dreamtalk`与同级`dreamtalk.zip`；旧包保留。Core HTTP适配源码与包内原文件核对；根规则/交接/产品及docs随包同步，静态清单位于`artifacts/startup-proactive-fix-source-audit.json`。未运行产品、自动测试、模型或真实存档；保存持久性、至少1.5秒画面和主动联系仍待用户体验。
+当时修复了主动联系JSON请求头/UUID解析与启动最低展示，版本同步package/Tauri/Cargo/npm锁文件。前端ESLint/tsc、目标Python Ruff lint/格式、文档链接（0断链）及Git差异检查通过；`--build-only --output-name startup-proactive-fix`完成。Desktop ProductVersion/FileVersion均为0.1.35，新包`artifacts/portable/startup-proactive-fix/dreamtalk`与同级`dreamtalk.zip`；旧包保留。Core HTTP适配源码与包内原文件核对；根规则/交接/产品及docs随包同步，静态清单位于`artifacts/startup-proactive-fix-source-audit.json`。未运行产品、自动测试、模型或真实存档；保存持久性、至少1.5秒画面和主动联系仍待用户体验。
 
 Desktop SHA256 `aa81b23dcc2795efac06e72453b59a94abe1318a5922fdb097e382088674dd38`；Core SHA256 `2d7bc064f1af15e7525108e4465bb492ea89e308889e95b8c9e152f3a43baa94`。本轮仅Core HTTP请求字段适配改变，无持久化/迁移/生成规则修改。构建有非阻塞大chunk告警（主709.62kB、共享Three.js587.98kB、关系网817.51kB）及STATIC_VCRUNTIME弃用；不隐藏告警或声称帧率已验收。
 
@@ -185,9 +193,9 @@ git diff --check
 
 ## 8. 下一步、限制与疑问
 
-先验收0.1.35主动联系同意开启、刷新与重开保持状态，以及快速启动至少1.5秒三维展示/相机推进。按[启动说明](docs/CELESTIAL_STARTUP.md)核对隐藏后台、静态回退和失败重试；自动联系真正送达仍需合法活动/许可/间隔/回复门禁。三维关系网按[验收说明](docs/CHARACTER_FACTIONS.md)继续体验，不扩充玩法。
+先体验0.1.36聊天/通讯录/设置/个人身份的视觉与交互；同时保留0.1.35主动联系同意开启、刷新与重开保持状态，以及快速启动至少1.5秒三维展示/相机推进的验收入口。按[启动说明](docs/CELESTIAL_STARTUP.md)核对隐藏后台、静态回退和失败重试；自动联系真正送达仍需合法活动/许可/间隔/回复门禁。三维关系网按[验收说明](docs/CHARACTER_FACTIONS.md)继续体验，不扩充玩法。
 
-1. 启动/保存修复0.1.35和三维关系网0.1.33已有源码；0.1.35源码检查及便携build-only已完成，运行与画面待用户体验。没有必需新产品决定。
+1. 世界内界面0.1.36已接线，按[界面说明](docs/WORLD_TERMINAL.md)核对聊天、工具、头像、角色档案、设置/身份草稿和窄窗口；源码/构建证据见第6节。启动/主动联系及三维关系网原契约不改变。没有必需新产品决定。
 2. 主动联系仍有待验收：同一真实共同休闲的两名角色是否同目的邀请、未回复是否阻断跨角色后续联系、回复后是否在下一合法机会恢复。已有相识不代表一定会主动联系；活动、许可、冷却和门禁仍有效。
 3. 以前经历终态/身份隔离、共同休闲生命周期和来源回看仍待体验，缺少验收不表示没实现。0.1.30红点清除已获用户确认。
 4. 最终发行等待用户验收和明确批准；本轮只本地提交，不push/Release、不修改自启动或现有存档。

@@ -21,7 +21,10 @@ import { WorldArchivePage } from "./WorldArchivePage";
 import { Brand } from "./Brand";
 import { SettingsHandbook, SettingsFold, type SettingsPage } from "./SettingsHandbook";
 import { SettingsDiagnostics } from "./SettingsDiagnostics";
+import { ContactAvatar } from "./ContactSocial";
+import { useChatAvatars } from "./useChatAvatars";
 import "./product.css";
+import "./world-terminal.css";
 
 type Tab = "chats" | "contacts" | "settings" | "me";
 type IconName = "chats" | "contacts" | "settings" | "me";
@@ -277,6 +280,8 @@ function WorldWorkspace({ client, initialWorldId, initialTab, onArchive }: {
   const visibleEvents = knownEvents?.worldId === worldId && knownEvents.playerId === selectedPlayer ? knownEvents.items : [];
   const conversations = conversationDirectory?.worldId === worldId && conversationDirectory.playerId === selectedPlayer ? conversationDirectory.items : [];
   const groups = groupDirectory?.worldId === worldId && groupDirectory.playerId === selectedPlayer ? groupDirectory.items : [];
+  const chatAvatars = useChatAvatars(client, worldId, [...conversations.map(item => item.root_import_id), ...groups.flatMap(item => item.participants.map(person => person.root_import_id))], tab === "chats");
+  const pageHint = { chats: "与角色交流，收集世界的片段", contacts: "角色档案、所属阵营与相识关系", settings: "让这个世界按照你的节奏运行", me: "你在这里的称呼与身份" }[tab];
   const selectedConversation = conversations.find(item => item.conversation_id === selectedConversationId);
   const selectedGroup = groups.find(item => item.conversation_id === selectedGroupId);
   const discussEvent = (conversationId: string, kind: "direct" | "group") => {
@@ -308,15 +313,16 @@ function WorldWorkspace({ client, initialWorldId, initialTab, onArchive }: {
       section?.scrollIntoView({ block: "start" }); section?.focus({ preventScroll: true });
     });
   };
-  return <div className="product-shell world-workspace">
+  return <div className={`product-shell world-workspace world-tab-${tab}${contactsManagementOpen ? " contacts-editing" : ""}`}>
     <header className="app-header"><Brand /><span role="status" className="sr-only">核心已就绪</span><span className="workspace-header-actions"><span className="world-context">{world?.name ?? "正在读取世界…"}</span><button type="button" className="text-action" onClick={returnArchive}>返回书架</button></span></header>
     <main className="app-content" id="main-content">
-      <div className="page-heading"><h1 ref={entryHeading} tabIndex={-1}>{title}</h1>{world ? <span className="page-world">{world.name}</span> : null}</div>
+      <div className="page-heading"><div><h1 ref={entryHeading} tabIndex={-1}>{title}</h1><p>{pageHint}</p></div>{world ? <span className="page-world">{world.name}</span> : null}</div>
       {error ? <p className="app-alert" role="alert">{error}</p> : null}
       {notice ? <p className="app-notice" role="status">{notice}</p> : null}
 
       {tab === "chats" && <div className={`chat-workspace ${eventsOpen || selectedConversation || selectedGroup || groupSetupOpen ? "thread-open" : ""}`}>
         <aside className="conversation-list" aria-label="会话列表">
+        <div className="directory-heading"><strong>会话</strong><small>{conversationsLoading ? "读取中" : conversationsFailed ? "读取未完成" : `${conversations.length + groups.length} 个会话`}</small></div>
         <button className={`conversation-row pinned ${eventsOpen ? "selected" : ""}`} aria-pressed={eventsOpen} type="button" onClick={() => { setTopicEvent(null); setEventsOpen(true); }}>
           <span className="avatar event-avatar" aria-hidden="true">事</span>
           <span className="row-copy"><strong>世界事件</strong><small>你已获知的事件</small></span>
@@ -327,7 +333,7 @@ function WorldWorkspace({ client, initialWorldId, initialTab, onArchive }: {
         {conversationsFailed && <div className="thread-hint" role="alert"><p>会话读取未完成，已读取的会话仍保留。</p><button type="button" className="text-action" disabled={conversationsLoading} onClick={() => setConversationsRefresh(value => value + 1)}>重新读取会话</button></div>}
         {conversationsLoading && conversations.length === 0 && groups.length === 0 ? <p className="thread-hint">正在读取会话…</p> : conversationsFailed && conversations.length === 0 && groups.length === 0 ? null : conversations.length === 0 && groups.length === 0 ? <div className="empty-state"><h2>还没有会话</h2><p>在通讯录中选择角色，打开与他的会话。</p><button type="button" className="text-action" onClick={() => setTab("contacts")}>前往通讯录</button></div> : <>
           {groups.map(item => <button key={item.conversation_id} type="button" className={`conversation-row ${!eventsOpen && selectedGroupId === item.conversation_id ? "selected" : ""}`} aria-pressed={!eventsOpen && selectedGroupId === item.conversation_id} onClick={() => { setDraftSuggestion(null); setSelectedGroupId(item.conversation_id); setSelectedConversationId(null); setGroupSetupOpen(false); setEventsOpen(false); }}><span className="avatar event-avatar" aria-hidden="true">群</span><span className="row-copy"><strong>{item.participants.map(member => member.character_name).join("、")}{unread.unread(item.conversation_id) && <span className="unread-dot" role="img" aria-label="有未读角色消息" />}</strong><small>群聊 · {item.participants.length} 位角色</small></span></button>)}
-          {conversations.map(item => <button key={item.conversation_id} type="button" className={`conversation-row ${!eventsOpen && selectedConversationId === item.conversation_id ? "selected" : ""}`} aria-pressed={!eventsOpen && selectedConversationId === item.conversation_id} onClick={() => { setDraftSuggestion(null); setSelectedConversationId(item.conversation_id); setSelectedGroupId(null); setGroupSetupOpen(false); setEventsOpen(false); }}><span className="avatar event-avatar" aria-hidden="true">{Array.from(item.character_name)[0]}</span><span className="row-copy"><strong>{item.character_name}{unread.unread(item.conversation_id) && <span className="unread-dot" role="img" aria-label="有未读角色消息" />}</strong><small>{unread.unread(item.conversation_id) ? "新消息" : "私聊"}</small></span></button>)}
+          {conversations.map(item => <button key={item.conversation_id} type="button" className={`conversation-row ${!eventsOpen && selectedConversationId === item.conversation_id ? "selected" : ""}`} aria-pressed={!eventsOpen && selectedConversationId === item.conversation_id} onClick={() => { setDraftSuggestion(null); setSelectedConversationId(item.conversation_id); setSelectedGroupId(null); setGroupSetupOpen(false); setEventsOpen(false); }}><ContactAvatar name={item.character_name} url={chatAvatars[item.root_import_id]} /><span className="row-copy"><strong>{item.character_name}{unread.unread(item.conversation_id) && <span className="unread-dot" role="img" aria-label="有未读角色消息" />}</strong><small>{unread.unread(item.conversation_id) ? "新消息" : "私聊"}</small></span></button>)}
         </>}
 
         </aside>
@@ -336,7 +342,7 @@ function WorldWorkspace({ client, initialWorldId, initialTab, onArchive }: {
         <div className="thread-heading"><button type="button" className="text-action" onClick={() => setEventsOpen(false)}>返回聊天</button><h2>世界事件</h2><span>聊天获知与世界动态</span></div>
         {topicEvent ? <div className="event-topic-picker"><strong>聊聊「{topicEvent.title}」</strong><p>选择已有会话，系统只填写一条可编辑的消息，不会自动发送。</p>{conversations.length === 0 && groups.length === 0 ? <p>先从通讯录打开一位角色的会话。</p> : <div className="event-topic-choices">{conversations.map(item => <button type="button" key={item.conversation_id} onClick={() => discussEvent(item.conversation_id, "direct")}>{item.character_name}</button>)}{groups.map(item => <button type="button" key={item.conversation_id} onClick={() => discussEvent(item.conversation_id, "group")}>群聊：{item.participants.map(member => member.character_name).join("、")}</button>)}</div>}</div> : null}
         {!world ? <p className="thread-hint">先创建世界，才能查看事件。</p> : !selectedPlayer ? <div className="thread-empty"><p>先进入当前世界，才能查看你获知的事件。</p><button type="button" className="text-action" onClick={() => { setEventsOpen(false); setTab("me"); }}>前往我的身份</button></div> : <WorldEventJournal key={`journal:${worldId}:${selectedPlayer}`} client={client} worldId={worldId} witnessed={visibleEvents} onTopic={setTopicEvent} displayTime={displayTime} />}
-          </section> : groupSetupOpen ? <GroupChatSetup key={`${worldId}:${selectedPlayer}`} client={client} worldId={worldId} onBack={() => setGroupSetupOpen(false)} onDirtyChange={setChatDirty} onCreated={group => { setGroupDirectory(current => ({ worldId, playerId: selectedPlayer!, items: [...(current?.worldId === worldId && current.playerId === selectedPlayer ? current.items : []).filter(item => item.conversation_id !== group.conversation_id), group] })); setSelectedGroupId(group.conversation_id); setGroupSetupOpen(false); }} /> : selectedGroup && selectedPlayer ? <GroupChatDetails key={`${worldId}:${selectedPlayer}:${selectedGroup.conversation_id}`} client={client} worldId={worldId} playerId={selectedPlayer} group={selectedGroup} onDirtyChange={setChatDirty} tokenCeiling={tokenCeiling} suggestedDraft={suggestedFor(selectedGroup.conversation_id)} onSuggestionUsed={() => setDraftSuggestion(null)} onBack={() => setSelectedGroupId(null)} /> : selectedConversation && selectedPlayer ? <ChatTranscript key={`${worldId}:${selectedPlayer}:${selectedConversation.conversation_id}`} client={client} worldId={worldId} playerId={selectedPlayer} conversation={selectedConversation} onDirtyChange={setChatDirty} tokenCeiling={tokenCeiling} suggestedDraft={suggestedFor(selectedConversation.conversation_id)} onSuggestionUsed={() => setDraftSuggestion(null)} onBack={() => setSelectedConversationId(null)} /> : <div className="conversation-placeholder"><h2>与世界保持联系</h2><p>从左侧选择会话，或查看你已获知的世界事件。</p></div>}
+          </section> : groupSetupOpen ? <GroupChatSetup key={`${worldId}:${selectedPlayer}`} client={client} worldId={worldId} onBack={() => setGroupSetupOpen(false)} onDirtyChange={setChatDirty} onCreated={group => { setGroupDirectory(current => ({ worldId, playerId: selectedPlayer!, items: [...(current?.worldId === worldId && current.playerId === selectedPlayer ? current.items : []).filter(item => item.conversation_id !== group.conversation_id), group] })); setSelectedGroupId(group.conversation_id); setGroupSetupOpen(false); }} /> : selectedGroup && selectedPlayer ? <GroupChatDetails key={`${worldId}:${selectedPlayer}:${selectedGroup.conversation_id}`} client={client} worldId={worldId} playerId={selectedPlayer} group={selectedGroup} avatarUrls={chatAvatars} onDirtyChange={setChatDirty} tokenCeiling={tokenCeiling} suggestedDraft={suggestedFor(selectedGroup.conversation_id)} onSuggestionUsed={() => setDraftSuggestion(null)} onBack={() => setSelectedGroupId(null)} /> : selectedConversation && selectedPlayer ? <ChatTranscript key={`${worldId}:${selectedPlayer}:${selectedConversation.conversation_id}`} client={client} worldId={worldId} playerId={selectedPlayer} conversation={selectedConversation} avatarUrl={chatAvatars[selectedConversation.root_import_id]} onDirtyChange={setChatDirty} tokenCeiling={tokenCeiling} suggestedDraft={suggestedFor(selectedConversation.conversation_id)} onSuggestionUsed={() => setDraftSuggestion(null)} onBack={() => setSelectedConversationId(null)} /> : <div className="conversation-placeholder"><h2>与世界保持联系</h2><p>从左侧选择会话，或查看你已获知的世界事件。</p></div>}
         </div>
       </div>}
 
