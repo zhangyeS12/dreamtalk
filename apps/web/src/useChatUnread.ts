@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { invoke, isTauri } from "@tauri-apps/api/core";
 import { CoreClient, type ChatMessage, type ChatUnreadStatus } from "@dreamtalk/api-client";
 
 const READ_EVENT = "dreamtalk:chat-read";
@@ -26,7 +25,9 @@ export function useChatUnread(client: CoreClient, worldId: string, playerId: str
       } catch { failures += 1; if (active) setError(true); }
       finally { running = false; if (active && failures < 2) timer = window.setTimeout(() => void read(), 5000); }
     };
-    const acknowledged = (event: Event) => { if ((event as CustomEvent<string>).detail === worldId) void read(); };
+    // A read acknowledgement can arrive while the previous GET is in flight.
+    // Restarting the effect discards that older result and requests a fresh snapshot.
+    const acknowledged = (event: Event) => { if ((event as CustomEvent<string>).detail === worldId) setRefresh(n => n + 1); };
     window.addEventListener(READ_EVENT, acknowledged);
     void read();
     return () => { active = false; controller.abort(); window.clearTimeout(timer); window.removeEventListener(READ_EVENT, acknowledged); };
@@ -41,34 +42,48 @@ export function useChatUnread(client: CoreClient, worldId: string, playerId: str
 export function useConversationRead(client: CoreClient, worldId: string, conversationId: string, messages: ChatMessage[] | null) {
   const acknowledged = useRef(0);
   const attempts = useRef(new Map<number, number>());
+  const loadedMessages = useRef(messages);
+  loadedMessages.current = messages;
+  const firstMessageId = messages?.[0]?.message_id ?? "";
+  const lastMessageId = messages?.[messages.length - 1]?.message_id ?? "";
+  const messageCount = messages?.length ?? 0;
+  const [error, setError] = useState(false);
+  const [retryRevision, setRetryRevision] = useState(0);
+  useEffect(() => { acknowledged.current = 0; attempts.current.clear(); setError(false); }, [worldId, conversationId]);
   useEffect(() => {
     let active = true, running = false;
+    let retryTimer: number | undefined;
     const check = async () => {
       if (!active || running || document.visibilityState !== "visible" || !document.hasFocus()) return;
       let position = 0;
-      for (const message of messages ?? []) {
+      for (const message of loadedMessages.current ?? []) {
         const element = document.querySelector<HTMLElement>(`[data-message-id="${message.message_id}"]`);
-        const parent = element?.closest<HTMLElement>(".chat-thread");
-        if (!element || !parent) continue;
-        const r = element.getBoundingClientRect(), p = parent.getBoundingClientRect();
-        if (r.height > 0 && r.bottom > Math.max(0, p.top) && r.top < Math.min(window.innerHeight, p.bottom)) position = Math.max(position, message.position);
+        const scroller = element?.closest<HTMLElement>(".conversation-detail");
+        if (!element || !scroller) continue;
+        const r = element.getBoundingClientRect(), viewport = scroller.getBoundingClientRect();
+        if (r.height > 0 && r.bottom > Math.max(0, viewport.top) && r.top < Math.min(window.innerHeight, viewport.bottom)) position = Math.max(position, message.position);
       }
-      if (position <= acknowledged.current || (attempts.current.get(position) ?? 0) >= 2) return;
+      if (position <= acknowledged.current || (attempts.current.get(position) ?? 0) >= 3) return;
       running = true;
       attempts.current.set(position, (attempts.current.get(position) ?? 0) + 1);
       try {
-        if (isTauri() && !await invoke<boolean>("report_desktop_presence", { worldId, visible: true })) return;
-        if (!active || !document.hasFocus()) return;
+        if (!active || document.visibilityState !== "visible" || !document.hasFocus()) return;
         await client.markConversationRead(worldId, conversationId, position);
-        if (active) { acknowledged.current = position; window.dispatchEvent(new CustomEvent(READ_EVENT, { detail: worldId })); }
-      } catch { /* Two bounded read acknowledgements; no model work or hidden-tab acknowledgement. */ }
+        if (active) { acknowledged.current = position; setError(false); window.dispatchEvent(new CustomEvent(READ_EVENT, { detail: worldId })); }
+      } catch {
+        if (active) {
+          if ((attempts.current.get(position) ?? 0) < 3) retryTimer = window.setTimeout(() => void check(), 1500);
+          else setError(true);
+        }
+      }
       finally { running = false; }
     };
     const changed = () => { void check(); };
     const frame = window.requestAnimationFrame(changed);
     window.addEventListener("focus", changed); document.addEventListener("visibilitychange", changed);
-    document.addEventListener("scroll", changed, true);
-    return () => { active = false; window.cancelAnimationFrame(frame); window.removeEventListener("focus", changed);
-      document.removeEventListener("visibilitychange", changed); document.removeEventListener("scroll", changed, true); };
-  }, [client, worldId, conversationId, messages]);
+    window.addEventListener("resize", changed); document.addEventListener("scroll", changed, true);
+    return () => { active = false; window.cancelAnimationFrame(frame); window.clearTimeout(retryTimer); window.removeEventListener("focus", changed);
+      document.removeEventListener("visibilitychange", changed); window.removeEventListener("resize", changed); document.removeEventListener("scroll", changed, true); };
+  }, [client, worldId, conversationId, firstMessageId, lastMessageId, messageCount, retryRevision]);
+  return { error, retry: () => { attempts.current.clear(); setError(false); setRetryRevision(n => n + 1); } };
 }

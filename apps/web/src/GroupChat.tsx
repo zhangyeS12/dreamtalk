@@ -100,7 +100,7 @@ export function GroupChatDetails({ client, worldId, playerId, group, tokenCeilin
   const [replyFailure, setReplyFailure] = useState<{ turnId: string; message: string } | null>(null);
   const stream = useReplyStream();
   const { messages, failed, hasOlder, loadingOlder, loadOlder, acceptMessage } = useTranscriptPages(client, worldId, group.conversation_id, refresh, true);
-  useConversationRead(client, worldId, group.conversation_id, messages);
+  const readReceipt = useConversationRead(client, worldId, group.conversation_id, messages);
   const { thread, beforePrepend } = useChatScroll(messages, stream.draft?.text);
 
   useEffect(() => {
@@ -233,6 +233,7 @@ export function GroupChatDetails({ client, worldId, playerId, group, tokenCeilin
       return true;
     }} /> : null}
     {failed ? <p className="thread-hint" role="alert">无法读取群聊记录，请刷新后重试。</p> : null}
+    {readReceipt.error ? <p className="thread-hint" role="alert">消息已显示，但未能保存已读状态。<button type="button" className="text-action" onClick={readReceipt.retry}>重新确认已读</button></p> : null}
     {messages === null ? failed ? null : <p className="thread-hint">正在读取消息…</p> : messages.length === 0 ? <div className="conversation-placeholder"><h2>还没有消息</h2><p>发一条消息，开始群聊。</p></div> : <>{hasOlder ? <div className="transcript-history"><button type="button" className="text-action" disabled={loadingOlder} onClick={() => void loadOlder(beforePrepend)}>{loadingOlder ? "正在加载…" : "加载更早消息"}</button></div> : null}<ol className="message-list">{messages.map(message => {
       const own = message.sender_kind === "player" && message.sender_id === playerId;
       return <li key={message.message_id} data-message-id={message.message_id} className={`message-row ${own ? "own" : ""}`}><div className="message-bubble"><span className="message-sender">{own ? "我" : names.get(message.sender_id) ?? "角色"}</span><ChatMessageBody text={message.text} /><MessageTime message={message} />{!own ? <button type="button" className="text-action message-reference" onClick={() => setReferenceTurn(message.turn_id)}>本次参考内容</button> : null}</div></li>;

@@ -53,7 +53,7 @@ export function ChatTranscript({ client, worldId, playerId, conversation, tokenC
   const { messages, failed, hasOlder, loadingOlder, loadOlder, acceptMessage } = useTranscriptPages(client, worldId, conversation.conversation_id, refresh, true);
   const { thread, beforePrepend } = useChatScroll(messages, stream.draft?.text);
 
-  useConversationRead(client, worldId, conversation.conversation_id, messages);
+  const readReceipt = useConversationRead(client, worldId, conversation.conversation_id, messages);
 
   useEffect(() => {
     if (suggestedDraft) {
@@ -175,6 +175,7 @@ export function ChatTranscript({ client, worldId, playerId, conversation, tokenC
       return true;
     }} /> : null}
     {failed ? <p className="thread-hint" role="alert">无法读取会话记录，请刷新后重试。</p> : null}
+    {readReceipt.error ? <p className="thread-hint" role="alert">消息已显示，但未能保存已读状态。<button type="button" className="text-action" onClick={readReceipt.retry}>重新确认已读</button></p> : null}
     {messages === null ? failed ? null : <p className="thread-hint">正在读取消息…</p>
         : messages.length === 0 ? <div className="conversation-placeholder"><h2>还没有消息</h2><p>发一条消息，开始与角色聊天。</p></div>
           : <>{hasOlder ? <div className="transcript-history"><button type="button" className="text-action" disabled={loadingOlder} onClick={() => void loadOlder(beforePrepend)}>{loadingOlder ? "正在加载…" : "加载更早消息"}</button></div> : null}<ol className="message-list">{messages.map(message => {

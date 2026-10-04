@@ -684,7 +684,7 @@ export class CoreClient {
   }
   markConversationRead(worldId: string, conversationId: string, position: number): Promise<{ read: boolean }> {
     return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/${encodeURIComponent(conversationId)}/read`, {
-      method: "POST", body: JSON.stringify({ position }) });
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ position }) });
   }
   offlineContactStatus(worldId: string): Promise<OfflineContactStatus> {
     return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/offline-contact`);
