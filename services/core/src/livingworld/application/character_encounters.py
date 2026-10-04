@@ -5,6 +5,7 @@ from hashlib import sha256
 from uuid import UUID, uuid5
 
 from livingworld.application.action_resolution import AudienceResolver
+from livingworld.application.encounter_policy import encounter_event_uuid, encounter_request_uuid
 from livingworld.application.errors import (
     EntityNotFoundError,
     IdempotencyConflictError,
@@ -53,7 +54,7 @@ class EncounterKernel:
 
     async def execute(self, world, candidate_id):
         proposal = EncounterProposal(world, candidate_id)
-        request_id = RequestId(uuid5(candidate_id, "kernel-encounter"))
+        request_id = RequestId(encounter_request_uuid(candidate_id))
         fingerprint = sha256(
             canonical_json(
                 {
@@ -134,7 +135,7 @@ class EncounterKernel:
                 actor_id=None,
                 world_id=world,
             )
-            event_id = EventId(world, uuid5(request_id.value, "characters-met"))
+            event_id = EventId(world, encounter_event_uuid(candidate_id=proposal.candidate_id))
             event = WorldEvent(
                 event_id,
                 world,

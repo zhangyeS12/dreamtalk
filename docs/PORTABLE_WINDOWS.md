@@ -1,6 +1,6 @@
 # dreamtalk Windows 便携版
 
-最新完整包0.1.25新增[角色短暂相遇](CHARACTER_ENCOUNTERS.md)，并包含[经历话题召回](EXPERIENCE_RECALL.md)。在“设置 → 世界自动活动 → 角色相遇”单独开启，下一批日常生效；双方真实碰面后才能在聊天提及，无逐相遇API，不自动推进关系。0.1.23的连接卡顿已由用户验收；本版新功能只完成静态/编译与包核对，运行仍待体验。新增0033增量结构，不回填历史。先退出旧托盘，再直接运行完整character-encounters/dreamtalk目录，保留core/；使用自启动时在新版显式保存启动位置。
+最新完整包0.1.26减慢[角色短暂相遇](CHARACTER_ENCOUNTERS.md)：每批最多2次，每角色滚动24小时世界时间最多新增一位见面对象；持续同地点不重复普通问候，真实离开再返回还需原6小时冷却。仍含[经历话题召回](EXPERIENCE_RECALL.md)，无逐相遇API、不自动推进关系。0.1.23连接卡顿已由用户验收；新相遇效果仅完成静态/编译与包核对，运行待体验。沿用0033，无新迁移或历史回填。先退出旧托盘，再直接运行完整encounter-pacing/dreamtalk目录，保留core/；需要自启动时在新版显式保存更新启动位置。
 
 将整个 `dreamtalk` 文件夹解压后运行 `dreamtalk-desktop.exe`。请勿只复制 exe：`core/` 文件夹包含随附的 Python Core 和迁移脚本。使用 Windows 10/11，并确保系统有 WebView2 Runtime。无需另行安装 Python、uv、Node 或 Rust。
 

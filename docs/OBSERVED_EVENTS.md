@@ -15,3 +15,7 @@ Director基本自动活动和离线联系已在此前版本实现；此前本文
 ## CharactersMet v1（0.1.25，已获用户批准）
 
 由独立EncounterKernel消费Director候选，同一Kernel写事务复核授权、计划、WorldTime、双方active rest/leisure、地点和presence revision后提交。不可变载荷白名单是first_character_id/second_character_id/location_id、双方routine_id/revision、candidate_id/purpose=brief_greeting、encounter_due_at/encounter_end_at。保留实际发生时间和创建UTC，不回填离线相遇；仅描述短暂见面，不创建对话、任务成果或关系变化。两位参与者与授权在场观察者获得witnessed/event_occurrence；其他主体无自动观察。投影保留participants和participant/witness区分，不暴露全量payload。候选与回执原子完成，重放验证来源活动、时间窗口、同地点、revision、去重与六小时冷却。见[批准方案](proposals/2026-10-03-character-encounters.md)。
+
+## 0.1.26持续同场与熟悉边界
+
+CharactersMet v1观察投影明确encounter_stage=brief_greeting、relationship_effect=none，不将名字显示解释为交换姓名，不从普通问候升级正式介绍/共同经历/关系；已有独立授权的熟识背景仍可使用。Kernel按实际离开账本结束同场段，持续停留不重复普通问候。活动开始/结束/中断等真实变化仍正常记录，不把本次去重解释为所有见闻只留一条。无新观察类型、事件版本或自动记忆写入，既有owner/participant/witness与字节边界保持。见[使用说明](CHARACTER_ENCOUNTERS.md)。

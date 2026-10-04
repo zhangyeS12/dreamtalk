@@ -2,7 +2,20 @@
 
 更新日期：2026-10-04。此文件记录当前开发现场与接续工作，不替代 [AGENTS.md](AGENTS.md)。先读 AGENTS，再读本文，最后核对实际 Git 状态和相关代码；不能把下面的基线哈希当作永远不变的当前 HEAD。
 
-## 最新接续：2026-10-04 角色相遇首版（桌面0.1.25）
+## 最新接续：2026-10-04 相遇节奏与持续同场去重（桌面0.1.26）
+
+- 用户担心短时间全员互相认识及持续同场刷见闻，并明确“可以”接受此前建议。基线d023535/codex/world-archive，正式D:\LivingWorld，开始Git clean；此前0.1.25首版事实与0033保持，0.1.23连接卡顿已用户验收。AGENTS第26节追加本次具体限制，不扩成正式介绍、共同任务、关系或自动测试授权。
+- [成熟方案调查](docs/research/2026-10-04-encounter-pacing-reuse.md)核对Generative Agents冷却/感知去重和Mesa调度，实际复用原Kernel单写事务、candidate账本、canonical ledger_position、scheduler和观察检索，不安装agent框架、复制上游代码或新增调用。
+- schema/提示可选0～2次，Kernel同plan_id成功数同样最多2；旧持久化8候选计划执行也受限，已发生旧事实保留。每角色滚动24小时世界时间至多一个首次实际记录的见面对象，双方均核对；老对象重逢不花新增额度，但受原pair六小时冷却与持续同场去重。限制来自finished历史，不因切批/重启/开关重置；不声称实测百分比或全世界滚动六小时总额度。
+- 同场段使用上次相遇canonical账本位置为锚点，之后CharacterPlaced/CharacterRoutineStarted实际不同location才算一方离开；同地换活动/revision不重记。账本顺序兼容同WorldTime内离开回来，缺锚拒绝猜测。SQL只返回固定原因，未给Director新增历史名单/私密记录。额度取消不参与日常半批失效，不补选或发起额外付费重规划。
+- 授权聊天投影增加brief_greeting、relationship_effect=none，明确问候不证明交换姓名/正式介绍/共同任务/关系，既有独立授权亲缘熟识保留；近128条/最多12条/8KiB范围保持。正式介绍与共同成果仍未有新动作，模型具体语义仍需体验，不宣称提示彻底消除幻觉。正常真实日常变更仍有见闻，不等于所有观察只记录一条。
+- 五处桌面版本0.1.26；无新依赖、表/迁移或事件版本，0033和旧稳定UUID/回执保留。旧v1重放不被新准入策略追溯否决。启动与重点体验见[相遇说明](docs/CHARACTER_ENCOUNTERS.md)，完整独立包artifacts/portable/encounter-pacing/dreamtalk与同父ZIP，旧包保留。
+- 7份Python Ruff lint/format、前端ESLint/TypeScript、227份源码AST、Git diff及653个README/docs本地链接静态检查通过（302个外部URL仅计数，复用调查的一手资料另行在线查阅）。没有新增迁移或修改0033，原迁移源SHA256=018ccfa7e39e99e831876157006620ef81b6c2bb1038d0ce5c0a798eabd8f82a。没有运行测试、产品应用/Core/GUI、模型推理/付费API或真实存档诊断，不把源码检查冒充SQL或模型效果验收。
+- build-only exit0，PyInstaller/Core、Vite239模块（658.98kB/gzip197.66kB、186ms）和Rust release26.03s完成，Desktop PE FileVersion/ProductVersion均0.1.26，修改UTC时间2026-10-04T01:29:45.16148Z。保留主chunk>500kB、STATIC_VCRUNTIME弃用、jieba转义及tzdata/pysqlite2/MySQLdb可选依赖告警，没有隐藏告警或宣称运行兼容已经验收。
+- 完整独立目录artifacts/portable/encounter-pacing/dreamtalk和同父ZIP已生成。227份冻结Python源码、1051份包/ZIP文件、249次文档/许可字节、124个本轮文档本地链接、固定模型哈希及五处版本核对通过；日志encounter-pacing-build.log，静态清单encounter-pacing-source-audit.json、encounter-pacing-audit.json。Desktop SHA256=26b0fd27a1aecdc24ed717d8bb4e85d74d19d08692a68bc337ad48e7f49109a2；Core=fb620420a6d1f86664c2cd6d20387886be79ae909fd466eaa5118f6b75651d7c；ZIP=52a9752157c07f57b1f7db408e4ed4e03d9dac5c1363ec5acdbbd28003349a22。旧包保留，未启动/替换用户正在运行的应用或修改自启动。
+- 本地提交见git log，无必需新用户决策，不push/发布。下一步用户体验持续同场、真实分离后冷却、每日新增对象、问候语义和切世界/重启边界；之后准备共同委托/实际成果的具体方案，正式介绍与关系机制不声称完成。
+
+## 历史接续：2026-10-04 角色相遇首版（桌面0.1.25）
 
 - 0.1.23全页连接/读取卡顿已获用户验收，随后用户明确批准[角色相遇具体方案](docs/proposals/2026-10-03-character-encounters.md)。0.1.24经历话题召回已先本地保存为9fded9f，独立包experience-recall保留；本次正式交付0.1.25包含两者。AGENTS新增第26节记录狭窄授权，不扩大为共同任务、关系、后台互聊或自动测试许可。
 - 每世界默认关闭、独立同意revision和认证POST /director/encounters，在世界自动活动下操作，首次解释同批后台用量。开启只影响下一正常六小时批次；保存/刷新不额外发起模型请求，不逐相遇调用API。已有日常revision与半批失效门槛保持。

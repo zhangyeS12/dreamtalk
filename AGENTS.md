@@ -831,8 +831,8 @@ single-ceiling-per-original-message clause in section 23 for this explicit new a
 
 The user explicitly approved [the first encounter slice](docs/proposals/2026-10-03-character-encounters.md).
 This narrowly extends section 24: a per-world default-off opt-in permits the existing
-six-hour Director batch to propose up to eight brief greetings between two placed
-Characters. Kernel admits only actual co-presence during both planned, active rest/leisure
+six-hour Director batch to propose optional brief greetings between two placed
+Characters. The initial ceiling of eight is superseded by the later user-approved pacing below. Kernel admits only actual co-presence during both planned, active rest/leisure
 intervals, with unchanged presence revisions, current consent/binding/plan and an unpaused
 world. The execution window is at most five minutes; the same pair meets at most once in
 six continuous hours of WorldTime. No missed/offline encounter is backfilled.
@@ -845,3 +845,22 @@ not moved. Disabling cancels pending encounters while preserving facts. New enco
 the next normal batch, do not invoke a per-encounter API and do not change the existing
 routine invalidation/replanning threshold or budget. No automated/runtime/provider testing
 authorization is implied; section 20 still applies.
+
+## Later approved encounter pacing (2026-10-04)
+
+The user accepted slower encounters and continuous co-presence deduplication. Each
+accepted plan may propose and execute at most two ordinary brief greetings (zero is
+valid). Kernel admission also limits each Character to one first recorded counterpart
+in a rolling 24 hours of WorldTime; both participants must qualify. Previously greeted
+pairs do not spend the new-counterpart allowance, but still obey the per-plan ceiling,
+six-hour pair cooldown and continuous co-presence rule. One ordinary greeting is recorded
+per uninterrupted same-location stay; an actual canonical departure by either participant
+is needed before considering another. Same-location routine/revision changes, restart and
+disable/re-enable do not reset the policy. Preserve old facts, stable UUIDs, consent and
+CharactersMet v1 replay. Rejected encounters neither invoke a replacement provider call
+nor contribute to routine invalidation/replanning. A brief greeting does not imply name
+exchange, formal introduction, shared task results or relationship progression. Existing
+independently authorized familiarity is preserved; formal new actions remain outside this
+slice. Reuse investigation and exact policy are in
+[encounter pacing research](docs/research/2026-10-04-encounter-pacing-reuse.md).
+Section 20's testing restrictions remain unchanged.

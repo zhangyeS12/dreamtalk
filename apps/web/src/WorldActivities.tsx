@@ -131,7 +131,8 @@ export function WorldActivities({ client, worldId, visible, paused, hasInitializ
       <h3>角色相遇</h3>
       <p>{status?.encounters_enabled ? (status.enabled ? "已允许：双方实际碰面后会记住这段经历。" : "已允许，自动活动关闭期间不执行相遇。") : "尚未开启。允许角色在休息或自由活动时短暂碰面。"}</p>
       <p className="inline-hint">相遇随下一批6小时日常一起规划，不逐次调用 API；只在双方实际处于同一地点且时段有效时记录。不会移动你，不自动改变关系，也不补演错过的碰面。</p>
-      <p className="inline-hint">角色可在聊天中自然提及自己的见闻；你未亲历或尚未从聊天获知的相遇，不会直接出现在世界事件中。</p>
+      <p className="inline-hint">每批最多两次普通相遇；每位角色每24小时世界时间最多新增一个见面对象。两人一直在同一地点时不重复记录问候，分开后再碰面才重新考虑；同一对仍有6小时冷却。</p>
+      <p className="inline-hint">角色可在聊天中自然提及自己的见闻；短暂问候不会自动变成正式认识或熟悉。你未亲历或尚未从聊天获知的相遇，不会直接出现在世界事件中。</p>
       <button type="button" disabled={!status || busy || (!status.enabled && !status.encounters_enabled)} onClick={() => {
         if (status?.encounters_enabled) void configureEncounters(false);
         else if (status?.encounters_consented) void configureEncounters(true);

@@ -15,3 +15,7 @@
 ## 0.1.25真实碰面也可召回
 
 [角色相遇](CHARACTER_ENCOUNTERS.md)已按批准方案接入，默认关闭；仅Kernel实际提交的CharactersMet才进入双方/授权在场者的观察检索。投影标出event_type、两名参与者ID与participant/witness；不会把目击他人相遇说成本人参加，也不把短暂打招呼编成私聊、任务成果或关系变化。较早的“相遇待批准”属于0.1.24先行实现时的边界，本次方案已获得明确批准。范围仍近128条词法候选、最终12条/8KiB，运行效果待验收。
+
+## 0.1.26问候语义与节奏
+
+真实碰面的观察投影增加encounter_stage=brief_greeting、relationship_effect=none，明确问候不证明交换姓名、正式介绍、私下谈话、共同任务或熟悉程度提升。既有授权背景的亲缘/熟识仍保留。没有新增正式介绍/任务/关系动作；观察的近128条词法检索和最终12条/8KiB上限保持。持续同场普通问候、每角色新增对象和每批执行数量的限制见[相遇说明](CHARACTER_ENCOUNTERS.md)。完整0.1.26包位于encounter-pacing/dreamtalk；无需额外API判断记忆。

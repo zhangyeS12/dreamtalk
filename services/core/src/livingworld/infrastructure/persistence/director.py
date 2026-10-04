@@ -27,6 +27,7 @@ from livingworld.infrastructure.persistence.encounter_models import (
 from livingworld.infrastructure.persistence.encounter_models import (
     EncounterSettingsRecord as EncounterSettings,
 )
+from livingworld.infrastructure.persistence.encounter_policy import pacing_rejection
 from livingworld.infrastructure.persistence.models import (
     CharacterRecord,
     CharacterStateRecord,
@@ -732,22 +733,11 @@ class DirectorKernelRepository:
         if not row.due_at <= now.microseconds < min(row.end_at, plan.window_end):
             row.state, row.reason = "expired", "window_elapsed"
             return row, None
-        previous = await self.session.scalar(
-            select(Encounter.candidate_id)
-            .where(
-                Encounter.world_id == world.value,
-                Encounter.first_character_id == row.first_character_id,
-                Encounter.second_character_id == row.second_character_id,
-                Encounter.state == "finished",
-                Encounter.executed_at > now.microseconds - WINDOW_US,
-            )
-            .limit(1)
-        )
         routines = [
             await self.session.get(Candidate, (world.value, identity))
             for identity in (row.first_routine_id, row.second_routine_id)
         ]
-        if previous or any(
+        if any(
             routine is None
             or routine.state != "active"
             or routine.activity not in {"rest", "leisure"}
@@ -759,6 +749,10 @@ class DirectorKernelRepository:
                 routines, (row.first_character_id, row.second_character_id), strict=True
             )
         ):
-            row.state, row.reason = "invalid", "cooldown_or_activity_changed"
+            row.state, row.reason = "invalid", "activity_changed"
+            return row, None
+        rejected = await pacing_rejection(self.session, row, now.microseconds)
+        if rejected is not None:
+            row.state, row.reason = "invalid", rejected
             return row, None
         return row, tuple(routines)

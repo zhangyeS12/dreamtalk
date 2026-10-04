@@ -97,6 +97,9 @@ async def character_observed_events(
                 str(identity.value) for identity in event.participants
             ]
             item["participation"] = "participant" if owner in event.participants else "witness"
+            if event.event_type == "CharactersMet":
+                item["encounter_stage"] = "brief_greeting"
+                item["relationship_effect"] = "none"
         size = len(json.dumps(item, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
         if used + size + 1 > MAX_CHARACTER_EVENT_BYTES:
             continue

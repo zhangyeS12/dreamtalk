@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from livingworld.application.character_encounters import EncounterKernel
 from livingworld.application.content_builder import generate_bounded_text
+from livingworld.application.encounter_policy import MAX_ENCOUNTERS_PER_BATCH
 from livingworld.application.errors import WorldRuntimeUnavailableError
 from livingworld.application.llm import (
     InvocationId,
@@ -60,7 +61,9 @@ class PlannedEncounter(BaseModel):
 class PlannedBatch(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     candidates: list[PlannedRoutine] = Field(min_length=1, max_length=MAX_CANDIDATES)
-    encounters: list[PlannedEncounter] = Field(default_factory=list, max_length=8)
+    encounters: list[PlannedEncounter] = Field(
+        default_factory=list, max_length=MAX_ENCOUNTERS_PER_BATCH
+    )
 
 
 def validate_plan(text, snapshot):
@@ -296,10 +299,13 @@ class DirectorService:
                                 "start_minute不得早于available_from_minute；同角色活动不重叠，结束不超过第360分钟。"
                                 "活动只表示开始做事，不保证完成任务或产生未定义成果。"
                                 "活动activity只能为rest/work/leisure。总候选最多64条。"
-                                "只有world.encounters_enabled=true才可填写encounters，最多8条，可为空。"
+                                "只有world.encounters_enabled=true才可填写encounters，每批最多2条，可为0或1条，不必凑满。"
                                 "每条仅两个角色在同地点的已有休息/自由活动时段偶遇问候，start_minute至少1；"
                                 "同一对只一次。不能安排工作中碰面、未重叠活动、对话、关系或任务成果。"
                                 "可以合理协调两人的日常，让部分时段与地点重叠，但不能强行让所有人相遇。"
+                                "同批优先安排不重叠的角色对；程序会限制每角色24小时世界时间最多一个新见面对象，"
+                                "并拒绝持续同地点期间的重复问候。取消相遇不影响日常，不补选、不额外重规划。"
+                                "短暂碰面只证明见过/问候，不代表交换姓名、正式介绍、朋友或关系推进。"
                             ),
                         ),
                     ),
