@@ -16,3 +16,6 @@ tests/core/fixtures/llm/*.sse -text whitespace=-blank-at-eof,cr-at-eol
 docs/licenses/semantic-runtime/** -text
 docs/licenses/bge-model-LICENSE.txt -text
 docs/licenses/diskcache-5.6.3-LICENSE.txt -text
+
+# Preserve upstream relationship-network license text bytes.
+docs/licenses/relationship-network/*.txt -text
