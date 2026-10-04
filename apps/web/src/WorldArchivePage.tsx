@@ -6,12 +6,14 @@ import { WorldImports } from "./WorldContent";
 import { WorldShelf, worldShelfBlankCount } from "./WorldShelf";
 import { WorldCoverEditor } from "./WorldCoverEditor";
 import { useWorldCovers } from "./useWorldCovers";
+import { Brand } from "./Brand";
 import "./world-archive.css";
 import "./world-cover.css";
 
-export function WorldArchivePage({ client, initialWorldId, onEnter, displayTime }: {
+export function WorldArchivePage({ client, initialWorldId, onEnter, displayTime, onStartupStatus }: {
   client: CoreClient; initialWorldId: string | null;
   onEnter: (id: string, hasIdentity: boolean) => void; displayTime: (raw: string) => string;
+  onStartupStatus?: (ready: boolean) => void;
 }) {
   const covers = useWorldCovers(client);
   const [coverOpen, setCoverOpen] = useState(false);
@@ -24,6 +26,8 @@ export function WorldArchivePage({ client, initialWorldId, onEnter, displayTime 
   const [blankIndex, setBlankIndex] = useState<number | null>(null);
   const [readyKey, setReadyKey] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [startupFailed, setStartupFailed] = useState(false);
+  const startupReported = useRef(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [creating, setCreating] = useState(false);
@@ -53,9 +57,9 @@ export function WorldArchivePage({ client, initialWorldId, onEnter, displayTime 
   const world = worlds.find(item => item.world_id === selectedId);
   const items = content?.worldId === selectedId ? content.items : null;
   const books = items?.filter(item => item.kind === "lorebook");
-  const refresh = useCallback(async () => {
-    const result = await client.listProductWorlds();
-    if (!active.current) return result;
+  const refresh = useCallback(async (signal?: AbortSignal) => {
+    const result = await client.listProductWorlds(signal);
+    if (!active.current || signal?.aborted) return result;
     setWorlds(result);
     setBlankIndex(current => current === null ? null : Math.min(current, worldShelfBlankCount(result.length) - 1));
     // Remembered world positions never imply an active selection.
@@ -64,13 +68,21 @@ export function WorldArchivePage({ client, initialWorldId, onEnter, displayTime 
   }, [client]);
   useEffect(() => {
     active.current = true;
-    void refresh().catch(() => { if (active.current) setError("世界档案未能读取。请检查核心连接后刷新。"); })
-      .finally(() => { if (active.current) setLoading(false); });
+    let initialActive = true;
+    const initialRequest = new AbortController();
+    void refresh(initialRequest.signal).catch(() => { if (initialActive) { setStartupFailed(true); setError("世界档案未能读取。请检查核心连接后刷新。"); } })
+      .finally(() => { if (initialActive) setLoading(false); });
     const timer = window.setInterval(() => {
       if (!lock.current && !coverBusyRef.current) void refresh().catch(() => { if (active.current) setError("世界状态暂时无法刷新。已有草稿仍保留。"); });
     }, 15000);
-    return () => { active.current = false; window.clearInterval(timer); };
+    return () => { initialActive = false; initialRequest.abort(); active.current = false; window.clearInterval(timer); };
   }, [refresh]);
+  useEffect(() => {
+    if (!onStartupStatus || startupReported.current || loading || !startupFailed && !covers.ready) return;
+    // The real books/covers have committed. Avoid waiting for animation frames:
+    // hidden autostart windows may not receive them at all.
+    startupReported.current = true; onStartupStatus(!startupFailed);
+  }, [onStartupStatus, loading, covers.ready, startupFailed]);
   useEffect(() => {
     if (!isTauri()) return;
     const report = () => void invoke("report_desktop_presence", { worldId: null, visible: false }).catch(() => undefined);
@@ -162,7 +174,7 @@ export function WorldArchivePage({ client, initialWorldId, onEnter, displayTime 
   };
   const contentChanged = useCallback(() => setContentRevision(value => value + 1), []);
   return <div className="product-shell archive-shell">
-    <header className="archive-header"><span className="app-brand">dreamtalk</span><span className="archive-header-label">世界档案库</span>
+    <header className="archive-header"><Brand /><span className="archive-header-label">世界档案库</span>
       <button type="button" className="text-action" disabled={busy || entering || coverBusy} onClick={() => {
         if (modelOpen) { leaveEditor(); return; }
         if (leaveEditor()) { clearSelection(); setModelOpen(true); }

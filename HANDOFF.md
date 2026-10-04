@@ -5,8 +5,9 @@
 
 ## 1. 当前任务、范围与结论
 
-当前任务是根据用户0.1.32体验反馈优化阵营表单及关系网，0.1.33源码已完成：真实三维宇宙视角头像球、直接点击、缓慢漂浮与相机操作。源码检查及前端/桌面编译、build-only便携构建通过。用户反馈旧框过窄、图内不能点、球体缺少立体感；不把这个体验认定为阵营/模型全量验收。实际运行由用户验收，不调用模型或读取现有存档。此前0.1.30红点清除已获用户“问题已解决”的反馈；0.1.31主动/离线联动仍待体验，不阻挡用户明确选择阵营功能。
+当前任务为用户批准的新Logo和真实三维流星漩涡启动，Desktop0.1.34源码、静态检查及build-only便携构建已完成；实际画面/启动/后台与设备流畅度由用户验收。正常启动不显示核心连接文字；真实核心health/generation确认、世界列表和有界封面准备后，约900ms相机推进并进入背后的原书架。隐藏自启动不创建WebGL，减少动态效果/不可用时静态回退；失败有明确重试。Core、迁移、模型调用及系统启动注册不变。详见[启动说明](docs/CELESTIAL_STARTUP.md)与[成熟实现调查](docs/research/2026-10-04-celestial-startup-reuse.md)。
 
+此前0.1.33真三维关系网和宽表单已交付源码/便携包，用户这轮转向启动体验；不据此标成全量关系网验收。0.1.30红点修复已获用户“问题已解决”反馈；0.1.31主动/离线联动仍待体验，不阻挡当前明确需求。
 - 当前世界通讯录可创建、重命名、迁移、删除空阵营；子阵营不限制层级，角色可多重归属。同一个阵营的直接成员在单写事务中建立持久相识；父子和多跳关系不扩大熟人范围，撤出阵营只改变归属、不抹去已建立的相识。
 - 头像复用已有世界封面图片校验、资产存储及授权读取，绑定稳定角色卡根ID。关系网改用3d-force-graph1.80.1 / Three.js0.186.1：真正三维头像球、明暗/透视/遮挡、稀疏星点、静置和聚焦后缓慢漂浮、连线同步；直接点击约260ms聚焦、左键平移/右键旋转/滚轮缩放，右侧完整姓名/阵营路径/聊天跳转。底部定位与键盘操作、暂停漂浮/减少动态效果、按需加载、切页释放及后台暂停均接线。旧全局input90px由表单字段样式覆盖，React Flow关闭交互造成的点击阻断随二维库移除；左侧选人不退出星图。当前头像用于通讯录及关系网。
 - 私聊/群聊仅提供发言者本人有界阵营与相识数据，最多8个阵营、每阵营16名同伴和24名相识，合计4KiB；容量不足可整体移除，“本次参考内容”显示保留/省略。相识不证明共同经历、秘密或亲密度。
@@ -19,9 +20,9 @@
 | --- | --- |
 | 正式仓库 | `D:\LivingWorld`；当前用户工作目录 `C:\Users\zhang\Documents\ChatGPT\LivingWorld` 是受限环境可写工作目录，不据此推断正式仓库/构建产物已搬迁。 |
 | 分支 | `codex/world-archive`。 |
-| 本轮开始 HEAD | `bd90ab3`，0.1.32阵营/头像/关系网提交；开始工作区干净。此前文档整理基线为1221c18，后续以实际git log为准。 |
+| 本轮开始 HEAD | `167d5e8`，0.1.33三维关系网优化提交；开始工作区干净。此前文档整理基线为1221c18，后续以实际git log为准。 |
 | 此前功能提交 | `844259a`：离线恢复门禁状态提示；`ed5f844`：在线主动联系与未读红点；前序 `9939579` 授权活动终态召回去重、`ee17ed6` 共同休闲/来源回看。 |
-| 桌面版本 | `0.1.33`（package/Tauri/Cargo；交付 EXE 元数据以本轮构建核对）。根 npm/Core package 的 `0.1.0` 是已有独立包版本，不误改成桌面版本。 |
+| 桌面版本 | `0.1.34`（package/Tauri/Cargo；交付 EXE 元数据以本轮构建核对）。根 npm/Core package 的 `0.1.0` 是已有独立包版本，不误改成桌面版本。 |
 | Core API | `services/core/src/livingworld/domain/api_contract.json`：`api_protocol = 1`、loopback `127.0.0.1`；随机 Core 端口，UI 不硬编码。 |
 | Alembic head | `0036_character_factions`，前序 `0035_proactive_contact`。此次不运行升级或读取真实存档。 |
 | Git remote | `origin = https://github.com/zhangyeS12/dreamtalk.git`；只读本地配置，不表示本地最新提交已推送。 |
@@ -79,7 +80,7 @@
 
 | 领域 | 当前入口 |
 | --- | --- |
-| UI/连接 | `apps/web/src/App.tsx`、`connection.ts`、`ProductApp.tsx`、`WorldArchivePage.tsx`、`SettingsHandbook.tsx`；`packages/api-client/src`。 |
+| UI/连接 | `apps/web/src/App.tsx`、`StartupSplash.tsx`、`celestialVortex.ts`、`Brand.tsx`、`connection.ts`、`ProductApp.tsx`、`WorldArchivePage.tsx`、`SettingsHandbook.tsx`；`packages/api-client/src`。 |
 | 卡/书与公共背景 | `application/content_builder.py`、`lore_activation.py`、`infrastructure/persistence/world_content.py`；WorldContent/ContentEditor。 |
 | 聊天/预算/恢复 | `application/chat_context.py`、`group_chat_context.py`、`chat_reply.py`、`group_chat_reply.py`、`chat_capacity.py`；`infrastructure/persistence/chat_reply_recovery.py`。 |
 | 记忆/RAG | `application/long_chat_memory.py`；`infrastructure/persistence/long_chat_memory.py`、`infrastructure/chat_retrieval.py`、`semantic_chat_retrieval.py`。 |
@@ -95,6 +96,14 @@
 不要用旧包打开已升级存档；不要把代码核对称为真实存档升级验证。
 
 ## 6. 交付与证据
+
+### 0.1.34 星梦启动与新Logo
+
+Three.js0.186.1真实空间流星、明暗球体/遮挡、星点和透视相机；900ms真实就绪后的穿越/透明交接。原Logo字节保留，TauriCLI2.11.4转换窗口/托盘/任务栏图标和favicon，页头复用Brand。书架数据及有界封面就绪接线、失败只读重试、减少动态效果/静态回退、隐藏启动与资源释放完成。没有改Core/协议/迁移或自启动注册。
+
+前端ESLint/tsc、图标脚本Ruff格式/lint、本地文档链接及Git差异检查通过；`--build-only --output-name celestial-startup`已完成。后续启动读取取消修正已重新编译桌面并同步EXE，包内文档/ZIP重新生成核对。ProductVersion/FileVersion为0.1.34。新包`artifacts/portable/celestial-startup/dreamtalk`及同级`dreamtalk.zip`；原Core与0.1.33字节哈希相同，旧包保留。尚未启动产品、执行自动测试、真实存档或模型；图标与原Logo元数据及当前源码/产物清单见`artifacts/celestial-startup-source-audit.json`，不是运行验收。
+
+保留非阻塞告警：主chunk707.79kB（gzip210.68kB）、共享Three.js587.98kB（gzip145.15kB）、关系网817.51kB（gzip233.11kB）、STATIC_VCRUNTIME弃用；启动场景单独6.64kB（gzip2.95kB），Three与关系网按需加载。图标CLI提示Windows某字体文件无法加载，源SVG仅嵌PNG，产物存在并具备所需透明/尺寸层；未隐藏告警，也没有声称GPU/帧率验收通过。Desktop SHA256 `a5533aa30f76743baf93409f4eb9a3723639e597d5915c559ac31a9034fe75cf`；Core SHA256 `fcb37748d6a6a9f3da5f81ad3d9df1b6488963099c799c8011030f3e2e7387b0`；原Logo SHA256 `15cc4b6eb20b831282cdf3134c4b037809d6ff6944330edaf6b248df0e76fd6e`。
 
 ### 0.1.33 三维人物关系网优化
 
@@ -170,9 +179,9 @@ git diff --check
 
 ## 8. 下一步、限制与疑问
 
-当前根据用户反馈优化阵营输入及三维关系网；先按[验收说明](docs/CHARACTER_FACTIONS.md)体验图内直接点击、聚焦后的轻缓漂浮、连线同步、拖动旋转缩放及侧窗聊天入口，再核对此前阵营隔离/头像与卡片更新。下一步根据实际反馈修复，不自动扩充关系分数、委托或新社交动作。
+当前Logo与真三维流星启动已交付；下一步按[启动说明](docs/CELESTIAL_STARTUP.md)体验近远光尾、球体遮挡、相机穿越到书架、失败重试、隐藏后台与减少动态效果。三维关系网仍按[验收说明](docs/CHARACTER_FACTIONS.md)体验；根据具体反馈修复，不自动扩充玩法或新社交动作。
 
-1. 三维关系网优化源码和前端编译已完成，便携包已交付，运行仍待用户体验；没有需要另行决定的产品问题。
+1. 星梦启动0.1.34和三维关系网0.1.33均已有源码/便携包，运行与画面仍待用户体验；没有必需新产品决定。
 2. 主动联系仍有待验收：同一真实共同休闲的两名角色是否同目的邀请、未回复是否阻断跨角色后续联系、回复后是否在下一合法机会恢复。已有相识不代表一定会主动联系；活动、许可、冷却和门禁仍有效。
 3. 以前经历终态/身份隔离、共同休闲生命周期和来源回看仍待体验，缺少验收不表示没实现。0.1.30红点清除已获用户确认。
 4. 最终发行等待用户验收和明确批准；本轮只本地提交，不push/Release、不修改自启动或现有存档。

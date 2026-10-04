@@ -18,6 +18,7 @@ import { WorldLocations } from "./WorldLocations";
 import { CharacterActivitySetup } from "./CharacterActivitySetup";
 import { ProfileEditor } from "./ProfileEditor";
 import { WorldArchivePage } from "./WorldArchivePage";
+import { Brand } from "./Brand";
 import { SettingsHandbook, SettingsFold, type SettingsPage } from "./SettingsHandbook";
 import { SettingsDiagnostics } from "./SettingsDiagnostics";
 import "./product.css";
@@ -68,7 +69,7 @@ function savedTokenCeiling(): number {
   return 50_000;
 }
 
-export function ProductApp({ client }: { client: CoreClient }) {
+export function ProductApp({ client, onStartupStatus }: { client: CoreClient; onStartupStatus?: (ready: boolean) => void }) {
   useEffect(() => {
     const preventFileNavigation = (event: DragEvent) => {
       if (event.dataTransfer?.types.includes("Files")) event.preventDefault();
@@ -81,7 +82,7 @@ export function ProductApp({ client }: { client: CoreClient }) {
   const [previewId, setPreviewId] = useState(savedWorldId);
   return entered ? <WorldWorkspace key={entered.worldId} client={client} initialWorldId={entered.worldId}
     initialTab={entered.hasIdentity ? "chats" : "me"} onArchive={() => { setPreviewId(entered.worldId); setEntered(null); }} />
-    : <WorldArchivePage client={client} initialWorldId={previewId} displayTime={displayTime}
+    : <WorldArchivePage client={client} initialWorldId={previewId} displayTime={displayTime} onStartupStatus={onStartupStatus}
       onEnter={(worldId, hasIdentity) => setEntered({ worldId, hasIdentity })} />;
 }
 
@@ -308,7 +309,7 @@ function WorldWorkspace({ client, initialWorldId, initialTab, onArchive }: {
     });
   };
   return <div className="product-shell world-workspace">
-    <header className="app-header"><span className="app-brand">dreamtalk</span><span role="status" className="sr-only">核心已就绪</span><span className="workspace-header-actions"><span className="world-context">{world?.name ?? "正在读取世界…"}</span><button type="button" className="text-action" onClick={returnArchive}>返回书架</button></span></header>
+    <header className="app-header"><Brand /><span role="status" className="sr-only">核心已就绪</span><span className="workspace-header-actions"><span className="world-context">{world?.name ?? "正在读取世界…"}</span><button type="button" className="text-action" onClick={returnArchive}>返回书架</button></span></header>
     <main className="app-content" id="main-content">
       <div className="page-heading"><h1 ref={entryHeading} tabIndex={-1}>{title}</h1>{world ? <span className="page-world">{world.name}</span> : null}</div>
       {error ? <p className="app-alert" role="alert">{error}</p> : null}
