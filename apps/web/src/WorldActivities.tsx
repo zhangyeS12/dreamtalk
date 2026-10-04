@@ -5,6 +5,8 @@ import { BackgroundTaskFeedback, taskErrorGuidance, activityGuidance, type Backg
 import { PublicBackgroundReadiness } from "./PublicBackgroundReadiness";
 
 const errors: Record<string, string> = {
+  director_encounters_require_activity: "请先开启世界自动活动，再允许角色相遇。",
+  director_encounter_consent_required: "首次允许相遇，需要确认同批后台规划的模型用量。",
   director_player_required: "请先选择你在当前世界的身份。",
   director_model_unavailable: "请先配置可用的聊天模型。",
   director_settings_changed: "设置已变化，请刷新状态后重试。",
@@ -36,6 +38,14 @@ export function WorldActivities({ client, worldId, visible, paused, hasInitializ
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; ++requestSerial.current; }; }, []);
   const [consentOpen, setConsentOpen] = useState(false);
+  const [encounterConsentOpen, setEncounterConsentOpen] = useState(false);
+  const currentWorld = useRef(worldId);
+  currentWorld.current = worldId;
+  useEffect(() => {
+    setStatus(null); setNotice(""); setLoadError(""); setOperationError(""); setOperationCode(null);
+    setConsentOpen(false); setEncounterConsentOpen(false);
+    ++requestSerial.current;
+  }, [worldId]);
   useEffect(() => {
     if (!visible) return;
     let alive = true;
@@ -59,15 +69,32 @@ export function WorldActivities({ client, worldId, visible, paused, hasInitializ
     setBusy(true); setNotice(""); setOperationError(""); setOperationCode(null);
     try {
       const next = await client.configureDirector(worldId, status, enabled, consent, retry);
-      if (!mounted.current) return;
+      if (!mounted.current || currentWorld.current !== worldId) return;
       setStatus(next); setLoadError("");
       setConsentOpen(false);
       setNotice(enabled ? (retry ? "新的规划已排队；暂停的世界恢复后才开始。" : "开关已保存，请按上方状态查看规划进度；有了有效计划后才执行活动。") : "已关闭后续规划和待执行活动。已经开始的模型请求仍可能产生用量。");
     } catch (error) {
-      if (!mounted.current) return;
+      if (!mounted.current || currentWorld.current !== worldId) return;
       setOperationCode(error instanceof CoreRequestError ? error.code : null);
       setOperationError(error instanceof CoreRequestError && error.code && errors[error.code]
         ? errors[error.code] : "未能更新设置，请读取最新状态后重试。");
+    } finally { busyRef.current = false; if (mounted.current) setBusy(false); }
+  }
+
+  async function configureEncounters(enabled: boolean, consent = false) {
+    if (!status || busyRef.current) return;
+    busyRef.current = true; ++requestSerial.current;
+    setBusy(true); setNotice(""); setOperationError(""); setOperationCode(null);
+    try {
+      const next = await client.configureDirectorEncounters(worldId, status, enabled, consent);
+      if (!mounted.current || currentWorld.current !== worldId) return;
+      setStatus(next); setLoadError(""); setEncounterConsentOpen(false);
+      setNotice(enabled ? "已允许角色相遇，下一批日常规划生效；此次保存未额外调用模型。" : "已关闭后续相遇，取消尚未执行的候选；已发生的见闻保留。");
+    } catch (error) {
+      if (!mounted.current || currentWorld.current !== worldId) return;
+      setOperationCode(error instanceof CoreRequestError ? error.code : null);
+      setOperationError(error instanceof CoreRequestError && error.code && errors[error.code]
+        ? errors[error.code] : "未能保存相遇设置，请刷新状态后重试。");
     } finally { busyRef.current = false; if (mounted.current) setBusy(false); }
   }
 
@@ -100,6 +127,23 @@ export function WorldActivities({ client, worldId, visible, paused, hasInitializ
       <button type="button" className="primary-button" disabled={busy} onClick={() => void configure(true, true)}>同意后台模型用量并开启</button>
       <button type="button" disabled={busy} onClick={() => setConsentOpen(false)}>暂不开启</button>
     </div>}
+    <div className="editor-panel" role="group" aria-label="角色相遇设置">
+      <h3>角色相遇</h3>
+      <p>{status?.encounters_enabled ? (status.enabled ? "已允许：双方实际碰面后会记住这段经历。" : "已允许，自动活动关闭期间不执行相遇。") : "尚未开启。允许角色在休息或自由活动时短暂碰面。"}</p>
+      <p className="inline-hint">相遇随下一批6小时日常一起规划，不逐次调用 API；只在双方实际处于同一地点且时段有效时记录。不会移动你，不自动改变关系，也不补演错过的碰面。</p>
+      <p className="inline-hint">角色可在聊天中自然提及自己的见闻；你未亲历或尚未从聊天获知的相遇，不会直接出现在世界事件中。</p>
+      <button type="button" disabled={!status || busy || (!status.enabled && !status.encounters_enabled)} onClick={() => {
+        if (status?.encounters_enabled) void configureEncounters(false);
+        else if (status?.encounters_consented) void configureEncounters(true);
+        else setEncounterConsentOpen(true);
+      }}>{status?.encounters_enabled ? "关闭角色相遇" : "允许角色相遇"}</button>
+      {!status?.enabled && <p className="inline-hint">先开启上方世界自动活动，再允许相遇。</p>}
+      {encounterConsentOpen && <div role="group" aria-label="授权相遇规划">
+        <p>开启后允许现有 Director 在日常批次中安排两名角色短暂碰面，使用已有角色资料、地点和公共背景；同批输出可能增加用量，遵循现有预算，不发送私聊或私人记忆。</p>
+        <button type="button" className="primary-button" disabled={busy || !status?.enabled} onClick={() => void configureEncounters(true, true)}>同意同批后台用量并开启</button>
+        <button type="button" disabled={busy} onClick={() => setEncounterConsentOpen(false)}>暂不开启</button>
+      </div>}
+    </div>
     <PublicBackgroundReadiness client={client} worldId={worldId} visible={visible} disabled={busy} onManage={onNavigate ? () => onNavigate("lore") : undefined} />
     {loadError && <p role="alert">{loadError}</p>}
     {operationError && <BackgroundTaskFeedback name="更新自动活动" guidance={taskErrorGuidance(operationCode, operationError, "本次设置未能确认")} onNavigate={onNavigate} disabled={busy} />}

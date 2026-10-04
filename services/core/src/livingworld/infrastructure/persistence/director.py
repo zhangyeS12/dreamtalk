@@ -21,6 +21,12 @@ from livingworld.infrastructure.persistence.director_models import DirectorPlanR
 from livingworld.infrastructure.persistence.director_models import (
     DirectorSettingsRecord as Settings,
 )
+from livingworld.infrastructure.persistence.encounter_models import (
+    EncounterCandidateRecord as Encounter,
+)
+from livingworld.infrastructure.persistence.encounter_models import (
+    EncounterSettingsRecord as EncounterSettings,
+)
 from livingworld.infrastructure.persistence.models import (
     CharacterRecord,
     CharacterStateRecord,
@@ -45,6 +51,11 @@ async def _binding(session, world):
 
 async def _pending_cancel(session, world, state="cancelled"):
     await session.execute(
+        update(Encounter)
+        .where(Encounter.world_id == world.value, Encounter.state == "pending")
+        .values(state=state)
+    )
+    await session.execute(
         update(Candidate)
         .where(Candidate.world_id == world.value, Candidate.state == "pending")
         .values(state=state)
@@ -67,12 +78,17 @@ class SqlAlchemyDirectorStore:
             if player is None or bound != player.value:
                 raise DirectorError("director_player_required")
             owned = config is not None and config.player_id == bound
+            encounters = await session.get(EncounterSettings, world.value)
+            encounter_owned = encounters is not None and encounters.player_id == bound
             return {
                 "enabled": bool(owned and config.enabled),
                 "revision": config.revision if config else 0,
                 "state": config.state if owned else "off",
                 "error": config.error if owned else None,
                 "consented": bool(owned),
+                "encounters_enabled": bool(encounter_owned and encounters.enabled),
+                "encounter_revision": encounters.revision if encounters else 0,
+                "encounters_consented": bool(encounter_owned),
             }
 
     async def configure(self, world, player, enabled, consent, revision, retry):
@@ -337,6 +353,13 @@ class SqlAlchemyDirectorStore:
             character["name"] + " " + location_names.get(character["location_id"], "")
             for character in characters
         )
+        encounter_settings = await session.get(EncounterSettings, world.value)
+        snapshot["encounters_enabled"] = bool(
+            encounter_settings
+            and encounter_settings.enabled
+            and encounter_settings.player_id == await _binding(session, world)
+        )
+        snapshot["encounter_revision"] = encounter_settings.revision if encounter_settings else 0
         snapshot["common_world_background"] = select_common_background(
             await read_director_background(session, world),
             (planning_text,),
@@ -439,7 +462,7 @@ class SqlAlchemyDirectorStore:
                 raise DirectorError("director_background_changed")
             return True
 
-    async def finish(self, world, request_id, generation, candidates):
+    async def finish(self, world, request_id, generation, candidates, encounters=()):
         async with self.sessions() as session:
             await _write(session)
             config = await session.get(Settings, world.value)
@@ -472,6 +495,32 @@ class SqlAlchemyDirectorStore:
                         **value,
                     )
                 )
+            await session.flush()
+            consent = await session.get(EncounterSettings, world.value)
+            planned_input = json.loads(plan.input_json)
+            if (
+                consent
+                and consent.enabled
+                and consent.player_id == config.player_id
+                and consent.revision == planned_input.get("encounter_revision")
+                and planned_input.get("encounters_enabled")
+            ):
+                for index, value in enumerate(encounters):
+                    values = dict(value)
+                    first = values.pop("first_routine_index")
+                    second = values.pop("second_routine_index")
+                    session.add(
+                        Encounter(
+                            world_id=world.value,
+                            candidate_id=uuid5(request_id, f"encounter:{index}"),
+                            plan_id=request_id,
+                            consent_revision=consent.revision,
+                            state="pending",
+                            first_routine_id=uuid5(request_id, f"routine:{first}"),
+                            second_routine_id=uuid5(request_id, f"routine:{second}"),
+                            **values,
+                        )
+                    )
             plan.candidate_count, plan.state = len(candidates), "ready"
             config.state, config.error = "ready", None
             await session.commit()
@@ -492,6 +541,95 @@ class SqlAlchemyDirectorStore:
             ):
                 config.state, config.error = "attention", code
             await session.commit()
+
+    async def configure_encounters(self, world, player, enabled, consent, revision):
+        async with self.sessions() as session:
+            await _write(session)
+            if await session.get(WorldRecord, world.value) is None:
+                raise EntityNotFoundError("world_not_found")
+            bound = await _binding(session, world)
+            if player is None or player.value != bound:
+                raise DirectorError("director_player_required")
+            director = await session.get(Settings, world.value)
+            if enabled and (not director or not director.enabled or director.player_id != bound):
+                raise DirectorError("director_encounters_require_activity")
+            setting = await session.get(EncounterSettings, world.value)
+            if (setting.revision if setting else 0) != revision:
+                raise DirectorError("director_settings_changed")
+            if enabled and (not setting or setting.player_id != bound) and not consent:
+                raise DirectorError("director_encounter_consent_required")
+            if not setting and not enabled:
+                return
+            if setting and setting.enabled == enabled and setting.player_id == bound:
+                return
+            if not setting:
+                setting = EncounterSettings(
+                    world_id=world.value,
+                    player_id=bound,
+                    enabled=False,
+                    revision=0,
+                    consented_at=datetime.now(UTC),
+                )
+                session.add(setting)
+            if enabled and setting.player_id != bound:
+                setting.consented_at = datetime.now(UTC)
+            if enabled:
+                setting.player_id = bound
+            setting.enabled = enabled
+            setting.revision += 1
+            await session.execute(
+                update(Encounter)
+                .where(Encounter.world_id == world.value, Encounter.state == "pending")
+                .values(state="cancelled")
+            )
+            # Separate consent revision never invalidates admitted daily activities.
+            await session.commit()
+
+    async def advance_encounters(self, world, now):
+        async with self.sessions() as session:
+            await _write(session)
+            config = await session.get(Settings, world.value)
+            consent = await session.get(EncounterSettings, world.value)
+            if not (
+                config
+                and config.enabled
+                and config.state == "ready"
+                and consent
+                and consent.enabled
+                and consent.player_id == config.player_id
+                and config.player_id == await _binding(session, world)
+            ):
+                return (), None
+            await session.execute(
+                update(Encounter)
+                .where(
+                    Encounter.world_id == world.value,
+                    Encounter.state == "pending",
+                    Encounter.end_at <= now,
+                )
+                .values(state="expired")
+            )
+            scope = (
+                Encounter.world_id == world.value,
+                Encounter.plan_id == config.plan_id,
+                Encounter.consent_revision == consent.revision,
+                Encounter.state == "pending",
+            )
+            due = tuple(
+                (
+                    await session.scalars(
+                        select(Encounter.candidate_id)
+                        .where(*scope, Encounter.due_at <= now, Encounter.end_at > now)
+                        .order_by(Encounter.due_at, Encounter.candidate_id)
+                        .limit(8)
+                    )
+                ).all()
+            )
+            deadline = await session.scalar(
+                select(func.min(Encounter.due_at)).where(*scope, Encounter.due_at > now)
+            )
+            await session.commit()
+            return due, deadline
 
 
 class DirectorKernelRepository:
@@ -567,3 +705,60 @@ class DirectorKernelRepository:
     def finish(self, row, interrupted):
         row.state = "cancelled" if interrupted else "finished"
         row.reason = "presence_changed" if interrupted else "interval_elapsed"
+
+    async def encounter_candidate(self, world, candidate_id, now):
+        row = await self.session.get(Encounter, (world.value, candidate_id))
+        if not row or row.state != "pending":
+            return None, None
+        config = await self.session.get(Settings, world.value)
+        consent = await self.session.get(EncounterSettings, world.value)
+        plan = await self.session.get(Plan, (world.value, row.plan_id))
+        if not (
+            config
+            and config.enabled
+            and config.state == "ready"
+            and consent
+            and consent.enabled
+            and consent.revision == row.consent_revision
+            and consent.player_id == config.player_id
+            and config.player_id == await _binding(self.session, world)
+            and config.plan_id == row.plan_id
+            and plan
+            and plan.state == "ready"
+            and plan.generation == config.revision
+        ):
+            row.state, row.reason = "cancelled", "consent_or_plan_changed"
+            return row, None
+        if not row.due_at <= now.microseconds < min(row.end_at, plan.window_end):
+            row.state, row.reason = "expired", "window_elapsed"
+            return row, None
+        previous = await self.session.scalar(
+            select(Encounter.candidate_id)
+            .where(
+                Encounter.world_id == world.value,
+                Encounter.first_character_id == row.first_character_id,
+                Encounter.second_character_id == row.second_character_id,
+                Encounter.state == "finished",
+                Encounter.executed_at > now.microseconds - WINDOW_US,
+            )
+            .limit(1)
+        )
+        routines = [
+            await self.session.get(Candidate, (world.value, identity))
+            for identity in (row.first_routine_id, row.second_routine_id)
+        ]
+        if previous or any(
+            routine is None
+            or routine.state != "active"
+            or routine.activity not in {"rest", "leisure"}
+            or routine.location_id != row.location_id
+            or routine.plan_id != row.plan_id
+            or routine.character_id != owner
+            or not routine.due_at <= now.microseconds < routine.end_at
+            for routine, owner in zip(
+                routines, (row.first_character_id, row.second_character_id), strict=True
+            )
+        ):
+            row.state, row.reason = "invalid", "cooldown_or_activity_changed"
+            return row, None
+        return row, tuple(routines)

@@ -11,3 +11,7 @@
 Director基本自动活动和离线联系已在此前版本实现；此前本文“尚未实现”和“无新表”的文字是旧切片状态，与实际代码不符，本版已更正。日常计划、离线联系与公共动态独立开关。新迁移0028增加五张应用数据表，未运行于用户存档；用户启动新版后按既有流程升级。
 
 按AGENTS§20，本轮只源码／静态检查、编译和包内字节核对，未新增／执行测试、启动应用、调用真实API或操作用户存档。运行效果和权限隔离由用户验收。无亲历记录时该折叠列表为空是预期，不应伪造活动或回填授权。
+
+## CharactersMet v1（0.1.25，已获用户批准）
+
+由独立EncounterKernel消费Director候选，同一Kernel写事务复核授权、计划、WorldTime、双方active rest/leisure、地点和presence revision后提交。不可变载荷白名单是first_character_id/second_character_id/location_id、双方routine_id/revision、candidate_id/purpose=brief_greeting、encounter_due_at/encounter_end_at。保留实际发生时间和创建UTC，不回填离线相遇；仅描述短暂见面，不创建对话、任务成果或关系变化。两位参与者与授权在场观察者获得witnessed/event_occurrence；其他主体无自动观察。投影保留participants和participant/witness区分，不暴露全量payload。候选与回执原子完成，重放验证来源活动、时间窗口、同地点、revision、去重与六小时冷却。见[批准方案](proposals/2026-10-03-character-encounters.md)。

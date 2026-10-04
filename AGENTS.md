@@ -826,3 +826,22 @@ Only a recorded terminal validation failure or a known interrupted local executi
 permit a new attempt; old untracked claimed turns remain unknown. No startup, refresh or
 background process automatically invokes the provider for reply recovery. This narrowly supersedes the
 single-ceiling-per-original-message clause in section 23 for this explicit new attempt.
+
+# 26. Approved character encounters (2026-10-03)
+
+The user explicitly approved [the first encounter slice](docs/proposals/2026-10-03-character-encounters.md).
+This narrowly extends section 24: a per-world default-off opt-in permits the existing
+six-hour Director batch to propose up to eight brief greetings between two placed
+Characters. Kernel admits only actual co-presence during both planned, active rest/leisure
+intervals, with unchanged presence revisions, current consent/binding/plan and an unpaused
+world. The execution window is at most five minutes; the same pair meets at most once in
+six continuous hours of WorldTime. No missed/offline encounter is backfilled.
+
+Kernel atomically records CharactersMet v1, event-time observations, candidate outcome and
+idempotent receipt. Only participants and authorized physically present observers know it;
+remote group membership grants no physical observation. Chat can recall a brief meeting,
+never infer unrecorded private dialogue, task results or relationship changes. Players are
+not moved. Disabling cancels pending encounters while preserving facts. New encounters use
+the next normal batch, do not invoke a per-encounter API and do not change the existing
+routine invalidation/replanning threshold or budget. No automated/runtime/provider testing
+authorization is implied; section 20 still applies.

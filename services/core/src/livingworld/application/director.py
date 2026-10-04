@@ -6,6 +6,7 @@ from uuid import UUID, uuid4, uuid5
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from livingworld.application.character_encounters import EncounterKernel
 from livingworld.application.content_builder import generate_bounded_text
 from livingworld.application.errors import WorldRuntimeUnavailableError
 from livingworld.application.llm import (
@@ -48,9 +49,18 @@ class PlannedRoutine(BaseModel):
     duration_minutes: int = Field(ge=5, le=120)
 
 
+class PlannedEncounter(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    first_character_id: str
+    second_character_id: str
+    location_id: str
+    start_minute: int = Field(ge=1, lt=360)
+
+
 class PlannedBatch(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     candidates: list[PlannedRoutine] = Field(min_length=1, max_length=MAX_CANDIDATES)
+    encounters: list[PlannedEncounter] = Field(default_factory=list, max_length=8)
 
 
 def validate_plan(text, snapshot):
@@ -94,6 +104,49 @@ def validate_plan(text, snapshot):
         raise DirectorError("director_plan_invalid") from None
 
 
+def validate_encounters(text, snapshot, routines):
+    plan = PlannedBatch.model_validate_json(text)
+    if plan.encounters and not snapshot.get("encounters_enabled", False):
+        raise DirectorError("director_plan_invalid")
+    pairs = set()
+    result = []
+    try:
+        for item in plan.encounters:
+            pair = tuple(sorted((UUID(item.first_character_id), UUID(item.second_character_id))))
+            if pair[0] == pair[1] or pair in pairs:
+                raise ValueError()
+            due = snapshot["window_start"] + item.start_minute * 60_000_000
+            indexes = []
+            for character in pair:
+                matches = [
+                    index
+                    for index, routine in enumerate(routines)
+                    if routine["character_id"] == character
+                    and str(routine["location_id"]) == item.location_id
+                    and routine["activity"] in {"rest", "leisure"}
+                    and routine["due_at"] <= due < routine["end_at"]
+                ]
+                if len(matches) != 1:
+                    raise ValueError()
+                indexes.append(matches[0])
+            end = min(due + 300_000_000, *(routines[index]["end_at"] for index in indexes))
+            pairs.add(pair)
+            result.append(
+                {
+                    "first_character_id": pair[0],
+                    "second_character_id": pair[1],
+                    "location_id": UUID(item.location_id),
+                    "due_at": due,
+                    "end_at": end,
+                    "first_routine_index": indexes[0],
+                    "second_routine_index": indexes[1],
+                }
+            )
+        return result
+    except (ValueError, TypeError, KeyError):
+        raise DirectorError("director_plan_invalid") from None
+
+
 class DirectorService:
     def __init__(
         self, store, players, configured, actions, wake_signal, credentials_ready=lambda: True
@@ -104,6 +157,7 @@ class DirectorService:
         self._worlds = set()
         self._credentials_ready = credentials_ready
         self._closing = False
+        self._encounters = EncounterKernel(actions)
         self._lock = asyncio.Lock()
 
     def available(self):
@@ -121,6 +175,12 @@ class DirectorService:
         if enabled and not self.available():
             raise DirectorError("director_model_unavailable")
         await self.store.configure(world, player, enabled, consent, revision, retry)
+        self.wake_signal.wake(world)
+        return await self.snapshot(world)
+
+    async def configure_encounters(self, world, enabled, consent, revision):
+        player = await self.players.selected_player(world)
+        await self.store.configure_encounters(world, player, enabled, consent, revision)
         self.wake_signal.wake(world)
         return await self.snapshot(world)
 
@@ -177,6 +237,17 @@ class DirectorService:
                     # storage failures stop this world, rather than spin or replay an LLM.
                     await self.store.runtime_failed(world_id)
                     return None
+            if state == "ready" and not self._closing:
+                meetings, deadline = await self.store.advance_encounters(world_id, now.microseconds)
+                for candidate_id in meetings:
+                    if self._closing:
+                        return None
+                    try:
+                        await self._encounters.execute(world_id, candidate_id)
+                    except WorldRuntimeUnavailableError:
+                        return None
+                if deadline is not None:
+                    next_time = min(next_time, deadline) if next_time is not None else deadline
             if state == "plan" and not self._closing and world_id not in self._jobs:
                 if not self._credentials_ready():
                     # Host startup sync is not a failed model invocation. Wait for
@@ -225,6 +296,10 @@ class DirectorService:
                                 "start_minute不得早于available_from_minute；同角色活动不重叠，结束不超过第360分钟。"
                                 "活动只表示开始做事，不保证完成任务或产生未定义成果。"
                                 "活动activity只能为rest/work/leisure。总候选最多64条。"
+                                "只有world.encounters_enabled=true才可填写encounters，最多8条，可为空。"
+                                "每条仅两个角色在同地点的已有休息/自由活动时段偶遇问候，start_minute至少1；"
+                                "同一对只一次。不能安排工作中碰面、未重叠活动、对话、关系或任务成果。"
+                                "可以合理协调两人的日常，让部分时段与地点重叠，但不能强行让所有人相遇。"
                             ),
                         ),
                     ),
@@ -243,7 +318,8 @@ class DirectorService:
             )
             response = await generate_bounded_text(self.configured, request)
             candidates = validate_plan(response.text, snapshot)
-            await self.store.finish(world, request_id, generation, candidates)
+            encounters = validate_encounters(response.text, snapshot, candidates)
+            await self.store.finish(world, request_id, generation, candidates, encounters)
         except asyncio.CancelledError:
             await asyncio.shield(
                 self.store.fail(world, request_id, generation, "director_interrupted")

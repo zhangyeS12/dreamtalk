@@ -18,6 +18,13 @@ class DirectorSettingRequest(BaseModel):
     retry: bool = Field(default=False, strict=True)
 
 
+class EncounterSettingRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool = Field(strict=True)
+    consent_background_usage: bool = Field(default=False, strict=True)
+    expected_revision: int = Field(ge=0, le=2147483646, strict=True)
+
+
 def director_router(service, authorize):
     router = APIRouter(
         prefix="/api/v1/worlds/{world_id}/director", dependencies=[Depends(authorize)]
@@ -46,6 +53,17 @@ def director_router(service, authorize):
                 body.consent_background_usage,
                 body.expected_revision,
                 body.retry,
+            )
+        )
+
+    @router.post("/encounters")
+    async def configure_encounters(world_id: UUID, body: EncounterSettingRequest):
+        return await execute(
+            service.configure_encounters(
+                WorldId(world_id),
+                body.enabled,
+                body.consent_background_usage,
+                body.expected_revision,
             )
         )
 

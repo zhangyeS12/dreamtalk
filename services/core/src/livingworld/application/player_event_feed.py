@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
-from livingworld.domain.identifiers import EventId, PlayerId, PrincipalId, WorldId
+from livingworld.domain.identifiers import CharacterId, EventId, PlayerId, PrincipalId, WorldId
 from livingworld.domain.participants import PlayerAvailability
 from livingworld.domain.values import Revision, WorldTime
 
@@ -33,6 +33,7 @@ class KnownWorldEvent:
     description: str | None = None
     observation_channel: str | None = None
     subject: PrincipalId | None = None
+    participants: tuple[CharacterId, ...] = ()
 
 
 class PlayerEventFeedStore(Protocol):

@@ -86,6 +86,8 @@ class _EventFold:
         self._event_ids = set()
         self._routine_starts = {}
         self._routine_ends = set()
+        self._encounter_times = {}
+        self._encounter_candidates = set()
         self._handlers = {
             ("WorldCreated", 1): self._world_created,
             ("LocationCreated", 1): self._location_created,
@@ -95,6 +97,7 @@ class _EventFold:
             ("PlayerAvailabilityChanged", 1): self._player_availability_changed,
             ("CharacterCreated", 1): self._character_created,
             ("CharacterPlaced", 1): self._character_placed,
+            ("CharactersMet", 1): self._characters_met,
             ("CharacterRoutineStarted", 1): self._character_routine_started,
             ("CharacterRoutineEnded", 1): self._character_routine_ended,
             ("CharacterRoutineInterrupted", 1): self._character_routine_ended,
@@ -315,6 +318,70 @@ class _EventFold:
         self.character_states[identity] = CharacterState(
             self.world_id, identity, location, revision
         )
+
+    def _characters_met(self, event):
+        value = event.payload
+        _check(
+            set(value)
+            == {
+                "first_character_id",
+                "second_character_id",
+                "location_id",
+                "first_routine_id",
+                "second_routine_id",
+                "first_revision",
+                "second_revision",
+                "candidate_id",
+                "purpose",
+                "encounter_due_at",
+                "encounter_end_at",
+            },
+            "Invalid encounter payload",
+        )
+        due, end = _integer(value["encounter_due_at"]), _integer(value["encounter_end_at"])
+        _check(
+            due < end <= due + 300_000_000 and due <= event.occurred_at.microseconds < end,
+            "Invalid encounter window",
+        )
+        first = self._id(CharacterId, value["first_character_id"])
+        second = self._id(CharacterId, value["second_character_id"])
+        location = self._id(LocationId, value["location_id"])
+        _check(
+            first.value.int < second.value.int and value["purpose"] == "brief_greeting",
+            "Invalid encounter pair/purpose",
+        )
+        pair = (first, second)
+        previous = self._encounter_times.get(pair)
+        _check(
+            previous is None or event.occurred_at.microseconds - previous >= 21_600_000_000,
+            "Encounter pair cooldown",
+        )
+        for owner, routine_key, revision_key in (
+            (first, "first_routine_id", "first_revision"),
+            (second, "second_routine_id", "second_revision"),
+        ):
+            routine = UUID(value[routine_key])
+            _check(
+                routine in self._routine_starts and routine not in self._routine_ends,
+                "Encounter needs active routine",
+            )
+            _, actor, activity, target, end, start = self._routine_starts[routine]
+            presence = self.character_states.get(owner)
+            _check(
+                actor == owner
+                and activity in {"rest", "leisure"}
+                and target == value["location_id"]
+                and start <= event.occurred_at
+                and event.occurred_at.microseconds < end
+                and presence is not None
+                and presence.location_id == location
+                and presence.revision.value == _integer(value[revision_key]),
+                "Encounter presence/activity mismatch",
+            )
+        candidate = UUID(value["candidate_id"])
+        _check(candidate not in self._encounter_candidates, "Duplicate encounter candidate")
+        self._encounter_candidates.add(candidate)
+        self._encounter_times[pair] = event.occurred_at.microseconds
 
     def _character_routine_started(self, event):
         from livingworld.domain.actions import RoutineActivity

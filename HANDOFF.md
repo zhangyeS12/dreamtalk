@@ -1,6 +1,18 @@
 # dreamtalk 工作交接
 
-更新日期：2026-10-03。此文件记录当前开发现场与接续工作，不替代 [AGENTS.md](AGENTS.md)。先读 AGENTS，再读本文，最后核对实际 Git 状态和相关代码；不能把下面的基线哈希当作永远不变的当前 HEAD。
+更新日期：2026-10-04。此文件记录当前开发现场与接续工作，不替代 [AGENTS.md](AGENTS.md)。先读 AGENTS，再读本文，最后核对实际 Git 状态和相关代码；不能把下面的基线哈希当作永远不变的当前 HEAD。
+
+## 最新接续：2026-10-04 角色相遇首版（桌面0.1.25）
+
+- 0.1.23全页连接/读取卡顿已获用户验收，随后用户明确批准[角色相遇具体方案](docs/proposals/2026-10-03-character-encounters.md)。0.1.24经历话题召回已先本地保存为9fded9f，独立包experience-recall保留；本次正式交付0.1.25包含两者。AGENTS新增第26节记录狭窄授权，不扩大为共同任务、关系、后台互聊或自动测试许可。
+- 每世界默认关闭、独立同意revision和认证POST /director/encounters，在世界自动活动下操作，首次解释同批后台用量。开启只影响下一正常六小时批次；保存/刷新不额外发起模型请求，不逐相遇调用API。已有日常revision与半批失效门槛保持。
+- Director同批可选至多8个两人短暂问候；仅匹配同地点重叠rest/leisure日常。Kernel在同一物理写事务复核当前授权/绑定/计划、未暂停、有效窗口、双方实际location/revision、active routine和同对六小时冷却，原子提交CharactersMet v1、双方/获准现场观察、候选结果和ResolveEncounter幂等回执。迟到/变化取消或过期，不移动主体、不补造对话/成果/关系。重放白名单复核活动来源、时段和cooldown，不修改位置关系。
+- 复用[本轮成熟方案调查](docs/research/2026-10-03-experience-recall-reuse.md)及已有Kernel/Director/scheduler/AudienceResolver/Observation/FTS；没有新依赖或供应商。聊天投影参与者与witness分开，只在owner授权观察里召回；玩家只有现场或既有聊天获知路径可知道事件，群聊不等于同场。原最多12条/8KiB观察边界保持。没有读取其他角色私聊/私人记忆或隐藏条目。
+- 0033只增加director_encounter_settings和director_encounters，严格迁移检查为旧0032保留形状；不修改旧字段顺序或回填历史。用户原存档未读取/迁移/修改。详见[体验说明](docs/CHARACTER_ENCOUNTERS.md)。本轮没有自动测试、应用/GUI、模型推理/付费API或存档诊断，运行待用户验收。
+- 13份Python Ruff lint/format、前端ESLint/TypeScript、Git diff、225份源码AST及两新表19字段的迁移/ORM声明顺序、类型、可空性、键、约束与索引静态比较通过。仅解析源代码，没有导入产品或执行数据库升级。build-only完成PyInstaller/Core、Vite239模块（658.65kB/gzip197.51kB、148ms）和Rust release26.81s；PE FileVersion/ProductVersion均0.1.25。保留主chunk>500kB、STATIC_VCRUNTIME弃用及既有PyInstaller可选依赖告警，没有隐藏或说成运行兼容。
+- 新独立完整目录artifacts/portable/character-encounters/dreamtalk和同父ZIP，旧包保留。225份冻结源码字节、1048份包/ZIP、248次文档/许可字节、122个本轮文档本地链接、模型哈希和五处版本核对通过。Desktop SHA256=04347a0477a11e7fa863b3eb374c67865c64653d8205a44aad8dec38cea35f00；Core=eb369e802c71804e85aeeb7b23bd29447170f61f64bf925d007961a3d024acf7；ZIP=618b8ee7f6ec7142f17f11166af0912f72a036798cd2d97bca782b759f35177d。日志character-encounters-build.log，静态源码/清单character-encounters-source-audit.json、character-encounters-audit.json。构建结束后续工具会话ID失效，但日志有release完成及package/archive结尾，完整ZIP与全部内容核对通过，未重复构建或启动产品。首轮源码lint格式问题已修正；文档帮助脚本因猜错DIRECTOR.md路径中止、包核对脚本曾误改调查文件路径，按实际文件修正后全部检查通过，没有据此改产品行为或损坏包。
+- 本地提交见git log；源码/编译/字节核对不代表设置保存、相遇执行、聊天质量或现有存档升级已实际验收。具体启动与核对步骤见docs/CHARACTER_ENCOUNTERS.md。
+- 下一步先体验有效碰面双方回忆、未在场玩家隔离与关闭/暂停/重启边界；之后推进共同委托/成果的具体方案。仅本地提交，不push/发布或改自启动，旧包保留。
 
 ## 最新接续：2026-10-03 角色经历话题召回（桌面0.1.24）
 
@@ -8,7 +20,7 @@
 - 接续0.1.21建议的相遇/共同经历方向，实际先补已有经历只取最近12条的缺口。[复用调查](docs/research/2026-10-03-experience-recall-reuse.md)查Generative Agents（Apache-2.0）与SQLite官方资料，直接复用现有jieba/FTS5/BM25/RRF，不新增框架或复制外部代码。
 - 私聊/群聊从当前问题和前两句检索该发言者近128条owner-authorized witnessed/event_occurrence白名单投影；临时语料至多256KiB，数据库会话在FTS工作前释放。复用同一个既有词法ranker和有界线程槽；保留近期8条、补最多4条旧相关项、不足用近期填满，按ID去重、时间排序，最终原12条/8KiB。topic_match打包优先级高于无关近期观察；当前本人活动快照仍独立保留。
 - 历史命中不代表现在，未命中不证明未发生，目击不证明共同社交/任务成果，群聊不移动角色。无新增模型调用/后台任务、依赖、主库迁移或HTTP外发接口；普通玩家不会获得后台未知活动列表。较早的同类已授权观察仍随正常聊天模型请求提供，数量/字节上限保持，实际输入Token随所选记录变化。
-- [体验说明](docs/EXPERIENCE_RECALL.md)。当前仅近128条词法召回，不宣称完整远历史或同义召回，也不是自动Observation→EpisodicMemory。[真正相遇方案](docs/proposals/2026-10-03-character-encounters.md)已准备，尚未实现；AGENTS第22/24节要求先确认新Director动作/候选事实契约。建议两角色短暂问候，同批规划、Kernel到时核验、无逐相遇API、默认关闭与获准观察；任务成果/关系/多人联系继续延后。
+- [体验说明](docs/EXPERIENCE_RECALL.md)。当前仅近128条词法召回，不宣称完整远历史或同义召回，也不是自动Observation→EpisodicMemory。[真正相遇方案](docs/proposals/2026-10-03-character-encounters.md)当时已准备，随后用户批准并在上方0.1.25实施；AGENTS第22/24节要求先确认新Director动作/候选事实契约。建议两角色短暂问候，同批规划、Kernel到时核验、无逐相遇API、默认关闭与获准观察；任务成果/关系/多人联系继续延后。
 - 完成8份Python Ruff lint/format、222份源码AST、build-only PyInstaller/Vite239模块/Rust release24.57s，以及1044份包/ZIP、247次文档许可字节、88个本轮文档链接和模型/五处版本静态核对。新完整目录artifacts/portable/experience-recall/dreamtalk；日志experience-recall-build.log、清单experience-recall-audit.json。ZIP SHA256=4643fb7fe1eeca853fcc6cdfdde2069a1c05ed520d3936d93d52dda3e411915e。无自动测试、应用/推理/付费API或用户存档访问；0.1.24效果待用户验收。既有主chunk与可选依赖/弃用提示保留；仅本地保存，不push或修改自启动。
 
 ## 最新接续：2026-10-03 Windows原生库首次导入阻塞（桌面0.1.23）

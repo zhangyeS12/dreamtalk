@@ -21,6 +21,9 @@ from livingworld.infrastructure.persistence.conversation_memory import (
 from livingworld.infrastructure.persistence.director_models import (
     DirectorSettingsRecord,  # noqa: F401
 )
+from livingworld.infrastructure.persistence.encounter_models import (
+    EncounterSettingsRecord,  # noqa: F401
+)
 from livingworld.infrastructure.persistence.errors import MigrationCompatibilityError
 from livingworld.infrastructure.persistence.llm_models import AccountingBase
 from livingworld.infrastructure.persistence.long_memory_models import (
@@ -64,7 +67,9 @@ STORY_REVISION = "0028_world_event_journal"
 LONG_MEMORY_REVISION = "0029_long_chat_memory"
 COVER_REVISION = "0030_world_covers"
 REPLY_RECOVERY_REVISION = "0031_chat_reply_recovery"
-HEAD_REVISION = "0032_chat_context_reports"
+CONTEXT_REPORT_REVISION = "0032_chat_context_reports"
+HEAD_REVISION = "0033_character_encounters"
+ENCOUNTER_TABLES = {"director_encounter_settings", "director_encounters"}
 REPLY_RECOVERY_TABLES = {"chat_reply_executions", "chat_reply_recoveries"}
 COVER_TABLES = {"world_covers", "world_cover_images"}
 LONG_MEMORY_TABLES = {"long_chat_memories", "long_chat_memory_settings"}
@@ -242,13 +247,24 @@ def _current_revision(connection: Connection) -> str:
 
 def _validate_managed_state(connection: Connection, revision: str) -> None:
     # Additive authored/job tables do not change the older runtime shapes.
-    pre_context_report_revision = revision != HEAD_REVISION
-    pre_reply_recovery_revision = revision not in {REPLY_RECOVERY_REVISION, HEAD_REVISION}
-    pre_cover_revision = revision not in {COVER_REVISION, REPLY_RECOVERY_REVISION, HEAD_REVISION}
+    pre_encounter_revision = revision != HEAD_REVISION
+    pre_context_report_revision = revision not in {CONTEXT_REPORT_REVISION, HEAD_REVISION}
+    pre_reply_recovery_revision = revision not in {
+        REPLY_RECOVERY_REVISION,
+        CONTEXT_REPORT_REVISION,
+        HEAD_REVISION,
+    }
+    pre_cover_revision = revision not in {
+        COVER_REVISION,
+        REPLY_RECOVERY_REVISION,
+        CONTEXT_REPORT_REVISION,
+        HEAD_REVISION,
+    }
     pre_long_memory_revision = revision not in {
         LONG_MEMORY_REVISION,
         COVER_REVISION,
         REPLY_RECOVERY_REVISION,
+        CONTEXT_REPORT_REVISION,
         HEAD_REVISION,
     }
     pre_story_revision = revision not in {
@@ -256,6 +272,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         LONG_MEMORY_REVISION,
         COVER_REVISION,
         REPLY_RECOVERY_REVISION,
+        CONTEXT_REPORT_REVISION,
         HEAD_REVISION,
     }
     pre_offline_contact_revision = revision not in {
@@ -264,6 +281,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         LONG_MEMORY_REVISION,
         COVER_REVISION,
         REPLY_RECOVERY_REVISION,
+        CONTEXT_REPORT_REVISION,
         HEAD_REVISION,
     }
     pre_local_location_revision = revision not in {
@@ -273,6 +291,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         LONG_MEMORY_REVISION,
         COVER_REVISION,
         REPLY_RECOVERY_REVISION,
+        CONTEXT_REPORT_REVISION,
         HEAD_REVISION,
     }
     pre_director_revision = revision not in {
@@ -283,6 +302,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         LONG_MEMORY_REVISION,
         COVER_REVISION,
         REPLY_RECOVERY_REVISION,
+        CONTEXT_REPORT_REVISION,
         HEAD_REVISION,
     }
     pre_conversation_memory_revision = revision not in {
@@ -294,6 +314,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         LONG_MEMORY_REVISION,
         COVER_REVISION,
         REPLY_RECOVERY_REVISION,
+        CONTEXT_REPORT_REVISION,
         HEAD_REVISION,
     }
     pre_builder_revision = revision not in {
@@ -306,6 +327,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         LONG_MEMORY_REVISION,
         COVER_REVISION,
         REPLY_RECOVERY_REVISION,
+        CONTEXT_REPORT_REVISION,
         HEAD_REVISION,
     }
     pre_completion_revision = revision not in {
@@ -320,6 +342,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         LONG_MEMORY_REVISION,
         COVER_REVISION,
         REPLY_RECOVERY_REVISION,
+        CONTEXT_REPORT_REVISION,
         HEAD_REVISION,
     }
     pre_common_lore_revision = revision not in {
@@ -333,6 +356,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         LONG_MEMORY_REVISION,
         COVER_REVISION,
         REPLY_RECOVERY_REVISION,
+        CONTEXT_REPORT_REVISION,
         HEAD_REVISION,
     }
     if revision in {
@@ -347,6 +371,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         LONG_MEMORY_REVISION,
         COVER_REVISION,
         REPLY_RECOVERY_REVISION,
+        CONTEXT_REPORT_REVISION,
         HEAD_REVISION,
     }:
         revision = CHAT_DISPATCH_REVISION
@@ -497,6 +522,8 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         expected -= LOCAL_PROFILE_TABLES
     if revision != CHAT_DISPATCH_REVISION:
         expected -= {"world_content_imports"}
+    if pre_encounter_revision:
+        expected -= ENCOUNTER_TABLES
     if pre_reply_recovery_revision:
         expected -= REPLY_RECOVERY_TABLES
     if pre_cover_revision:
@@ -539,6 +566,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
             pre_cover_revision=pre_cover_revision,
             pre_reply_recovery_revision=pre_reply_recovery_revision,
             pre_context_report_revision=pre_context_report_revision,
+            pre_encounter_revision=pre_encounter_revision,
         )
     if revision in {
         CONTENT_REVISION,
@@ -602,6 +630,7 @@ def _validate_domain_shape(
     pre_cover_revision: bool = True,
     pre_reply_recovery_revision: bool = True,
     pre_context_report_revision: bool = True,
+    pre_encounter_revision: bool = True,
 ) -> None:
     """Detect partial/mismatched schemas; never infer a revision from them."""
 
@@ -627,6 +656,8 @@ def _validate_domain_shape(
         "ck_command_receipt_command_result",
     }
     for table in metadata.sorted_tables:
+        if pre_encounter_revision and table.name in ENCOUNTER_TABLES:
+            continue
         if pre_reply_recovery_revision and table.name in REPLY_RECOVERY_TABLES:
             continue
         if pre_cover_revision and table.name in COVER_TABLES:

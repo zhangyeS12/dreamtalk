@@ -40,7 +40,7 @@ async def character_observed_events(
     owner: CharacterId,
     *,
     query_texts: tuple[str, ...] = (),
-) -> list[dict[str, str]]:
+) -> list[dict[str, object]]:
     if reader_factory is None:
         return []
     reader = reader_factory(owner)
@@ -56,7 +56,7 @@ async def character_observed_events(
     if any(identity.world_id != owner.world_id for identity in related):
         raise EntityNotFoundError("chat_event_world_invalid")
     events = selection.events
-    result: list[dict[str, str]] = []
+    result: list[dict[str, object]] = []
     used = 2
     # Related older evidence competes before recency within the same byte ceiling.
     ordered = sorted(
@@ -72,9 +72,10 @@ async def character_observed_events(
             continue
         if not event.description or event.observation_channel != "witnessed":
             continue
-        item = {
+        item: dict[str, object] = {
             "event_id": str(event.event_id.value),
             "description": event.description,
+            "event_type": event.event_type,
             "occurred_at": str(event.occurred_at.microseconds),
             "observed_at": str(event.observed_at.microseconds),
             "ledger_position": str(event.ledger_position),
@@ -89,6 +90,13 @@ async def character_observed_events(
             )
             item["subject_id"] = str(event.subject.value)
             item["participation"] = "actor" if event.subject == owner else "witness"
+        if event.participants:
+            if any(identity.world_id != owner.world_id for identity in event.participants):
+                raise EntityNotFoundError("chat_event_subject_world_invalid")
+            item["participant_character_ids"] = [
+                str(identity.value) for identity in event.participants
+            ]
+            item["participation"] = "participant" if owner in event.participants else "witness"
         size = len(json.dumps(item, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
         if used + size + 1 > MAX_CHARACTER_EVENT_BYTES:
             continue

@@ -21,7 +21,7 @@ from livingworld.infrastructure.persistence.models import (
 
 _ROUTINE_TYPES = ("CharacterRoutineStarted", "CharacterRoutineEnded", "CharacterRoutineInterrupted")
 _CHARACTER_TYPES = ("CharacterPlaced", *_ROUTINE_TYPES)
-_SUPPORTED_TYPES = ("PlayerMoved", "PlayerPlaced", *_CHARACTER_TYPES)
+_SUPPORTED_TYPES = ("PlayerMoved", "PlayerPlaced", "CharactersMet", *_CHARACTER_TYPES)
 
 
 def witnessed_occurrence():
@@ -76,13 +76,20 @@ async def project_observed_events(
             event.ledger_position,
             seen.c.observed_at,
             reference("$.player_id", ("PlayerMoved", "PlayerPlaced")).label("player_id"),
+            reference("$.first_character_id", ("CharactersMet",)).label("first_character_id"),
+            reference("$.second_character_id", ("CharactersMet",)).label("second_character_id"),
+            case((eligible, func.json_extract(safe_body, "$.purpose")), else_=None).label(
+                "purpose"
+            ),
             reference("$.character_id", _CHARACTER_TYPES).label("character_id"),
             case(
                 (
                     event.event_type == "PlayerMoved",
                     reference("$.to_location_id", ("PlayerMoved",)),
                 ),
-                else_=reference("$.location_id", ("PlayerPlaced", *_CHARACTER_TYPES)),
+                else_=reference(
+                    "$.location_id", ("PlayerPlaced", "CharactersMet", *_CHARACTER_TYPES)
+                ),
             ).label("destination"),
             case(
                 (
@@ -119,7 +126,11 @@ async def project_observed_events(
         query = query.where(eligible)
     rows = (await session.execute(query)).all()
     players = {_uuid(row.player_id) for row in rows} - {None}
-    characters = {_uuid(row.character_id) for row in rows} - {None}
+    characters = {
+        _uuid(identity)
+        for row in rows
+        for identity in (row.character_id, row.first_character_id, row.second_character_id)
+    } - {None}
     locations = {_uuid(value) for row in rows for value in (row.origin, row.destination)} - {None}
 
     async def names(model, key, identities: set) -> dict[UUID, str]:
@@ -144,6 +155,24 @@ async def project_observed_events(
     location_names = await names(LocationRecord, LocationRecord.location_id, locations)
 
     def description(row) -> str | None:
+        if row.event_type == "CharactersMet":
+            first, second, location = (
+                _uuid(row.first_character_id),
+                _uuid(row.second_character_id),
+                _uuid(row.destination),
+            )
+            if (
+                first == second
+                or first not in character_names
+                or second not in character_names
+                or location not in location_names
+                or row.purpose != "brief_greeting"
+            ):
+                return None
+            return (
+                f"角色「{character_names[first]}」与角色「{character_names[second]}」"
+                f"在「{location_names[location]}」短暂碰面，打过招呼。"
+            )
         actor = _uuid(row.character_id if row.event_type in _CHARACTER_TYPES else row.player_id)
         actor_names = character_names if row.event_type in _CHARACTER_TYPES else player_names
         destination = _uuid(row.destination)
@@ -181,7 +210,7 @@ async def project_observed_events(
         if detailed_only and text is None:
             continue
         subject = None
-        if text is not None:
+        if text is not None and row.event_type != "CharactersMet":
             identity = _uuid(
                 row.character_id if row.event_type in _CHARACTER_TYPES else row.player_id
             )
@@ -201,6 +230,12 @@ async def project_observed_events(
                 text,
                 "witnessed" if text is not None else None,
                 subject=subject,
+                participants=tuple(
+                    CharacterId(world_id, identity)
+                    for identity in (_uuid(row.first_character_id), _uuid(row.second_character_id))
+                )
+                if text is not None and row.event_type == "CharactersMet"
+                else (),
             )
         )
     return tuple(result)

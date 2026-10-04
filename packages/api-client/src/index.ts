@@ -38,6 +38,7 @@ export interface OfflineContactStatus {
 export interface DirectorStatus {
   enabled: boolean; revision: number; state: "off" | "idle" | "planning" | "ready" | "attention";
   error: string | null; consented: boolean; model_available: boolean; model: string | null;
+  encounters_enabled: boolean; encounter_revision: number; encounters_consented: boolean;
 }
 export interface ChatStoryEntry {
   entry_id: string; character_id: string; character_name: string; conversation_id: string; message_id: string;
@@ -696,6 +697,12 @@ export class CoreClient {
     return this.productRequest(`/worlds/${worldId}/director`, { method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ enabled, consent_background_usage: consent, expected_revision: status.revision, retry }),
+    });
+  }
+  configureDirectorEncounters(worldId: string, status: DirectorStatus, enabled: boolean, consent = false): Promise<DirectorStatus> {
+    return this.productRequest(`/worlds/${worldId}/director/encounters`, { method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled, consent_background_usage: consent, expected_revision: status.encounter_revision }),
     });
   }
   listWorlds(): Promise<WorldSummary[]> { return this.developerRequest("/developer/worlds"); }
