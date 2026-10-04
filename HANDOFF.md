@@ -2,7 +2,13 @@
 
 更新日期：2026-10-04。此文件记录当前开发现场与接续工作，不替代 [AGENTS.md](AGENTS.md)。先读 AGENTS，再读本文，最后核对实际 Git 状态和相关代码；不能把下面的基线哈希当作永远不变的当前 HEAD。
 
-## 最新接续：2026-10-04 活动经历后续状态召回（桌面0.1.28）
+## 最新范围更正：2026-10-04 不擅自增加产品方向
+
+- 用户指出“怎么突然就有什么共同委托”，随后明确“不要乱加东西”。共同委托/巡查是工程端自行扩展的建议，已撤回，不作为默认下一步；此前研究与历史交接中的相关建议不代表用户需求或授权。
+- 后续只推进已确认的功能及其修复、可靠性和体验改善；新的产品方向先讨论，不能把“继续推进项目”解释为自行加任务、奖励、战斗等玩法。原日常/相遇/共同休闲许可继续按既有狭窄契约，不扩大功能。
+- 本次只更正根目录AGENTS/HANDOFF，不修改应用源码、版本、存档或已有0.1.28包，不运行测试/应用/API。下一步回到已确认的自然聊天、上下文/长期记忆、角色自身活动、离线联系与世界事件，真实模型体验仍待用户验收。
+
+## 历史接续：2026-10-04 活动经历后续状态召回（桌面0.1.28）
 
 - 从正式D:\LivingWorld干净ee17ed6/codex/world-archive接续。用户明确继续项目，先核对当前代码和文档，并查[LangChain父子资料关联、ink/Yarn/Spiff一手实现及许可](docs/research/2026-10-04-experience-state-reuse.md)。本轮直接复用既有jieba/FTS5检索、SQL授权投影及正常聊天，不添加检索/状态机框架、依赖或额外API。
 - 静态代码发现：活动开始与结束/中断分别排名，可能重复占名额或只提供较早开始；没有声称这是用户已遇到的运行故障。内部KnownWorldEvent增加可选activity_start_event_id，只从已授权v1终态标量投影；普通HTTP DTO保持，无新的外发类别、记忆写入、canonical事实或账本变更。
@@ -11,7 +17,7 @@
 - 四份Python Ruff lint/format、前端ESLint/TypeScript、Git diff通过。首次Ruff lint因只读工作区不能写D盘缓存而未完成，改为--no-cache后通过，没有把第一次失败算通过。233份源码AST、既有0034两表26字段与ORM声明、14组历史revision条件及754个本地文档链接核对；324个外部URL只计数，复用调查的页面另已联网查阅。0033源SHA保持018ccfa7e39e99e831876157006620ef81b6c2bb1038d0ce5c0a798eabd8f82a。
 - build-only exit0：PyInstaller/Core、Vite240模块（665.59kB/gzip199.01kB、147ms）、Rust release27.85s。完整包PE FileVersion/ProductVersion0.1.28，修改UTC2026-10-04T02:39:28。保留主JS>500kB、STATIC_VCRUNTIME弃用与PyInstaller可选tzdata/pysqlite2/MySQLdb提示，未隐藏告警。没有运行自动测试、Core/桌面/GUI、数据库升级、推理/付费API或真实存档/密钥诊断。
 - 新独立完整目录artifacts/portable/experience-state/dreamtalk及同父ZIP，旧包保留，包含0.1.27全部功能。233份冻结Python源码、1062份包/ZIP文件、254次文档许可字节、153个相关文档本地链接、固定语义模型哈希与五处版本核对通过。Desktop SHA256=acafc250d5ab563f2474502be1686b2de125c1591209784de30b211134dc49bc；Core=6631bf0794d880c77cb0a08fc6eb97890b6f2bccc8af5e6a4b80fcee88dc1082；ZIP=55fb9bcfe8e28831aaf0a57964317e3619d35f2b9af60fa37d7c2320c92bc3b6。日志experience-state-build.log，静态清单experience-state-source-audit.json/experience-state-audit.json。未替用户启动/退出应用或修改自启动。
-- 本地提交见git log，不push/发布。当前实现、编译与源码核对完成，真实表达与跨角色/世界/旁观权限仍待用户验收，见[体验说明](docs/EXPERIENCE_STATE_RECALL.md)。0.1.27共同休闲与来源回看也未收到新的实际验收结论。下一步共同委托需明确可核验目标、失败/中断及成果契约；推荐先做共同巡查行程，仍不能把活动时段结束当作交付、胜利或报酬。本轮只做该方向调查，没有批准/实现新的Mission动作；AGENTS22/24/26边界保持。
+- 本地提交见git log，不push/发布。当前实现、编译与源码核对完成，真实表达与跨角色/世界/旁观权限仍待用户验收，见[体验说明](docs/EXPERIENCE_STATE_RECALL.md)。0.1.27共同休闲与来源回看也未收到新的实际验收结论。当时自行提出的共同委托/巡查后续方向已被用户纠正并撤回，见最新范围更正；不作为下一步或授权。本轮只做该方向调查，没有批准/实现新的Mission动作；AGENTS22/24/26边界保持。
 
 ## 历史接续：2026-10-04 共同休闲与来源回看（桌面0.1.27）
 

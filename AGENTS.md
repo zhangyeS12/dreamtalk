@@ -880,3 +880,20 @@ interrupts it. Missed completion is not backfilled. No per-activity API, Player 
 dialogue/task/asset results or relationship changes are authorized. Planning uses the existing
 approved input, not new encounter-history or private-memory export. Observation and chat
 isolation and limits remain unchanged. Section 20 testing responsibility still applies.
+
+
+# 27. Confirmed scope correction (2026-10-04)
+
+The user explicitly rejected the unsolicited "shared commissions" direction and said
+"不要乱加东西". Only advance already confirmed product requirements and their fixes,
+reliability and usability improvements. A general "continue the project" instruction
+does not authorize inventing new product goals or treating the engineer's suggestions
+as the user's requirements. Discuss a genuinely new product direction before implementation.
+
+Shared commissions, patrol missions, quest/reward/combat systems are not approved and
+must not be the default next step. References to these as future recommendations in
+older handoff/research documents are withdrawn recommendations, not authorization.
+Preserve the explicitly approved routine/encounter/shared-leisure boundaries and existing
+chat, memory, world-event and offline-contact requirements. Ordinary technical choices
+and well-defined improvements within those requirements remain delegated; do not ask
+the user to reconfirm settled decisions. Section 20 testing responsibility is unchanged.
