@@ -334,13 +334,11 @@ class SqlAlchemyOfflineContactStore:
                     )
                     .limit(1)
                 )
-                if (
-                    frozen.get("eligible")
-                    and binding
-                    and binding.player_id == cfg.player_id
-                    and not used
-                    and not await self._unanswered(session, cfg)
-                ):
+                eligible = bool(
+                    frozen.get("eligible") and binding and binding.player_id == cfg.player_id
+                )
+                blocked = await self._unanswered(session, cfg) if eligible else False
+                if eligible and not used and not blocked:
                     ep = Episode(
                         episode_id=uuid4(),
                         world_id=cfg.world_id,
@@ -356,10 +354,25 @@ class SqlAlchemyOfflineContactStore:
                     session.add(ep)
                     cfg.episode_id, cfg.state, cfg.error = ep.episode_id, "waiting", None
                 else:
-                    cfg.state, cfg.error = (
-                        "skipped",
-                        "offline_reason_used" if used else "offline_no_contact",
-                    )
+                    if blocked:
+                        from livingworld.infrastructure.persistence.contact_gate import (
+                            waiting_conversation,
+                        )
+
+                        unanswered = await waiting_conversation(
+                            session, cfg.world_id, cfg.player_id
+                        )
+                    else:
+                        unanswered = None
+                    if unanswered:
+                        skip_reason = "offline_waiting_reply"
+                    elif used:
+                        skip_reason = "offline_reason_used"
+                    elif blocked:
+                        skip_reason = "offline_contact_in_progress"
+                    else:
+                        skip_reason = "offline_no_contact"
+                    cfg.state, cfg.error = "skipped", skip_reason
             cfg.last_online_at = now
             try:
                 cfg.input_json = await self._capture(session, cfg, now)

@@ -60,10 +60,11 @@ export function offlineGuidance(status: OfflineContactStatus | null, paused: boo
   if (error) return disconnected;
   if (!status) return { title: "正在读取离线联系设置", detail: "尚未核对开关，读取不会生成消息。" };
   if (!status.enabled) return { title: "离线联系未开启", detail: status.model_available ? "开启后先记录在线基线；只有之后符合时长的恢复才考虑联系。" : "请先完成模型设置，再开启离线联系。", destination: status.model_available ? undefined : "model" };
-  // No-contact is intentionally broad: the persisted code cannot distinguish a
-  // paused/busy recovery, an unanswered outreach or a model choosing silence.
+  // The shared gate has distinct saved reasons; other no-contact causes remain broad.
   if (status.state === "skipped" && status.error === "offline_reason_used") return { title: "已开启，本次联系理由已处理", detail: "本次恢复不会重复发送。继续与角色交流后，下次符合条件的恢复会重新判断；刷新或重新保存不会补发。", destination: "chats" };
-  if (status.state === "skipped" && status.error === "offline_no_contact") return { title: "已开启，本次恢复没有发起联系", detail: "可能是忙碌、暂停、没有合适角色、上条主动消息未回复，或模型决定不联系。当前记录未区分具体原因，刷新不会补发。", destination: "chats" };
+  if (status.state === "skipped" && status.error === "offline_waiting_reply") return { title: "等待你回复上一条主动联系", detail: "这次离线恢复已跳过，不会补发。打开并阅读只清除红点；请在收到联系的会话里实际发送回复，之后的新恢复才会重新判断。", destination: "chats" };
+  if (status.state === "skipped" && status.error === "offline_contact_in_progress") return { title: "另一条主动联系正在处理中", detail: "系统不会同时发起两条联系；这次离线恢复已跳过，不会在处理中任务结束后补发。", destination: "chats" };
+  if (status.state === "skipped" && status.error === "offline_no_contact") return { title: "已开启，本次恢复没有发起联系", detail: "旧记录也可能是上一条主动消息未回复；新记录会单独标明。其他可能原因包括忙碌、暂停、没有合适角色或模型决定不联系。刷新不会补发。", destination: "chats" };
   if (status.error === "offline_context_changed") return { tone: "warning", title: "本次联系已取消，开关仍已开启", detail: "身份、资料、玩家状态或新消息发生变化，原结果不再适用。等待下次符合条件的离线恢复。" };
   if (status.error === "offline_clock_regression") return { tone: "warning", title: "系统时间回退，暂不判断离线时长", detail: "请核对电脑时间。程序等待时间恢复，不会把负时长当成离线。" };
   if (status.state === "attention" || status.error) return { ...taskErrorGuidance(status.error, `${reason || "本次离线任务未能完成。"} 本次恢复不会自动重试；修正后等待下次符合条件的恢复，重新保存开关不会补发。`), title: "本次离线任务已停止" };

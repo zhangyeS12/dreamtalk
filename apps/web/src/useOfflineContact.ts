@@ -13,6 +13,8 @@ const errors: Record<string, string> = {
   offline_background_capacity: "公共背景超过读取容量，请精简公开条目或触发条件。",
   offline_background_invalid: "公共背景格式异常，请检查或重新确认世界书。",
   offline_reason_used: "本次离线恢复已跳过：同一联系理由已处理，不会重复发送。无需重新保存或反复刷新；与角色继续聊天后，下次符合条件的离线恢复会重新判断。",
+  offline_waiting_reply: "本次离线恢复已跳过：你还没有回复上一条主动联系。查看或清除红点不会解除等待；请在收到联系的会话中回复。",
+  offline_contact_in_progress: "本次离线恢复已跳过：另一条主动联系正在处理中。系统不会并发发送，也不会补发这次恢复。",
   offline_no_contact: "本次恢复没有发起联系。现有记录可能对应忙碌、暂停、没有合适角色、未回复上一条主动消息或模型决定不联系，不能据此确定具体原因。",
   offline_interrupted: "上次任务被中断，系统不会自动重试这次恢复。",
   offline_generation_failed: "本次生成未完成，可能已产生费用，系统不会自动重试。",
