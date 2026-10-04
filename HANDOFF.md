@@ -19,7 +19,7 @@
 | 正式仓库 | `D:\LivingWorld`；当前用户工作目录 `C:\Users\zhang\Documents\ChatGPT\LivingWorld` 是受限环境可写工作目录，不据此推断正式仓库/构建产物已搬迁。 |
 | 分支 | `codex/world-archive`。 |
 | 文档整理前 HEAD | `1221c18a019874b1bc5de2deeeed8043d75f666c`，范围纠正文档提交；开始工作区干净。后续以实际 `git log` 为准。 |
-| 最新功能提交 | `9939579`：授权活动终态召回去重；前序 `ee17ed6` 共同休闲/来源回看、`79f7d91` 相遇节奏、`d023535` 相遇首版。 |
+| 当前功能提交 | `ed5f844`：在线主动联系与未读红点；前序 `9939579` 授权活动终态召回去重、`ee17ed6` 共同休闲/来源回看。 |
 | 桌面版本 | `0.1.29`（package/Tauri/Cargo 与交付 EXE 元数据）。根 npm/Core package 的 `0.1.0` 是已有独立包版本，不误改成桌面版本。 |
 | Core API | `services/core/src/livingworld/domain/api_contract.json`：`api_protocol = 1`、loopback `127.0.0.1`；随机 Core 端口，UI 不硬编码。 |
 | Alembic head | `0035_proactive_contact`，前序 `0034_shared_activities`。此次不运行升级或读取真实存档。 |
