@@ -2,7 +2,7 @@
 
 All engineering agents must read AGENTS.md before modifying the repository.
 
-当前逐项完成度、待验收、明确限制与接续顺序见 [当前状态清单](docs/PROJECT_STATUS.md)；工作规则见 [AGENTS.md](AGENTS.md)，现场与最新 0.1.28 产物见 [HANDOFF.md](HANDOFF.md)。以下架构介绍不替代当前进度清单。
+当前逐项完成度、待验收、明确限制与接续顺序见 [当前状态清单](docs/PROJECT_STATUS.md)；工作规则见 [AGENTS.md](AGENTS.md)，模块入口与最新 0.1.36 产物见 [HANDOFF.md](HANDOFF.md)。以下架构介绍不替代当前进度清单。
 
 ## 项目定位
 
@@ -10,7 +10,7 @@ dreamtalk 是持久化、事件驱动的多角色 AI 世界，不是普通聊天
 
 ## 开发状态
 
-当前处于 **Stage 6 之后的产品体验接线阶段**，仍未完成最终产品。C-007A 的情景记忆基础已完成：Character 可从自身已授权 Observation 显式形成不可变、带证据的 EpisodicMemory，并由 owner-scoped 查询读取。Observation 不自动创建 Memory；Memory 不授予 Truth、Knowledge 或 Belief，也不进入 authored content package 或 projection replay。详见 [Episodic Memory](docs/architecture/EPISODIC_MEMORY.md) 与 [Memory Model](docs/architecture/MEMORY_MODEL.md)。
+截至2026-10-05，当前应用为 **Desktop 0.1.36**，实现基线`e56c7f8`，处于 **产品体验与验收阶段**，仍未完成最终产品发行。世界内界面、长期聊天记忆/混合RAG、日常/相遇/共同休闲、在线与同目的双人主动联系、阵营/头像/三维关系网已有实现；具体已完成、待验收和未实现见状态清单，不从以下历史Stage介绍推断未完成。C-007A 的情景记忆基础已完成：Character 可从自身已授权 Observation 显式形成不可变、带证据的 EpisodicMemory，并由 owner-scoped 查询读取。Observation 不自动创建 Memory；Memory 不授予 Truth、Knowledge 或 Belief，也不进入 authored content package 或 projection replay。详见 [Episodic Memory](docs/architecture/EPISODIC_MEMORY.md) 与 [Memory Model](docs/architecture/MEMORY_MODEL.md)。
 
 Q-001B 提供仅开发环境启用的 [开发者运行时检查器](docs/architecture/RUNTIME_INSPECTOR.md)，用于通过真实 API/application 路径观察时钟、位置、Scene、trigger、activation、WorldEvent、Observation 与 owner-scoped EpisodicMemory。它不是最终产品 UI，也没有加入 Activation consumer 或自动 Observation→Memory。
 
@@ -18,17 +18,17 @@ Q-001B 提供仅开发环境启用的 [开发者运行时检查器](docs/archite
 
 Stage 5 — World Kernel & Simulation Runtime 已完成并冻结。C-006D 的 clock reconciliation、C-006C sparse activation/coalescing 与 C-006B deterministic Action/Scene/event-time perception 继续作为 Stage 6 substrate。详见 [Stage 5 验收](docs/architecture/STAGE5_ACCEPTANCE.md)、[Clock Reconciliation](docs/architecture/CLOCK_RECONCILIATION.md)、[Sparse Activation](docs/architecture/SPARSE_ACTIVATION.md)、[Action Resolution](docs/architecture/ACTION_RESOLUTION.md) 和 [Scenes and Perception](docs/architecture/SCENES_AND_PERCEPTION.md)。
 
-Stage 4 — LLM Infrastructure 已完成并冻结。C-005E5 将四种 provider adapter、ModelRegistry、purpose routing、retry、accounting/pricing、Budget Guard 和 session credentials 接入单一生产 composition root。桌面 API key 由 OS credential facilities 持久化；Python Core 只接收内存 session credential。非秘密配置使用严格 version 1 JSON；桌面设置现提供单模型首次配置入口，要求填写经核实的 Token 上界。启动和配置都不会发现模型、验证 key 或发起生成。全部验收保持离线，没有真实付费 API；可选 live smoke 必须显式 opt-in。详见 [生产组装](docs/architecture/LLM_PRODUCTION_COMPOSITION.md)、[Stage 4 验收](docs/architecture/STAGE4_ACCEPTANCE.md)、[OpenAI Responses adapter](docs/architecture/OPENAI_RESPONSES_ADAPTER.md)、[Gemini Interactions adapter](docs/architecture/GEMINI_INTERACTIONS_ADAPTER.md)、[Anthropic Messages adapter](docs/architecture/ANTHROPIC_MESSAGES_ADAPTER.md)、[LLM routing](docs/architecture/LLM_ROUTING.md)、[Budget Guard](docs/architecture/LLM_BUDGET_GUARD.md)、[LLM accounting](docs/architecture/LLM_ACCOUNTING.md)、[执行策略](docs/architecture/LLM_EXECUTION_POLICY.md)、[基础契约](docs/architecture/LLM_INFRASTRUCTURE.md)、[结构化生成](docs/architecture/STRUCTURED_GENERATION.md) 和 [真实文本流](docs/architecture/LLM_STREAMING.md)。
+Stage 4 — LLM Infrastructure 已完成并冻结。C-005E5 将四种 provider adapter、ModelRegistry、purpose routing、retry、accounting/pricing、Budget Guard 和 session credentials 接入单一生产 composition root。桌面 API key 由 OS credential facilities 持久化；Python Core 只接收内存 session credential。非秘密配置使用严格 version 1 JSON；桌面设置提供单模型首次配置入口，常见型号使用经核对的容量预设，未知型号在高级设置确认可信Token上界。启动和配置都不会发现模型、验证 key 或发起生成。全部验收保持离线，没有真实付费 API；可选 live smoke 必须显式 opt-in。详见 [生产组装](docs/architecture/LLM_PRODUCTION_COMPOSITION.md)、[Stage 4 验收](docs/architecture/STAGE4_ACCEPTANCE.md)、[OpenAI Responses adapter](docs/architecture/OPENAI_RESPONSES_ADAPTER.md)、[Gemini Interactions adapter](docs/architecture/GEMINI_INTERACTIONS_ADAPTER.md)、[Anthropic Messages adapter](docs/architecture/ANTHROPIC_MESSAGES_ADAPTER.md)、[LLM routing](docs/architecture/LLM_ROUTING.md)、[Budget Guard](docs/architecture/LLM_BUDGET_GUARD.md)、[LLM accounting](docs/architecture/LLM_ACCOUNTING.md)、[执行策略](docs/architecture/LLM_EXECUTION_POLICY.md)、[基础契约](docs/architecture/LLM_INFRASTRUCTURE.md)、[结构化生成](docs/architecture/STRUCTURED_GENERATION.md) 和 [真实文本流](docs/architecture/LLM_STREAMING.md)。
 
 Stage 3 已完成 canonical authored-content、Character Card/Lorebook 离线导入、Draft/Preview/confirmed Commit、外部 JSON 导出和 `.lwcontent` 原生内容包。原生包支持显式 roots 的依赖闭包、shared references、完整来源、本地 SHA-256 资产、六种三方冲突与事务化 accepted baseline。详见 [Stage 3 验收](docs/architecture/STAGE_3_ACCEPTANCE.md)、[原生内容包](docs/architecture/NATIVE_CONTENT_PACKAGE.md)、[内容模型](docs/architecture/CONTENT_MODEL.md)、[导入](docs/architecture/IMPORT_MODEL.md)、[导出](docs/architecture/EXPORT_MODEL.md) 和 [持久化](docs/architecture/PERSISTENCE_MODEL.md)。
 
 `.lwcontent` = authored content package；`.lworld` 保留给未来 runtime-world/state package。旧格式后缀为兼容标识，不随项目改名而变。content package != backup != running world；hash integrity != publisher authentication；filesystem blobs + SQLite 不被宣称为一个 ACID transaction。导入/导出不创建 Runtime World/Character，不断言 Truth 或授予 Belief/PlayerKnowledge。作者文本/regex/activation metadata 保持不可信数据，不执行。
 
-当前角色聊天上下文已接入本角色授权记忆、玩家描述、当前世界确认的角色卡，以及逐条开放的公共世界背景。世界书条目默认隐藏；暗线不因导入自动进入角色上下文。群聊记录按固定成员授权，沉默成员同样可在之后读取该群已发送的消息；聊天文本不会自动成为 WorldTruth、KnowledgeAssertion 或 Observation。长期聊天记忆与历史原文召回、Director 受约束的日常批量规划、手动处理的世界动态池、角色卡／世界书联网 Builder 已完成相应切片，边界见 HANDOFF 与各使用说明；更完整的记忆整理、相遇／关系／剧情调度、自动知识传播、checkpoint/branch、`.lworld`、cloud sync、marketplace 与最终 UI 仍未完成。Stage 5 catch-up 只 materialize 到期 work，不编造离线叙事或角色决定。外部 PNG/APNG writer、CHARX、任意图复制、签名与 orphan blob GC 仍 deferred。Stage 2 的资源级 CAS、幂等、ledger/rebuild 和知识隔离继续沿用，见 [Stage 2 验收](docs/architecture/STAGE_2_ACCEPTANCE.md)。provider tools、完整模型管理 UI 和真实付费 API 验证尚未完成。
+当前角色聊天上下文已接入本角色授权记忆、玩家描述、当前世界确认的角色卡，以及逐条开放的公共世界背景。世界书条目默认隐藏；暗线不因导入自动进入角色上下文。群聊记录按固定成员授权，沉默成员同样可在之后读取该群已发送的消息；聊天文本不会自动成为 WorldTruth、KnowledgeAssertion 或 Observation。长期聊天记忆与历史原文召回、Director 受约束的日常批量规划、手动处理的世界动态池、角色卡／世界书联网 Builder 已完成相应切片，边界见 HANDOFF 与各使用说明；相遇、共同休闲、阵营相识与世界内UI首轮优化已完成相应切片；更完整的自主剧情/关系成长、自动知识传播、checkpoint/branch与runtime`.lworld`仍未实现，完整离线重建和最终产品验收尚未完成。cloud sync、marketplace不是已批准排期。Stage 5 catch-up 只 materialize 到期 work，不编造离线叙事或角色决定。外部 PNG/APNG writer、CHARX、任意图复制、签名与 orphan blob GC 仍 deferred。Stage 2 的资源级 CAS、幂等、ledger/rebuild 和知识隔离继续沿用，见 [Stage 2 验收](docs/architecture/STAGE_2_ACCEPTANCE.md)。provider tools和完整多模型管理UI尚未完成；已有DeepSeek优先路径及用户历史聊天/生成反馈，不代表全部provider/代理已验收。
 
-C-002 运行时基础继续沿用：共享 React UI、Tauri v2 Windows 开发壳、Python Core 启停协议、系统 API、SQLite 迁移元数据、结构化日志和 CI。连接阶段显示“正在连接核心 / 核心已就绪 / 核心连接失败”；就绪后默认进入世界档案书架，进入选定世界后显示普通用户四标签页面。
+C-002 运行时基础继续沿用：共享 React UI、Tauri v2 Windows 开发壳、Python Core 启停协议、系统 API、SQLite 迁移元数据、结构化日志和 CI。普通前台启动由[三维流星动画](docs/CELESTIAL_STARTUP.md)承接真实加载，至少展示1.5秒后进入就绪书架；正常等待不显示核心连接技术文字，失败保留可理解的重试。开发Inspector的技术状态独立；进入选定世界后显示普通用户四标签页面。
 
-当前已有受约束的角色回复与独立群聊发言调度器，但尚未形成完整自主 Character Agent；Director 的日常活动／移动子集已实现，完整剧情／相遇／关系调度、自动知识传播、完整语义检索及最终 UI 仍未完成。生产 action registry 与 Director 已批准的内核日常命令保持各自边界；Scene lifecycle 是内部应用操作。生产 snapshot store 只读，正式世界变更通过 Kernel/UoW 管线执行；投影恢复另用内部 ProjectionRebuilder。P-01 的时间推进/离线/暂停部分已由 C-006D 解决；其余待确认问题见 [PRODUCT_SPEC.md](docs/product/PRODUCT_SPEC.md)。Stage 0 审查见 [ARCHITECTURE_REVIEW_001.md](docs/architecture/ARCHITECTURE_REVIEW_001.md)，运行时边界见 [RUNTIME_FOUNDATION.md](docs/architecture/RUNTIME_FOUNDATION.md)。
+当前已有受约束的角色回复与独立群聊发言调度器；Director已接线日常/移动、有限相遇及共同休闲，角色相识/阵营、本地有界语义+词法RAG和0.1.36世界内UI均已实现。尚未形成完整自主剧情、关系成长或自动知识传播；有界召回不是无限历史覆盖，最新版运行与视觉仍需用户验收。生产 action registry 与 Director 已批准的内核日常命令保持各自边界；Scene lifecycle 是内部应用操作。生产 snapshot store 只读，正式世界变更通过 Kernel/UoW 管线执行；投影恢复另用内部 ProjectionRebuilder。P-01 的时间推进/离线/暂停部分已由 C-006D 解决；其余待确认问题见 [PRODUCT_SPEC.md](docs/product/PRODUCT_SPEC.md)。Stage 0 审查见 [ARCHITECTURE_REVIEW_001.md](docs/architecture/ARCHITECTURE_REVIEW_001.md)，运行时边界见 [RUNTIME_FOUNDATION.md](docs/architecture/RUNTIME_FOUNDATION.md)。
 
 ## 开发环境与运行
 
