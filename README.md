@@ -2,15 +2,25 @@
 
 All engineering agents must read AGENTS.md before modifying the repository.
 
-当前逐项完成度、待验收、明确限制与接续顺序见 [当前状态清单](docs/PROJECT_STATUS.md)；工作规则见 [AGENTS.md](AGENTS.md)，模块入口与最新 0.1.36 产物见 [HANDOFF.md](HANDOFF.md)。以下架构介绍不替代当前进度清单。
+## 下载体验（Windows）
+
+**[下载 dreamtalk 0.1.37 观星室体验版](https://github.com/zhangyeS12/dreamtalk/releases/tag/v0.1.37)** · [直接下载 Windows x64 便携包](https://github.com/zhangyeS12/dreamtalk/releases/download/v0.1.37/dreamtalk-0.1.37-windows-x64.zip)
+
+1. 下载 Release 附件中的 `dreamtalk-0.1.37-windows-x64.zip`，完整解压后运行 `dreamtalk/dreamtalk-desktop.exe`。GitHub 自动生成的 **Source code** 是源码，不是可运行程序。
+2. 支持 Windows 10/11 x64，需要 [Microsoft WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/)。无需安装 Python、Node 或 Rust；请保留同目录的 `core/`。
+3. 创建世界，在模型设置中配置自己的模型服务和 API Key，在通讯录创建或导入角色卡，然后打开聊天。模型使用可能产生服务商费用；后台功能默认关闭。
+
+这是未签名的 **预发布体验版**，没有自动更新，尚无最新版整体验收结论。更新前从旧版托盘退出程序并备份重要应用数据。详细操作、升级和反馈方式见 [Windows 便携版说明](docs/PORTABLE_WINDOWS.md)。
+
+当前逐项完成度、待验收、明确限制与接续顺序见 [当前状态清单](docs/PROJECT_STATUS.md)；工作规则见 [AGENTS.md](AGENTS.md)，模块入口与最新 0.1.37 切片与产物状态见 [HANDOFF.md](HANDOFF.md)。以下架构介绍不替代当前进度清单。
 
 ## 项目定位
 
-dreamtalk 是持久化、事件驱动的多角色 AI 世界，不是普通聊天机器人。Director 负责世界与宏观剧情调度，Character Agent 主要负责自己拥有的记忆、人格表达和与玩家对话；世界真实事实、角色知识和玩家知识相互分离。项目计划在 GitHub 公开开发，源码采用 [Apache-2.0 许可证](LICENSE)。旧工程名及仍需兼容的内部标识见 [项目命名与兼容性](docs/architecture/PROJECT_IDENTITY.md)。
+dreamtalk 是持久化、事件驱动的多角色 AI 世界，不是普通聊天机器人。Director 负责世界与宏观剧情调度，Character Agent 主要负责自己拥有的记忆、人格表达和与玩家对话；世界真实事实、角色知识和玩家知识相互分离。项目在 GitHub 公开开发，源码采用 [Apache-2.0 许可证](LICENSE)。旧工程名及仍需兼容的内部标识见 [项目命名与兼容性](docs/architecture/PROJECT_IDENTITY.md)。
 
 ## 开发状态
 
-截至2026-10-05，当前应用为 **Desktop 0.1.36**，实现基线`e56c7f8`，处于 **产品体验与验收阶段**，仍未完成最终产品发行。世界内界面、长期聊天记忆/混合RAG、日常/相遇/共同休闲、在线与同目的双人主动联系、阵营/头像/三维关系网已有实现；具体已完成、待验收和未实现见状态清单，不从以下历史Stage介绍推断未完成。C-007A 的情景记忆基础已完成：Character 可从自身已授权 Observation 显式形成不可变、带证据的 EpisodicMemory，并由 owner-scoped 查询读取。Observation 不自动创建 Memory；Memory 不授予 Truth、Knowledge 或 Belief，也不进入 authored content package 或 projection replay。详见 [Episodic Memory](docs/architecture/EPISODIC_MEMORY.md) 与 [Memory Model](docs/architecture/MEMORY_MODEL.md)。
+截至2026-10-07，当前Desktop源码为 **0.1.37**，对应 `v0.1.37` 观星室体验版；用户已授权源码推送、公开仓库与便携包发布，处于 **产品体验与验收阶段**，仍未完成最终产品发行。世界内界面、长期聊天记忆/混合RAG、日常/相遇/共同休闲、在线与同目的双人主动联系、阵营/头像/三维关系网已有实现；具体已完成、待验收和未实现见状态清单，不从以下历史Stage介绍推断未完成。C-007A 的情景记忆基础已完成：Character 可从自身已授权 Observation 显式形成不可变、带证据的 EpisodicMemory，并由 owner-scoped 查询读取。Observation 不自动创建 Memory；Memory 不授予 Truth、Knowledge 或 Belief，也不进入 authored content package 或 projection replay。详见 [Episodic Memory](docs/architecture/EPISODIC_MEMORY.md) 与 [Memory Model](docs/architecture/MEMORY_MODEL.md)。
 
 Q-001B 提供仅开发环境启用的 [开发者运行时检查器](docs/architecture/RUNTIME_INSPECTOR.md)，用于通过真实 API/application 路径观察时钟、位置、Scene、trigger、activation、WorldEvent、Observation 与 owner-scoped EpisodicMemory。它不是最终产品 UI，也没有加入 Activation consumer 或自动 Observation→Memory。
 
@@ -28,7 +38,7 @@ Stage 3 已完成 canonical authored-content、Character Card/Lorebook 离线导
 
 C-002 运行时基础继续沿用：共享 React UI、Tauri v2 Windows 开发壳、Python Core 启停协议、系统 API、SQLite 迁移元数据、结构化日志和 CI。普通前台启动由[三维流星动画](docs/CELESTIAL_STARTUP.md)承接真实加载，至少展示1.5秒后进入就绪书架；正常等待不显示核心连接技术文字，失败保留可理解的重试。开发Inspector的技术状态独立；进入选定世界后显示普通用户四标签页面。
 
-当前已有受约束的角色回复与独立群聊发言调度器；Director已接线日常/移动、有限相遇及共同休闲，角色相识/阵营、本地有界语义+词法RAG和0.1.36世界内UI均已实现。尚未形成完整自主剧情、关系成长或自动知识传播；有界召回不是无限历史覆盖，最新版运行与视觉仍需用户验收。生产 action registry 与 Director 已批准的内核日常命令保持各自边界；Scene lifecycle 是内部应用操作。生产 snapshot store 只读，正式世界变更通过 Kernel/UoW 管线执行；投影恢复另用内部 ProjectionRebuilder。P-01 的时间推进/离线/暂停部分已由 C-006D 解决；其余待确认问题见 [PRODUCT_SPEC.md](docs/product/PRODUCT_SPEC.md)。Stage 0 审查见 [ARCHITECTURE_REVIEW_001.md](docs/architecture/ARCHITECTURE_REVIEW_001.md)，运行时边界见 [RUNTIME_FOUNDATION.md](docs/architecture/RUNTIME_FOUNDATION.md)。
+当前已有受约束的角色回复与独立群聊发言调度器；Director已接线日常/移动、有限相遇及共同休闲，角色相识/阵营、本地有界语义+词法RAG和0.1.37观星室界面均已实现。尚未形成完整自主剧情、关系成长或自动知识传播；有界召回不是无限历史覆盖，最新版运行与视觉仍需用户验收。生产 action registry 与 Director 已批准的内核日常命令保持各自边界；Scene lifecycle 是内部应用操作。生产 snapshot store 只读，正式世界变更通过 Kernel/UoW 管线执行；投影恢复另用内部 ProjectionRebuilder。P-01 的时间推进/离线/暂停部分已由 C-006D 解决；其余待确认问题见 [PRODUCT_SPEC.md](docs/product/PRODUCT_SPEC.md)。Stage 0 审查见 [ARCHITECTURE_REVIEW_001.md](docs/architecture/ARCHITECTURE_REVIEW_001.md)，运行时边界见 [RUNTIME_FOUNDATION.md](docs/architecture/RUNTIME_FOUNDATION.md)。
 
 ## 开发环境与运行
 
@@ -78,7 +88,7 @@ npm run test:desktop-smoke
 npm run test:llm-live -- --config <path> --data-dir <path> --provider <id> --model <id> --credential-env <ENV_NAME>
 ```
 
-`build:core` 生成 `artifacts/core/*.whl`；`build:desktop` 生成未签名的 Windows debug executable，依赖当前 checkout 的 `.venv`。`build:portable` 先冻结 Python Core 并验证独立启动和迁移，再构建 release 桌面程序，生成 `artifacts/portable/dreamtalk/` 与 zip。它是本地便携产物，尚非签名安装包或 GitHub 发布；使用说明见 [Windows 便携版](docs/PORTABLE_WINDOWS.md)。
+`build:core` 生成 `artifacts/core/*.whl`；`build:desktop` 生成未签名的 Windows debug executable，依赖当前 checkout 的 `.venv`。`build:portable` 先冻结 Python Core 并验证独立启动和迁移，再构建 release 桌面程序，生成 `artifacts/portable/dreamtalk/` 与 zip。构建产物本身不自动发布；0.1.37由用户授权另行上传GitHub Release，仍不是签名安装包；使用说明见 [Windows 便携版](docs/PORTABLE_WINDOWS.md)。
 
 只生成便携产物、由验收者另行执行生命周期检查时，可使用 `npm run build:portable -- --build-only`；默认命令仍包含自检。
 

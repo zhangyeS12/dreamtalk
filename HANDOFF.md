@@ -1,7 +1,7 @@
 # dreamtalk 工作交接
 
-更新日期：**2026-10-05**。源码核对基线：`e56c7f8b63a75574c404e7e071ee879ee94fa390`，Desktop **0.1.36**。
-本轮只整理文档，不修改应用、版本、数据库、系统设置或便携包，不运行产品/测试/模型。规则读 [AGENTS.md](AGENTS.md)，逐项完成度读 [PROJECT_STATUS.md](docs/PROJECT_STATUS.md)，产品体验读 [PRODUCT.md](PRODUCT.md)。
+更新日期：**2026-10-07**。本轮起点：`b2bc43022e5fb4688fa2ddf22de25b05a04a98de`；Desktop **0.1.37**观星室体验版以`v0.1.37`标签定位本轮源码。用户明确授权推送当前版本、公开仓库（含源码及历史）并发布可下载便携包。
+前轮应用户要求重新设计启动及世界内界面；本轮同步GitHub、整理下载及首次使用说明、补齐npm生产依赖许可证并发布既有build-only便携包，不修改Core、数据库或系统设置，不运行产品/测试/模型。规则读 [AGENTS.md](AGENTS.md)，逐项完成度读 [PROJECT_STATUS.md](docs/PROJECT_STATUS.md)，产品体验读 [PRODUCT.md](PRODUCT.md)。
 
 ## 1. 五分钟了解当前完成度
 
@@ -10,25 +10,25 @@
 | 分类 | 当前事实 | 接手时的处理 |
 | --- | --- | --- |
 | 已实现并交付代码/包 | 世界书架与封面、卡/书创作与联网生成、世界/玩家身份、私聊/群聊/流式、模型/额度/恢复、长期记忆/混合RAG、两块事件、日常生命周期/经历召回、相遇/共同休闲、在线/离线主动联系、红点、阵营/头像/三维关系网、Logo启动、世界内四页视觉。 | 按第3节定位实际实现；不能重新列为“待开发”。 |
-| 有明确历史使用反馈 | 用户报告卡/书生成、单聊、群聊@及无@正常，认可循环书架；0.1.23连接卡顿和0.1.30已读红点问题获确认解决。 | 反馈只覆盖当时功能/问题，不代表0.1.36全量通过。 |
-| 已实现、待最新版验收 | 0.1.36视觉/操作；三维关系网/启动；长期记忆自然表现与权限边界；日常/相遇/共同休闲生命周期；双人共同联系、未回复门禁、离线联动及动态池完整流程。 | 先收集具体现象，按原契约修复；不因未验收就重做系统。 |
+| 有明确历史使用反馈 | 用户报告卡/书生成、单聊、群聊@及无@正常，认可循环书架；0.1.23连接卡顿和0.1.30已读红点问题获确认解决。 | 反馈只覆盖当时功能/问题，不代表0.1.37全量通过。 |
+| 已实现、待最新版验收 | 0.1.37视觉/操作；三维关系网/启动；长期记忆自然表现与权限边界；日常/相遇/共同休闲生命周期；双人共同联系、未回复门禁、离线联动及动态池完整流程。 | 先收集具体现象，按原契约修复；不因未验收就重做系统。 |
 | 尚未实现的愿景 | 完整离线演化、更广剧情/关系/知识演化、一键构建完整运行世界/持续资料更新、Checkpoint/Timeline Branch及runtime世界备份。 | 详见第4节。未冻结的产品行为须先讨论，不是默认下一步授权。 |
-| 发行未完成 | 最新版整体验收、签名安装/自动更新/正式发布；目前交付Windows便携包。 | GitHub push/Release须用户明确批准，构建成功不等于产品完工。 |
+| 发行未完成 | 最新版整体验收、签名安装/自动更新/正式发布；目前交付Windows便携包。 | 本版已获用户明确发布授权，按预发布体验版交付；构建成功或公开下载不等于产品完工。 |
 | 已拒绝/未批准 | 共同委托、巡查、任务奖励、战斗、资产玩法，以及未经决定的云同步/市场。 | 不从历史建议、领域类名或“继续推进”推导新授权。 |
 
-**上一个开发切片已经结束：** `e56c7f8` 完成0.1.36世界内界面优化，采用深蓝灰外壳、月白阅读面和连续档案层级。聊天复用头像、按日期分隔并收纳工具；通讯录、设置、个人身份和事件统一层级。沿用既有Core和后台开关，未改费用/知识/持久化契约。当前待办是体验验收及有证据的修复，不是继续完成一份未写完的UI代码。
+**最近进展：** 上一轮`b2bc430`只整理文档；上一应用版本`e56c7f8`完成0.1.36浅色世界内界面。用户本轮明确表示不满意并授权继续设计，当前0.1.37改为观星室：墨蓝空间、月白正文、银蓝会话、暖金主操作；压缩重复页头，新增本地名字筛选，突出人物档案，统一暗色控件/事件/弹窗。启动重编排20条光轨、1400尘点和两颗真实天体。代码与静态检查已完成，便携交付见第6节，实际体验仍待用户验收。
 
 ## 2. 仓库、运行和版本现场
 
-| 项 | 2026-10-05只读核对 |
+| 项 | 2026-10-07恢复发布时核对 |
 | --- | --- |
 | 正式仓库 | `D:\LivingWorld`。`C:\Users\zhang\Documents\ChatGPT\LivingWorld`是本次受限工具的可写工作目录，不是正式仓库搬迁。 |
-| 分支/基线 | `codex/world-archive` / `e56c7f8`；本轮开始工作区干净。此哈希是应用实现基线，后续文档提交查`git log`。 |
+| 分支/基线 | `codex/world-archive` / `b2bc430`；0.1.37代码与发布说明由本轮提交，源码标识`v0.1.37`；应用前序为`e56c7f8`，实际HEAD每轮重查。 |
 | 关键前序提交 | `8d56c99`：主动联系保存/启动最低展示；`42e675c`：Logo/三维启动；`167d5e8`：真三维人物网；`bd90ab3`：阵营/头像；`844259a`：离线门禁提示；`0a1539c`：已读红点修复；`ed5f844`：主动联系/通用未读。 |
-| 版本 | Desktop package/Tauri/Cargo及现有EXE为`0.1.36`。根npm/Web/Core的`0.1.0`为独立包版本，不能一并误改。 |
+| 版本 | Desktop package/Tauri/Cargo及本轮EXE元数据均为`0.1.37`。根npm/Web/Core的`0.1.0`为独立包版本，不能一并误改。 |
 | 协议/迁移 | [API契约](services/core/src/livingworld/domain/api_contract.json)为`api_protocol=1`，loopback`127.0.0.1`、随机Core端口；迁移源码head`0036_character_factions`，前序0035。没有读取真实存档确认其迁移版本。 |
-| GitHub | `origin=https://github.com/zhangyeS12/dreamtalk.git`。此前0.1.35按用户要求备份，当前本地追踪引用为`8d56c99`；0.1.36只本地提交。本轮不fetch/push，不把追踪引用称为实时远端核对。 |
-| 最新便携入口 | `D:\LivingWorld\artifacts\portable\world-terminal\dreamtalk\dreamtalk-desktop.exe`；完整目录与同级`dreamtalk.zip`一起保留。产物ignored，不随Git自动同步。 |
+| GitHub | `origin=https://github.com/zhangyeS12/dreamtalk.git`。本轮已fetch核对：发布前main为`90edd3c`、开发分支为`8d56c99`，均为当前版本祖先；用户授权快进同步main与codex/world-archive。下载见[v0.1.37体验版](https://github.com/zhangyeS12/dreamtalk/releases/tag/v0.1.37)；不强推。 |
+| 最新便携入口 | `D:\LivingWorld\artifacts\portable\observatory-0137\dreamtalk\dreamtalk-desktop.exe`；本轮已完成build-only，EXE文件/产品版本均为0.1.37；同级`dreamtalk.zip`可用于完整分发。旧`world-terminal`目录保留。产物ignored，不随Git自动同步。 |
 | 存档/启动 | app identifier仍为`app.livingworld.desktop`；开发数据兼容位置为`%LOCALAPPDATA%/LivingWorld/development`。当前运行进程、用户存档与自启动注册未检查。换包须用户在新版显式“保存并更新启动位置”；启动本身不擅自改注册。 |
 
 不要覆盖用户/其他任务改动，不强推、不改写历史。不能用旧便携版打开已升级存档；不要移动或删除DB/WAL。代码head、包版本和实际运行EXE是三种证据，必须分别核对。
@@ -39,7 +39,7 @@
 
 `apps/web`（React/TypeScript/Vite）→ `packages/api-client`（认证HTTP JSON与POST回复流）→ `adapters/http`（FastAPI）→ `application`（业务/上下文/编排）→ `domain`及Kernel动作 → `infrastructure/persistence`（SQLite WAL/FTS5）。
 
-- [App.tsx](apps/web/src/App.tsx)管理连接代次和启动交接；[ProductApp.tsx](apps/web/src/ProductApp.tsx)以React局部状态切换书架/世界/四入口，不额外引入路由或状态管理框架。设置用[SettingsHandbook.tsx](apps/web/src/SettingsHandbook.tsx)。基础样式为style/product及各功能CSS，0.1.36覆盖在[world-terminal.css](apps/web/src/world-terminal.css)，限定于世界内；不重写书架/三维场景。
+- [App.tsx](apps/web/src/App.tsx)管理连接代次和启动交接；[ProductApp.tsx](apps/web/src/ProductApp.tsx)以React局部状态切换书架/世界/四入口，不额外引入路由或状态管理框架。设置用[SettingsHandbook.tsx](apps/web/src/SettingsHandbook.tsx)。基础样式为style/product及各功能CSS，0.1.37视觉层在[world-terminal.css](apps/web/src/world-terminal.css)，限定于世界内；不重写书架/三维场景。
 - [API client](packages/api-client/src/index.ts)校验session/generation；实际回复流为一次认证POST，不自动重连重放生成。[HTTP组装](services/core/src/livingworld/adapters/http/app.py)注册各功能路由。
 - [Core组合根](services/core/src/livingworld/bootstrap/cli.py)接线聊天、记忆、Director、事件池、离线/在线联系、Store及调度；[LLM组合](services/core/src/livingworld/bootstrap/llm_runtime.py)配置目的路由。不要只看到一个类或接口就宣称普通用户流程已实现。
 - [Tauri host](apps/desktop/src-tauri/src/lib.rs)/[supervisor](apps/desktop/src-tauri/src/supervisor.rs)启动监督Core；[Database](services/core/src/livingworld/infrastructure/database.py)提供Store/Reader；Alembic是唯一迁移authority。
@@ -65,7 +65,7 @@
 | 通用未读/红点 | `useChatUnread.ts`、聊天目录/底部标签 | [chat_unread.py](services/core/src/livingworld/infrastructure/persistence/chat_unread.py)、`proactive_contact.py` HTTP：对已加载且前台可见的消息保存单调已读位置，失败提示重试并刷新未读；阅读不解除等待回复；0035。 |
 | 两块世界事件 | `WorldEventJournal.tsx`、`WorldNewsSettings.tsx` | [chat_event_annotations.py](services/core/src/livingworld/application/chat_event_annotations.py)、[world_story.py](services/core/src/livingworld/application/world_story.py)/对应persistence：回复同次取具体事件/原句/时间；公共动态10条入池随机发布，手动经历/跳过达8/10续批；0028。 |
 | 阵营/头像/人物网 | `ContactSocial.tsx`、`RelationshipUniverse.tsx`；聊天`useChatAvatars.ts` | [factions.py](services/core/src/livingworld/infrastructure/persistence/factions.py)、`adapters/http/factions.py`：直接成员多重归属、同阵营持久相识、父子不继承；头像本地资产、3d-force-graph/Three.js真三维拾取/相机/漂浮，聊天/Director使用有界相识输入；0036。 |
-| Logo、启动/界面材质 | `Brand.tsx`、`StartupSplash.tsx`、`celestialVortex.ts`、`world-terminal.css` | 前台首帧至少1.5秒且Core/书架真实就绪后交接；Three.js真实纵深，隐藏后台停渲染、静态/错误回退；0.1.36统一四页，Core与0.1.35包相同。 |
+| Logo、启动/界面材质 | `Brand.tsx`、`StartupSplash.tsx`、`celestialVortex.ts`、`world-terminal.css` | 前台首帧至少1.5秒且Core/书架真实就绪后交接；Three.js真实纵深，隐藏后台停渲染、静态/错误回退；0.1.37观星室四页及双天体星轨；本轮未改Core源码。 |
 | Kernel/知识/持久化基础 | 普通功能经应用接线；开发Inspector独立 | [command_handler.py](services/core/src/livingworld/application/command_handler.py)、`action_resolution.py`、`ledger.py`/`replay.py`、`domain/knowledge.py`、`application/memory.py`、`persistence/unit_of_work.py`：CAS/幂等/事务事件、投影重建、owner授权Observation/EpisodicMemory；不是普通聊天自动写Truth。 |
 | 内容包/外部导出基础 | 核心已有能力，不能推定完整用户备份UI | [package_service.py](services/core/src/livingworld/application/package_service.py)、`exports.py`、`infrastructure/packages/`：authored内容依赖闭包、冲突确认、`.lwcontent`及JSON导出；不是runtime存档/Checkpoint。 |
 
@@ -97,27 +97,41 @@
 
 ## 5. 接下来从哪一步继续
 
-1. **先接收0.1.36体验反馈**：聊天/通讯录/设置/我，重点头像更新、会话工具、滚动、未读、草稿/保存、窄窗口；完成条件见[世界内界面](docs/WORLD_TERMINAL.md)。没有新反馈时不要把这轮实现重新登记为未完成代码。
+1. **先接收0.1.37体验反馈**：聊天/通讯录/设置/我，重点头像更新、会话工具、滚动、未读、草稿/保存、窄窗口；完成条件见[世界内界面](docs/WORLD_TERMINAL.md)。没有新反馈时不要把这轮实现重新登记为未完成代码。
 2. **验收尚未确认的关键链路**：记忆纠正/停用和旧事召回、活动真实终态/权限、动态池公共背景→生成→逐条发布→标记、在线单人/双人同事由→等待回复→原会话回复→合法下次机会、离线联动。主动联系失败先查保存状态/前提/终端原因，不靠反复开关或自动重放API排查。
 3. **只按证据修复**：记录现象、版本、受影响模块和可观察完成条件；新功能先调查成熟实现并确认新增范围。用户仍负责测试；未获新许可不运行自动测试、GUI smoke、真实存档/模型诊断。
-4. **新方向先讨论，发行最后决定**：将4.2中的愿景与当前功能验收分开；发布须用户明确批准。现在没有等待补写的共同委托，也没有需要重新搭建的记忆底座。
+4. **新方向先讨论**：将4.2中的愿景与当前功能验收分开；0.1.37已获公开体验发布授权，后续版本发行仍须相应批准。现在没有等待补写的共同委托，也没有需要重新搭建的记忆底座。
 
 各功能操作/验收手册： [聊天恢复](docs/CHAT_FUNCTIONAL_EXPERIENCE.md)、[记忆与上下文](docs/CONTEXT_AND_RECALL.md)、[经历终态](docs/EXPERIENCE_STATE_RECALL.md)、[日常](docs/DIRECTOR_ACTIVITIES.md)、[相遇](docs/CHARACTER_ENCOUNTERS.md)、[共同休闲](docs/SHARED_LEISURE.md)、[主动联系](docs/PROACTIVE_CONTACT.md)、[离线消息](docs/OFFLINE_MESSAGES.md)、[事件](docs/WORLD_EVENT_JOURNAL.md)、[阵营](docs/CHARACTER_FACTIONS.md)、[启动](docs/CELESTIAL_STARTUP.md)。
 
 ## 6. 交付与证据
 
-### 最新应用交付：0.1.36（2026-10-04）
+### 本轮0.1.37观星室（2026-10-05）
 
-- 实现提交`e56c7f8`；此前前端ESLint/TypeScript、静态CSS语法/288规则范围、9组基础文字色值最低6.25:1、文档链接和Git差异检查通过；`--build-only --output-name world-terminal`完成。**这些是前轮检查/构建记录，不是本轮重跑或用户整体验收。**
-- 便携目录`artifacts/portable/world-terminal/dreamtalk`，ZIP为同级`dreamtalk.zip`；EXE元数据FileVersion/ProductVersion本轮只读核对仍为0.1.36。静态清单在`artifacts/world-terminal-source-audit.json`（ignored）。Desktop SHA256记录为`80051e373bd316f41dac2e6c242129481d574d6074093f96abf0f252d6c4299f`，Core为`2d7bc064f1af15e7525108e4465bb492ea89e308889e95b8c9e152f3a43baa94`；本轮未重新全量hash。前轮清单记录Core与0.1.35相同。
-- 构建保留非阻塞告警：主chunk713.56kB、共享Three.js587.98kB、人物网817.51kB及STATIC_VCRUNTIME弃用；不能宣称帧率/全平台兼容已验收。
-- 包内文档为2026-10-04打包快照；**本轮2026-10-05文档只更新源码仓库，不重打包/重写原ZIP及哈希**。接手看仓库根的当前规则；不能说现有包的文档与此次新文档字节相同。
+- 实现基于`b2bc430`，公开源码以`v0.1.37`标签定位；Desktop版本0.1.37；无Core/API/迁移改动，无新依赖，原Logo字节未改。
+- 本轮`npm run lint`（ESLint/TypeScript）通过；CSS静态解析世界内346条/启动40条规则；10组代表性配色计算最低5.60:1。这不是渲染验证、全页面对比度认证或用户验收。
+- build-only完成：`.\.venv\Scripts\python.exe scripts\build-portable.py --build-only --output-name observatory-0137`。常规npm/uv入口因本机uv缓存目录拒绝访问未开始构建；改用已安装PyInstaller6.22.3的仓库虚拟环境调用同一脚本完成。没有修改构建脚本、安装依赖或绕开build-only。
+- 独立便携目录`artifacts/portable/observatory-0137/dreamtalk`与同级ZIP已生成，EXE FileVersion/ProductVersion均为0.1.37。Desktop SHA256 `87fc2f6f23b8c18d06b0f6c24caad61bbbf52de8c0b7fb198a86d92ff46674aa`；Core SHA256 `2d7bc064f1af15e7525108e4465bb492ea89e308889e95b8c9e152f3a43baa94`，与0.1.36记录一致。最终ZIP/源码/资产清单在`artifacts/observatory-source-audit.json`（ignored）。
+- 本轮文档链接751个本地目标/0断链；Git差异格式无错误，Git提示部分text=auto文件在后续操作时转换CRLF。包内docs在构建结束后同步本轮最终交付说明并重新压缩，仅影响这个新包。
+- 构建非阻塞告警：主chunk717.72kB、Three.js587.98kB、关系网817.51kB；STATIC_VCRUNTIME弃用；PyInstaller缺少tzdata/pysqlite2/MySQLdb的hidden import及jieba转义SyntaxWarning。未据此新增依赖，也未宣称运行兼容通过。
+- 未运行自动测试、GUI smoke、模型、真实存档或迁移；未更改系统启动注册。构建/运行/用户接受分别记录。
+- 设计方案和验收入口：[世界内界面](docs/WORLD_TERMINAL.md)、[启动](docs/CELESTIAL_STARTUP.md)、[成品复用](docs/research/2026-10-05-observatory-design.md)。
 
-### 历史与本轮证据
+### 本轮公开体验发布（2026-10-07恢复完成）
 
-0.1.35主动联系JSON头/UUID适配及启动至少1.5秒、0.1.33真三维关系网、0.1.30红点修复、0.1.29主动联系的完整构建记录/哈希保留在Git基线：`git show e56c7f8:HANDOFF.md`。更早根文件原文在[历史索引](docs/history/README.md)，不从旧排期推导新工作。
+- 用户明确授权GitHub推送，并确认将当前私有仓库设为公开，包含源码与提交历史；不以此补造最新版整体验收结论。
+- 源码同步main与codex/world-archive，版本标签`v0.1.37`；[Release入口](https://github.com/zhangyeS12/dreamtalk/releases/tag/v0.1.37)提供`dreamtalk-0.1.37-windows-x64.zip`与`SHA256SUMS.txt`。
+- 使用前轮已构建的EXE/Core，源码哈希与原构建记录一致；本轮只更新包内说明和许可证并重新压缩，不运行应用或重建程序。发布资产记录保存在`artifacts/release-0137/`（ignored）。
+- 随包README改为当前0.1.37上手/升级说明，不再把0.1.27称为最新；补充锁定npm生产依赖的原许可证/通知文本。
+- 保留既有测试/CI定义；发布提交用`[skip ci]`遵守本轮不运行自动测试的约定，不据此声称CI通过。
+- 发布前检查Git历史中2563个文本blob及包内文件名，命中项为离线测试的synthetic凭据；未发现匹配规则的真实密钥或用户数据文件。此为有界发布检查，不宣称覆盖所有敏感信息。
+- 本轮说明见[0.1.37发布说明](docs/releases/0.1.37.md)；恢复后再次核对GitHub仍为私有且无Release，按已有授权完成发布。本轮链接检查743个本地目标/0断链，与前轮构建记录分别保留。
 
-本轮只读核对Git、版本/迁移源码、UI接线、Core组合根/HTTP路由、记忆限制及现有静态清单；本轮文档链接检查：749个本地目标、0断链；Git差异格式检查通过，32个未涉及修改的编号规则章节与原文一致，变更仅4份Markdown。337个外部URL仅计数，未联网探测。提交哈希查本轮git log。没有启动产品、自动测试、付费模型、数据库升级或用户存档读取，没有核对当前运行EXE或自启动注册。
+### 历史交付
+
+- 0.1.36 `e56c7f8`完成浅色世界内UI与build-only便携包；2026-10-05用户反馈不满意，已被本轮新视觉方案接续。旧包`artifacts/portable/world-terminal/dreamtalk`保留。
+- 0.1.35主动联系保存/至少1.5秒启动、0.1.33三维关系网、0.1.30红点验收及更早构建记录查Git（`git show b2bc430:HANDOFF.md`、`git show e56c7f8:HANDOFF.md`）和[历史索引](docs/history/README.md)。
+- 上一文档轮749个本地目标/0断链等是历史检查，本轮结果另行记录，不推定本轮功能验收。
 
 ## 7. 接手操作与维护规则
 

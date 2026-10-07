@@ -5,13 +5,13 @@ export interface VortexController { enter(): void; setPaused(paused: boolean): v
 // Real world-space ribbon paths. The local XY pair is only the ribbon's UV grid;
 // depth, orbital tilt, perspective and camera travel are evaluated in 3D.
 const ribbonVertex = `
-  uniform float uTime, uPhase, uDepth, uRadius, uWidth;
+  uniform float uTime, uPhase, uDepth, uRadius, uWidth, uSpeed;
   varying vec2 vRibbon;
   vec3 orbit(float age) {
-    float theta = uPhase + uTime * .34 - age * 1.65;
-    float radius = uRadius + age * .55;
-    return vec3(cos(theta) * radius, sin(theta) * radius,
-      uDepth + sin(theta * .85 + uPhase) * 3.2 - age * 3.0);
+    float theta = uPhase + uTime * uSpeed - age * 2.1;
+    float radius = uRadius + age * .32;
+    return vec3(cos(theta) * radius, sin(theta) * radius * .68,
+      uDepth + sin(theta) * 4.6 - age * 1.8);
   }
   void main() {
     float age = position.x;
@@ -70,56 +70,80 @@ export function createCelestialVortex(container: HTMLElement, onPaint: () => voi
   const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, powerPreference: "low-power" });
   renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 1.65));
   renderer.setClearColor(0x080a14, 0); renderer.outputColorSpace = THREE.SRGBColorSpace;
-  renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.15;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.1;
   renderer.domElement.setAttribute("aria-hidden", "true");
   container.appendChild(renderer.domElement);
   const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(48, 1, .1, 200);
+  const camera = new THREE.PerspectiveCamera(46, 1, .1, 200);
   const focus = new THREE.Vector3(0, 0, -7);
-  const orbit = new THREE.Group(); orbit.rotation.set(.37, -.25, -.16); scene.add(orbit);
+  const orbit = new THREE.Group(); orbit.rotation.set(.24, -.16, -.32); scene.add(orbit);
   const geometries = new Set<THREE.BufferGeometry>(), materials = new Set<THREE.Material>();
   const track = <T extends THREE.Material>(material: T): T => { materials.add(material); return material; };
   const geometry = ribbonGeometry(); geometries.add(geometry);
   const texture = lightTexture();
   const pearl = new THREE.Color("#d7e3ff"), gold = new THREE.Color("#f7ce94");
-  const meteors = Array.from({ length: 26 }, (_, i) => {
-    const layer = i % 5;
-    const depth = 8 - layer * 7 + Math.sin(i * 2.4) * 1.8;
+  const meteors = Array.from({ length: 20 }, (_, i) => {
+    const layer = i % 4;
+    const depth = 3 - layer * 5.5 + Math.sin(i * 2.4) * .8;
     const phase = i * 2.399963;
-    const radius = 9.1 - layer * .76 + Math.cos(i * 1.7) * .65;
+    const radius = 10.8 - layer * .68 + Math.cos(i * 1.7) * .42;
+    const speed = .22 + layer * .018;
     const color = i % 3 === 0 ? gold : pearl;
     const material = track(new THREE.ShaderMaterial({
       vertexShader: ribbonVertex, fragmentShader: ribbonFragment,
       uniforms: { uTime: { value: 0 }, uPhase: { value: phase }, uDepth: { value: depth },
-        uRadius: { value: radius }, uWidth: { value: .16 + (i % 4) * .027 },
-        uColor: { value: color }, uOpacity: { value: .83 - layer * .07 } },
+        uRadius: { value: radius }, uWidth: { value: .13 + (i % 4) * .024 }, uSpeed: { value: speed },
+        uColor: { value: color }, uOpacity: { value: .90 - layer * .10 } },
       transparent: true, depthWrite: false, depthTest: true, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
     }));
     const ribbon = new THREE.Mesh(geometry, material); ribbon.frustumCulled = false; orbit.add(ribbon);
     const tip = new THREE.Sprite(track(new THREE.SpriteMaterial({ map: texture, color, transparent: true,
       blending: THREE.AdditiveBlending, depthWrite: false, opacity: .94 - layer * .1 })));
-    tip.scale.setScalar(.6 + (i % 3) * .14); orbit.add(tip);
-    return { material, tip, phase, depth, radius };
+    tip.scale.setScalar(.48 + (i % 3) * .12); orbit.add(tip);
+    return { material, tip, phase, depth, radius, speed };
   });
 
-  // Opaque pearl nucleus occludes the rear trails; it is not a flat CSS disc.
-  const nucleusGeometry = new THREE.SphereGeometry(1.25, 48, 32); geometries.add(nucleusGeometry);
-  const nucleusMaterial = track(new THREE.MeshPhysicalMaterial({ color: 0x8d9fb7, metalness: .38, roughness: .43,
-    emissive: 0x25324c, emissiveIntensity: .4, clearcoat: .65 }));
-  const nucleus = new THREE.Mesh(nucleusGeometry, nucleusMaterial); nucleus.position.copy(focus); scene.add(nucleus);
-  scene.add(new THREE.AmbientLight(0x8499c9, 1.5));
-  const sun = new THREE.DirectionalLight(0xffe3bb, 4.5); sun.position.set(-5, 5, 8); scene.add(sun);
-  const moon = new THREE.DirectionalLight(0x91b6ff, 2); moon.position.set(5, -3, 2); scene.add(moon);
+  // Two opaque, lit bodies frame the original logo without replacing it.
+  // The rear ribbons depth-test against them; silhouettes are real spheres.
+  const nucleusGeometry = new THREE.SphereGeometry(1.6, 48, 32); geometries.add(nucleusGeometry);
+  const nucleusMaterial = track(new THREE.MeshPhysicalMaterial({ color: 0x7186af, metalness: .42, roughness: .39,
+    emissive: 0x101727, emissiveIntensity: .16, clearcoat: .55 }));
+  const nucleus = new THREE.Mesh(nucleusGeometry, nucleusMaterial); nucleus.position.set(-6.4, 2.8, -9); scene.add(nucleus);
+  const solar = new THREE.Mesh(nucleusGeometry, track(new THREE.MeshStandardMaterial({ color: 0xd8b77d, metalness: .3,
+    roughness: .55, emissive: 0x79502a, emissiveIntensity: .65 })));
+  solar.scale.setScalar(.5); solar.position.set(6.1, -2.4, -13); scene.add(solar);
+  scene.add(new THREE.AmbientLight(0x8499c9, .45));
+  const sun = new THREE.DirectionalLight(0xffe3bb, 4.5); sun.position.set(-8, 5, -2); scene.add(sun);
+  const moon = new THREE.DirectionalLight(0x91b6ff, 1.4); moon.position.set(5, -3, 1); scene.add(moon);
+  const solarGlow = new THREE.Sprite(track(new THREE.SpriteMaterial({ map: texture, color: 0xe6b76e, transparent: true,
+    opacity: .6, blending: THREE.AdditiveBlending, depthWrite: false })));
+  solarGlow.position.copy(solar.position); solarGlow.position.z -= 1; solarGlow.scale.setScalar(5.5); scene.add(solarGlow);
   const aura = new THREE.Sprite(track(new THREE.SpriteMaterial({ map: texture, color: 0xe1b782, transparent: true,
     opacity: .3, blending: THREE.AdditiveBlending, depthWrite: false })));
   aura.position.set(0, 0, -9); aura.scale.setScalar(14); scene.add(aura);
-  const haloGeometry = new THREE.TorusGeometry(2.45, .012, 8, 128); geometries.add(haloGeometry);
+  const haloGeometry = new THREE.TorusGeometry(8.2, .009, 6, 180); geometries.add(haloGeometry);
   const halo = new THREE.Mesh(haloGeometry, track(new THREE.MeshBasicMaterial({ color: 0xcdb79a, transparent: true,
-    opacity: .2, depthWrite: false, blending: THREE.AdditiveBlending })));
-  halo.position.copy(focus); halo.rotation.set(1.13, .25, -.5); scene.add(halo);
+    opacity: .24, depthWrite: false, blending: THREE.AdditiveBlending })));
+  halo.position.copy(focus); halo.rotation.set(1.0, .25, -.4); scene.add(halo);
+
+  // A single point cloud adds a fine orbital dust band without postprocessing.
+  const dustPositions: number[] = [], dustColors: number[] = [];
+  for (let i = 0; i < 1400; i++) {
+    const theta = i * 2.399963;
+    const scatter = Math.sin(i * 78.233) * .5 + Math.cos(i * 12.9898) * .5;
+    const radius = 10.3 + scatter * .7;
+    dustPositions.push(Math.cos(theta) * radius, Math.sin(theta) * radius * .68, -5 + Math.sin(theta) * 4.6 + scatter * .4);
+    const color = i % 3 ? pearl : gold;
+    dustColors.push(color.r, color.g, color.b);
+  }
+  const dustGeometry = new THREE.BufferGeometry().setAttribute("position", new THREE.Float32BufferAttribute(dustPositions, 3))
+    .setAttribute("color", new THREE.Float32BufferAttribute(dustColors, 3)); geometries.add(dustGeometry);
+  const dust = new THREE.Points(dustGeometry, track(new THREE.PointsMaterial({ map: texture, size: .075, sizeAttenuation: true,
+    vertexColors: true, opacity: .45, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })));
+  orbit.add(dust);
 
   const stars: number[] = [], sizes: number[] = [];
-  for (let i = 0; i < 900; i++) {
+  for (let i = 0; i < 650; i++) {
     const angle = i * 2.399963, radius = 10 + ((i * 67) % 370) / 10;
     stars.push(Math.cos(angle) * radius, Math.sin(angle) * radius, -75 + ((i * 31) % 800) / 10);
     sizes.push(.025 + (i % 5) * .012);
@@ -151,19 +175,21 @@ export function createCelestialVortex(container: HTMLElement, onPaint: () => voi
     if (disposed || document.hidden || paused || contextLost) { previous = 0; return; }
     elapsed += previous ? Math.min((now - previous) / 1000, .05) : 0; previous = now;
     const travel = entryStart === null ? 0 : Math.min(1, (now - entryStart) / 850);
-    const advance = travel * travel * (3 - 2 * travel);
-    camera.position.set(Math.sin(elapsed * .13) * .4 * (1 - travel), .8 * (1 - travel), 27 - advance * 42);
+    const advance = travel * travel * travel;
+    const cameraDistance = camera.aspect < 1 ? 30 / Math.max(.55, camera.aspect) : 30;
+    camera.position.set(Math.sin(elapsed * .13) * .3 * (1 - travel), .5 * (1 - travel), cameraDistance - advance * (cameraDistance + 15));
     camera.lookAt(0, 0, -40);
-    orbit.rotation.z = -.16 + Math.sin(elapsed * .08) * .075;
-    orbit.rotation.y = -.25 + Math.sin(elapsed * .11) * .07;
+    orbit.rotation.z = -.32 + Math.sin(elapsed * .08) * .04;
+    orbit.rotation.y = -.16 + Math.sin(elapsed * .11) * .06;
+    dust.rotation.z = elapsed * .025;
     for (const meteor of meteors) {
       meteor.material.uniforms.uTime.value = elapsed;
-      const theta = meteor.phase + elapsed * .34;
-      meteor.tip.position.set(Math.cos(theta) * meteor.radius, Math.sin(theta) * meteor.radius,
-        meteor.depth + Math.sin(theta * .85 + meteor.phase) * 3.2);
+      const theta = meteor.phase + elapsed * meteor.speed;
+      meteor.tip.position.set(Math.cos(theta) * meteor.radius, Math.sin(theta) * meteor.radius * .68,
+        meteor.depth + Math.sin(theta) * 4.6);
     }
-    nucleus.visible = halo.visible = travel < .18;
     aura.material.opacity = .3 * (1 - travel);
+    solarGlow.material.opacity = .6 * (1 - travel);
     starMaterial.uniforms.uTime.value = elapsed;
     renderer.render(scene, camera);
     if (!painted) { painted = true; onPaint(); }

@@ -1,4 +1,5 @@
 import { useRef, type ReactNode } from "react";
+import { WorkspaceIcon } from "./WorkspacePrimitives";
 
 export function ConversationHeading({ title, kind, portrait, onBack, onRefresh, onLongMemory, onMemory, onHistory }: {
   title: string; kind: string; portrait: ReactNode; onBack: () => void; onRefresh: () => void;
@@ -15,7 +16,7 @@ export function ConversationHeading({ title, kind, portrait, onBack, onRefresh, 
     <button type="button" className="text-action thread-back" onClick={onBack}>返回聊天</button>
     {portrait}
     <div className="thread-identity"><h2>{title}</h2><span>{kind}</span></div>
-    <button type="button" className="text-action transcript-refresh" onClick={onRefresh}>刷新记录</button>
+    <button type="button" className="text-action transcript-refresh" onClick={onRefresh}><WorkspaceIcon name="refresh" /><span>刷新记录</span></button>
     <details ref={tools} className="thread-tools" onKeyDown={event => {
       if (event.key === "Escape") { event.preventDefault(); if (tools.current) tools.current.open = false; summary.current?.focus(); }
     }}>

@@ -1,41 +1,50 @@
-/* The same surface is used by index.html before React and by the live 3D scene. */
+/* Preboot and React share the same composition; no white frame at handover. */
 .startup-splash, .startup-preboot {
-  --night: oklch(.145 .025 270); --pearl: oklch(.96 .025 86); --gold: oklch(.82 .09 76);
+  --night: oklch(.145 .025 270); --pearl: oklch(.94 .014 265); --gold: oklch(.85 .07 80);
   position: fixed; inset: 0; z-index: 60; overflow: hidden; color: var(--pearl);
-  background: radial-gradient(ellipse at 51% 48%, oklch(.28 .04 271 / .45), transparent 42%),
-    radial-gradient(ellipse at 66% 60%, oklch(.26 .03 82 / .16), transparent 58%), var(--night);
+  background: radial-gradient(ellipse at 46% 43%, oklch(.29 .045 270 / .45), transparent 54%),
+    radial-gradient(ellipse at 64% 59%, oklch(.30 .045 80 / .15), transparent 42%), var(--night);
   isolation: isolate; display: grid; place-items: center;
 }
-.startup-universe { position: absolute; inset: 0; opacity: 0; transition: opacity 500ms ease; }
+.startup-splash .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+.startup-universe { position: absolute; inset: 0; opacity: 0; transition: opacity 600ms ease-out; }
 .startup-universe.is-painted { opacity: 1; }
 .startup-universe canvas { display: block; width: 100%; height: 100%; }
-.startup-vignette { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse, transparent 28%, oklch(.1 .025 270 / .54) 100%); }
-.startup-signature { position: relative; display: grid; justify-items: center; gap: 24px; transform: translateY(-4%); }
-.startup-signature img { width: clamp(150px, 18vw, 230px); height: auto; filter: drop-shadow(0 0 24px oklch(.82 .065 78 / .22)); }
-.startup-signature span { font-size: clamp(17px, 1.5vw, 22px); font-weight: 450; letter-spacing: .12em; color: oklch(.91 .025 86); }
-.startup-splash.is-entering { animation: startup-reveal 900ms cubic-bezier(.4,0,.2,1) forwards; pointer-events: none; }
-.startup-splash.is-entering .startup-signature { animation: startup-signature-exit 650ms cubic-bezier(.5,0,.2,1) forwards; }
-.startup-splash.has-failed .startup-universe { opacity: .22; }
-.startup-splash.has-failed .startup-signature { transform: translateY(-72px); }
-.startup-recovery { position: absolute; top: calc(50% + 120px); width: min(420px, calc(100% - 40px)); display: grid; justify-items: center; gap: 12px; text-align: center; }
+.startup-vignette { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse, transparent 26%, oklch(.10 .025 270 / .6) 100%); }
+.startup-signature { position: relative; display: grid; justify-items: center; gap: 18px; transform: translateY(-5%); padding: 20px; text-align: center; }
+.startup-signature img { width: clamp(144px, 17vw, 210px); height: auto; filter: drop-shadow(0 0 26px oklch(.82 .065 78 / .16)); }
+.startup-signature > span { font-family: ui-sans-serif, system-ui, sans-serif; font-size: clamp(24px, 2.4vw, 32px); font-weight: 350; letter-spacing: .08em; color: var(--pearl); }
+.startup-signature > p { margin: 4px 0 0; font-size: 13px; line-height: 1.8; letter-spacing: .12em; color: oklch(.76 .025 265); }
+.startup-horizon { position: absolute; bottom: max(42px, 7vh); left: 24px; right: 24px; display: flex; align-items: center; justify-content: center; gap: 20px; color: oklch(.74 .03 265); font-size: 11px; letter-spacing: .1em; }
+.startup-horizon > span { width: min(64px, 10vw); height: 1px; background: oklch(.59 .045 80 / .5); }
+.startup-splash.is-entering { animation: startup-reveal 900ms cubic-bezier(.22,1,.36,1) forwards; pointer-events: none; }
+.startup-splash.is-entering .startup-signature { animation: startup-signature-exit 680ms cubic-bezier(.22,1,.36,1) forwards; }
+.startup-splash.is-entering .startup-horizon { opacity: 0; transition: opacity 200ms ease-out; }
+.startup-splash.has-failed .startup-universe { opacity: .18; }
+.startup-splash.has-failed .startup-signature { transform: translateY(-100px); }
+.startup-splash.has-failed .startup-signature > p, .startup-splash.has-failed .startup-horizon { display: none; }
+.startup-recovery { position: absolute; top: calc(50% + 80px); width: min(420px, calc(100% - 40px)); display: grid; justify-items: center; gap: 12px; text-align: center; }
 .startup-recovery p { margin: 0; font-size: 18px; color: var(--pearl); }
-.startup-recovery span { font-size: 14px; line-height: 1.65; color: oklch(.81 .024 255); }
-.startup-recovery button { margin-top: 12px; min-height: 44px; padding: 10px 28px; border: 1px solid oklch(.74 .07 76 / .65); background: oklch(.28 .026 267); color: var(--pearl); border-radius: 6px; }
-.startup-recovery button:hover { background: oklch(.36 .03 265); }
+.startup-recovery span { font-size: 14px; line-height: 1.65; color: oklch(.79 .024 265); }
+.startup-recovery button { margin-top: 12px; min-height: 44px; padding: 10px 28px; border: 1px solid var(--gold); background: var(--gold); color: var(--night); border-radius: 6px; }
+.startup-recovery button:hover { background: oklch(.93 .055 85); }
 .startup-recovery button:focus-visible { outline: 2px solid var(--gold); outline-offset: 5px; }
 .dreamtalk-brand { display: inline-flex; align-items: center; gap: 10px; flex-shrink: 0; }
 .dreamtalk-brand img { width: 36px; height: 32px; object-fit: contain; }
-@keyframes startup-reveal { 0%, 45% { opacity: 1; } 100% { opacity: 0; } }
-@keyframes startup-signature-exit { to { opacity: 0; transform: translateY(-4%) scale(1.7); } }
+@keyframes startup-reveal { 0%, 48% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes startup-signature-exit { to { opacity: 0; transform: translateY(-5%) scale(1.14); } }
 .startup-splash.is-reduced.is-entering { animation: startup-reveal 160ms ease-out forwards; }
 .startup-splash.is-reduced.is-entering .startup-signature { animation: none; }
 @media (prefers-reduced-motion: reduce) {
-  .startup-universe { transition: none; }
+  .startup-universe, .startup-horizon { transition: none !important; }
   .startup-splash.is-entering { animation: startup-reveal 160ms ease-out forwards; }
   .startup-splash.is-entering .startup-signature { animation: none; }
 }
 @media (max-height: 550px) {
-  .startup-splash.has-failed .startup-signature img { width: 115px; }
-  .startup-splash.has-failed .startup-signature { gap: 8px; transform: translateY(-60px); }
-  .startup-recovery { top: calc(50% + 60px); gap: 8px; }
+  .startup-signature { gap: 8px; }
+  .startup-signature img { width: 120px; }
+  .startup-horizon { bottom: 20px; }
+  .startup-splash.has-failed .startup-signature { transform: translateY(-85px); }
+  .startup-splash.has-failed .startup-signature img { width: 90px; }
+  .startup-recovery { top: calc(50% + 36px); gap: 8px; }
 }

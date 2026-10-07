@@ -114,7 +114,8 @@ export function StartupSplash({ ready, failed, onRetry, onComplete }: {
   return <section className={`startup-splash${entering ? " is-entering" : ""}${failed ? " has-failed" : ""}${reduced ? " is-reduced" : ""}`} aria-label="dreamtalk 启动" aria-busy={!failed}>
     <div ref={surface} className={`startup-universe${painted ? " is-painted" : ""}`} aria-hidden="true" />
     <div className="startup-vignette" aria-hidden="true" />
-    <div className="startup-signature"><img src="/brand/dreamtalk-logo.png" alt="dreamtalk" width="230" height="198" draggable="false" /><span aria-hidden="true">dreamtalk</span></div>
+    <div className="startup-signature"><img src="/brand/dreamtalk-logo.png" alt="dreamtalk" width="230" height="198" draggable="false" /><span aria-hidden="true">dreamtalk</span><p>在万千星轨中，与你相遇。</p></div>
+    <div className="startup-horizon" aria-hidden="true"><span />每一个世界，都有回响<span /></div>
     <p className="sr-only" role="status" aria-live="polite">{failed ? "启动暂时没有完成。" : ready ? "世界书架已准备好。" : "正在打开世界书架。"}</p>
     {failed && <div className="startup-recovery" role="alert"><p>暂时无法打开世界书架</p><span>请重试；若仍未完成，请退出程序后重新打开。</span><button type="button" onClick={onRetry}>重新打开</button></div>}
   </section>;
