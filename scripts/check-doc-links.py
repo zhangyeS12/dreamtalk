@@ -1,11 +1,14 @@
 """Check local Markdown destinations. External URLs are counted, not probed online."""
 
+import argparse
 import re
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
-root = Path(__file__).resolve().parents[1]
-sources = [root / "README.md", *sorted((root / "docs").rglob("*.md"))]
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[1])
+root = parser.parse_args().root.resolve()
+sources = [*sorted(root.glob("*.md")), *sorted((root / "docs").rglob("*.md"))]
 broken = []
 checked = 0
 external = 0

@@ -45,6 +45,18 @@ class Fts5ChatRecallRanker:
                 raise
         return tuple(term for term in dict.fromkeys(reversed(tokens)) if len(term) <= 64)[:24]
 
+    async def tokenize_documents(self, texts):
+        """Segment one bounded authorized page for the persistent local index."""
+        async with self._slots:
+            job = asyncio.create_task(
+                asyncio.to_thread(lambda: tuple(" ".join(self._tokens(text)) for text in texts))
+            )
+            try:
+                return await asyncio.shield(job)
+            except asyncio.CancelledError:
+                await job
+                raise
+
     async def rank(
         self, query: str, candidates: tuple[ChatMessage, ...], *, limit: int
     ) -> tuple[ChatMessage, ...]:

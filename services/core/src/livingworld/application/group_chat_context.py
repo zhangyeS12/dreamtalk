@@ -4,44 +4,37 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field, replace
 
 from livingworld.application.character_activity_context import (
     ACTIVITY_GROUNDING_INSTRUCTIONS,
-    CharacterActivityContextReader,
     character_activity_context,
 )
 from livingworld.application.chat_capacity import ContextLayout
 from livingworld.application.chat_context import (
+    ChatContextSources,
     card_greeting_example,
+    character_chat_persona,
     common_chat_lore,
+    player_chat_persona,
     private_chat_memories,
     recent_chat_transcript,
     recent_seen_group_messages,
 )
-from livingworld.application.chat_conversations import ChatConversationService
 from livingworld.application.chat_messages import (
     ChatMessage,
-    ChatMessageService,
     ClaimedGroupTurn,
     PlayerSend,
 )
-from livingworld.application.chat_recall import EarlierChatRecall
-from livingworld.application.conversation_memory import ConversationSummaryReader
 from livingworld.application.errors import EntityNotFoundError
 from livingworld.application.llm import LLMMessage, MessageRole, TextContent
-from livingworld.application.local_profile import LocalProfileStore
 from livingworld.application.long_chat_memory import LONG_MEMORY_GROUNDING_INSTRUCTIONS
 from livingworld.application.observed_events import (
-    CharacterObservedEventReader,
     character_observed_events,
     experience_queries,
 )
-from livingworld.application.ports import CharacterMemoryReader
-from livingworld.application.world_content import CommonLoreEntry
 from livingworld.domain.content.models import CharacterDefinition
-from livingworld.domain.identifiers import CharacterId, PlayerId, WorldId
+from livingworld.domain.identifiers import CharacterId, PlayerId
 
 _SELECT_SYSTEM = (
     "你是群聊发言顺序调度器，不是世界 Director。依据已确认的角色性格与群聊记录，"
@@ -76,34 +69,7 @@ class GroupChatContext:
     layout: ContextLayout | None = None
 
 
-class GroupChatContextBuilder:
-    def __init__(
-        self,
-        conversations: ChatConversationService,
-        messages: ChatMessageService,
-        profiles: LocalProfileStore,
-        memory_reader: Callable[[CharacterId], CharacterMemoryReader],
-        common_lore_reader: Callable[[WorldId], Awaitable[tuple[CommonLoreEntry, ...]]]
-        | None = None,
-        earlier_chat_recall: EarlierChatRecall | None = None,
-        conversation_summary: ConversationSummaryReader | None = None,
-        observed_event_reader: Callable[[CharacterId], CharacterObservedEventReader] | None = None,
-        activity_reader: Callable[[CharacterId], CharacterActivityContextReader] | None = None,
-        long_memory=None,
-        social_reader=None,
-    ) -> None:
-        self._conversations = conversations
-        self._messages = messages
-        self._profiles = profiles
-        self._memory_reader = memory_reader
-        self._common_lore_reader = common_lore_reader
-        self._earlier_chat_recall = earlier_chat_recall
-        self._conversation_summary = conversation_summary
-        self._observed_event_reader = observed_event_reader
-        self._activity_reader = activity_reader
-        self._long_memory = long_memory
-        self._social_reader = social_reader
-
+class GroupChatContextBuilder(ChatContextSources):
     async def _input(
         self, source: PlayerSend | ClaimedGroupTurn
     ) -> tuple[tuple[tuple[CharacterId, CharacterDefinition], ...], tuple[ChatMessage, ...]]:
@@ -247,20 +213,8 @@ class GroupChatContextBuilder:
             else source.conversation_id.world_id
         )
         data = {
-            "character": {
-                "id": str(speaker.value),
-                "name": persona.display_name,
-                "description": persona.description,
-                "personality": persona.personality,
-                "background": persona.background,
-                "scenario": persona.scenario,
-                "speech_guidance": persona.speech_guidance,
-                "example_dialogue": list(persona.example_dialogue),
-            },
-            "player": {
-                "general": {"name": general.name, "description": general.description},
-                "current_world": {"name": world.name, "description": world.description},
-            },
+            "character": character_chat_persona(speaker, persona),
+            "player": player_chat_persona(general, world),
             "character_memories": await private_chat_memories(self._memory_reader, speaker),
             "known_faction_contacts": (
                 await self._social_reader(speaker) if self._social_reader is not None else []

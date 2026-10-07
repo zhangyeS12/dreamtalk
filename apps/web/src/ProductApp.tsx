@@ -321,7 +321,7 @@ function WorldWorkspace({ client, initialWorldId, initialTab, onArchive }: {
   return <div className={`product-shell world-workspace world-tab-${tab}${contactsManagementOpen ? " contacts-editing" : ""}`}>
     <header className="app-header"><Brand /><span role="status" className="sr-only">核心已就绪</span><div className="workspace-world"><WorkspaceIcon name="orbit" /><div><strong>{world?.name ?? "正在读取世界…"}</strong>{world && <span>{displayTime(world.world_time)}<span className="world-clock-state">{world.clock_state === "paused" ? " · 已暂停" : ""}{world.runtime_state === "degraded" ? " · 运行异常" : ""}</span></span>}</div></div><button type="button" className="text-action archive-return" onClick={returnArchive}><WorkspaceIcon name="book" /><span>世界书架</span></button></header>
     <main className="app-content" id="main-content">
-      <div className={`page-heading${tab === "chats" ? " chat-page-heading" : ""}`}><div><h1 ref={entryHeading} tabIndex={-1}>{title}</h1><p>{pageHint}</p></div>{world ? <span className="page-world"><WorkspaceIcon name="orbit" />{world.name}</span> : null}</div>
+      <div className={`page-heading${tab === "chats" || tab === "contacts" ? " chat-page-heading" : ""}`}><div><h1 ref={entryHeading} tabIndex={-1}>{title}</h1><p>{pageHint}</p></div>{world ? <span className="page-world"><WorkspaceIcon name="orbit" />{world.name}</span> : null}</div>
       {error ? <p className="app-alert" role="alert">{error}</p> : null}
       {notice ? <p className="app-notice" role="status">{notice}</p> : null}
 
@@ -355,9 +355,8 @@ function WorldWorkspace({ client, initialWorldId, initialTab, onArchive }: {
 
       {(tab === "contacts" || contactsVisited) && <div className="contacts-page" hidden={tab !== "contacts"}>
         {world ? <>
-          <div className="contacts-toolbar"><div><h2>「{world.name}」的角色</h2><p>已确认的角色卡只加入当前世界。</p></div><button type="button" className="primary-button" onClick={openContactsManager}>＋ 添加角色卡</button></div>
           <details className="contacts-management" open={contactsManagementOpen} onToggle={event => setContactsManagementOpen(event.currentTarget.open)}>
-            <summary ref={contactsManager}><strong>添加与编辑角色卡</strong><span>{worldContentDirty ? "有未保存的编辑 · 草稿保留中" : "新建、联网生成或从文件导入"}</span></summary>
+            <summary ref={contactsManager}><strong>添加／编辑角色卡</strong>{worldContentDirty && <span>有未保存的编辑 · 草稿保留中</span>}</summary>
             <WorldImports key={`content:${world.world_id}`} client={client} worldId={world.world_id} onlyKind="character" onDirtyChange={setWorldContentDirty} onSaved={() => setContactsRefresh(value => value + 1)} />
           </details>
           <WorldContacts key={world.world_id} client={client} worldId={world.world_id} refreshKey={contactsRefresh} visible={tab === "contacts"} onSettings={openContactsManager} onIdentity={() => setTab("me")} onOpenChat={openChat} canOpenChat={!!selectedPlayer} openingChat={busy} />

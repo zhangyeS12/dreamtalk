@@ -1,6 +1,6 @@
 # C-002：Application Runtime Foundation
 
-状态：C-002 Stage 1 运行时基础继续沿用；Stage 2–6 已在其上建立 canonical state、持久化、内容、LLM 基础、确定性模拟与 clock reconciliation，C-007A 已加入显式 EpisodicMemory 形成。Stage 0 的 [冻结规则与 P-01～P-19](../product/PRODUCT_SPEC.md) 保持不变。当前没有 Director、Character Agent、Activation consumer、自动 Observation→Memory、对外业务 HTTP API 或最终产品 UI。
+状态（2026-10-07）：C-002 运行时基础继续沿用，Core 已接入持久化、内容、LLM、调度、业务 HTTP API、角色聊天与有限 Director 消费者，桌面四入口 UI 已交付。自动 Observation→Memory 和完整离线演化仍未实现。当前能力与验收见[状态清单](../PROJECT_STATUS.md)；下文 C-002/阶段说明保留其历史语境，不把旧阶段边界当作当前未完成清单。
 
 ## 工程边界与依赖
 

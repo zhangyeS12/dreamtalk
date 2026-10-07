@@ -353,7 +353,7 @@ async def run(
             status,
             shutdown,
             session,
-            lambda: None,
+            None,
             logger,
             config.allowed_origins,
             developer_inspector,

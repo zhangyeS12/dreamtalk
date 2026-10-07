@@ -11,7 +11,7 @@ from livingworld.application.director import DirectorError
 from livingworld.application.errors import EntityNotFoundError
 from livingworld.application.lore_activation import select_common_background
 from livingworld.application.offline_contact import OfflineContactError
-from livingworld.domain.identifiers import WorldId
+from livingworld.domain.identifiers import PlayerId, WorldId
 from livingworld.infrastructure.persistence.director_background import (
     background_is_current,
     read_director_background,
@@ -19,6 +19,7 @@ from livingworld.infrastructure.persistence.director_background import (
 from livingworld.infrastructure.persistence.director_models import (
     DirectorCandidateRecord as Candidate,
 )
+from livingworld.infrastructure.persistence.mapping import to_domain
 from livingworld.infrastructure.persistence.models import (
     CharacterRecord,
     WorldRecord,
@@ -59,6 +60,7 @@ from livingworld.infrastructure.persistence.offline_contact_models import (
 from livingworld.infrastructure.persistence.offline_contact_models import (
     OfflineContactSettingsRecord as Settings,
 )
+from livingworld.infrastructure.persistence.world_story import record_contact_invitation
 
 
 async def _write(session):
@@ -523,20 +525,33 @@ class SqlAlchemyOfflineContactStore:
                     completed_at_utc=now,
                 )
             )
-            session.add(
-                Message(
-                    world_id=ep.world_id,
-                    message_id=message_id,
-                    conversation_id=ep.conversation_id,
-                    turn_id=turn_id,
-                    position=position,
-                    sender_character_id=ep.character_id,
-                    text=text,
-                    created_at_utc=now,
-                    story_sent_at_utc=ep.story_sent_at_utc,
-                )
+            message = Message(
+                world_id=ep.world_id,
+                message_id=message_id,
+                conversation_id=ep.conversation_id,
+                turn_id=turn_id,
+                position=position,
+                sender_character_id=ep.character_id,
+                text=text,
+                created_at_utc=now,
+                story_sent_at_utc=ep.story_sent_at_utc,
             )
+            session.add(message)
             await session.flush()
+            if ep.purpose == "invite_chat":
+                chosen = next(
+                    c
+                    for c in json.loads(ep.input_json)["characters"]
+                    if c["character_id"] == str(ep.character_id)
+                )
+                clock = await session.get(Clock, ep.world_id)
+                await record_contact_invitation(
+                    session,
+                    message,
+                    PlayerId(WorldId(ep.world_id), ep.player_id),
+                    chosen["name"],
+                    to_domain(clock).effective_time(now).microseconds if clock else None,
+                )
             ep.message_id = message_id
             await self._terminal(session, ep, "delivered", None)
             await session.commit()

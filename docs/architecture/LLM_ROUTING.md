@@ -1,6 +1,6 @@
 # Model Registry, Purpose Routing & Safe Provider Fallback — C-005E1
 
-状态：已实现 provider-neutral、deterministic、opt-in 的 operational Model Registry 与路由层；C-005E2 已用独立 Anthropic 原生 Messages adapter 验证不同协议可以进入同一路由管线。全部验证使用 offline fixtures、可控 gateway 和临时 SQLite；没有真实 provider 调用、production default registry 或新 migration。
+状态（2026-10-07）：provider-neutral operational Model Registry、四类协议 adapter、预算/使用账本与 production bootstrap 接线已实现，见[状态清单](../PROJECT_STATUS.md)。下文 C-005E 各阶段的 offline fixtures 是历史验证记录，不代表当前任意供应商/代理已通过验收；本轮未运行测试或真实 provider。
 
 ```text
 Application → immutable RoutePlan → routed invocation context
@@ -80,7 +80,7 @@ Pre-STARTED candidate failures可隐藏并 fallback。Application 只看到一�
 
 ## 7. Deferred scope
 
-Anthropic Messages、Gemini Interactions 和 OpenAI Responses native adapters 已分别在 C-005E2/E3/E4 实现；tools、vision、provider discovery、online pricing、dynamic ranking、circuit breaker、semantic repair、Director、Agent、Memory 或 UI 仍未实现。Production registry loading/bootstrap composition 留给后续任务。
+Anthropic Messages、Gemini Interactions 和 OpenAI Responses native adapters 已分别在 C-005E2/E3/E4 实现；C-005E5 已接入 production registry/bootstrap，后续应用已接聊天、有限 Director、记忆与 UI。tools、vision、provider discovery、online pricing、dynamic ranking、circuit breaker 和 semantic repair 仍不在此层当前实现范围。
 
 ## 8. C-005E2 跨协议证明
 

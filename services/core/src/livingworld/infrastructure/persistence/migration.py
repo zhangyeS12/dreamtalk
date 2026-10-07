@@ -42,6 +42,12 @@ from livingworld.infrastructure.persistence.offline_contact_models import (
 from livingworld.infrastructure.persistence.proactive_models import (
     ProactiveSettingsRecord,  # noqa: F401
 )
+from livingworld.infrastructure.persistence.recall_index_models import (
+    FTS_SQL,
+    FTS_TABLES,
+    FTS_TRIGGERS,
+    RecallDocumentRecord,  # noqa: F401
+)
 from livingworld.infrastructure.persistence.shared_activity_models import (
     SharedActivityRecord,  # noqa: F401
 )
@@ -83,7 +89,53 @@ CONTEXT_REPORT_REVISION = "0032_chat_context_reports"
 ENCOUNTER_REVISION = "0033_character_encounters"
 SHARED_REVISION = "0034_shared_activities"
 PROACTIVE_REVISION = "0035_proactive_contact"
-HEAD_REVISION = "0036_character_factions"
+FACTION_REVISION = "0036_character_factions"
+HEAD_REVISION = "0037_persistent_chat_recall"
+
+# One reviewed linear chain replaces repeated hand-maintained suffix sets.
+_SUPPORTED_REVISIONS = (
+    LEGACY_REVISION,
+    DOMAIN_BASELINE_REVISION,
+    COMMAND_REVISION,
+    OBSERVATION_REVISION,
+    LEDGER_REVISION,
+    CONTENT_REVISION,
+    LORE_REVISION,
+    PACKAGE_REVISION,
+    ACCOUNTING_REVISION,
+    BUDGET_REVISION,
+    SIMULATION_REVISION,
+    ACTION_REVISION,
+    SPARSE_REVISION,
+    MEMORY_REVISION,
+    BINDING_REVISION,
+    PROFILE_REVISION,
+    WORLD_CONTENT_REVISION,
+    CHAT_CONVERSATION_REVISION,
+    CHAT_MESSAGE_REVISION,
+    CHAT_DISPATCH_REVISION,
+    CHAT_COMPLETION_REVISION,
+    COMMON_LORE_REVISION,
+    BUILDER_REVISION,
+    CONVERSATION_MEMORY_REVISION,
+    DIRECTOR_REVISION,
+    LOCAL_LOCATION_REVISION,
+    OFFLINE_CONTACT_REVISION,
+    STORY_REVISION,
+    LONG_MEMORY_REVISION,
+    COVER_REVISION,
+    REPLY_RECOVERY_REVISION,
+    CONTEXT_REPORT_REVISION,
+    ENCOUNTER_REVISION,
+    SHARED_REVISION,
+    PROACTIVE_REVISION,
+    FACTION_REVISION,
+    HEAD_REVISION,
+)
+_REVISION_RANGES = {
+    revision: frozenset(_SUPPORTED_REVISIONS[index:])
+    for index, revision in enumerate(_SUPPORTED_REVISIONS)
+}
 FACTION_TABLES = {
     "character_factions",
     "character_faction_members",
@@ -274,183 +326,26 @@ def _current_revision(connection: Connection) -> str:
 
 def _validate_managed_state(connection: Connection, revision: str) -> None:
     # Additive authored/job tables do not change the older runtime shapes.
-    pre_faction_revision = revision != HEAD_REVISION
-    pre_proactive_revision = revision not in {PROACTIVE_REVISION, HEAD_REVISION}
-    pre_shared_revision = revision not in {SHARED_REVISION, PROACTIVE_REVISION, HEAD_REVISION}
-    pre_encounter_revision = revision not in {
-        ENCOUNTER_REVISION,
-        SHARED_REVISION,
-        PROACTIVE_REVISION,
-        HEAD_REVISION,
-    }
-    pre_context_report_revision = revision not in {
-        CONTEXT_REPORT_REVISION,
-        ENCOUNTER_REVISION,
-        SHARED_REVISION,
-        PROACTIVE_REVISION,
-        HEAD_REVISION,
-    }
-    pre_reply_recovery_revision = revision not in {
-        REPLY_RECOVERY_REVISION,
-        CONTEXT_REPORT_REVISION,
-        ENCOUNTER_REVISION,
-        SHARED_REVISION,
-        PROACTIVE_REVISION,
-        HEAD_REVISION,
-    }
-    pre_cover_revision = revision not in {
-        COVER_REVISION,
-        REPLY_RECOVERY_REVISION,
-        CONTEXT_REPORT_REVISION,
-        ENCOUNTER_REVISION,
-        SHARED_REVISION,
-        PROACTIVE_REVISION,
-        HEAD_REVISION,
-    }
-    pre_long_memory_revision = revision not in {
-        LONG_MEMORY_REVISION,
-        COVER_REVISION,
-        REPLY_RECOVERY_REVISION,
-        CONTEXT_REPORT_REVISION,
-        ENCOUNTER_REVISION,
-        SHARED_REVISION,
-        PROACTIVE_REVISION,
-        HEAD_REVISION,
-    }
-    pre_story_revision = revision not in {
-        STORY_REVISION,
-        LONG_MEMORY_REVISION,
-        COVER_REVISION,
-        REPLY_RECOVERY_REVISION,
-        CONTEXT_REPORT_REVISION,
-        ENCOUNTER_REVISION,
-        SHARED_REVISION,
-        PROACTIVE_REVISION,
-        HEAD_REVISION,
-    }
-    pre_offline_contact_revision = revision not in {
-        OFFLINE_CONTACT_REVISION,
-        STORY_REVISION,
-        LONG_MEMORY_REVISION,
-        COVER_REVISION,
-        REPLY_RECOVERY_REVISION,
-        CONTEXT_REPORT_REVISION,
-        ENCOUNTER_REVISION,
-        SHARED_REVISION,
-        PROACTIVE_REVISION,
-        HEAD_REVISION,
-    }
-    pre_local_location_revision = revision not in {
-        LOCAL_LOCATION_REVISION,
-        OFFLINE_CONTACT_REVISION,
-        STORY_REVISION,
-        LONG_MEMORY_REVISION,
-        COVER_REVISION,
-        REPLY_RECOVERY_REVISION,
-        CONTEXT_REPORT_REVISION,
-        ENCOUNTER_REVISION,
-        SHARED_REVISION,
-        PROACTIVE_REVISION,
-        HEAD_REVISION,
-    }
-    pre_director_revision = revision not in {
-        DIRECTOR_REVISION,
-        LOCAL_LOCATION_REVISION,
-        OFFLINE_CONTACT_REVISION,
-        STORY_REVISION,
-        LONG_MEMORY_REVISION,
-        COVER_REVISION,
-        REPLY_RECOVERY_REVISION,
-        CONTEXT_REPORT_REVISION,
-        ENCOUNTER_REVISION,
-        SHARED_REVISION,
-        PROACTIVE_REVISION,
-        HEAD_REVISION,
-    }
-    pre_conversation_memory_revision = revision not in {
-        CONVERSATION_MEMORY_REVISION,
-        DIRECTOR_REVISION,
-        LOCAL_LOCATION_REVISION,
-        OFFLINE_CONTACT_REVISION,
-        STORY_REVISION,
-        LONG_MEMORY_REVISION,
-        COVER_REVISION,
-        REPLY_RECOVERY_REVISION,
-        CONTEXT_REPORT_REVISION,
-        ENCOUNTER_REVISION,
-        SHARED_REVISION,
-        PROACTIVE_REVISION,
-        HEAD_REVISION,
-    }
-    pre_builder_revision = revision not in {
-        BUILDER_REVISION,
-        CONVERSATION_MEMORY_REVISION,
-        DIRECTOR_REVISION,
-        LOCAL_LOCATION_REVISION,
-        OFFLINE_CONTACT_REVISION,
-        STORY_REVISION,
-        LONG_MEMORY_REVISION,
-        COVER_REVISION,
-        REPLY_RECOVERY_REVISION,
-        CONTEXT_REPORT_REVISION,
-        ENCOUNTER_REVISION,
-        SHARED_REVISION,
-        PROACTIVE_REVISION,
-        HEAD_REVISION,
-    }
-    pre_completion_revision = revision not in {
-        CHAT_COMPLETION_REVISION,
-        COMMON_LORE_REVISION,
-        BUILDER_REVISION,
-        CONVERSATION_MEMORY_REVISION,
-        DIRECTOR_REVISION,
-        LOCAL_LOCATION_REVISION,
-        OFFLINE_CONTACT_REVISION,
-        STORY_REVISION,
-        LONG_MEMORY_REVISION,
-        COVER_REVISION,
-        REPLY_RECOVERY_REVISION,
-        CONTEXT_REPORT_REVISION,
-        ENCOUNTER_REVISION,
-        SHARED_REVISION,
-        PROACTIVE_REVISION,
-        HEAD_REVISION,
-    }
-    pre_common_lore_revision = revision not in {
-        COMMON_LORE_REVISION,
-        BUILDER_REVISION,
-        CONVERSATION_MEMORY_REVISION,
-        DIRECTOR_REVISION,
-        LOCAL_LOCATION_REVISION,
-        OFFLINE_CONTACT_REVISION,
-        STORY_REVISION,
-        LONG_MEMORY_REVISION,
-        COVER_REVISION,
-        REPLY_RECOVERY_REVISION,
-        CONTEXT_REPORT_REVISION,
-        ENCOUNTER_REVISION,
-        SHARED_REVISION,
-        PROACTIVE_REVISION,
-        HEAD_REVISION,
-    }
-    if revision in {
-        CHAT_COMPLETION_REVISION,
-        COMMON_LORE_REVISION,
-        BUILDER_REVISION,
-        CONVERSATION_MEMORY_REVISION,
-        DIRECTOR_REVISION,
-        LOCAL_LOCATION_REVISION,
-        OFFLINE_CONTACT_REVISION,
-        STORY_REVISION,
-        LONG_MEMORY_REVISION,
-        COVER_REVISION,
-        REPLY_RECOVERY_REVISION,
-        CONTEXT_REPORT_REVISION,
-        ENCOUNTER_REVISION,
-        SHARED_REVISION,
-        PROACTIVE_REVISION,
-        HEAD_REVISION,
-    }:
+    pre_recall_revision = revision != HEAD_REVISION
+    pre_faction_revision = revision not in _REVISION_RANGES[FACTION_REVISION]
+    pre_proactive_revision = revision not in _REVISION_RANGES[PROACTIVE_REVISION]
+    pre_shared_revision = revision not in _REVISION_RANGES[SHARED_REVISION]
+    pre_encounter_revision = revision not in _REVISION_RANGES[ENCOUNTER_REVISION]
+    pre_context_report_revision = revision not in _REVISION_RANGES[CONTEXT_REPORT_REVISION]
+    pre_reply_recovery_revision = revision not in _REVISION_RANGES[REPLY_RECOVERY_REVISION]
+    pre_cover_revision = revision not in _REVISION_RANGES[COVER_REVISION]
+    pre_long_memory_revision = revision not in _REVISION_RANGES[LONG_MEMORY_REVISION]
+    pre_story_revision = revision not in _REVISION_RANGES[STORY_REVISION]
+    pre_offline_contact_revision = revision not in _REVISION_RANGES[OFFLINE_CONTACT_REVISION]
+    pre_local_location_revision = revision not in _REVISION_RANGES[LOCAL_LOCATION_REVISION]
+    pre_director_revision = revision not in _REVISION_RANGES[DIRECTOR_REVISION]
+    pre_conversation_memory_revision = (
+        revision not in _REVISION_RANGES[CONVERSATION_MEMORY_REVISION]
+    )
+    pre_builder_revision = revision not in _REVISION_RANGES[BUILDER_REVISION]
+    pre_completion_revision = revision not in _REVISION_RANGES[CHAT_COMPLETION_REVISION]
+    pre_common_lore_revision = revision not in _REVISION_RANGES[COMMON_LORE_REVISION]
+    if revision in _REVISION_RANGES[CHAT_COMPLETION_REVISION]:
         revision = CHAT_DISPATCH_REVISION
     if revision not in {
         LEGACY_REVISION,
@@ -599,6 +494,10 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         expected -= LOCAL_PROFILE_TABLES
     if revision != CHAT_DISPATCH_REVISION:
         expected -= {"world_content_imports"}
+    if pre_recall_revision:
+        expected -= {"recall_documents"}
+    else:
+        expected |= FTS_TABLES
     if pre_faction_revision:
         expected -= FACTION_TABLES
     if pre_proactive_revision:
@@ -629,7 +528,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         expected -= WORLD_COMMON_LORE_TABLES
     if tables != expected:
         _fail("alembic_schema_state_mismatch")
-    _validate_auxiliary_objects(connection, domain_present)
+    _validate_auxiliary_objects(connection, domain_present, recall_present=not pre_recall_revision)
     if domain_present:
         _validate_domain_shape(
             connection,
@@ -653,6 +552,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
             pre_shared_revision=pre_shared_revision,
             pre_proactive_revision=pre_proactive_revision,
             pre_faction_revision=pre_faction_revision,
+            pre_recall_revision=pre_recall_revision,
         )
     if revision in {
         CONTENT_REVISION,
@@ -684,11 +584,18 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         _validate_domain_shape(connection, revision, AccountingBase.metadata)
 
 
-def _validate_auxiliary_objects(connection: Connection, domain_present: bool) -> None:
+def _validate_auxiliary_objects(
+    connection: Connection, domain_present: bool, *, recall_present: bool = False
+) -> None:
     objects = connection.execute(
         text("SELECT name, type, sql FROM sqlite_master WHERE type IN ('trigger', 'view')")
     ).all()
-    expected = _EVENT_TRIGGERS if domain_present else {}
+    expected = dict(_EVENT_TRIGGERS) if domain_present else {}
+    if recall_present:
+        expected.update(FTS_TRIGGERS)
+        sql = connection.scalar(text("SELECT sql FROM sqlite_master WHERE name='recall_fts'"))
+        if _normalized_sql(sql or "") != _normalized_sql(FTS_SQL):
+            _fail("migration_schema_objects_mismatch")
     if {row[0] for row in objects} != set(expected):
         _fail("migration_schema_objects_mismatch")
     for name, type_, sql in objects:
@@ -720,6 +627,7 @@ def _validate_domain_shape(
     pre_shared_revision: bool = True,
     pre_proactive_revision: bool = True,
     pre_faction_revision: bool = True,
+    pre_recall_revision: bool = True,
 ) -> None:
     """Detect partial/mismatched schemas; never infer a revision from them."""
 
@@ -745,6 +653,8 @@ def _validate_domain_shape(
         "ck_command_receipt_command_result",
     }
     for table in metadata.sorted_tables:
+        if pre_recall_revision and table.name == "recall_documents":
+            continue
         if pre_faction_revision and table.name in FACTION_TABLES:
             continue
         if pre_proactive_revision and table.name in PROACTIVE_TABLES:

@@ -10,6 +10,7 @@ from livingworld.application.errors import (
     IdempotencyConflictError,
 )
 from livingworld.application.fingerprints import canonical_json, id_input
+from livingworld.application.idempotency import run_with_receipt_recovery
 from livingworld.application.ports import UnitOfWork, WallClock
 from livingworld.application.results import SceneResult
 from livingworld.domain.commands import CommandReceipt
@@ -126,14 +127,12 @@ class SceneService:
     async def execute(self, command: SceneCommand) -> SceneResult:
         self._validate(command)
         fingerprint = _scene_fingerprint(command)
-        try:
-            return await self._execute(command, fingerprint)
-        except (EntityAlreadyExistsError, IdempotencyConflictError):
-            async with self._uow_factory() as uow:
-                existing = await uow.receipts.existing_scene(command.request_id, fingerprint)
-                if existing is not None:
-                    return replace(existing, replayed=True)
-            raise
+        return await run_with_receipt_recovery(
+            lambda: self._execute(command, fingerprint),
+            self._uow_factory,
+            lambda uow: uow.receipts.existing_scene(command.request_id, fingerprint),
+            (EntityAlreadyExistsError, IdempotencyConflictError),
+        )
 
     def _validate(self, command: SceneCommand) -> None:
         require_type(command.request_id, RequestId, "request_id")

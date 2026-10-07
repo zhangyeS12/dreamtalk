@@ -1,6 +1,6 @@
 # dreamtalk 领域概念模型
 
-状态：Stage 0 领域语言保留；Stage 2 已建立领域模型、SQLite 映射、命令事务、知识隔离、canonical ledger、回放及资源级乐观并发；Stage 3 建立独立创作内容边界；Stage 5 建立 scheduler、typed ActionProposal、persistent Scene、event-time perception、sparse activation 与 clock reconciliation；C-007A 新增 Character-owned evidence-backed EpisodicMemory。见 [EPISODIC_MEMORY.md](EPISODIC_MEMORY.md)、[ACTION_RESOLUTION.md](ACTION_RESOLUTION.md)、[SCENES_AND_PERCEPTION.md](SCENES_AND_PERCEPTION.md)、[SPARSE_ACTIVATION.md](SPARSE_ACTIVATION.md)、[CLOCK_RECONCILIATION.md](CLOCK_RECONCILIATION.md) 和 [PERSISTENCE_MODEL.md](PERSISTENCE_MODEL.md)。Director、Agent、Reflection、memory retrieval 与业务 HTTP API 仍未实现。
+状态（2026-10-07）：领域、canonical ledger、命令/CAS、知识隔离、调度/Action/Scene、Observation 与显式 EpisodicMemory 基础已实现。业务 HTTP API、角色聊天、长期聊天记忆/本地检索及有限 Director 日常/相遇/共同休闲已有应用接线，见[状态清单](../PROJECT_STATUS.md)。长期聊天条目不同于有 Observation 证据的 EpisodicMemory；自动 Reflection、广泛知识/关系演化仍未实现。下文 Stage 0/2 记录按对应阶段阅读。
 
 ## C-004A 内容与运行状态边界
 
@@ -14,7 +14,7 @@ CharacterDefinitionId / WorldContentId / LoreEntryId / ContentAssetId / RawImpor
 
 ## C-003E2 已确认的边界
 
-Stage 2 已建立 canonical ledger、内部回放及资源级乐观并发；Director、Agent、业务 HTTP API 与世界模拟仍未实现。验收见 [STAGE_2_ACCEPTANCE.md](STAGE_2_ACCEPTANCE.md)。
+Stage 2 建立 canonical ledger、内部回放及资源级乐观并发；当时未接入的 Director、聊天/API 和确定性模拟已由后续切片实现，当前范围以顶部说明及状态清单为准。验收见 [STAGE_2_ACCEPTANCE.md](STAGE_2_ACCEPTANCE.md)。
 
 - mutable projection 各自由 Revision 保护，Presence / CharacterState / 有向 Relationship 独立，无全局 World revision；期待不存在用 None，不等同 Revision(0)。CAS 在基础设施实现，领域继续不知道 SQLAlchemy 或数据库。
 - 现有 ConcurrencyConflictError 增加可选内部 resource kind、typed identity、expected/actual Revision 信息；Revision.advance 的既有调用仍有效。

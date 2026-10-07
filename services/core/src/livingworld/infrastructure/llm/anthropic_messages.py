@@ -37,7 +37,11 @@ from livingworld.application.llm import (
     TextDelta,
     UsageUpdate,
 )
-from livingworld.application.llm_config import CredentialProvider, ProviderConfig, SecretValue
+from livingworld.application.llm_config import CredentialProvider, ProviderConfig
+from livingworld.infrastructure.llm.adapter_support import (
+    error_from_failure,
+    resolve_adapter_secret,
+)
 from livingworld.infrastructure.llm.http_transport import (
     bounded_body,
     is_event_stream,
@@ -556,16 +560,7 @@ class AnthropicMessagesGateway:
         )
 
     def _failure_error(self, request, failure):
-        return self._error(
-            request,
-            failure.code,
-            failure.diagnostics,
-            attempt=failure.attempt,
-            structured_detail=failure.structured_detail,
-            dispatch_state=failure.dispatch_state,
-            http_status=failure.http_status,
-            retry_after_seconds=failure.retry_after_seconds,
-        )
+        return error_from_failure(self._error, request, failure)
 
     def _payload(self, request, *, streaming=False):
         if not isinstance(request, LLMRequest):
@@ -660,21 +655,14 @@ class AnthropicMessagesGateway:
         return headers
 
     async def _secret(self, request):
-        if self._client.is_closed or self._config.secret_ref is None:
-            raise self._error(request, LLMErrorCode.CONFIGURATION)
-        failed = False
-        try:
-            credential = await self._credentials.resolve(self._config.secret_ref)
-        except Exception:
-            failed = True
-        if failed or not isinstance(credential, SecretValue):
-            raise self._error(request, LLMErrorCode.AUTHENTICATION)
-        secret = credential.reveal_for_adapter()
-        del credential
-        if not _TOKEN.fullmatch(secret):
-            del secret
-            raise self._error(request, LLMErrorCode.AUTHENTICATION)
-        return secret
+        return await resolve_adapter_secret(
+            request,
+            closed=self._client.is_closed,
+            config=self._config,
+            credentials=self._credentials,
+            error=self._error,
+            token_pattern=_TOKEN,
+        )
 
     async def generate(self, request: LLMRequest) -> LLMResponse:
         payload = self._payload(request)

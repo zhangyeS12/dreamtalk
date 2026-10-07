@@ -37,6 +37,7 @@ from livingworld.application.llm import (
     UsageUpdate,
 )
 from livingworld.application.llm_config import CredentialProvider, ProviderConfig, SecretValue
+from livingworld.infrastructure.llm.adapter_support import error_from_failure
 from livingworld.infrastructure.llm.http_transport import (
     bounded_body,
     is_event_stream,
@@ -666,16 +667,7 @@ class OpenAICompatibleChatGateway:
         )
 
     def _failure_error(self, request, failure):
-        return self._error(
-            request,
-            failure.code,
-            failure.diagnostics,
-            attempt=failure.attempt,
-            structured_detail=failure.structured_detail,
-            dispatch_state=failure.dispatch_state,
-            http_status=failure.http_status,
-            retry_after_seconds=failure.retry_after_seconds,
-        )
+        return error_from_failure(self._error, request, failure)
 
     def _prompt_json_dialogue(self, request):
         # Native JSON decoding can return empty content on official DeepSeek.

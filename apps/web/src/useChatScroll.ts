@@ -5,12 +5,18 @@ import type { ChatMessage } from "@dreamtalk/api-client";
 export function useChatScroll(messages: ChatMessage[] | null, progressText?: string) {
   const thread = useRef<HTMLElement>(null);
   const followLatest = useRef(true);
-  const prependAnchor = useRef<{ height: number; top: number } | null>(null);
+  const prependAnchor = useRef<{ height: number; top: number; id?: string; offset?: number } | null>(null);
 
   const beforePrepend = () => {
     const scroller = thread.current?.parentElement;
     if (scroller) {
-      prependAnchor.current = { height: scroller.scrollHeight, top: scroller.scrollTop };
+      const edge = scroller.getBoundingClientRect().top;
+      const visible = [...(thread.current?.querySelectorAll<HTMLElement>("[data-message-id]") ?? [])]
+        .find(item => item.getBoundingClientRect().bottom > edge);
+      prependAnchor.current = {
+        height: scroller.scrollHeight, top: scroller.scrollTop,
+        id: visible?.dataset.messageId, offset: visible ? visible.getBoundingClientRect().top - edge : undefined,
+      };
       followLatest.current = false;
     }
   };
@@ -27,12 +33,19 @@ export function useChatScroll(messages: ChatMessage[] | null, progressText?: str
 
   useLayoutEffect(() => {
     const scroller = thread.current?.parentElement;
-    if (messages === null || !scroller) return;
+    if (messages === null) { followLatest.current = true; prependAnchor.current = null; return; }
+    if (!scroller) return;
     if (prependAnchor.current) {
-      scroller.scrollTop = prependAnchor.current.top + scroller.scrollHeight - prependAnchor.current.height;
+      const anchor = prependAnchor.current;
+      const retained = [...(thread.current?.querySelectorAll<HTMLElement>("[data-message-id]") ?? [])]
+        .find(item => item.dataset.messageId === anchor.id);
+      if (retained && anchor.offset !== undefined) {
+        scroller.scrollTop += retained.getBoundingClientRect().top - scroller.getBoundingClientRect().top - anchor.offset;
+      } else scroller.scrollTop = anchor.top + scroller.scrollHeight - anchor.height;
       prependAnchor.current = null;
     } else if (followLatest.current) scroller.scrollTop = scroller.scrollHeight;
   }, [messages, progressText]);
 
-  return { thread, beforePrepend };
+  const followBottom = () => { prependAnchor.current = null; followLatest.current = true; };
+  return { thread, beforePrepend, followBottom };
 }

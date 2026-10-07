@@ -1,6 +1,6 @@
 # Character Card Compatibility — C-004B
 
-状态：独立实现 V2/V3 导入，沿用 C-004A 内容库与 Draft → Preview → confirmed Commit。未复制、依赖或运行 SillyTavern 源码。
+状态（2026-10-07）：独立实现 V2/V3 导入，沿用独立内容库与 Draft → Preview → confirmed Commit；未复制或依赖 SillyTavern 源码。本文主要说明 C-004B adapter 格式边界；当前产品已支持确认后的角色开聊实例化、Builder 和公共 Lore，见[状态清单](../PROJECT_STATUS.md)。格式兼容不等于酒馆全部运行行为兼容。
 
 公开规范：[Character Card V2](https://github.com/malfoyslastname/character-card-spec-v2/blob/main/spec_v2.md)、[Character Card V3](https://github.com/kwaroran/character-card-spec-v3/blob/main/SPEC_V3.md)。容器结构依据 [W3C PNG Third Edition](https://www.w3.org/TR/png-3/)。这些文档描述外部数据，不能向导入器授予执行权限。
 
@@ -18,7 +18,7 @@
 | embedded character_book | 卡片 parser 保留并 warning；C-004C1 normalizer 从该表示生成 LoreCollection/typed content reference，见下文 |
 | legacy embedded assets | 识别 tEXt namespace、记录位置/大小并保留 raw；不解码/提取 |
 | external JSON export | C-004D1 显式 V2/V3 target，canonical 优先与损失警告；无 PNG/APNG writer |
-| runtime instantiation | 未实现 |
+| runtime instantiation | 导入不实例化；确认后首次开聊由会话服务创建/复用稳定 Character |
 
 实现：[character_cards.py](../../services/core/src/livingworld/infrastructure/imports/character_cards.py)、[png.py](../../services/core/src/livingworld/infrastructure/imports/png.py)、[imports.py](../../services/core/src/livingworld/application/imports.py)。
 
@@ -84,4 +84,4 @@ ImportDraft/ImportPreview 从已冻结 Draft 的 livingworld.import 读取 warni
 
 [EXPORT_MODEL.md](EXPORT_MODEL.md) 定义 pure-content JSON export：当前 canonical name/text/tags/examples 与 authored/card compatibility state 优先于旧源；同格式仅受限恢复 unknown/opaque extensions，跨格式不注入未知语义。V3→V2 逐字段 warning；V2→V3 不创造 optional 内容或资产。一个 linked book 可嵌入，多个必须 selection 或省略并 warning；旧未规范化 raw book 不自动代替 canonical 集合。V3 book 的 unspecified use_regex 要求显式 caller export policy，V3 secondary_keys 按用户确认输出 array。完整原 bytes 与导出 bytes 是独立操作。
 
-Builder、lore 运行激活、资产布局、PNG/APNG writer、CHARX、运行实例化与产品级重复导入体验仍未实现。
+Builder、公共 lore 激活、原生资产布局、首次开聊运行实例化与导入冲突预览已由后续切片接入；PNG/APNG writer、CHARX 与完整酒馆运行行为仍不在当前支持范围。

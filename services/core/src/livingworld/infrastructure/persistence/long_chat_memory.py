@@ -2,11 +2,11 @@
 
 import hashlib
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import LargeBinary, and_, cast, exists, false, func, or_, select
+from sqlalchemy import LargeBinary, and_, cast, exists, func, or_, select
 
 from livingworld.application.errors import EntityNotFoundError
 from livingworld.application.long_chat_memory import LongMemoryError
@@ -18,7 +18,8 @@ from livingworld.infrastructure.persistence.models import ChatConversationRecord
 from livingworld.infrastructure.persistence.models import ChatMessageRecord as Message
 from livingworld.infrastructure.persistence.models import ChatParticipantRecord as Participant
 from livingworld.infrastructure.persistence.models import LocalPlayerBindingRecord as Binding
-from livingworld.infrastructure.semantic_chat_retrieval import MAX_INDEX_REFERENCES, reference_key
+from livingworld.infrastructure.persistence.recall_index import PersistentRecallIndex
+from livingworld.infrastructure.semantic_chat_retrieval import reference_key
 
 
 def _scope(world, player, character):
@@ -223,11 +224,13 @@ class RecallCandidate:
     scope_key: str = ""
     index_key: bytes = b""
     index_priority: bool = False
+    vector_payload: bytes | None = None
 
 
 class SqlAlchemyLongChatMemoryStore:
     def __init__(self, sessions, ranker):
         self.sessions, self.ranker = sessions, ranker
+        self.index = PersistentRecallIndex(sessions, ranker)
 
     async def _queries(self, session, conversation, player, current):
         # Current membership is authorized before this same-conversation read.
@@ -253,86 +256,39 @@ class SqlAlchemyLongChatMemoryStore:
         return tuple(dict.fromkeys(terms))
 
     async def _history_pool(self, session, authorized, model, scope, queries):
-        method = getattr(self.ranker, "historical", None)
-        if method is None:
-            return [], [], False
-        is_memory = model is Memory
-        identity = Memory.entry_id if is_memory else Message.message_id
-        stamp = Memory.created_at if is_memory else Message.created_at_utc
-        columns = (
-            (identity, Memory.fingerprint, Memory.revision)
-            if is_memory
-            else (identity, Message.created_at_utc)
-        )
-        # Only metadata is read here. Bodies are fetched for hits and one small
-        # backfill page; authorization precedes every cached-vector lookup.
-        metadata = (
-            await session.execute(
-                authorized.with_only_columns(*columns)
-                .order_by(None)
-                .order_by(stamp.desc(), identity)
-                .limit(MAX_INDEX_REFERENCES)
+        page = await self.index.backfill(session, authorized, model)
+        method = getattr(self.ranker, "historical_vectors", None)
+        hits, partial = (), bool(page)
+        if method is not None:
+            hits, scan_partial = await method(
+                queries, self.index.vector_batches(session, authorized, model), limit=24
             )
-        ).all()
-        references = [
-            (
-                row[0],
-                reference_key(
-                    scope,
-                    "memory" if is_memory else "message",
-                    row[0],
-                    f"{row[1]}:{row[2]}" if is_memory else row[1].isoformat(),
-                ),
+            partial |= scan_partial
+        identity = Memory.entry_id if model is Memory else Message.message_id
+        rows = (await session.scalars(authorized.where(identity.in_(hits)))).all() if hits else []
+
+        def keyed(row):
+            return row, reference_key(
+                scope,
+                "memory" if model is Memory else "message",
+                row.entry_id if model is Memory else row.message_id,
+                f"{row.fingerprint}:{row.revision}"
+                if model is Memory
+                else row.created_at_utc.isoformat(),
             )
-            for row in reversed(metadata)
-        ]
-        hits, page, partial = await method(queries, references, limit=24)
-        keys = {identity: key for identity, key in references}
-        selected = [*page, *hits]
-        if not selected:
-            return [], [], partial
-        rows = (await session.scalars(authorized.where(identity.in_(selected)).limit(88))).all()
-        values = {row.entry_id if is_memory else row.message_id: row for row in rows}
-        return (
-            [(values[item], keys[item]) for item in page if item in values],
-            [(values[item], keys[item]) for item in hits if item in values],
-            partial,
-        )
+
+        return [keyed(row) for row in page], [keyed(row) for row in rows], partial
 
     async def _matching(self, session, world, player, character, query, cutoff=None, modes=None):
         queries = (query,) if isinstance(query, str) else query
         terms = await self._terms(queries)
-        predicates = [
-            *_scope(world, player, character),
-            Memory.state == "active",
-            or_(
-                false(),
-                *(
-                    or_(
-                        Memory.content.contains(term, autoescape=True),
-                        Memory.topic.contains(term, autoescape=True),
-                        Memory.quote.contains(term, autoescape=True),
-                    )
-                    for term in terms
-                ),
-            ),
-        ]
-        if cutoff is not None:
-            predicates.append(Memory.created_at <= cutoff)
-        rows = (
-            await session.scalars(
-                select(Memory)
-                .where(*predicates)
-                .order_by(Memory.created_at.desc(), Memory.entry_id)
-                .limit(500)
-            )
-        ).all()
         scope = f"{world}:{player}:{character}"
         authorized = select(Memory).where(
             *_scope(world, player, character),
             Memory.state == "active",
             *([Memory.created_at <= cutoff] if cutoff is not None else []),
         )
+        rows = await self.index.lexical(session, authorized, Memory, terms, 500)
         independent = (
             await session.scalars(
                 authorized.order_by(Memory.created_at.desc(), Memory.entry_id).limit(256)
@@ -368,7 +324,9 @@ class SqlAlchemyLongChatMemoryStore:
                 )
                 size += amount
                 seen.add(row.entry_id)
-        ranked = await self._rank(queries, candidates, 12, modes, partial)
+        ranked = await self._rank(
+            queries, candidates, 12, modes, partial, session, authorized, Memory
+        )
         return [item.row for item in ranked]
 
     async def _older_quotes(
@@ -422,17 +380,7 @@ class SqlAlchemyLongChatMemoryStore:
             )
             .order_by(Message.created_at_utc.desc(), Message.message_id)
         )
-        lexical = (
-            (
-                await session.scalars(
-                    authorized.where(
-                        or_(*(Message.text.contains(term, autoescape=True) for term in terms))
-                    ).limit(200)
-                )
-            ).all()
-            if terms
-            else []
-        )
+        lexical = await self.index.lexical(session, authorized, Message, terms, 200)
         independent = (await session.scalars(authorized.limit(256))).all()
         scope = f"{conversation.world_id.value}:{player.value}:{character.value}"
         page, historical, partial = await self._history_pool(
@@ -465,7 +413,9 @@ class SqlAlchemyLongChatMemoryStore:
                         row.message_id in priority,
                     )
                 )
-        ranked = await self._rank(queries, candidates, 4, modes, partial)
+        ranked = await self._rank(
+            queries, candidates, 4, modes, partial, session, authorized, Message
+        )
         result, used = [], 2
         for item in ranked:
             row = item.row
@@ -484,11 +434,42 @@ class SqlAlchemyLongChatMemoryStore:
             result.append(value)
         return result
 
-    async def _rank(self, queries, candidates, limit, modes, history_partial=False):
-        method = getattr(self.ranker, "rank_with_mode", None)
-        if method is None:
-            return await self.ranker.rank_queries(queries, tuple(candidates), limit=limit)
-        result, mode = await method(queries, tuple(candidates), limit=limit)
+    async def _rank(
+        self,
+        queries,
+        candidates,
+        limit,
+        modes,
+        history_partial=False,
+        session=None,
+        authorized=None,
+        model=None,
+    ):
+        indexed_method = getattr(self.ranker, "rank_with_index", None)
+        if indexed_method is not None and authorized is not None:
+            identities = [
+                item.row.entry_id if model is Memory else item.row.message_id for item in candidates
+            ]
+            payloads = await self.index.payloads(session, authorized, model, identities)
+            candidates = tuple(
+                replace(item, vector_payload=payloads.get(identity))
+                for item, identity in zip(candidates, identities, strict=True)
+            )
+            result, mode, vectors = await indexed_method(queries, candidates, limit=limit)
+            persisted = await self.index.save(authorized, model, candidates, vectors)
+            if not persisted:
+                history_partial = True
+            elif mode == "hybrid_memory_only":
+                mode = "hybrid"
+        else:
+            method = getattr(self.ranker, "rank_with_mode", None)
+            if method is None:
+                result = await self.ranker.rank_queries(queries, tuple(candidates), limit=limit)
+                mode = "keyword"
+            else:
+                result, mode = await method(queries, tuple(candidates), limit=limit)
+            if authorized is not None:
+                await self.index.save(authorized, model, candidates, ())
         if mode == "hybrid" and history_partial:
             mode = "hybrid_partial"
         if modes is not None:

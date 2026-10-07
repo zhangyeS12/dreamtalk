@@ -160,10 +160,8 @@
 .world-workspace .directory-search button svg { width: 14px; height: 14px; }
 
 /* People are portraits and readable dossiers, not repeated form cards. */
-.world-workspace .contacts-toolbar { padding: 0 8px 16px; margin: 0; }
-.world-workspace .contacts-toolbar h2 { font-size: .875rem; font-weight: 500; }
-.world-workspace .contacts-toolbar p { font-size: .75rem; }
 .world-workspace .contacts-management { border: 1px solid var(--line); border-radius: 8px; margin-bottom: 16px; background: var(--recessed); }
+.world-workspace .contacts-management:not([open]) { align-self: flex-end; max-width: 100%; margin-bottom: 8px; border: 0; background: transparent; }
 .world-workspace .contacts-management > summary { padding: 11px 18px; }
 .world-workspace .contacts-management > summary strong { font-size: .8125rem; font-weight: 500; }
 .world-workspace .contacts-management > summary span { font-size: .75rem; }
@@ -173,9 +171,9 @@
 .world-workspace .contacts-view-switch .text-action { margin-left: auto; font-size: .75rem; }
 .world-workspace .contacts-workspace .conversation-detail > .thread-heading { position: static; min-height: 0; padding: 12px 36px 0; border: 0; }
 .world-workspace .contacts-workspace .conversation-detail > .thread-heading h2 { display: none; }
-.world-workspace .contact-dossier { max-width: 1120px; padding: 20px 40px 48px; margin-inline: auto; }
-.world-workspace .dossier-hero { display: flex; flex-wrap: wrap; align-items: center; gap: 28px; padding: 24px 0 32px; border-bottom: 1px solid var(--line); margin-bottom: 0; }
-.world-workspace .dossier-portrait { width: 128px; height: 152px; font-size: 3rem; border-radius: 10px; background: radial-gradient(ellipse at 20% 0%, oklch(.53 .045 80 / .25), transparent 70%), var(--raised); }
+.world-workspace .contact-dossier { max-width: none; padding: 12px 24px 32px; margin: 0; }
+.world-workspace .dossier-hero { display: flex; flex-wrap: wrap; align-items: center; gap: 20px; padding: 8px 0 20px; border-bottom: 1px solid var(--line); margin-bottom: 0; }
+.world-workspace .dossier-portrait { width: 88px; height: 104px; font-size: 2.25rem; border-radius: 10px; background: radial-gradient(ellipse at 20% 0%, oklch(.53 .045 80 / .25), transparent 70%), var(--raised); }
 .world-workspace .dossier-title { min-width: min(210px, 100%); flex: 1; }
 .world-workspace .dossier-caption { display: block; font-size: .75rem; color: var(--muted); margin-bottom: 12px; }
 .world-workspace .dossier-title h2 { font-size: 1.875rem; line-height: 1.35; font-weight: 450; margin: 0 0 14px; overflow-wrap: anywhere; }
@@ -190,7 +188,7 @@
 .world-workspace .contact-dossier .content-details p { color: var(--ink); font-size: .9375rem; line-height: 1.9; margin: 0; }
 .world-workspace .contact-dossier .content-details > details { border-top: 1px solid var(--line); margin-top: 32px; font-size: .8125rem; }
 .world-workspace .contact-dossier .inline-hint { font-size: .75rem; margin-bottom: 24px; }
-.world-workspace .faction-manager { background: var(--page); padding: 28px 36px; }
+.world-workspace .faction-manager { background: var(--page); padding: 20px 24px; max-height: none; overflow: visible; }
 .world-workspace .faction-manager > p { max-width: 65ch; font-size: .8125rem; color: var(--muted); }
 .world-workspace .faction-create { background: var(--surface); }
 .world-workspace .faction-branch { border-left-color: var(--line); }
@@ -298,9 +296,9 @@
   .world-workspace .chat-workspace { grid-template-columns: 248px minmax(0, 1fr); }
   .world-workspace .settings-handbook { grid-template-columns: 216px minmax(0, 1fr); }
   .world-workspace .handbook-sheet { padding: 28px; }
-  .world-workspace .contact-dossier { padding: 12px 28px 36px; }
+  .world-workspace .contact-dossier { padding: 12px 20px 28px; }
   .world-workspace .dossier-hero { gap: 20px; }
-  .world-workspace .dossier-portrait { width: 96px; height: 120px; }
+  .world-workspace .dossier-portrait { width: 80px; height: 96px; }
   .world-workspace .message-list { padding: 24px; }
   .world-workspace .thread-heading { padding: 18px 20px; }
   .world-workspace .profile-page > .settings-section { padding: 32px 28px; }
@@ -350,12 +348,11 @@
   .world-workspace .message-portrait { width: 30px; height: 30px; }
   .world-workspace .chat-composer { margin: 0 10px 14px; padding: 14px; bottom: 92px; }
   .world-workspace .chat-composer-actions > small { flex-basis: 100%; }
-  .world-workspace .contacts-toolbar { padding: 0 8px 16px; }
   .world-workspace .contacts-management > summary { padding: 12px; }
   .world-workspace .contacts-view-switch { padding: 10px; gap: 0; position: static; }
   .world-workspace .contacts-view-switch .secondary-button { padding-inline: 9px; font-size: .75rem; }
-  .world-workspace .contact-dossier { padding: 12px 20px 28px; }
-  .world-workspace .dossier-portrait { width: 88px; height: 108px; }
+  .world-workspace .contact-dossier { padding: 12px 16px 24px; }
+  .world-workspace .dossier-portrait { width: 72px; height: 88px; }
   .world-workspace .dossier-hero { gap: 16px; }
   .world-workspace .dossier-title { min-width: 0; }
   .world-workspace .dossier-title h2 { font-size: 1.5rem; }
@@ -376,9 +373,15 @@
   .world-workspace .world-journal { padding: 4px 20px 28px; }
   .world-workspace .journal-refresh { align-items: flex-start; }
 }
-@media (max-height: 700px) and (min-width: 701px) {
-  .world-workspace.world-tab-contacts:not(.contacts-editing) .app-content { height: auto; }
-  .world-workspace.world-tab-contacts:not(.contacts-editing) .contacts-workspace { min-height: 400px; max-height: 760px; }
+@media (min-width: 701px) {
+  .world-workspace.world-tab-contacts .app-content { padding-inline: 16px; }
+  .world-workspace .contacts-workspace { grid-template-columns: 220px minmax(0, 1fr); }
+  .world-workspace.world-tab-contacts:not(.contacts-editing) .contacts-workspace { min-height: 0; }
+  .world-workspace .contacts-workspace .directory-heading { padding: 12px 8px 14px; }
+  .world-workspace .contacts-workspace .directory-heading strong { font-size: 1rem; }
+  .world-workspace .contacts-workspace .conversation-row { min-height: 64px; padding: 10px 8px; }
+  .world-workspace .contacts-workspace .row-copy small { display: none; }
+  .world-workspace .contacts-workspace .conversation-detail > .thread-heading { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   .world-workspace *, .world-workspace *::before, .world-workspace *::after { transition-duration: 0ms !important; animation-duration: 0ms !important; }

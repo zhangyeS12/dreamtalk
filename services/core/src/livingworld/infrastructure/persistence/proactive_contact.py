@@ -10,7 +10,7 @@ from sqlalchemy import func, select, update
 from livingworld.application.errors import EntityNotFoundError
 from livingworld.application.lore_activation import select_common_background
 from livingworld.application.proactive_contact import ProactiveContactError
-from livingworld.domain.identifiers import WorldId
+from livingworld.domain.identifiers import PlayerId, WorldId
 from livingworld.infrastructure.persistence.contact_gate import (
     contact_blocked,
     waiting_conversation,
@@ -53,6 +53,7 @@ from livingworld.infrastructure.persistence.shared_activity_models import (
 from livingworld.infrastructure.persistence.shared_activity_models import (
     SharedActivitySettingsRecord as SharedSettings,
 )
+from livingworld.infrastructure.persistence.world_story import record_contact_invitation
 
 MINUTE = 60_000_000
 
@@ -327,7 +328,8 @@ class SqlAlchemyProactiveContactStore:
                         )
                     ).all()
                 ]
-                # Prefer actual shared activity; stable ranking avoids the same first character.
+                # Prefer shared activity, then deterministic per-plan ordering.
+                # This avoids fixed ID order; it does not guarantee character rotation.
                 choices.sort(
                     key=lambda pair: (
                         pair[0] != "shared",
@@ -502,17 +504,25 @@ class SqlAlchemyProactiveContactStore:
                 )
             )
             for index, c in enumerate(characters, 1):
-                session.add(
-                    Message(
-                        world_id=episode.world_id,
-                        message_id=uuid5(episode.episode_id, c["character_id"]),
-                        conversation_id=conversation,
-                        turn_id=turn_id,
-                        position=position + index,
-                        sender_character_id=UUID(c["character_id"]),
-                        text=replies[c["character_id"]],
-                        created_at_utc=now,
-                    )
+                message = Message(
+                    world_id=episode.world_id,
+                    message_id=uuid5(episode.episode_id, c["character_id"]),
+                    conversation_id=conversation,
+                    turn_id=turn_id,
+                    position=position + index,
+                    sender_character_id=UUID(c["character_id"]),
+                    text=replies[c["character_id"]],
+                    created_at_utc=now,
+                )
+                session.add(message)
+                await session.flush()
+                clock = await session.get(Clock, episode.world_id)
+                await record_contact_invitation(
+                    session,
+                    message,
+                    PlayerId(WorldId(episode.world_id), episode.player_id),
+                    c["name"],
+                    to_domain(clock).effective_time(now).microseconds,
                 )
             episode.state, episode.conversation_id = "delivered", conversation
             cfg.state, cfg.error = "idle", None

@@ -11,6 +11,7 @@ from livingworld.application.errors import (
     MemoryEvidenceAccessDeniedError,
 )
 from livingworld.application.fingerprints import canonical_json, id_input
+from livingworld.application.idempotency import run_with_receipt_recovery
 from livingworld.application.ports import (
     TemporalMutationBarrier,
     WallClock,
@@ -101,14 +102,12 @@ class EpisodicMemoryService:
         if self._mutation_barrier is not None:
             await self._mutation_barrier.assert_mutation_allowed(command.world_id)
         fingerprint = memory_fingerprint(command)
-        try:
-            return await self._transaction(command, fingerprint)
-        except (EntityAlreadyExistsError, IdempotencyConflictError):
-            async with self._uow_factory() as uow:
-                existing = await uow.receipts.existing_memory(command.request_id, fingerprint)
-                if existing is not None:
-                    return replace(existing, replayed=True)
-            raise
+        return await run_with_receipt_recovery(
+            lambda: self._transaction(command, fingerprint),
+            self._uow_factory,
+            lambda uow: uow.receipts.existing_memory(command.request_id, fingerprint),
+            (EntityAlreadyExistsError, IdempotencyConflictError),
+        )
 
     async def _transaction(self, command: RecordEpisodicMemory, fingerprint: str) -> MemoryResult:
         async with self._uow_factory() as uow:

@@ -1,15 +1,15 @@
-# dreamtalk 0.1.37 · Windows 观星室体验版
+# dreamtalk 0.1.40 · Windows 本地反馈修复版
 
-这是一款以聊天为中心的本地 AI 持久世界应用。0.1.37 更新启动星轨、聊天、通讯录、设置与个人资料的观星室界面；当前为预发布体验版，尚未完成最新版整体验收。
+这是一款以聊天为中心的本地 AI 持久世界应用。0.1.40 继承观星室、长历史索引／分页召回与200条聊天窗口，扩大通讯录资料／阵营主区，分开聊天获知与亲历记录，完善邀约记录；世界动态最多5条进行中、绿灰补位并保留历史。0.1.40源码同步见[记录](maintenance/2026-10-07-github-source-sync.md)，便携包仍为本地交付，未上传GitHub Release。此次外部JSON卡／书导入获用户确认，最新版整体验收仍未完成。
 
 ## 下载与启动
 
-1. 从 [GitHub Release](https://github.com/zhangyeS12/dreamtalk/releases/tag/v0.1.37) 下载 **dreamtalk-0.1.37-windows-x64.zip**。不要下载 Source code 代替程序。
+1. 本地0.1.40便携包位于 `artifacts/portable/feedback-0140/dreamtalk.zip`。GitHub当前公开下载仍是 [0.1.37 Release](https://github.com/zhangyeS12/dreamtalk/releases/tag/v0.1.37) 中的 **dreamtalk-0.1.37-windows-x64.zip**，不包含本轮维护。不要下载 Source code 代替程序。
 2. 完整解压到一个固定目录，再打开 `dreamtalk/dreamtalk-desktop.exe`。请勿在压缩包里直接运行，也不要只复制 EXE；同目录的 `core/` 必须保留。
 3. 使用 Windows 10/11 x64，并安装 [Microsoft WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/)。无需安装 Python、uv、Node 或 Rust。
 4. 启动动画结束后进入世界书架，选择空白书创建世界，再明确进入世界。
 
-程序尚未签名，Windows 可能显示未知发布者提示；请从项目 Release 获取完整包并核对随附 `SHA256SUMS.txt`。不用关闭系统安全防护。暂不提供 macOS/Linux 便携包或自动更新。
+程序尚未签名，Windows 可能显示未知发布者提示；请使用完整便携目录或ZIP。公开Release另附 `SHA256SUMS.txt`。不用关闭系统安全防护。暂不提供 macOS/Linux 便携包或自动更新。
 
 ## 第一次聊天
 
@@ -20,11 +20,13 @@
 
 程序不附带 API Key、个人存档或商业角色内容。角色对话、联网生成和启用后的后台模型任务可能产生服务商费用。自动活动、相遇、共同休闲、世界动态及主动联系按各自开关与许可运行，新世界默认关闭；开启前请阅读页面费用说明。
 
+前一步0.1.39新增0037可重建本地全文／向量派生索引，首次启动不扫描／编码全部历史；冷索引随正常聊天／明确搜索逐步补齐，尚未覆盖时保留关键词回退。历史召回、老存档升级与大规模耗时待用户验收，见[记忆说明](CONTEXT_AND_RECALL.md)。旧0.1.38／0.1.39包保留。
+
 ## 更新旧版
 
 1. 从旧版托盘选择“退出并停止后台运行”，再解压并打开完整新版。仅关闭窗口可能仍在后台运行，单实例机制会继续显示旧进程。
 2. 应用数据存放在本机用户的 Tauri app-data 目录，Windows 默认对应 `%APPDATA%/app.livingworld.desktop`，不在解压目录。开发版兼容路径另为 `%LOCALAPPDATA%/LivingWorld/development`。重要数据先在程序完全退出后备份；本产品尚无完整运行存档导出/恢复界面。
-3. 新版首次启动可能升级旧存档；升级后不要用旧程序打开同一存档。本轮0.1.37没有新增迁移，迁移源码仍到0036。
+3. 新版首次启动可能升级旧存档；升级后不要用旧程序打开同一存档。0.1.40没有追加迁移，继承0.1.39的0037派生索引源码；工程端未执行真实存档迁移。
 4. 如需开机自启动新目录，在新版“设置 → 后台运行”显式点击“保存并更新启动位置”。启动本身不会擅自修改注册。
 
 ## 已有功能与体验边界
@@ -33,11 +35,13 @@
 
 关闭程序或电脑关机后不会执行本地模型任务。记忆召回有容量和权限边界，不保证覆盖全部历史。主动联系需有合法理由且受未回复门禁限制，开启后不一定立即收到消息。
 
-本包基于已完成的 lint/类型检查、CSS静态检查和 build-only 编译；发布阶段只核对源码、包内容、哈希与下载。未代替用户运行产品、自动测试、真实存档迁移或付费模型验收。构建存在JS体积、STATIC_VCRUNTIME弃用、PyInstaller可选hidden import及jieba语法提示，详见源码 `HANDOFF.md`。
+本包采用 `--build-only` 编译打包，不启动程序或触发共同联系。已完成的源码/lint/类型与文档检查不代替用户运行产品、自动测试、真实存档迁移或付费模型验收；实际构建结果及告警见随包 `HANDOFF.md`。
 
 ## 帮助与反馈
 
-随包 `docs/` 包含完整说明：`WORLD_TERMINAL.md`（新版界面）、`SETTINGS_HANDBOOK.md`（设置）、`CONTEXT_AND_RECALL.md`（记忆）、`PROACTIVE_CONTACT.md`（主动联系）、`OFFLINE_MESSAGES.md`（后台与离线）。
+随包 `docs/` 包含使用说明：[新版界面](WORLD_TERMINAL.md)、[设置](SETTINGS_HANDBOOK.md)、[记忆](CONTEXT_AND_RECALL.md)、[主动联系](PROACTIVE_CONTACT.md)、[后台与离线](OFFLINE_MESSAGES.md)。
+
+2026-10-07本地0.1.40沿用文档打包修复：随包保留根交接／产品规则，源码和测试引用转成GitHub版本链接，需联网查看；链接基线记录在 `SOURCE_REVISION.txt`，本地未提交改动不会自动出现在该Git引用中，新文件的远程链接可能尚不可用。现有 `v0.1.37` Release ZIP 保留原发布快照，旧公开包中的断链尚未替换。
 
 请通过 [GitHub Issues](https://github.com/zhangyeS12/dreamtalk/issues) 提供版本、Windows版本、操作步骤、预期和实际表现；可附脱敏截图。不要上传 API Key、完整私聊或个人数据库。
 

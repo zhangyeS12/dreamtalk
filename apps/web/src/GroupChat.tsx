@@ -2,18 +2,17 @@ import { useConversationRead } from "./useChatUnread";
 import { ContextReferencePanel } from "./ContextReferencePanel";
 import { MessageTime } from "./MessageTime";
 import { Fragment, useEffect, useRef, useState, type FormEvent } from "react";
-import { CoreClient, CoreRequestError, type ChatReplyAvailability, type GroupChatConversation, type WorldContentItem } from "@dreamtalk/api-client";
-import { useReplyStream } from "./useReplyStream";
+import { CoreClient, CoreRequestError, type GroupChatConversation, type WorldContentItem } from "@dreamtalk/api-client";
+import { useChatReplyWorkflow } from "./useChatReplyWorkflow";
 import { ReplyRecoveryControls } from "./ReplyRecoveryControls";
 import { StreamingReplyBubble } from "./StreamingReplyBubble";
 import { useChatScroll } from "./useChatScroll";
-import { useTranscriptPages } from "./useTranscriptPages";
 import { ChatMessageBody } from "./ChatMessageBody";
 import { ChatHistoryPanel } from "./ChatHistoryPanel";
 import { LongChatMemoryPanel } from "./LongChatMemoryPanel";
 import { ConversationMemoryPanel } from "./ConversationMemoryPanel";
 import { submitChatOnEnter } from "./chatComposerKeys";
-import { chatTokenReservationFeedback, chatPhaseFeedback, chatReplyFailureFeedback, chatReplyStateFeedback, chatSaveFailureFeedback, type ChatRequestPhase } from "./chatFeedback";
+import { chatPhaseFeedback } from "./chatFeedback";
 
 import { ConversationHeading, transcriptDay } from "./ConversationHeading";
 import { ContactAvatar } from "./ContactSocial";
@@ -85,124 +84,17 @@ export function GroupChatDetails({ client, worldId, playerId, group, avatarUrls 
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [longMemoryOpen, setLongMemoryOpen] = useState(false);
   const [referenceTurn, setReferenceTurn] = useState<string | null>(null);
-  const [refresh, setRefresh] = useState(0);
-  const [availability, setAvailability] = useState<ChatReplyAvailability | null>(null);
-  const [availabilityReading, setAvailabilityReading] = useState(true);
-  const [availabilityFailed, setAvailabilityFailed] = useState(false);
-  const available = availability?.available === true && !availabilityReading && !availabilityFailed;
-  const budgetFeedback = chatTokenReservationFeedback(availability, tokenCeiling, "group");
-  const [draft, setDraft] = useState("");
-  const [pending, setPending] = useState<{ text: string; ceiling: number; requestId: string } | null>(null);
-  const [phase, setPhase] = useState<ChatRequestPhase>(null);
-  const [recoveryBusy, setRecoveryBusy] = useState(false);
-  const actionLock = useRef(false);
-  const sending = phase !== null || recoveryBusy;
-  useEffect(() => { onDirtyChange?.(Boolean(draft.trim() || pending || sending)); }, [draft, pending, sending, onDirtyChange]);
-  useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
-  const [feedback, setFeedback] = useState("");
-  const [replyFailure, setReplyFailure] = useState<{ turnId: string; message: string } | null>(null);
-  const stream = useReplyStream();
-  const { messages, failed, hasOlder, loadingOlder, loadOlder, acceptMessage } = useTranscriptPages(client, worldId, group.conversation_id, refresh, true);
+  const {
+    refresh, setRefresh, available, availabilityReading, availabilityFailed, budgetFeedback,
+    draft, setDraft, pending, phase, sending, setRecoveryBusy, feedback, stream,
+    messages, failed, hasOlder, loadingOlder, loadOlder, followingLatest, showLatest, visibleStreamDraft,
+    latestPlayerMessage, checkReply, generateSavedReply, send,
+  } = useChatReplyWorkflow({
+    client, worldId, playerId, conversationId: group.conversation_id, kind: "group",
+    speakers: group.participants.map(item => item.character_id), tokenCeiling, suggestedDraft, onSuggestionUsed, onDirtyChange,
+  });
   const readReceipt = useConversationRead(client, worldId, group.conversation_id, messages);
-  const { thread, beforePrepend } = useChatScroll(messages, stream.draft?.text);
-
-  useEffect(() => {
-    if (suggestedDraft) {
-      setDraft(suggestedDraft);
-      onSuggestionUsed?.();
-    }
-  }, [suggestedDraft, onSuggestionUsed]);
-
-  useEffect(() => {
-    let active = true;
-    const controller = new AbortController();
-    setAvailabilityReading(true); setAvailabilityFailed(false);
-    void client.groupReplyAvailability(worldId, controller.signal)
-      .then(result => { if (active) setAvailability(result); })
-      .catch(() => { if (active) setAvailabilityFailed(true); })
-      .finally(() => { if (active) setAvailabilityReading(false); });
-    return () => { active = false; controller.abort(); };
-  }, [client, worldId, refresh]);
-
-  const visibleStreamDraft = stream.draft && (messages?.filter(message => message.turn_id === stream.draft?.turnId && message.sender_kind === "character").length ?? 0) <= stream.draft.index ? stream.draft : null;
-  const latestPlayerMessage = messages?.filter(message => message.sender_kind === "player" && message.sender_id === playerId).at(-1);
-  const checkReply = async () => {
-    if (actionLock.current || sending || pending || !latestPlayerMessage) return;
-    actionLock.current = true;
-    setPhase("checking");
-    setFeedback("");
-    try {
-      const recovery = await client.replyRecovery(worldId, group.conversation_id, latestPlayerMessage.turn_id);
-      const turn = await client.groupTurn(worldId, group.conversation_id, recovery.attempt_turn_id);
-      setRefresh(value => value + 1);
-      setFeedback(turn.state !== "completed" && replyFailure?.turnId === turn.turn_id
-        ? replyFailure.message
-        : chatReplyStateFeedback(turn.state, "group"));
-    } catch { setFeedback(chatReplyStateFeedback(null, "group")); }
-    finally { actionLock.current = false; if (stream.isMounted()) setPhase(null); }
-  };
-
-  const generateSavedReply = async (turnId: string) => {
-    if (actionLock.current || pending || !available) return;
-    actionLock.current = true;
-    setPhase("replying"); setFeedback(""); setReplyFailure(null);
-    try {
-      await stream.run(client, worldId, group.conversation_id, turnId, "group", group.participants.map(item => item.character_id), acceptMessage);
-      if (stream.isMounted()) setRefresh(value => value + 1);
-    } catch (failure) {
-      if (!stream.isMounted()) return;
-      setPhase("checking");
-      const turn = await client.groupTurn(worldId, group.conversation_id, turnId).catch(() => null);
-      if (!stream.isMounted()) return;
-      setRefresh(value => value + 1);
-      const message = turn?.state === "completed" ? chatReplyStateFeedback(turn.state, "group") : chatReplyFailureFeedback(failure, "group");
-      setFeedback(message);
-      if (turn?.state !== "completed") setReplyFailure({ turnId, message });
-    } finally { actionLock.current = false; if (stream.isMounted()) setPhase(null); }
-  };
-
-  const send = async (event: FormEvent) => {
-    event.preventDefault();
-    if (actionLock.current || sending || !available || (!draft.trim() && !pending)) return;
-    if (budgetFeedback && !pending) { setFeedback(budgetFeedback); return; }
-    actionLock.current = true;
-    const current = pending ?? { text: draft, ceiling: tokenCeiling, requestId: crypto.randomUUID() };
-    setPending(current);
-    setPhase("saving");
-    setFeedback("");
-    try {
-      const sent = await client.sendGroupMessage(worldId, group.conversation_id, current.text, current.ceiling, current.requestId);
-      setPending(null);
-      if (!stream.isMounted()) return;
-      setDraft("");
-      setReplyFailure(null);
-      setRefresh(value => value + 1);
-      setPhase("replying");
-      try {
-        await stream.run(client, worldId, group.conversation_id, sent.turn_id, "group", group.participants.map(item => item.character_id), acceptMessage);
-        setRefresh(value => value + 1);
-      } catch (failure) {
-        if (!stream.isMounted()) return;
-        setPhase("checking");
-        const turn = await client.groupTurn(worldId, group.conversation_id, sent.turn_id).catch(() => null);
-        setRefresh(value => value + 1);
-        const message = turn?.state === "completed"
-          ? chatReplyStateFeedback(turn.state, "group")
-          : stream.wasStopped()
-            ? "已请求停止生成。已保存的发言会保留；可检查回复状态，系统不会自动重新调用模型。"
-            : chatReplyFailureFeedback(failure, "group");
-        setFeedback(message);
-        if (turn?.state !== "completed") setReplyFailure({ turnId: sent.turn_id, message });
-      }
-    } catch (failure) {
-      if (failure instanceof CoreRequestError && failure.status >= 400 && failure.status < 500) {
-        setPending(null);
-        setFeedback(chatSaveFailureFeedback(failure));
-      } else {
-        setFeedback("消息保存结果尚未确认。可重试保存同一条消息，不会创建重复回合。");
-      }
-    } finally { actionLock.current = false; if (stream.isMounted()) setPhase(null); }
-  };
+  const { thread, beforePrepend, followBottom } = useChatScroll(messages, visibleStreamDraft?.text);
 
   const insertMention = (name: string) => {
     if (!available || sending || pending) return;
@@ -237,6 +129,7 @@ export function GroupChatDetails({ client, worldId, playerId, group, avatarUrls 
       requestAnimationFrame(() => { draftInput.current?.focus(); draftInput.current?.scrollIntoView({ block: "nearest" }); });
       return true;
     }} /> : null}
+    {!followingLatest ? <div className="transcript-history"><button type="button" className="text-action" onClick={() => { followBottom(); showLatest(); }}>返回最新消息</button></div> : null}
     {failed ? <p className="thread-hint" role="alert">无法读取群聊记录，请刷新后重试。</p> : null}
     {readReceipt.error ? <p className="thread-hint" role="alert">消息已显示，但未能保存已读状态。<button type="button" className="text-action" onClick={readReceipt.retry}>重新确认已读</button></p> : null}
     {messages === null ? failed ? null : <p className="thread-hint">正在读取消息…</p> : messages.length === 0 ? <div className="conversation-placeholder"><h2>还没有消息</h2><p>发一条消息，开始群聊。</p></div> : <>{hasOlder ? <div className="transcript-history"><button type="button" className="text-action" disabled={loadingOlder} onClick={() => void loadOlder(beforePrepend)}>{loadingOlder ? "正在加载…" : "加载更早消息"}</button></div> : null}<ol className="message-list">{messages.map((message, index) => {

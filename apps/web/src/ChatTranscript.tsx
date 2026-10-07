@@ -1,19 +1,18 @@
 import { useConversationRead } from "./useChatUnread";
 import { ContextReferencePanel } from "./ContextReferencePanel";
 import { MessageTime } from "./MessageTime";
-import { Fragment, useEffect, useRef, useState, type FormEvent } from "react";
-import { CoreClient, CoreRequestError, type ChatReplyAvailability, type ChatConversation } from "@dreamtalk/api-client";
-import { useReplyStream } from "./useReplyStream";
+import { Fragment, useRef, useState } from "react";
+import { CoreClient, type ChatConversation } from "@dreamtalk/api-client";
+import { useChatReplyWorkflow } from "./useChatReplyWorkflow";
 import { ReplyRecoveryControls } from "./ReplyRecoveryControls";
 import { StreamingReplyBubble } from "./StreamingReplyBubble";
 import { useChatScroll } from "./useChatScroll";
-import { useTranscriptPages } from "./useTranscriptPages";
 import { ChatMessageBody } from "./ChatMessageBody";
 import { ChatHistoryPanel } from "./ChatHistoryPanel";
 import { LongChatMemoryPanel } from "./LongChatMemoryPanel";
 import { ConversationMemoryPanel } from "./ConversationMemoryPanel";
 import { submitChatOnEnter } from "./chatComposerKeys";
-import { chatTokenReservationFeedback, chatPhaseFeedback, chatReplyFailureFeedback, chatReplyStateFeedback, chatSaveFailureFeedback, type ChatRequestPhase } from "./chatFeedback";
+import { chatPhaseFeedback } from "./chatFeedback";
 
 import { ConversationHeading, transcriptDay } from "./ConversationHeading";
 import { ContactAvatar } from "./ContactSocial";
@@ -37,129 +36,17 @@ export function ChatTranscript({ client, worldId, playerId, conversation, avatar
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [longMemoryOpen, setLongMemoryOpen] = useState(false);
   const [referenceTurn, setReferenceTurn] = useState<string | null>(null);
-  const [refresh, setRefresh] = useState(0);
-  const [availability, setAvailability] = useState<ChatReplyAvailability | null>(null);
-  const [availabilityReading, setAvailabilityReading] = useState(true);
-  const [availabilityFailed, setAvailabilityFailed] = useState(false);
-  const available = availability?.available === true && !availabilityReading && !availabilityFailed;
-  const budgetFeedback = chatTokenReservationFeedback(availability, tokenCeiling, "direct");
-  const [draft, setDraft] = useState("");
-  const [pendingSend, setPendingSend] = useState<{ text: string; ceiling: number; requestId: string } | null>(null);
-  const [phase, setPhase] = useState<ChatRequestPhase>(null);
-  const [recoveryBusy, setRecoveryBusy] = useState(false);
-  const actionLock = useRef(false);
-  const sending = phase !== null || recoveryBusy;
-  useEffect(() => { onDirtyChange?.(Boolean(draft.trim() || pendingSend || sending)); }, [draft, pendingSend, sending, onDirtyChange]);
-  useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
-  const [feedback, setFeedback] = useState("");
-  const [replyFailure, setReplyFailure] = useState<{ turnId: string; message: string } | null>(null);
-  const stream = useReplyStream();
-  const { messages, failed, hasOlder, loadingOlder, loadOlder, acceptMessage } = useTranscriptPages(client, worldId, conversation.conversation_id, refresh, true);
-  const { thread, beforePrepend } = useChatScroll(messages, stream.draft?.text);
-
+  const {
+    refresh, setRefresh, available, availabilityReading, availabilityFailed, budgetFeedback,
+    draft, setDraft, pending: pendingSend, phase, sending, setRecoveryBusy, feedback, stream,
+    messages, failed, hasOlder, loadingOlder, loadOlder, followingLatest, showLatest, visibleStreamDraft,
+    latestPlayerMessage, checkReply, generateSavedReply, send,
+  } = useChatReplyWorkflow({
+    client, worldId, playerId, conversationId: conversation.conversation_id, kind: "direct",
+    speakers: [conversation.character_id], tokenCeiling, suggestedDraft, onSuggestionUsed, onDirtyChange,
+  });
   const readReceipt = useConversationRead(client, worldId, conversation.conversation_id, messages);
-
-  useEffect(() => {
-    if (suggestedDraft) {
-      setDraft(suggestedDraft);
-      onSuggestionUsed?.();
-    }
-  }, [suggestedDraft, onSuggestionUsed]);
-
-  useEffect(() => {
-    let active = true;
-    const controller = new AbortController();
-    setAvailabilityReading(true); setAvailabilityFailed(false);
-    void client.directReplyAvailability(worldId, controller.signal)
-      .then(result => { if (active) setAvailability(result); })
-      .catch(() => { if (active) setAvailabilityFailed(true); })
-      .finally(() => { if (active) setAvailabilityReading(false); });
-    return () => { active = false; controller.abort(); };
-  }, [client, worldId, refresh]);
-
-  const visibleStreamDraft = stream.draft && (messages?.filter(message => message.turn_id === stream.draft?.turnId && message.sender_kind === "character").length ?? 0) <= stream.draft.index ? stream.draft : null;
-  const latestPlayerMessage = messages?.filter(message => message.sender_kind === "player" && message.sender_id === playerId).at(-1);
-  const checkReply = async () => {
-    if (actionLock.current || sending || pendingSend || !latestPlayerMessage) return;
-    actionLock.current = true;
-    setPhase("checking");
-    setFeedback("");
-    try {
-      const recovery = await client.replyRecovery(worldId, conversation.conversation_id, latestPlayerMessage.turn_id);
-      const turn = await client.directTurn(worldId, conversation.conversation_id, recovery.attempt_turn_id);
-      setRefresh(value => value + 1);
-      setFeedback(turn.state !== "completed" && replyFailure?.turnId === turn.turn_id
-        ? replyFailure.message
-        : chatReplyStateFeedback(turn.state, "direct"));
-    } catch { setFeedback(chatReplyStateFeedback(null, "direct")); }
-    finally { actionLock.current = false; if (stream.isMounted()) setPhase(null); }
-  };
-
-  const generateSavedReply = async (turnId: string) => {
-    if (actionLock.current || pendingSend || !available) return;
-    actionLock.current = true;
-    setPhase("replying"); setFeedback(""); setReplyFailure(null);
-    try {
-      await stream.run(client, worldId, conversation.conversation_id, turnId, "direct", [conversation.character_id], acceptMessage);
-      if (stream.isMounted()) setRefresh(value => value + 1);
-    } catch (failure) {
-      if (!stream.isMounted()) return;
-      setPhase("checking");
-      const turn = await client.directTurn(worldId, conversation.conversation_id, turnId).catch(() => null);
-      if (!stream.isMounted()) return;
-      setRefresh(value => value + 1);
-      const message = turn?.state === "completed" ? chatReplyStateFeedback(turn.state, "direct") : chatReplyFailureFeedback(failure, "direct");
-      setFeedback(message);
-      if (turn?.state !== "completed") setReplyFailure({ turnId, message });
-    } finally { actionLock.current = false; if (stream.isMounted()) setPhase(null); }
-  };
-
-  const send = async (event: FormEvent) => {
-    event.preventDefault();
-    if (actionLock.current || sending || !available || (!draft.trim() && !pendingSend)) return;
-    if (budgetFeedback && !pendingSend) { setFeedback(budgetFeedback); return; }
-    actionLock.current = true;
-    const current = pendingSend ?? { text: draft, ceiling: tokenCeiling, requestId: crypto.randomUUID() };
-    setPendingSend(current);
-    setPhase("saving");
-    setFeedback("");
-    try {
-      const sent = await client.sendPlayerMessage(worldId, conversation.conversation_id, current.text, current.ceiling, current.requestId);
-      setPendingSend(null);
-      if (!stream.isMounted()) return;
-      setDraft("");
-      setReplyFailure(null);
-      setRefresh(value => value + 1);
-      setPhase("replying");
-      try {
-        await stream.run(client, worldId, conversation.conversation_id, sent.turn_id, "direct", [conversation.character_id], acceptMessage);
-        setRefresh(value => value + 1);
-      } catch (failure) {
-        if (!stream.isMounted()) return;
-        // Query once for a completed reply; never replay an uncertain model call.
-        setPhase("checking");
-        const turn = await client.directTurn(worldId, conversation.conversation_id, sent.turn_id).catch(() => null);
-        setRefresh(value => value + 1);
-        const message = turn?.state === "completed"
-          ? chatReplyStateFeedback(turn.state, "direct")
-          : stream.wasStopped()
-            ? "已请求停止生成。已保存的发言会保留；可检查回复状态，系统不会自动重新调用模型。"
-            : chatReplyFailureFeedback(failure, "direct");
-        setFeedback(message);
-        if (turn?.state !== "completed") setReplyFailure({ turnId: sent.turn_id, message });
-      }
-    } catch (failure) {
-      if (failure instanceof CoreRequestError && failure.status >= 400 && failure.status < 500) {
-        setPendingSend(null);
-        setFeedback(chatSaveFailureFeedback(failure));
-      } else {
-        setFeedback("消息保存结果尚未确认。可重试保存同一条消息，不会创建重复回合。");
-      }
-    } finally {
-      actionLock.current = false;
-      if (stream.isMounted()) setPhase(null);
-    }
-  };
+  const { thread, beforePrepend, followBottom } = useChatScroll(messages, visibleStreamDraft?.text);
 
   return <section ref={thread} className="chat-thread" aria-label={`${conversation.character_name}的会话`}>
     <ConversationHeading title={conversation.character_name} kind="私聊" portrait={<ContactAvatar name={conversation.character_name} url={avatarUrl} />}
@@ -176,6 +63,7 @@ export function ChatTranscript({ client, worldId, playerId, conversation, avatar
       requestAnimationFrame(() => { draftInput.current?.focus(); draftInput.current?.scrollIntoView({ block: "nearest" }); });
       return true;
     }} /> : null}
+    {!followingLatest ? <div className="transcript-history"><button type="button" className="text-action" onClick={() => { followBottom(); showLatest(); }}>返回最新消息</button></div> : null}
     {failed ? <p className="thread-hint" role="alert">无法读取会话记录，请刷新后重试。</p> : null}
     {readReceipt.error ? <p className="thread-hint" role="alert">消息已显示，但未能保存已读状态。<button type="button" className="text-action" onClick={readReceipt.retry}>重新确认已读</button></p> : null}
     {messages === null ? failed ? null : <p className="thread-hint">正在读取消息…</p>

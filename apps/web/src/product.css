@@ -24,7 +24,6 @@
 .product-shell textarea:focus-visible { outline: 3px solid var(--green); outline-offset: 2px; }
 .app-header { height: 64px; padding: 0 32px; display: flex; align-items: center; justify-content: space-between; gap: 18px; background: var(--surface); border-bottom: 1px solid var(--line); }
 .app-brand { font-size: 1.02rem; font-weight: 720; letter-spacing: -0.02em; }
-.world-context { color: var(--muted); font-size: .85rem; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .app-content { max-width: none; width: 100%; min-height: calc(100dvh - 64px); margin: 0; padding: 24px 32px 96px; }
 .page-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 22px; }
 .page-heading h1 { margin: 0; font-size: 1.65rem; font-weight: 720; letter-spacing: -0.025em; text-wrap: balance; }
@@ -50,7 +49,6 @@
 .event-item { display: flex; flex-direction: column; align-items: flex-start; gap: 7px; margin: 12px 0; padding: 16px 18px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
 .event-item time, .event-item small { color: var(--muted); font-size: .77rem; }
 .event-item strong { font-size: .92rem; font-weight: 600; }
-.event-description { margin: 0; max-width: 100%; line-height: 1.65; overflow-wrap: anywhere; }
 .event-item .text-action { padding-left: 0; }
 .event-topic-picker { max-width: 860px; margin: 18px auto 0; padding: 18px 20px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
 .event-topic-picker p { color: var(--muted); font-size: .86rem; line-height: 1.6; }
@@ -105,18 +103,12 @@
 .conversation-list { min-width: 0; overflow-y: auto; border-right: 1px solid var(--line); background: var(--surface); }
 .conversation-list .empty-state { padding: 40px 20px; }
 .conversation-row.selected { background: var(--green-soft); }
-.group-create-link { display: block; width: 100%; padding: 12px 20px; border: 0; border-bottom: 1px solid var(--line); background: var(--surface); color: var(--green-hover); text-align: left; font: inherit; cursor: pointer; }
-.group-create-link:hover { background: var(--page); }
 .group-setup form { padding: 12px 24px 24px; }
 .group-contact-list { display: grid; gap: 0; max-width: 620px; margin: 14px 0; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
 .group-contact { display: flex; align-items: center; gap: 12px; padding: 13px 16px; border-bottom: 1px solid var(--line); cursor: pointer; }
 .group-contact:last-child { border-bottom: 0; }
 .group-contact input { width: 18px; height: 18px; accent-color: var(--green); }
 .group-actions { margin-top: 20px; }
-.group-members { padding: 24px; }
-.group-members h3 { margin: 0 0 12px; font-size: .95rem; }
-.group-members ul { display: flex; flex-wrap: wrap; gap: 8px; padding: 0; list-style: none; }
-.group-members li { padding: 8px 12px; border-radius: 8px; background: var(--green-soft); }
 .model-setup form { max-width: 700px; }
 .model-setup-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px 18px; margin: 18px 0; }
 .model-limits { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 14px; }
@@ -170,7 +162,6 @@
 .import-file { margin: 20px 0; }
 .import-preview { border-top: 1px solid var(--line); padding-top: 24px; }
 .content-details { padding: 24px; max-width: 900px; overflow-wrap: anywhere; }
-.contact-chat-action { padding: 20px 24px 0; }
 .chat-thread { min-height: 100%; display: flex; flex-direction: column; }
 .thread-heading .transcript-refresh { display: inline-flex; font-size: .82rem; }
 .transcript-history { padding: 14px 24px 0; text-align: center; }
@@ -190,7 +181,6 @@
 .message-content a { overflow-wrap: anywhere; }
 .message-image-placeholder { color: var(--muted); font-size: .85em; }
 .message-bubble time { display: block; color: var(--muted); font-size: .72rem; text-align: right; }
-.transcript-status { margin: 0; padding: 12px 24px 24px; text-align: center; color: var(--muted); font-size: .82rem; }
 .chat-composer { position: sticky; bottom: 0; display: flex; flex-direction: column; gap: 9px; padding: 14px 24px; border-top: 1px solid var(--line); background: var(--surface); }
 .chat-composer textarea { width: 100%; resize: vertical; min-height: 74px; max-height: 220px; padding: 11px 13px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); font: inherit; }
 .chat-composer textarea:focus { outline: 2px solid var(--green); outline-offset: 1px; }

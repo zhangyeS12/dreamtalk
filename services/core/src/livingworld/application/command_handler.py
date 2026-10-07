@@ -26,6 +26,7 @@ from livingworld.application.errors import (
     IdempotencyConflictError,
 )
 from livingworld.application.fingerprints import command_fingerprint, decimal_input, id_input
+from livingworld.application.idempotency import run_with_receipt_recovery
 from livingworld.application.ports import (
     TemporalMutationBarrier,
     UnitOfWork,
@@ -150,16 +151,12 @@ class CommandHandler:
         if self._mutation_barrier is not None and not isinstance(command, CreateWorld):
             await self._mutation_barrier.assert_mutation_allowed(command.world_id)
         fingerprint = command_fingerprint(command)
-        try:
-            result = await self._transaction(command, fingerprint)
-        except (ConcurrencyConflictError, EntityAlreadyExistsError, IdempotencyConflictError):
-            # The failed UoW has exited/rolled back. Resolve a possible committed duplicate
-            # exactly once from a fresh transaction; NEVER execute the mutation again.
-            async with self._uow_factory() as uow:
-                existing = await uow.receipts.existing(command.request_id, fingerprint)
-            if existing is None:
-                raise
-            result = replace(existing, replayed=True)
+        result = await run_with_receipt_recovery(
+            lambda: self._transaction(command, fingerprint),
+            self._uow_factory,
+            lambda uow: uow.receipts.existing(command.request_id, fingerprint),
+            (ConcurrencyConflictError, EntityAlreadyExistsError, IdempotencyConflictError),
+        )
         if isinstance(command, CreateWorld) and self._world_runtime_registrar is not None:
             await self._world_runtime_registrar.register_world(command.world_id)
         return result

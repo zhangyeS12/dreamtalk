@@ -24,6 +24,7 @@ from livingworld.domain.world import ClockState
 
 BATCH_SIZE = 10
 MAX_PENDING = 100
+ACTIVE_NEWS_LIMIT = 5
 
 
 class WorldStoryError(ValueError):
@@ -60,8 +61,12 @@ class WorldNewsKernel:
             if world is None or world.clock.state is ClockState.PAUSED:
                 return None
             now = self._time_source.read(world.clock)
-            prepared, next_time = await work.world_news.prepare(world_id, now.microseconds)
-            if prepared is not None:
+            next_time = None
+            # Fill only vacant places, in one atomic and bounded publication.
+            for _ in range(ACTIVE_NEWS_LIMIT):
+                prepared, next_time = await work.world_news.prepare(world_id, now.microseconds)
+                if prepared is None:
+                    break
                 row, config = prepared
                 event_id = EventId(world_id, uuid5(row.entry_id, "public-announcement"))
                 event = WorldEvent(

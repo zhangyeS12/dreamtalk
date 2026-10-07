@@ -38,7 +38,7 @@ def create_app(
     status: RuntimeStatus,
     shutdown: ShutdownRequests,
     session_token: str,
-    initialize: Callable[[], None],
+    initialize: Callable[[], None] | None,
     logger: StructuredLogger,
     allowed_origins: list[str] | None = None,
     developer_inspector: DeveloperInspectorService | None = None,
@@ -69,7 +69,8 @@ def create_app(
     async def lifespan(_app: FastAPI):
         import asyncio
 
-        await asyncio.to_thread(initialize)
+        if initialize is not None:
+            await asyncio.to_thread(initialize)
         status.ready = True
         logger.emit("core", "runtime_initialized")
         try:

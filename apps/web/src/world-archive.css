@@ -87,12 +87,10 @@
 .archive-editor-heading h2:focus { outline: none; }
 .archive-editor > .inline-hint { padding: 0 26px 18px; }
 .archive-footer { padding: 18px 36px; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 16px; color: var(--archive-muted); border-top: 1px solid var(--line); font-size: .75rem; }
-.workspace-header-actions { display: flex; gap: 18px; align-items: center; justify-content: flex-end; min-width: 0; }
-.workspace-header-actions .world-context { max-width: 260px; }
 .world-workspace { animation: archive-enter 180ms ease-out; }
 @keyframes archive-enter { from { opacity: .4; transform: translateY(5px); } to { opacity: 1; transform: none; } }
 @keyframes archive-details { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; transform: none; } }
 @media (min-width: 1600px) { .archive-main { padding-top: 36px; } .archive-preview { width: 390px; right: 48px; } }
 @media (max-width: 919px) { .shelf-viewport { --selection-position: .5; } .archive-main { padding: 24px; } .archive-header, .archive-footer { padding-inline: 24px; } .archive-preview { position: relative; top: auto; right: auto; width: 100%; max-height: none; margin-top: 20px; padding: 24px; } .archive-preview-actions { flex-direction: row; flex-wrap: wrap; } }
-@media (max-width: 600px) { .archive-main { padding: 22px 16px; } .archive-header, .archive-footer { padding-inline: 16px; } .archive-header { gap: 12px; } .archive-header-label { padding-left: 12px; } .archive-preview-actions { flex-direction: column; } .workspace-header-actions .world-context { max-width: 120px; } }
+@media (max-width: 600px) { .archive-main { padding: 22px 16px; } .archive-header, .archive-footer { padding-inline: 16px; } .archive-header { gap: 12px; } .archive-header-label { padding-left: 12px; } .archive-preview-actions { flex-direction: column; } }
 @media (prefers-reduced-motion: reduce) { .world-workspace, .archive-preview { animation: none; } .shelf-viewport { scroll-behavior: auto; } .book-shadow, .book-repeat .book-volume { transition: none; } }

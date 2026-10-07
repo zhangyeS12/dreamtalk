@@ -1,6 +1,6 @@
 # 系统概览
 
-状态：本文职责划分源于 Stage 0；冻结规则来源为 [PRODUCT_SPEC.md](../product/PRODUCT_SPEC.md) 中的 FR-01 至 FR-24。已接受技术基线见 [Architecture Review 001](ARCHITECTURE_REVIEW_001.md)，已实现基础见 [Stage 2](STAGE_2_ACCEPTANCE.md)、[Stage 3](STAGE_3_ACCEPTANCE.md)。Stage 5/6 已实现确定性调度、行动结算、稀疏激活与双时间 reconciliation，C-007A 已实现显式 EpisodicMemory 形成。Director、Character Agent、Builder、Activation consumer、自动 Observation→Memory 和最终产品 UI 尚未实现。本文不自行增加部署或产品决策。
+状态（2026-10-07）：职责划分源于 Stage 0，后续用户批准见根 AGENTS；当前完成度以[状态清单](../PROJECT_STATUS.md)为准。Core 已接入业务 HTTP API、角色聊天、有限 Director 日常/相遇/共同休闲、卡/书研究生成及桌面 UI。自动 Observation→EpisodicMemory、完整离线演化、广泛剧情/关系/知识传播仍未实现。下文阶段记录不代表当前功能缺失；实现、构建与用户验收分开。
 
 ## 1. 系统目标与边界
 
@@ -63,7 +63,7 @@ Planning Window 耗尽或大量计划失效才触发 Replan（FR-15）；上述�
 | --- | --- |
 | [PRODUCT_SPEC.md](../product/PRODUCT_SPEC.md) | 冻结规则原文与范围 |
 | [PRODUCT_PRINCIPLES.md](../product/PRODUCT_PRINCIPLES.md) | 规则的设计含义 |
-| [USER_FLOWS.md](../product/USER_FLOWS.md) | 尚未实现的产品流程 |
+| [USER_FLOWS.md](../product/USER_FLOWS.md) | 产品流程与已确认切片；当前实现见状态清单 |
 | [DOMAIN_MODEL.md](DOMAIN_MODEL.md) | 概念对象及职责；不设计数据库字段 |
 | [DIRECTOR_MODEL.md](DIRECTOR_MODEL.md) | 世界调度、规划和主动联系边界 |
 | [EVENT_MODEL.md](EVENT_MODEL.md) | 候选事件与真实事件的区别 |
@@ -86,4 +86,4 @@ Planning Window 耗尽或大量计划失效才触发 Replan（FR-15）；上述�
 
 结构化生成是独立 request/validated-result 概念，raw JSON-looking text 不等于验证结果；C-005C 才实现验证/重试。流为 provider-neutral typed async events，取消使用标准 asyncio。Refusal 是成功 round-trip 的独立结果，usage 是 factual token data，price/cost 是 C-005D 的配置政策。凭据只通过 SecretRef/CredentialProvider seam 引用，不写入 prompt、normal logs、canonical 项目数据或 `.lwcontent`。
 
-当前提供确定性内存 fake 和 C-005B 的 non-streaming text Chat Completions HTTP adapter；后者只经离线 OpenAI/DeepSeek 契约 fixtures 验证，未进行真实提供方调用或 production default wiring。没有 provider SDK、Prompt assembly、路由/预算执行或使用记录表。详见 [LLM_INFRASTRUCTURE.md](LLM_INFRASTRUCTURE.md) 和 [OPENAI_COMPATIBLE_ADAPTER.md](OPENAI_COMPATIBLE_ADAPTER.md)。
+当前已接入 OpenAI-compatible、Anthropic Messages、Gemini Interactions、OpenAI Responses 四类 adapter，含普通/流式、结构化处理、提示组装、路由、硬额度与使用账本。C-005B 的离线 fixtures 仅是该阶段证据，不代表当前模型兼容或运行验收。详见 [LLM_INFRASTRUCTURE.md](LLM_INFRASTRUCTURE.md) 和 [OPENAI_COMPATIBLE_ADAPTER.md](OPENAI_COMPATIBLE_ADAPTER.md)。

@@ -5,14 +5,19 @@ import json
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import and_, func, or_, select, update
+from sqlalchemy import and_, case, func, or_, select, update
 
 from livingworld.application.chat_event_annotations import ChatEventAnnotation
 from livingworld.application.director import DirectorError
 from livingworld.application.errors import EntityNotFoundError
 from livingworld.application.llm import LLMMessage, MessageRole, TextContent
 from livingworld.application.lore_activation import select_common_background
-from livingworld.application.world_story import BATCH_SIZE, MAX_PENDING, WorldStoryError
+from livingworld.application.world_story import (
+    ACTIVE_NEWS_LIMIT,
+    BATCH_SIZE,
+    MAX_PENDING,
+    WorldStoryError,
+)
 from livingworld.domain.identifiers import PlayerId, WorldId
 from livingworld.infrastructure.persistence.director_background import (
     background_is_current,
@@ -93,7 +98,9 @@ async def _news_background(session, world):
     return background
 
 
-async def record_chat_events(session, message, player, events, learned_world_time=None):
+async def record_chat_events(
+    session, message, player, events, learned_world_time=None, *, delivered_invitation=False
+):
     # Runs inside the completed-message transaction. IDs never come from a model.
     if not events:
         return
@@ -128,7 +135,11 @@ async def record_chat_events(session, message, player, events, learned_world_tim
         # Exact evidence de-duplication; do not claim semantic judgement without a
         # model. Source identity is stable; unreferenced daily statements use UTC day.
         key = [str(message.sender_character_id), item.kind, str(source), str(previous)]
-        if source is None:
+        if delivered_invitation:
+            # A separately authorized contact is a new invitation even if its
+            # wording repeats. This scope comes from the delivery code, not LLM data.
+            key += [str(message.message_id)]
+        elif source is None:
             key += [item.quote.strip(), item.time_text, message.created_at_utc.date().isoformat()]
         fingerprint = hashlib.sha256(json.dumps(key, ensure_ascii=False).encode()).hexdigest()
         if await session.scalar(
@@ -164,6 +175,26 @@ async def record_chat_events(session, message, player, events, learned_world_tim
             )
         )
     await session.flush()
+
+
+async def record_contact_invitation(session, message, player, name, learned_world_time=None):
+    """A delivered invitation is a reported message, never an accepted activity."""
+    if not 3 <= len(message.text) <= 1000:
+        return  # Optional metadata must not reject an otherwise valid message.
+    await record_chat_events(
+        session,
+        message,
+        player,
+        (
+            ChatEventAnnotation(
+                kind="invitation",
+                title=(name + "的邀请")[:80],
+                quote=message.text,
+            ),
+        ),
+        learned_world_time,
+        delivered_invitation=True,
+    )
 
 
 class SqlAlchemyWorldStoryStore:
@@ -308,6 +339,12 @@ class SqlAlchemyWorldStoryStore:
                     .where(Candidate.world_id == world.value, Candidate.state == "published")
                     .order_by(
                         (Mark.state.is_(None) | (Mark.state == "pending")).desc(),
+                        case(
+                            (
+                                Mark.state.is_(None) | (Mark.state == "pending"),
+                                Candidate.occurred_at,
+                            )
+                        ).asc(),
                         Candidate.occurred_at.desc(),
                         Candidate.entry_id.desc(),
                     )
@@ -781,8 +818,24 @@ class WorldNewsKernelRepository:
             )
             .values(state="cancelled")
         )
-        if config.next_publish_at is not None and now < config.next_publish_at:
-            return None, config.next_publish_at
+        active = await self.session.scalar(
+            select(func.count())
+            .select_from(Candidate)
+            .outerjoin(
+                Mark,
+                (Mark.world_id == Candidate.world_id)
+                & (Mark.entry_id == Candidate.entry_id)
+                & (Mark.player_id == config.player_id),
+            )
+            .where(
+                Candidate.world_id == world.value,
+                Candidate.state == "published",
+                or_(Mark.state.is_(None), Mark.state == "pending"),
+            )
+        )
+        if active >= ACTIVE_NEWS_LIMIT:
+            config.next_publish_at = None
+            return None, None
         row = await self.session.scalar(
             select(Candidate)
             .join(
@@ -796,7 +849,7 @@ class WorldNewsKernelRepository:
                 Batch.player_id == config.player_id,
                 Batch.state == "ready",
             )
-            .order_by(Candidate.shuffle_key)
+            .order_by(Candidate.available_from, Batch.created_at, Candidate.entry_id)
             .limit(1)
         )
         if row is None:
@@ -849,9 +902,9 @@ class WorldNewsKernelRepository:
     async def published(self, row, config, event):
         row.state, row.event_id = "published", event.event_id.value
         row.published_at, row.occurred_at = event.created_at, event.occurred_at.microseconds
-        # Stable random delay (15..45 world minutes), persisted once; no catch-up burst.
-        delay = 15 + int(row.shuffle_key[:8], 16) % 31
-        config.next_publish_at = row.occurred_at + delay * MINUTE
+        # Capacity replaces the former random delay. Availability/expiry still
+        # gate each candidate; publication time is always the actual current time.
+        config.next_publish_at = row.occurred_at
         self.session.add(
             Mark(
                 world_id=row.world_id,

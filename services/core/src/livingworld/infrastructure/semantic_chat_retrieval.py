@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import heapq
 import sys
 from collections import OrderedDict
 from pathlib import Path
@@ -13,6 +14,7 @@ from livingworld.infrastructure.local_vector_cache import LocalVectorCache
 
 MODEL = "BAAI/bge-small-zh-v1.5"
 MODEL_SHA = "1294ea4b6331115a353d81f96b85e8c8d7fdcc284453d5b2fab5b016230aad38"
+VECTOR_MODEL_VERSION = f"{MODEL_SHA}:2000:512"
 MAX_INDEX_REFERENCES = 8192
 PREFIX = "为这个句子生成表示以用于检索相关文章："
 _native_ready: bool | None = None
@@ -93,12 +95,17 @@ class HybridChatRecallRanker(Fts5ChatRecallRanker):
         return result if result is not None else ((), (), True)
 
     async def rank_with_mode(self, queries, candidates, *, limit):
+        result, mode, _payloads = await self.rank_with_index(queries, candidates, limit=limit)
+        return result, mode
+
+    async def rank_with_index(self, queries, candidates, *, limit):
         lexical = await super().rank_queries(queries, candidates, limit=max(32, limit * 4))
         if not candidates:
-            return (), "keyword"
-        semantic = await self._worker(self._semantic, queries, candidates)
+            return (), "keyword", ()
+        indexed = await self._worker(self._semantic_with_index, queries, candidates)
+        semantic, payloads = indexed if indexed is not None else (None, ())
         if semantic is None:
-            return lexical[:limit], "keyword_fallback"
+            return lexical[:limit], "keyword_fallback", payloads
         scores, items = {}, {}
         semantic, partial = semantic
         for result in (lexical, semantic):
@@ -114,7 +121,95 @@ class HybridChatRecallRanker(Fts5ChatRecallRanker):
             if partial
             else "hybrid"
         )
-        return tuple(items[key] for key in ordered), mode
+        return tuple(items[key] for key in ordered), mode, payloads
+
+    def _semantic_with_index(self, queries, candidates):
+        for item in candidates:
+            payload = getattr(item, "vector_payload", None)
+            if (
+                item.index_key
+                and payload is not None
+                and payload[:32] == hashlib.sha256(item.text[:2000].encode()).digest()
+                and self._decode(payload) is not None
+            ):
+                self._vectors[item.index_key] = payload
+        result = self._semantic(queries, candidates)
+        # Only this completed worker's freshly authorized candidates can be saved.
+        payloads = tuple(
+            (item.index_key, self._vectors[item.index_key])
+            for item in candidates
+            if item.index_key in self._vectors
+        )
+        return result, payloads
+
+    async def historical_vectors(self, queries, batches, *, limit=24):
+        """Stream all eligible indexed sources; keep only the best sixteen per query."""
+        if self._unavailable:
+            return (), True
+        heaps, partial = [[] for _ in queries[:3]], False
+
+        async def collect():
+            nonlocal partial
+            prepared = await self._worker(self._query_embeddings, queries)
+            if prepared is None:
+                partial = True
+                return
+            async for batch in batches:
+                scored = await self._worker(self._vector_batch_scores, prepared, batch)
+                if scored is None:
+                    partial = True
+                    return
+                scores, invalid = scored
+                partial |= invalid
+                for query_index, values in enumerate(scores):
+                    for score, identity in values:
+                        value = (score, str(identity), identity)
+                        heap = heaps[query_index]
+                        if len(heap) < 16:
+                            heapq.heappush(heap, value)
+                        elif value[:2] > heap[0][:2]:
+                            heapq.heapreplace(heap, value)
+
+        try:
+            # Covers query encoding, every page read and scoring; no unbounded wait.
+            await asyncio.wait_for(collect(), timeout=3.0)
+        except TimeoutError:
+            partial = True
+        except Exception:
+            return (), True
+        finally:
+            await batches.aclose()
+        fused = {}
+        for query_index, heap in enumerate(heaps):
+            for rank, (_score, _key, identity) in enumerate(sorted(heap, reverse=True), 1):
+                fused[identity] = fused.get(identity, 0.0) + (2 if query_index == 0 else 1) / (
+                    60 + rank
+                )
+        return tuple(sorted(fused, key=lambda key: (-fused[key], str(key)))[:limit]), partial
+
+    def _vector_batch_scores(self, queries, rows):
+        import numpy as np
+
+        identities, vectors = [], []
+        for identity, payload in rows:
+            vector = self._decode(payload)
+            if vector is not None:
+                identities.append(identity)
+                vectors.append(vector)
+        if not vectors:
+            return [[] for _ in queries], bool(rows)
+        matrix = np.stack(vectors)
+        scores = []
+        for query in queries:
+            similarities = matrix @ query
+            scores.append(
+                [
+                    (float(similarities[index]), identities[index])
+                    for index in np.argsort(-similarities, kind="stable")[:16]
+                    if similarities[index] >= 0.8
+                ]
+            )
+        return scores, len(vectors) != len(rows)
 
     async def rank_queries(self, queries, candidates, *, limit):
         result, _mode = await self.rank_with_mode(queries, candidates, limit=limit)
@@ -166,6 +261,18 @@ class HybridChatRecallRanker(Fts5ChatRecallRanker):
             return {}
         matrix = np.stack(vectors)
         scores = {}
+        for query_index, vector in enumerate(self._query_embeddings(queries)):
+            similarities = matrix @ vector
+            for rank, index in enumerate(np.argsort(-similarities, kind="stable")[:16], 1):
+                if similarities[index] < 0.8:
+                    continue
+                identity = int(index)
+                scores[identity] = scores.get(identity, 0.0) + (2 if query_index == 0 else 1) / (
+                    60 + rank
+                )
+        return scores
+
+    def _query_embeddings(self, queries):
         prepared = [PREFIX + query[:2000] for query in queries[:3]]
         keys = [hashlib.sha256(query.encode()).digest() for query in prepared]
         missing = {
@@ -183,17 +290,7 @@ class HybridChatRecallRanker(Fts5ChatRecallRanker):
             self._query_vectors.move_to_end(key)
         while len(self._query_vectors) > 128:
             self._query_vectors.popitem(last=False)
-        for query_index, key in enumerate(keys):
-            vector = self._query_vectors[key]
-            similarities = matrix @ vector
-            for rank, index in enumerate(np.argsort(-similarities, kind="stable")[:16], 1):
-                if similarities[index] < 0.8:
-                    continue
-                identity = int(index)
-                scores[identity] = scores.get(identity, 0.0) + (2 if query_index == 0 else 1) / (
-                    60 + rank
-                )
-        return scores
+        return tuple(self._query_vectors[key] for key in keys)
 
     def _historical(self, queries, references, limit):
         self._cache.open()

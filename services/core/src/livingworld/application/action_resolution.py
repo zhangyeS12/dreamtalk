@@ -13,6 +13,7 @@ from livingworld.application.errors import (
     WorldRuntimeUnavailableError,
 )
 from livingworld.application.fingerprints import canonical_json, id_input
+from livingworld.application.idempotency import run_with_receipt_recovery
 from livingworld.application.player_movement import (
     apply_player_movement,
     player_moved_payload,
@@ -224,14 +225,12 @@ class ActionResolutionService:
         if self._mutation_barrier is not None:
             await self._mutation_barrier.assert_mutation_allowed(proposal.world_id)
         fingerprint = action_fingerprint(proposal)
-        try:
-            return await self._execute(request_id, proposal, fingerprint)
-        except IdempotencyConflictError:
-            async with self._uow_factory() as uow:
-                existing = await uow.receipts.existing_action(request_id, fingerprint)
-                if existing is not None:
-                    return replace(existing, replayed=True)
-            raise
+        return await run_with_receipt_recovery(
+            lambda: self._execute(request_id, proposal, fingerprint),
+            self._uow_factory,
+            lambda uow: uow.receipts.existing_action(request_id, fingerprint),
+            (IdempotencyConflictError,),
+        )
 
     async def _execute(
         self, request_id: RequestId, proposal: ActionProposal, fingerprint: str

@@ -1,6 +1,6 @@
 # Canonical Content Model — C-004A / C-004C1
 
-状态：Stage 3 的标准库内容模型、确定性 canonical JSON、独立 SQLite 内容库及 Character Card adapter 已建立。C-004C1 新增 LoreCollection、typed 内容引用、Lorebook 离线导入/规范化和 legacy 归属兼容。C-004D1 新增独立外部 JSON export；C-004D2 新增 `.lwcontent`、immutable asset blob store、独立本地 accepted baseline 与 WorldContent 集合引用。Builder、LLM、lore 运行激活、prompt assembly、运行时实例化和最终 UI 尚未实现。
+状态（2026-10-07）：独立 authored 内容模型、卡/书导入与导出、原生 .lwcontent 包、资产和 accepted baseline 已实现。手动编辑、联网摘要辅助 Builder、公共 Lore 激活、提示组装及首次开聊创建/复用运行 Character 也已接线，见[状态清单](../PROJECT_STATUS.md)。导入/保存定义本身仍不实例化运行角色或写世界事实；完整运行 World Builder、持续来源更新与 runtime .lworld 仍未实现。下文 C-004 阶段验收保留历史语境。
 
 ```text
 Imported Content != Runtime State
@@ -85,4 +85,4 @@ V3 ContentAsset 只保存 descriptor/reference 元数据。PNG/APNG icon 的 ccd
 
 外部 JSON export 见 [EXPORT_MODEL.md](EXPORT_MODEL.md)：当前 canonical known fields 优先于旧 source，same-format unknown 保留与跨格式 loss 分开；原始 bytes retrieval 不变，多集合不隐式 merge。V3 use_regex 未指定时必须显式 caller policy；secondary_keys 保持 array；ST comment 使用 canonical comment，独立 title 发出损失警告。export 不修改内容对象、revision 或 runtime。
 
-原生 authored-content layout/blob store 见 [NATIVE_CONTENT_PACKAGE.md](NATIVE_CONTENT_PACKAGE.md)。accepted baseline 是独立本地冲突证据，不参加 canonical semantic_hash、不导出。native snapshot acceptance 保留包内 revision；日常编辑仍严格 next revision。`.lworld` runtime package 与 asset image decoding/materialization workflow 仍 deferred。初始知识分配、运行实例与定义版本绑定、产品级重复导入/冲突展示、Builder 来源评价和编辑历史仍未实现。
+原生 authored-content layout/blob store 见 [NATIVE_CONTENT_PACKAGE.md](NATIVE_CONTENT_PACKAGE.md)。accepted baseline 是独立本地冲突证据，不参加 canonical semantic_hash、不导出。native snapshot acceptance 保留包内 revision；日常编辑仍严格 next revision。`.lworld` runtime package 仍 deferred。本地封面/头像图片处理、运行角色稳定绑定、重复导入冲突预览及 Builder 来源/冲突草稿已有产品流程；完整来源全文核验、自动初始知识分配和通用编辑历史仍未实现，具体限制见当前状态清单。

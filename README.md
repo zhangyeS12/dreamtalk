@@ -12,7 +12,7 @@ All engineering agents must read AGENTS.md before modifying the repository.
 
 这是未签名的 **预发布体验版**，没有自动更新，尚无最新版整体验收结论。更新前从旧版托盘退出程序并备份重要应用数据。详细操作、升级和反馈方式见 [Windows 便携版说明](docs/PORTABLE_WINDOWS.md)。
 
-当前逐项完成度、待验收、明确限制与接续顺序见 [当前状态清单](docs/PROJECT_STATUS.md)；工作规则见 [AGENTS.md](AGENTS.md)，模块入口与最新 0.1.37 切片与产物状态见 [HANDOFF.md](HANDOFF.md)。以下架构介绍不替代当前进度清单。
+当前逐项完成度、待验收、明确限制与接续顺序见 [当前状态清单](docs/PROJECT_STATUS.md)；工作规则见 [AGENTS.md](AGENTS.md)，模块入口、0.1.40本地反馈修复包、前序0.1.38／39包与0.1.37公开产物状态见 [HANDOFF.md](HANDOFF.md)。以下架构介绍不替代当前进度清单。
 
 ## 项目定位
 
@@ -20,7 +20,7 @@ dreamtalk 是持久化、事件驱动的多角色 AI 世界，不是普通聊天
 
 ## 开发状态
 
-截至2026-10-07，当前Desktop源码为 **0.1.37**，对应 `v0.1.37` 观星室体验版；用户已授权源码推送、公开仓库与便携包发布，处于 **产品体验与验收阶段**，仍未完成最终产品发行。世界内界面、长期聊天记忆/混合RAG、日常/相遇/共同休闲、在线与同目的双人主动联系、阵营/头像/三维关系网已有实现；具体已完成、待验收和未实现见状态清单，不从以下历史Stage介绍推断未完成。C-007A 的情景记忆基础已完成：Character 可从自身已授权 Observation 显式形成不可变、带证据的 EpisodicMemory，并由 owner-scoped 查询读取。Observation 不自动创建 Memory；Memory 不授予 Truth、Knowledge 或 Belief，也不进入 authored content package 或 projection replay。详见 [Episodic Memory](docs/architecture/EPISODIC_MEMORY.md) 与 [Memory Model](docs/architecture/MEMORY_MODEL.md)。
+截至2026-10-07，当前Desktop源码为 **0.1.40**；本次源码同步包含0.1.38代码去重／文档维护、0.1.39持久全文索引／历史向量分页／200条聊天窗口，以及0.1.40通讯录空间、条件邀约与5条世界动态窗口修复。同步范围见[记录](docs/maintenance/2026-10-07-github-source-sync.md)，前轮检查与本地build-only证据见[长历史维护](docs/maintenance/2026-10-07-long-history-recall.md)和[反馈修复](docs/maintenance/2026-10-07-experience-feedback.md)。用户已确认本轮CCv2角色卡／World Info JSON世界书外部导入通过并授权推送当前源码；其他具体待验收项保持。**GitHub公开便携下载仍为0.1.37，本次不更新Release附件。** 项目处于产品体验与验收阶段，仍未完成最终发行；长期记忆／本地RAG、日常／相遇／共同休闲、在线与同目的双人主动联系、阵营／头像／三维关系网已有实现，具体已完成、待验收和未实现见状态清单，不从以下历史Stage介绍推断未完成。C-007A的情景记忆基础已完成：Character可从自身已授权Observation显式形成不可变、带证据的EpisodicMemory，并由owner-scoped查询读取。Observation不自动创建Memory；Memory不授予Truth、Knowledge或Belief，也不进入authored content package或projection replay。详见[Episodic Memory](docs/architecture/EPISODIC_MEMORY.md)与[Memory Model](docs/architecture/MEMORY_MODEL.md)。
 
 Q-001B 提供仅开发环境启用的 [开发者运行时检查器](docs/architecture/RUNTIME_INSPECTOR.md)，用于通过真实 API/application 路径观察时钟、位置、Scene、trigger、activation、WorldEvent、Observation 与 owner-scoped EpisodicMemory。它不是最终产品 UI，也没有加入 Activation consumer 或自动 Observation→Memory。
 

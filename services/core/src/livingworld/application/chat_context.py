@@ -23,7 +23,7 @@ from livingworld.application.chat_recall import EarlierChatRecall
 from livingworld.application.conversation_memory import ConversationSummaryReader
 from livingworld.application.errors import EntityNotFoundError
 from livingworld.application.llm import LLMMessage, MessageRole, TextContent
-from livingworld.application.local_profile import LocalProfileStore
+from livingworld.application.local_profile import LocalProfile, LocalProfileStore
 from livingworld.application.long_chat_memory import LONG_MEMORY_GROUNDING_INSTRUCTIONS
 from livingworld.application.lore_activation import select_common_background
 from livingworld.application.observed_events import (
@@ -185,7 +185,29 @@ class DirectChatContext:
     layout: ContextLayout | None = None
 
 
-class DirectChatContextBuilder:
+def character_chat_persona(owner: CharacterId, character: CharacterDefinition) -> dict:
+    return {
+        "id": str(owner.value),
+        "name": character.display_name,
+        "description": character.description,
+        "personality": character.personality,
+        "background": character.background,
+        "scenario": character.scenario,
+        "speech_guidance": character.speech_guidance,
+        "example_dialogue": list(character.example_dialogue),
+    }
+
+
+def player_chat_persona(general: LocalProfile, world: LocalProfile) -> dict:
+    return {
+        "general": {"name": general.name, "description": general.description},
+        "current_world": {"name": world.name, "description": world.description},
+    }
+
+
+class ChatContextSources:
+    """Shared dependencies; each builder still validates its own conversation scope."""
+
     def __init__(
         self,
         conversations: ChatConversationService,
@@ -213,6 +235,8 @@ class DirectChatContextBuilder:
         self._long_memory = long_memory
         self._social_reader = social_reader
 
+
+class DirectChatContextBuilder(ChatContextSources):
     async def build(self, sent: PlayerSend) -> DirectChatContext:
         conversation_id = sent.message.conversation_id
         conversations = await self._conversations.list_for_world(conversation_id.world_id)
@@ -239,20 +263,8 @@ class DirectChatContextBuilder:
             raise EntityNotFoundError("chat_sender_invalid")
         memories = await private_chat_memories(self._memory_reader, conversation.character_id)
         persona = {
-            "character": {
-                "id": str(conversation.character_id.value),
-                "name": character.display_name,
-                "description": character.description,
-                "personality": character.personality,
-                "background": character.background,
-                "scenario": character.scenario,
-                "speech_guidance": character.speech_guidance,
-                "example_dialogue": list(character.example_dialogue),
-            },
-            "player": {
-                "general": {"name": general.name, "description": general.description},
-                "current_world": {"name": world.name, "description": world.description},
-            },
+            "character": character_chat_persona(conversation.character_id, character),
+            "player": player_chat_persona(general, world),
             "character_memories": memories,
             "known_faction_contacts": (
                 await self._social_reader(conversation.character_id)

@@ -11,6 +11,8 @@ import sys
 import zipfile
 from pathlib import Path
 
+from portable_docs import copy_portable_docs
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -97,7 +99,7 @@ def main() -> None:
     shutil.copy2(root / "docs" / "licenses" / "jieba-0.42.1.txt", package / "JIEBA_LICENSE.txt")
     shutil.copytree(root / "docs" / "licenses", package / "third-party-licenses")
     shutil.copy2(root / "docs" / "PORTABLE_WINDOWS.md", package / "README.md")
-    shutil.copytree(root / "docs", package / "docs")
+    copy_portable_docs(root, package)
     if not args.build_only:
         environment = os.environ.copy()
         environment["DREAMTALK_PACKAGED_CORE_ROOT"] = str(package)

@@ -1,5 +1,7 @@
 # Q-001 Codebase Audit
 
+> 2026-10-07接续：以下为原阶段审查记录。当前维护已收拢A007的回滚后回执恢复、A009的16组版本集合、A010的通用错误/凭据处理，并消除A014生产空回调的线程任务；其余业务分派、域结构校验、各类型编码器和全量回放仍保留。见[维护记录](../maintenance/2026-10-07-code-and-docs.md)，不把历史DEFER统一当作当前未处理，也不宣称全部清零。
+
 Status: **Q-001A blocking decisions resolved; Inspector remains a separate task**
 
 Audit baseline: `880032c522e9eca941b10ff2d04954e69f506519`

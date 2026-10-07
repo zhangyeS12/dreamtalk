@@ -73,13 +73,20 @@ export function WorldEventJournal({ client, worldId, witnessed, onTopic, display
   }
 
   const topic = (item: PublicNewsEntry) => onTopic({ event_id: item.event_id, title: item.title, description: item.body, occurred_at: item.occurred_at, observed_at: item.occurred_at, ledger_position: 0 });
+  const pendingNews = entries?.news.filter(item => item.state === "pending") ?? [];
+  const activeNews = pendingNews.slice(0, 5);
+  const newsHistory = entries?.news.filter(item => item.state !== "pending") ?? [];
+  const renderNews = (item: PublicNewsEntry) => <li key={item.entry_id} className={`event-item news-item news-${item.state}`}>
+    <div className="news-copy"><strong>{item.title}</strong><p>{item.body}</p><small>发布于 {displayTime(item.occurred_at)}</small>{item.time_text && <small>活动时间：{item.time_text}</small>}<button type="button" className="text-action" onClick={() => topic(item)}>聊聊这件事</button></div>
+    <div className="news-marks" role="group" aria-label={`经历状态：${item.title}`}>{(["pending", "experienced", "skipped"] as NewsMark[]).map(mark => <button type="button" key={mark} className={`news-mark mark-${mark}`} aria-pressed={item.state === mark} disabled={busy || item.state === mark} onClick={() => void act(() => client.markWorldNews(worldId, item, mark))}>{marks[mark]}</button>)}</div>
+  </li>;
   return <div className="world-journal">
     <div className="journal-refresh"><p>历史记录有时间范围，旧消息不代表角色此刻仍在做同一件事。</p><button type="button" className="secondary-button" disabled={busy} onClick={() => void refresh()}>刷新事件</button></div>
     {(error || loadError) && <p role="alert" className="product-error">{error || loadError}</p>}
     <section aria-labelledby="chat-events-title"><h3 id="chat-events-title">聊天获知</h3><p className="inline-hint">来自角色告诉你的活动、计划、传闻和邀请。保留原话与获知时间；计划和传闻需要你核对。</p>
       {!entries ? <p>正在读取……</p> : entries.chat.length === 0 ? <p className="thread-hint">还没有从聊天中记录事件。普通寒暄不会记录，旧聊天不会自动补录。</p> : <ol className="event-list">{entries.chat.map((item, index) => <Fragment key={item.entry_id}>{index === 0 || transcriptDay(entries.chat[index - 1].learned_at) !== transcriptDay(item.learned_at) ? <li className="journal-day"><h4>{transcriptDay(item.learned_at)}</h4></li> : null}<li className="event-item">
         <div className="journal-entry-heading"><strong>{item.title}</strong><span>{kinds[item.kind]} · {item.character_name}</span></div>
-        <blockquote>{item.quote}</blockquote><small>获知时间：<time dateTime={item.learned_at}>{new Date(item.learned_at).toLocaleString()}</time></small><small>获知时的世界时间：{item.learned_world_time !== null ? displayTime(item.learned_world_time) : "未记录"}</small><small>事件时间（原话）：{item.time_text || "原话未明确时间"}</small>
+        <blockquote>{item.quote}</blockquote><small>获知时间：<time dateTime={item.learned_at}>{new Date(item.learned_at).toLocaleString()}</time></small><small>获知时的世界时间：{item.learned_world_time !== null ? displayTime(item.learned_world_time) : "未记录"}</small><small>事件时间（原话）：{item.time_text || "未提取时间，请查看原话"}</small>
         {entries.chat.some(newer => newer.updates_entry_id === item.entry_id) && <small>后来有变更记录；此条保留当时的信息。</small>}
         {item.updates_entry_id && <small>关联旧记录：{entries.chat.find(old => old.entry_id === item.updates_entry_id)?.title || "较早的计划"}；旧记录保留。</small>}
         {item.correction && <p className="inline-hint">我的批注：{item.correction}</p>}
@@ -88,13 +95,14 @@ export function WorldEventJournal({ client, worldId, witnessed, onTopic, display
         {editing?.entry_id === item.entry_id && <form onSubmit={event => { event.preventDefault(); void act(() => client.correctChatStory(worldId, item, correction.trim() || null), undefined, { ...item, correction: correction.trim() || null, revision: item.revision + 1 }); }}><label className="field"><span>补充或纠正（保留原话，不修改原始聊天）</span><textarea maxLength={500} value={correction} onChange={event => setCorrection(event.target.value)} /></label><button type="submit" className="primary-button" disabled={busy}>保存批注</button><button type="button" className="text-action" disabled={busy} onClick={() => setEditing(null)}>取消</button></form>}
       </li></Fragment>)}</ol>}
       {entries?.next_before && <button type="button" className="secondary-button" disabled={busy} onClick={() => void older()}>读取更早记录</button>}
+    </section>
+    <section aria-labelledby="witnessed-events-title"><h3 id="witnessed-events-title">亲历记录</h3><p className="inline-hint">来自你有权亲历的真实活动，每次开始和结束分别记录。同一角色在不同世界时间开始休息，会留下不同记录。</p>
       <details className="witnessed-events"><summary>我亲历的活动记录（{witnessed.length}）</summary><ol className="event-list">{witnessed.map(item => <li key={item.event_id} className="event-item"><time>{displayTime(item.occurred_at)}</time><strong>{item.title}</strong>{item.description && <p>{item.description}</p>}<small>获知于 {displayTime(item.observed_at)}</small><button type="button" className="text-action" onClick={() => onTopic(item)}>聊聊这件事</button></li>)}</ol></details>
     </section>
-    <section aria-labelledby="public-events-title"><h3 id="public-events-title">世界动态</h3><p className="inline-hint">公共动态分批生成、逐条发布。由你标记经历情况；显示出来不会自动变绿。每批达到 80% 的“已经历／跳过”后补充一批。</p>
-      {!entries ? <p>正在读取……</p> : entries.news.length === 0 ? <p className="thread-hint">还没有已发布动态。先在设置中确认世界书的公共背景，再开启“世界动态事件池”。</p> : <ol className="event-list">{entries.news.map(item => <li key={item.entry_id} className={`event-item news-item news-${item.state}`}>
-        <div className="news-copy"><strong>{item.title}</strong><p>{item.body}</p><small>发布于 {displayTime(item.occurred_at)}</small>{item.time_text && <small>活动时间：{item.time_text}</small>}<button type="button" className="text-action" onClick={() => topic(item)}>聊聊这件事</button></div>
-        <div className="news-marks" role="group" aria-label={`经历状态：${item.title}`}>{(["pending", "experienced", "skipped"] as NewsMark[]).map(mark => <button type="button" key={mark} className={`news-mark mark-${mark}`} aria-pressed={item.state === mark} disabled={busy || item.state === mark} onClick={() => void act(() => client.markWorldNews(worldId, item, mark))}>{marks[mark]}</button>)}</div>
-      </li>)}</ol>}
+    <section aria-labelledby="public-events-title"><h3 id="public-events-title">世界动态</h3><p className="inline-hint">按时间顺序展示，最多 5 条进行中。标绿（已经历）或标灰（跳过）后，从储备中补位；标红继续占位。每批 10 条中处理 8 条后补充新批，未到时间或过期的动态不会提前补发。</p>
+      {!entries ? <p>正在读取……</p> : activeNews.length === 0 ? <p className="thread-hint">暂无进行中的动态。储备会在允许发布的时间补入；可在设置中查看世界动态事件池。</p> : <ol className="event-list">{activeNews.map(renderNews)}</ol>}
+      {pendingNews.length > 5 && <p className="inline-hint">另有 {pendingNews.length - 5} 条先前已发布的动态等待展示，处理当前消息后依次补入。</p>}
+      {newsHistory.length > 0 && <details className="news-history"><summary>已经历／跳过的动态（{newsHistory.length}）</summary><ol className="event-list">{newsHistory.map(renderNews)}</ol></details>}
     </section>
     {source && <SourceMessageDialog key={`${worldId}:${source.conversation_id}:${source.message_id}`} client={client} worldId={worldId} conversationId={source.conversation_id} messageId={source.message_id} characters={[{ character_id: source.character_id, character_name: source.character_name }]} onClose={() => setSource(null)} />}
   </div>;

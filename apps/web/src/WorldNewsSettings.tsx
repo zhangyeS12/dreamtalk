@@ -67,7 +67,7 @@ export function WorldNewsSettings({ client, worldId, visible, paused, onNavigate
   }
   const state = status?.state;
   const guidance = newsGuidance(status, paused, loadError, status?.error ? errors[status.error] ?? "事件池暂不可用，请刷新后检查设置。" : "");
-  return <section className="settings-section"><div className="section-heading"><h2>世界动态事件池</h2><p>根据已确认的公共世界书背景，每次生成10条动态；首条就绪后发布，其余在有效时段内随机逐条发布，通常间隔15～45分钟世界时间。</p></div>
+  return <section className="settings-section"><div className="section-heading"><h2>世界动态事件池</h2><p>根据已确认的公共世界书背景，每次生成10条动态。按可发布时间先后补入，最多5条进行中；标绿或标灰后补位，标红继续占位，其余保留在储备中。</p></div>
     <div className="setting-row"><span><strong>当前生成模型</strong><small>{status?.model ? `使用 ${status.model}` : status ? "尚未配置模型" : "正在核对模型…"}</small></span><button type="button" className="secondary-button" disabled={busy} onClick={() => { void refresh().then(ok => { if (ok === true && alive.current) { setOperationError(""); setNotice("已读取最新状态，未生成动态或重新提交设置。"); } }); }}>刷新状态</button></div>
     <BackgroundTaskFeedback name="世界动态" guidance={guidance} onNavigate={onNavigate} disabled={busy} />
     {status && <p>待发布 {status.pending} 条；最近一批已处理 {status.batch_processed}／{status.batch_total} 条。达到8／10时自动补充下一批，旧的未经历动态仍保留。</p>}
