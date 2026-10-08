@@ -1,0 +1,45 @@
+.location-manager { padding: 1.2rem 1.4rem; border-top: 1px solid var(--line); }
+.location-manager-heading { display: flex; justify-content: space-between; align-items: start; gap: 1rem; margin-bottom: 1.2rem; }
+.location-manager-heading h2, .location-editor h3, .character-location-editor h3 { margin: 0 0 .4rem; font-size: 1.05rem; }
+.location-manager-heading p { margin: 0; font-size: .88rem; color: var(--muted); }
+.location-editor-grid { display: grid; grid-template-columns: minmax(14rem, 1fr) minmax(20rem, 2fr); gap: 1.6rem; }
+.location-catalog { max-height: 31rem; overflow-y: auto; border-right: 1px solid var(--line); padding-right: 1rem; }
+.location-catalog-row { display: grid; gap: .35rem; width: 100%; text-align: left; border: 0; background: transparent; padding: .9rem; border-radius: .4rem; color: inherit; overflow-wrap: anywhere; }
+.location-catalog-row small { color: var(--muted); }
+.location-catalog-row.selected, .location-catalog-row:hover { background: #91a9cd18; }
+.location-catalog-row:disabled { opacity: .55; cursor: default; }
+.location-editor { display: grid; gap: 1.1rem; align-content: start; }
+.location-editor .field, .character-location-editor .field { max-width: none; width: 100%; }
+.location-editor input:not([type="checkbox"]), .location-editor select, .character-location-editor select { width: 100%; }
+.location-check { display: flex; gap: .7rem; align-items: start; line-height: 1.6; cursor: pointer; }
+.location-check input { width: 1.15rem; height: 1.15rem; margin: .2rem 0 0; flex: none; accent-color: #d9c398; }
+.location-check span { display: grid; gap: .3rem; }
+.location-check small { color: var(--muted); }
+.location-access { margin: 0; border: 1px solid var(--line); padding: 1rem; border-radius: .4rem; display: grid; gap: .65rem; }
+.location-access legend { padding: 0 .4rem; }
+.character-location-editor { display: grid; gap: 1rem; padding: 1.5rem 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); margin: 1.4rem 0; }
+.location-current { margin: 0; color: #b8cbea; font-size: .85rem; }
+.location-map-stage { position: relative; min-height: 38rem; height: min(76vh, 56rem); background: #0b101b; overflow: hidden; color: #e6ecf5; }
+.location-map { width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
+.location-map:active { cursor: grabbing; }
+.location-region { fill: #91add40a; stroke: #94aacb5a; stroke-width: 1.5px; }
+.location-region.depth-2 { fill: #a5bfd411; stroke: #a5bfd479; }
+.location-region.depth-3 { fill: #c2cdd016; stroke: #b4c5d89a; }
+.location-region.hidden-place { stroke-dasharray: 7 5; stroke: #d9c39899; fill: #d9c39808; }
+.location-map-label { fill: #b5c6df; pointer-events: none; font-weight: 500; }
+.location-map-person { cursor: pointer; outline: none; }
+.location-map-person circle { fill: #283344; stroke: #b6cbe2; stroke-width: 2px; }
+.location-map-person text { fill: #e8eefa; pointer-events: none; }
+.location-map-person:hover circle, .location-map-person:focus-visible circle, .location-map-person.selected circle { stroke: #e2c68d; stroke-width: 4px; }
+.location-map-person.selected image { opacity: .85; }
+.location-map-caption { position: absolute; top: 1.15rem; left: 1.3rem; display: grid; gap: .4rem; pointer-events: none; font-size: .8rem; color: #9badc6; }
+.location-map-caption strong { font-size: 1.1rem; color: #e8ecf3; }
+.location-map-controls { position: absolute; bottom: 1rem; left: 1.3rem; display: flex; gap: .4rem; }
+.location-map-controls button, .location-unplaced button { border: 1px solid #8099bf50; background: #182233; color: #d0def0; padding: .5rem .7rem; border-radius: .35rem; }
+.location-focus-panel { background: #192333; border: 1px solid #d9c39840; }
+.location-route { line-height: 1.6; overflow-wrap: anywhere; color: #e4d1a8; }
+.location-unplaced { position: absolute; top: 1rem; right: 1.2rem; max-width: 45%; display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; font-size: .75rem; color: #9badc6; }
+.location-unplaced button { padding: .3rem .55rem; }
+.location-map-empty { position: absolute; top: 45%; left: 0; right: 0; text-align: center; }
+@media (max-width: 800px) { .location-editor-grid { grid-template-columns: 1fr; }.location-catalog { max-height: 12rem; border-right: 0; border-bottom: 1px solid var(--line); }.location-focus-panel { width: min(16rem, 55%); }.location-unplaced { max-width: 55%; top: 5.5rem; }.location-map-stage { min-height: 34rem; } }
+@media (prefers-reduced-motion: reduce) { .location-focus-panel { animation: none; } }

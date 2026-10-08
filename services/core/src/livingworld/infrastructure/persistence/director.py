@@ -29,6 +29,7 @@ from livingworld.infrastructure.persistence.encounter_models import (
 )
 from livingworld.infrastructure.persistence.encounter_policy import pacing_rejection
 from livingworld.infrastructure.persistence.factions import known_pairs
+from livingworld.infrastructure.persistence.location_rules import LocationRules, character_can_enter
 from livingworld.infrastructure.persistence.models import (
     CharacterRecord,
     CharacterStateRecord,
@@ -341,7 +342,18 @@ class SqlAlchemyDirectorStore(SharedDirectorMixin):
         if len(rows) > MAX_CHARACTERS or len(locations) > MAX_LOCATIONS:
             raise DirectorError("director_world_capacity")
         characters = []
+        rules = await LocationRules.load(session, world.value)
+        permitted_locations = set()
         for state, name in rows:
+            allowed = [
+                loc.location_id
+                for loc in locations
+                if await rules.allowed(session, world.value, state.character_id, loc.location_id)
+            ]
+            initial, locked, _ = await rules.scope(session, world.value, state.character_id)
+            if not allowed:
+                raise DirectorError("director_location_scope_unavailable")
+            permitted_locations.update(allowed)
             active_end = await session.scalar(
                 select(func.max(Candidate.end_at)).where(
                     Candidate.world_id == world.value,
@@ -354,6 +366,9 @@ class SqlAlchemyDirectorStore(SharedDirectorMixin):
                 "name": name,
                 "location_id": str(state.location_id),
                 "revision": state.revision,
+                "initial_location_id": str(initial),
+                "location_locked": locked,
+                "allowed_location_ids": [str(identity) for identity in allowed],
                 "available_from": max(now, active_end or now),
                 "available_from_minute": max(
                     0, ((active_end or now) - now + 59_999_999) // 60_000_000
@@ -366,10 +381,22 @@ class SqlAlchemyDirectorStore(SharedDirectorMixin):
             "window_end": now + WINDOW_US,
             "characters": characters,
             "locations": [
-                {"location_id": str(loc.location_id), "name": loc.name} for loc in locations
+                {
+                    "location_id": str(loc.location_id),
+                    "name": loc.name,
+                    "parent_id": str(rules.parents[loc.location_id])
+                    if rules.parents.get(loc.location_id) in permitted_locations
+                    else None,
+                }
+                for loc in locations
+                if loc.location_id in permitted_locations
             ],
         }
-        location_names = {str(loc.location_id): loc.name for loc in locations}
+        location_names = {
+            str(loc.location_id): loc.name
+            for loc in locations
+            if loc.location_id in permitted_locations
+        }
         # One synthetic planning context, not private chat or an omniscient history.
         # Include every character's name and own current place, not all destinations.
         planning_text = "\n".join(
@@ -742,6 +769,11 @@ class DirectorKernelRepository(SharedKernelMixin):
             or occurred_at.microseconds >= plan.window_end
         ):
             return None
+        if not await character_can_enter(
+            self.session, world.value, row.character_id, row.location_id
+        ):
+            self.invalidate(row, ActionRejectionReason.INVALID_DESTINATION)
+            return None
         return row
 
     async def occupied(self, character, now):
@@ -787,6 +819,14 @@ class DirectorKernelRepository(SharedKernelMixin):
         row = await self.session.get(Encounter, (world.value, candidate_id))
         if not row or row.state != "pending":
             return None, None
+        if not all(
+            [
+                await character_can_enter(self.session, world.value, character, row.location_id)
+                for character in (row.first_character_id, row.second_character_id)
+            ]
+        ):
+            row.state, row.reason = "invalid", "location_policy_changed"
+            return row, None
         config = await self.session.get(Settings, world.value)
         consent = await self.session.get(EncounterSettings, world.value)
         plan = await self.session.get(Plan, (world.value, row.plan_id))

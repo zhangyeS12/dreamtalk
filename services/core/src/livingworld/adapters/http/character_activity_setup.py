@@ -4,7 +4,7 @@ from collections.abc import Callable
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from livingworld.application.character_activity_setup import CharacterActivitySetupService
 from livingworld.application.errors import (
@@ -25,6 +25,12 @@ class InitialActivityRequest(BaseModel):
     location_id: UUID
 
 
+class CharacterLocationRequest(InitialActivityRequest):
+    locked: bool = False
+    expected_revision: int | None = Field(default=None, ge=0)
+    expected_policy_revision: int = Field(ge=0)
+
+
 def character_activity_setup_router(
     service: CharacterActivitySetupService, authorize: Callable[..., None]
 ) -> APIRouter:
@@ -41,6 +47,12 @@ def character_activity_setup_router(
                         "character_id": str(item.character_id.value),
                         "name": item.name,
                         "initialized": item.initialized,
+                        "root_import_id": item.root_import_id,
+                        "initial_location_id": item.initial_location_id,
+                        "current_location_id": item.current_location_id,
+                        "locked": item.locked,
+                        "revision": item.revision,
+                        "policy_revision": item.policy_revision,
                     }
                     for item in characters
                 ],
@@ -74,6 +86,40 @@ def character_activity_setup_router(
             raise HTTPException(409, str(error)) from None
         except ConcurrencyConflictError:
             raise HTTPException(409, "activity_initial_already_set") from None
+        except IdempotencyConflictError:
+            raise HTTPException(409, "activity_request_conflict") from None
+        except EntityNotFoundError:
+            raise HTTPException(404, "activity_target_unavailable") from None
+        except (WorldCatchingUpError, WorldRuntimeUnavailableError):
+            raise HTTPException(503, "world_runtime_unavailable") from None
+
+    @router.put("/worlds/{world_id}/activity-characters/{character_id}/location-policy")
+    async def configure(
+        world_id: UUID,
+        character_id: UUID,
+        body: CharacterLocationRequest,
+        x_request_id: str | None = Header(default=None),
+    ):
+        try:
+            request_id = RequestId.parse(x_request_id or "")
+        except ValueError:
+            raise HTTPException(400, "valid_request_id_required") from None
+        world = WorldId(world_id)
+        try:
+            await service.configure(
+                PlayerId(world, body.player_id),
+                CharacterId(world, character_id),
+                LocationId(world, body.location_id),
+                body.locked,
+                body.expected_revision,
+                request_id,
+                body.expected_policy_revision,
+            )
+            return {"character_id": str(character_id), "initialized": True}
+        except CharacterActivitySetupError as error:
+            raise HTTPException(409, str(error)) from None
+        except ConcurrencyConflictError:
+            raise HTTPException(409, "activity_presence_changed") from None
         except IdempotencyConflictError:
             raise HTTPException(409, "activity_request_conflict") from None
         except EntityNotFoundError:

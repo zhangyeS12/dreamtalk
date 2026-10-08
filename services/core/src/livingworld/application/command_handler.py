@@ -10,6 +10,7 @@ from livingworld.application.commands import (
     AcquireKnowledge,
     AssertWorldTruth,
     ChangeRelationship,
+    ConfigureLocation,
     CreateCharacter,
     CreateLocation,
     CreatePlayer,
@@ -59,6 +60,7 @@ from livingworld.domain.knowledge import (
     KnowledgeAssertion,
     KnowledgeScope,
     Observation,
+    ObservationBasis,
     ObservationChannel,
 )
 from livingworld.domain.participants import Character, CharacterState, Player, PlayerPresence
@@ -295,6 +297,12 @@ class CommandHandler:
                     raise EntityAlreadyExistsError("Location already exists")
                 if command.list_locally:
                     await uow.local_locations.check_new(command.world_id, command.name)
+                    await uow.local_locations.check_options(
+                        command.location_id,
+                        command.parent_id,
+                        command.hidden,
+                        command.allowed_characters,
+                    )
                 events = [
                     (
                         "LocationCreated",
@@ -311,6 +319,53 @@ class CommandHandler:
                     await uow.locations.add(location)
                     if command.list_locally:
                         await uow.local_locations.add(location.location_id, command.name)
+                        await uow.local_locations.configure(
+                            location.location_id,
+                            command.name,
+                            command.parent_id,
+                            command.hidden,
+                            command.allowed_characters,
+                        )
+
+            case ConfigureLocation():
+                before = await self._location(uow, world, command.location_id)
+                expect_revision(
+                    "Location", command.location_id, before.revision, command.expected_revision
+                )
+                await uow.local_locations.check_edit(command.location_id, command.name)
+                await uow.local_locations.check_options(
+                    command.location_id,
+                    command.parent_id,
+                    command.hidden,
+                    command.allowed_characters,
+                )
+                after = replace(
+                    before,
+                    name=command.name,
+                    revision=before.revision.advance(command.expected_revision),
+                )
+                events = [
+                    (
+                        "LocationUpdated",
+                        {
+                            "location_id": str(after.location_id.value),
+                            "before_name": before.name,
+                            "name": after.name,
+                            "revision": after.revision.value,
+                        },
+                    )
+                ]
+                reference, revision = after.location_id, after.revision
+
+                async def apply() -> None:
+                    await uow.locations.replace(after, command.expected_revision)
+                    await uow.local_locations.configure(
+                        after.location_id,
+                        command.name,
+                        command.parent_id,
+                        command.hidden,
+                        command.allowed_characters,
+                    )
 
             case CreatePlayer():
                 player = Player(world.world_id, command.player_id, command.name)
@@ -404,9 +459,17 @@ class CommandHandler:
             case PlaceCharacter():
                 same_world(world.world_id, command.character_id, command.location_id)
                 if command.activity_player_id is not None:
-                    await uow.local_locations.check_initial_activity(
-                        command.character_id, command.location_id, command.activity_player_id
-                    )
+                    if command.activity_configure:
+                        await uow.local_locations.check_character_config(
+                            command.character_id,
+                            command.location_id,
+                            command.activity_player_id,
+                            command.expected_location_policy_revision,
+                        )
+                    else:
+                        await uow.local_locations.check_initial_activity(
+                            command.character_id, command.location_id, command.activity_player_id
+                        )
                 if await uow.characters.get(command.character_id) is None:
                     raise EntityNotFoundError("Character does not exist")
                 await self._location(uow, world, command.location_id)
@@ -417,6 +480,39 @@ class CommandHandler:
                     before.revision if before else None,
                     command.expected_state_revision,
                 )
+                destination = command.location_id
+                if command.activity_configure:
+                    destination = await uow.local_locations.config_destination(
+                        command.character_id, command.location_id, command.activity_locked, before
+                    )
+                    if before and destination == before.location_id:
+
+                        async def apply_config() -> None:
+                            await uow.local_locations.configure_character(
+                                command.character_id, command.location_id, command.activity_locked
+                            )
+
+                        return await self._finish(
+                            uow,
+                            command,
+                            fingerprint,
+                            now,
+                            logical_time,
+                            [
+                                (
+                                    "CharacterLocationConfigured",
+                                    {
+                                        "character_id": str(command.character_id.value),
+                                        "initial_location_id": str(command.location_id.value),
+                                        "locked": command.activity_locked,
+                                        "revision": before.revision.value,
+                                    },
+                                )
+                            ],
+                            command.character_id,
+                            before.revision,
+                            apply_config,
+                        )
                 if before is not None:
                     await settle_routines(
                         uow,
@@ -431,9 +527,7 @@ class CommandHandler:
                     if before
                     else Revision()
                 )
-                state = CharacterState(
-                    world.world_id, command.character_id, command.location_id, revision
-                )
+                state = CharacterState(world.world_id, command.character_id, destination, revision)
                 events = [
                     (
                         "CharacterPlaced",
@@ -451,6 +545,22 @@ class CommandHandler:
 
                 async def apply() -> None:
                     await uow.characters.put_state(state, command.expected_state_revision)
+                    if command.activity_player_id is not None:
+                        await uow.local_locations.configure_character(
+                            command.character_id, command.location_id, command.activity_locked
+                        )
+                        await uow.observations.add(
+                            Observation(
+                                world.world_id,
+                                state.character_id,
+                                event_identity(command, 0),
+                                ObservationChannel.WITNESSED,
+                                logical_time,
+                                now,
+                                observation_id=ObservationId(world.world_id, uuid4()),
+                                basis=ObservationBasis.EVENT_OCCURRENCE,
+                            )
+                        )
                     if before is not None and before.location_id != state.location_id:
                         await uow.scenes.leave_active_for_principal(
                             state.character_id, logical_time

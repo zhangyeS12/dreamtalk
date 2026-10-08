@@ -10,6 +10,7 @@ from alembic import command
 from alembic.config import Config
 from sqlalchemy import CheckConstraint, Connection, MetaData, UniqueConstraint, inspect, text
 
+from livingworld.infrastructure.persistence import location_policy_models  # noqa: F401
 from livingworld.infrastructure.persistence.content_builder import (
     ContentBuilderJobRecord,  # noqa: F401
 )
@@ -90,7 +91,8 @@ ENCOUNTER_REVISION = "0033_character_encounters"
 SHARED_REVISION = "0034_shared_activities"
 PROACTIVE_REVISION = "0035_proactive_contact"
 FACTION_REVISION = "0036_character_factions"
-HEAD_REVISION = "0037_persistent_chat_recall"
+RECALL_REVISION = "0037_persistent_chat_recall"
+HEAD_REVISION = "0038_location_policies"
 
 # One reviewed linear chain replaces repeated hand-maintained suffix sets.
 _SUPPORTED_REVISIONS = (
@@ -130,11 +132,17 @@ _SUPPORTED_REVISIONS = (
     SHARED_REVISION,
     PROACTIVE_REVISION,
     FACTION_REVISION,
+    RECALL_REVISION,
     HEAD_REVISION,
 )
 _REVISION_RANGES = {
     revision: frozenset(_SUPPORTED_REVISIONS[index:])
     for index, revision in enumerate(_SUPPORTED_REVISIONS)
+}
+LOCATION_POLICY_TABLES = {
+    "location_policies",
+    "location_character_access",
+    "character_location_policies",
 }
 FACTION_TABLES = {
     "character_factions",
@@ -326,7 +334,8 @@ def _current_revision(connection: Connection) -> str:
 
 def _validate_managed_state(connection: Connection, revision: str) -> None:
     # Additive authored/job tables do not change the older runtime shapes.
-    pre_recall_revision = revision != HEAD_REVISION
+    pre_recall_revision = revision not in _REVISION_RANGES[RECALL_REVISION]
+    pre_location_policy_revision = revision != HEAD_REVISION
     pre_faction_revision = revision not in _REVISION_RANGES[FACTION_REVISION]
     pre_proactive_revision = revision not in _REVISION_RANGES[PROACTIVE_REVISION]
     pre_shared_revision = revision not in _REVISION_RANGES[SHARED_REVISION]
@@ -500,6 +509,8 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         expected |= FTS_TABLES
     if pre_faction_revision:
         expected -= FACTION_TABLES
+    if pre_location_policy_revision:
+        expected -= LOCATION_POLICY_TABLES
     if pre_proactive_revision:
         expected -= PROACTIVE_TABLES
     if pre_shared_revision:
@@ -553,6 +564,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
             pre_proactive_revision=pre_proactive_revision,
             pre_faction_revision=pre_faction_revision,
             pre_recall_revision=pre_recall_revision,
+            pre_location_policy_revision=pre_location_policy_revision,
         )
     if revision in {
         CONTENT_REVISION,
@@ -628,6 +640,7 @@ def _validate_domain_shape(
     pre_proactive_revision: bool = True,
     pre_faction_revision: bool = True,
     pre_recall_revision: bool = True,
+    pre_location_policy_revision: bool = True,
 ) -> None:
     """Detect partial/mismatched schemas; never infer a revision from them."""
 
@@ -653,6 +666,8 @@ def _validate_domain_shape(
         "ck_command_receipt_command_result",
     }
     for table in metadata.sorted_tables:
+        if pre_location_policy_revision and table.name in LOCATION_POLICY_TABLES:
+            continue
         if pre_recall_revision and table.name == "recall_documents":
             continue
         if pre_faction_revision and table.name in FACTION_TABLES:

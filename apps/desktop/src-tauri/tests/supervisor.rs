@@ -198,6 +198,8 @@ fn windows_first_time_chat_setup_restarts_core_with_in_memory_credential() {
                 base_url: None,
                 max_billable_input_tokens: 20_000,
                 max_output_tokens: 2_000,
+                timeout_ms: 30_000,
+                native_json: false,
             },
             reference,
         )

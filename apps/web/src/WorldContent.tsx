@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { CharacterLocationEditor, LocationManager, LocationMap, useLocationDirectory } from "./LocationWorkspace";
 import { ContentEditor, ResearchDetails } from "./ContentEditor";
 import { CoreClient, CoreRequestError, type WorldContentItem } from "@dreamtalk/api-client";
 import { ContactAvatar, FactionManager, SocialGraph } from "./ContactSocial";
@@ -173,7 +174,7 @@ export function WorldImports({ client, worldId, onlyKind, onSaved, onDirtyChange
   </section>;
 }
 
-export function WorldContacts({ client, worldId, onSettings, onIdentity, onOpenChat, canOpenChat, openingChat, refreshKey = 0, visible = true }: {
+export function WorldContacts({ client, worldId, onSettings, onIdentity, onOpenChat, canOpenChat, openingChat, refreshKey = 0, visible = true, onLocationDirty = ignoreDirty, onCharacterLocationDirty = ignoreDirty, identityKey = null }: {
   client: CoreClient;
   worldId: string;
   onSettings: () => void;
@@ -183,11 +184,20 @@ export function WorldContacts({ client, worldId, onSettings, onIdentity, onOpenC
   openingChat: boolean;
   refreshKey?: number;
   visible?: boolean;
+  onLocationDirty?: (dirty: boolean) => void;
+  onCharacterLocationDirty?: (dirty: boolean) => void;
+  identityKey?: string | null;
 }) {
   const [items, setItems] = useState<WorldContentItem[]>([]);
   const [selected, setSelected] = useState<WorldContentItem | null>(null);
   const [social, setSocial] = useState<SocialSnapshot | null>(null);
-  const [mode, setMode] = useState<"profile" | "factions" | "graph">("profile");
+  const [mode, setMode] = useState<"profile" | "factions" | "graph" | "locations">("profile");
+  const [locationOpen, setLocationOpen] = useState(false), [positionDirty, setPositionDirty] = useState(false);
+  const locationEditor = useRef<HTMLDetailsElement>(null);
+  const places = useLocationDirectory(client, worldId, visible);
+  const reportPositionDirty = useCallback((dirty: boolean) => { setPositionDirty(dirty); onCharacterLocationDirty(dirty); }, [onCharacterLocationDirty]);
+  const selectMode = (next: typeof mode) => { if (next !== mode && positionDirty && !window.confirm("角色位置规则尚未保存或结果未确认，确定离开并放弃本次编辑吗？")) return; setMode(next); };
+  const editLocations = () => { setLocationOpen(true); window.requestAnimationFrame(() => locationEditor.current?.scrollIntoView({ block: "start" })); };
   const [search, setSearch] = useState("");
   const [graphRoot, setGraphRoot] = useState<string | null>(null);
   const [urls, setUrls] = useState<Record<string, string>>({});
@@ -231,13 +241,14 @@ export function WorldContacts({ client, worldId, onSettings, onIdentity, onOpenC
     if (file.size > 10 * 1024 * 1024) { setSocialError("头像不能超过 10 MB。"); return; }
     await change(async () => { const image = await client.uploadCoverImage(worldId, file); await client.setCharacterAvatar(worldId, selectedRoot, image.digest); });
   };
-  return <div className={`chat-workspace contacts-workspace ${selected && mode === "profile" ? "thread-open" : ""}`}><aside className="conversation-list" aria-label="当前世界角色"><div className="directory-heading"><strong>世界中的人</strong><small>{loading ? "读取中" : failed ? "读取未完成" : `${characters.length} 位角色`}</small></div>
+  return <><details ref={locationEditor} className="contacts-management location-management" open={locationOpen} onToggle={event => setLocationOpen(event.currentTarget.open)}><summary><strong>添加／编辑地点</strong><span>地点层级、隐藏分支与角色开放范围</span></summary><LocationManager client={client} worldId={worldId} locations={places.locations} directory={places.directory} refresh={places.refresh} onDirtyChange={onLocationDirty} /></details><div className={`chat-workspace contacts-workspace ${selected && mode === "profile" ? "thread-open" : ""}`}><aside className="conversation-list" aria-label="当前世界角色"><div className="directory-heading"><strong>世界中的人</strong><small>{loading ? "读取中" : failed ? "读取未完成" : `${characters.length} 位角色`}</small></div>
     <DirectorySearch label="搜索角色名称" value={search} onChange={setSearch} />
-    {loading ? <p className="thread-hint">正在读取角色…</p> : failed ? <><p className="app-alert" role="alert">无法读取通讯录或阵营。</p><button type="button" onClick={() => setReload(value => value + 1)}>重试读取</button></> : characters.length === 0 ? <div className="empty-state"><h2>当前世界还没有角色</h2><p>在这里新建、联网生成或导入角色卡，确认后加入当前世界。</p><button className="text-action" onClick={onSettings}>添加角色卡</button></div> : matchingCharacters.map(item => { const person = social?.characters.find(value => value.current_import_id === item.import_id); return <button key={item.import_id} className={`conversation-row ${selected?.import_id === item.import_id ? "selected" : ""}`} aria-pressed={selected?.import_id === item.import_id} onClick={() => { setSelected(item); setGraphRoot(person?.root_import_id ?? null); }}><ContactAvatar name={item.characters[0].name} url={urls[person?.avatar_digest ?? ""]} /><span className="row-copy"><strong>{item.characters[0].name}</strong><small>查看角色资料与阵营</small></span></button>; })}
+    {loading ? <p className="thread-hint">正在读取角色…</p> : failed ? <><p className="app-alert" role="alert">无法读取通讯录或阵营。</p><button type="button" onClick={() => setReload(value => value + 1)}>重试读取</button></> : characters.length === 0 ? <div className="empty-state"><h2>当前世界还没有角色</h2><p>在这里新建、联网生成或导入角色卡，确认后加入当前世界。</p><button className="text-action" onClick={onSettings}>添加角色卡</button></div> : matchingCharacters.map(item => { const person = social?.characters.find(value => value.current_import_id === item.import_id); return <button key={item.import_id} className={`conversation-row ${selected?.import_id === item.import_id ? "selected" : ""}`} aria-pressed={selected?.import_id === item.import_id} onClick={() => { if (positionDirty && selected?.import_id !== item.import_id && !window.confirm("位置规则尚未保存，确定切换角色并放弃本次编辑吗？")) return; setSelected(item); setGraphRoot(person?.root_import_id ?? null); }}><ContactAvatar name={item.characters[0].name} url={urls[person?.avatar_digest ?? ""]} /><span className="row-copy"><strong>{item.characters[0].name}</strong><small>查看角色资料与阵营</small></span></button>; })}
     {!loading && !failed && characters.length > 0 && matchingCharacters.length === 0 && <p className="thread-hint" role="status">没有找到这个名字，试试其他关键词。</p>}
-  </aside><div className="conversation-detail"><div className="contacts-view-switch"><button type="button" className="secondary-button" aria-pressed={mode === "profile"} onClick={() => setMode("profile")}>角色资料</button><button type="button" className="secondary-button" aria-pressed={mode === "factions"} onClick={() => setMode("factions")}>编辑阵营</button><button type="button" className="secondary-button" aria-pressed={mode === "graph"} onClick={() => setMode("graph")}>人物关系网</button><button type="button" className="text-action" disabled={socialBusy || loading} onClick={() => setReload(value => value + 1)}>刷新</button></div>
+  </aside><div className="conversation-detail"><div className="contacts-view-switch"><button type="button" className="secondary-button" aria-pressed={mode === "profile"} onClick={() => selectMode("profile")}>角色资料</button><button type="button" className="secondary-button" aria-pressed={mode === "factions"} onClick={() => selectMode("factions")}>编辑阵营</button><button type="button" className="secondary-button" aria-pressed={mode === "graph"} onClick={() => selectMode("graph")}>人物关系网</button><button type="button" className="secondary-button" aria-pressed={mode === "locations"} onClick={() => selectMode("locations")}>地点</button><button type="button" className="text-action" disabled={socialBusy || loading} onClick={() => setReload(value => value + 1)}>刷新</button></div>
+    {places.error && <div className="app-alert" role="alert">{places.error}<button className="text-action" onClick={() => void places.refresh()}>刷新地点</button></div>}
     {socialError && <p className="app-alert" role="alert">{socialError}</p>}
-    {mode === "graph" && social ? <SocialGraph visible={visible} social={social} urls={urls} selected={graphRoot} onSelect={root => { setGraphRoot(root); setSelected(items.find(item => item.import_id === social.characters.find(person => person.root_import_id === root)?.current_import_id) ?? null); }} onChat={importId => void onOpenChat(importId)} canChat={canOpenChat} openingChat={openingChat} />
+    {mode === "locations" && social ? <LocationMap locations={places.locations} directory={places.directory} social={social} urls={urls} selected={graphRoot} onSelect={root => { setGraphRoot(root); setSelected(items.find(item => item.import_id === social.characters.find(person => person.root_import_id === root)?.current_import_id) ?? null); }} onChat={importId => void onOpenChat(importId)} openingChat={openingChat} onEdit={editLocations} /> : mode === "graph" && social ? <SocialGraph visible={visible} social={social} urls={urls} selected={graphRoot} onSelect={root => { setGraphRoot(root); setSelected(items.find(item => item.import_id === social.characters.find(person => person.root_import_id === root)?.current_import_id) ?? null); }} onChat={importId => void onOpenChat(importId)} canChat={canOpenChat} openingChat={openingChat} />
       : mode === "factions" && social ? <FactionManager social={social} selectedRoot={selectedRoot} busy={socialBusy} onSelect={root => { setSelected(items.find(item => item.import_id === social.characters.find(person => person.root_import_id === root)?.current_import_id) ?? null); }} onCreate={(name, parent) => change(() => client.createFaction(worldId, name, parent))} onEdit={(id, name, parent) => change(() => client.editFaction(worldId, id, name, parent))} onRemove={id => { if (window.confirm("确定删除这个空阵营吗？")) void change(() => client.removeFaction(worldId, id)); }} onMembership={(id, root, enabled) => void change(() => client.setFactionMember(worldId, id, root, enabled))} />
       : selected ? <><div className="thread-heading"><button className="text-action" onClick={() => setSelected(null)}>返回通讯录</button><h2>角色档案</h2></div>
         <div className="contact-dossier"><header className="dossier-hero">
@@ -246,6 +257,7 @@ export function WorldContacts({ client, worldId, onSettings, onIdentity, onOpenC
           {canOpenChat ? <button type="button" className="primary-button" disabled={openingChat} onClick={() => void onOpenChat(selected.import_id)}>{openingChat ? "正在打开…" : "打开会话"}<WorkspaceIcon name="arrow" /></button> : <button type="button" className="text-action" onClick={onIdentity}>先进入世界，再打开会话</button>}
         </header>
         {current && <details className="dossier-avatar-options"><summary>编辑角色头像</summary><div className="contact-avatar-edit"><label>上传角色头像（JPG、PNG 或 WebP，最大 10 MB）<input type="file" accept="image/jpeg,image/png,image/webp" disabled={socialBusy} onChange={event => { void uploadAvatar(event.target.files?.[0]); event.target.value = ""; }} /></label>{current.avatar_digest && <button type="button" className="text-action" disabled={socialBusy} onClick={() => void change(() => client.setCharacterAvatar(worldId, current.root_import_id, null))}>移除头像</button>}</div></details>}
+        {current && <CharacterLocationEditor key={`${identityKey}:${current.root_import_id}`} client={client} worldId={worldId} person={current} activity={places.directory?.items.find(person => person.root_import_id === current.root_import_id)} directory={places.directory} locations={places.locations} refresh={places.refresh} onDirtyChange={reportPositionDirty} />}
         <p className="inline-hint">同阵营直接成员默认相互认识；相遇仍可记录新见闻。</p><ContentDetails item={selected} hideCharacterTitle /></div></> : <CelestialEmpty title="在这里，认识彼此">选择一个名字，打开人物档案。<br />他们的资料、所属阵营和相识关系，都在这里。</CelestialEmpty>}
-  </div></div>;
+  </div></div></>;
 }

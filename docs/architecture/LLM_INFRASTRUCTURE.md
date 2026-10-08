@@ -163,8 +163,8 @@ HTTP attempt，固定 `store=false`、`background=false`、`truncation=disabled`
 `previous_response_id`、Conversation resource、tools 或 arbitrary metadata。
 
 Responses 原生保留 system/developer/user/assistant 的消息次序和原文。普通结果只暴露 ordered
-`output_text`；explicit refusal 是成功语义。Native JSON Schema 使用原 schema 和稳定安全 wire name，
-provider terminal 分类完成后再进行本地 Draft 2020-12 校验。Reasoning text/summary 永不成为公开
+`output_text`；explicit refusal 是成功语义。Native JSON Schema 使用适配厂商子集的wire副本和稳定安全wire name，
+provider terminal分类完成后仍对原始schema进行本地Draft 2020-12校验。0.1.42的Responses/兼容strict模式补齐required和closed object，Anthropic移除wire不支持的约束但保留本地限制；详见[适配记录](../maintenance/2026-10-08-provider-compatibility.md)。Reasoning text/summary永不成为公开
 content；optional encrypted reasoning 只进入短生命周期 `ProviderContinuationArtifact`，不是 memory、
 knowledge、content 或 durable accounting state。
 

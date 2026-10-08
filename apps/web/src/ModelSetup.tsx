@@ -10,11 +10,13 @@ type ChatModelSetup = {
   max_billable_input_tokens: number;
   max_output_tokens: number;
   streaming?: boolean;
+  timeout_ms?: number;
+  native_json?: boolean;
 };
 type ModelUpdateOutcome = { old_credential_cleanup_incomplete: boolean };
 const cleanupWarningKey = "dreamtalk-model-cleanup-warning";
-type SetupField = "model_id" | "base_url" | "secret" | "input_limit" | "output_limit";
-const setupFields: SetupField[] = ["model_id", "base_url", "secret", "input_limit", "output_limit"];
+type SetupField = "model_id" | "base_url" | "secret" | "input_limit" | "output_limit" | "timeout";
+const setupFields: SetupField[] = ["model_id", "base_url", "secret", "input_limit", "output_limit", "timeout"];
 const byteLength = (value: string) => new TextEncoder().encode(value).length;
 
 function validServiceUrl(value: string): boolean {
@@ -57,6 +59,8 @@ export function ModelSetup({ client, turnTokenCeiling, onConfigured = () => wind
   const [manualLimits, setManualLimits] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [streaming, setStreaming] = useState(true);
+  const [timeoutSeconds, setTimeoutSeconds] = useState("30");
+  const [nativeJson, setNativeJson] = useState(false);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
   useEffect(() => { onDirtyChange?.(dirty || saving); }, [dirty, saving, onDirtyChange]);
@@ -83,6 +87,8 @@ export function ModelSetup({ client, turnTokenCeiling, onConfigured = () => wind
         if (!active || !existing) return;
         setManaged(existing);
         setStreaming(existing.streaming ?? false);
+        setTimeoutSeconds(String((existing.timeout_ms ?? 30_000) / 1000));
+        setNativeJson(existing.native_json ?? false);
         setProviderKind(existing.provider_kind);
         setModelId(existing.model_id);
         setBaseUrl(existing.base_url ?? "");
@@ -92,7 +98,8 @@ export function ModelSetup({ client, turnTokenCeiling, onConfigured = () => wind
         const preset = findModelPreset(existing.provider_kind, existing.model_id, existing.base_url ?? "");
         const manual = !preset || preset.input_tokens !== existing.max_billable_input_tokens;
         setManualLimits(manual);
-        setAdvancedOpen(manual || ![2048, 8192, 16384].includes(existing.max_output_tokens));
+        setAdvancedOpen(manual || ![2048, 8192, 16384].includes(existing.max_output_tokens)
+          || Boolean(existing.native_json) || (existing.timeout_ms ?? 30_000) !== 30_000);
       } catch { if (active) setManagedUnsupported(true); }
     }).catch(() => { if (active) setError("无法读取模型状态，请检查核心连接。"); });
     return () => { active = false; };
@@ -103,7 +110,9 @@ export function ModelSetup({ client, turnTokenCeiling, onConfigured = () => wind
   const requestBoundAvailable = providerKind === "openai-responses" || Boolean(preset?.bound_encoding);
   const outputBound = Number(replyLength === "custom" ? outputLimit : replyLength);
   const outputMaximum = preset?.output_tokens ?? 1_000_000;
-  const resetCapacity = () => { setManualLimits(false); setInputLimit(""); };
+  const resetCapacity = () => { setManualLimits(false); setInputLimit(""); setNativeJson(false); };
+  const rawTimeoutMs = Number(timeoutSeconds) * 1000;
+  const timeoutMs = Math.round(rawTimeoutMs);
   const editing = status !== "unconfigured" && managed !== null;
   const secretRequired = !editing || status !== "ready" || providerKind !== managed?.provider_kind;
   const validationErrors: Partial<Record<SetupField, string>> = {};
@@ -124,6 +133,10 @@ export function ModelSetup({ client, turnTokenCeiling, onConfigured = () => wind
   if (!Number.isSafeInteger(outputBound) || outputBound < 1 || outputBound > outputMaximum) {
     validationErrors.output_limit = `回复长度必须是 1 至 ${outputMaximum.toLocaleString("zh-CN")} 之间的整数。`;
   }
+  if (!Number.isSafeInteger(timeoutMs) || Math.abs(rawTimeoutMs - timeoutMs) > 0.000001
+    || timeoutMs < 1000 || timeoutMs > 600_000) {
+    validationErrors.timeout = "请求超时必须为 1 至 600 秒，最多保留三位小数。";
+  }
   const firstInvalidField = setupFields.find(field => validationErrors[field]);
   const fieldError = (field: SetupField) => submitAttempted ? validationErrors[field] : undefined;
   const fieldFeedback = (field: SetupField) => fieldError(field)
@@ -136,7 +149,7 @@ export function ModelSetup({ client, turnTokenCeiling, onConfigured = () => wind
     setError("");
     if (firstInvalidField) {
       const form = event.currentTarget;
-      if (firstInvalidField === "input_limit" || firstInvalidField === "output_limit") {
+      if (["input_limit", "output_limit", "timeout"].includes(firstInvalidField)) {
         setAdvancedOpen(true);
         if (firstInvalidField === "output_limit") setReplyLength("custom");
       }
@@ -159,6 +172,8 @@ export function ModelSetup({ client, turnTokenCeiling, onConfigured = () => wind
           base_url: providerKind === "openai-compatible" ? baseUrl : null,
           max_billable_input_tokens: inputBound,
           max_output_tokens: outputBound,
+          timeout_ms: timeoutMs,
+          native_json: nativeJson,
         },
         secret,
         streaming,
@@ -183,7 +198,7 @@ export function ModelSetup({ client, turnTokenCeiling, onConfigured = () => wind
     <div className="section-heading"><h2>聊天模型</h2><p>{status === null ? "正在读取模型状态…" : statusText[status]}</p></div>
     {error ? <p className="app-alert" role="alert">{error}</p> : null}
     {managedUnsupported && status !== "unconfigured" ? <p className="inline-hint">当前配置由高级方式管理；此处不会覆盖其中的路由、定价或其他设置。</p> : null}
-    {turnTokenCeiling !== undefined && !requestBoundAvailable && inputBound >= turnTokenCeiling && (editing || status === "unconfigured") ? <p className="compatibility-notice" role="status">当前每轮 {turnTokenCeiling.toLocaleString("zh-CN")} Token 额度无法容纳 {inputBound.toLocaleString("zh-CN")} Token 输入预留与回复。聊天额度至少需 {(inputBound + 1).toLocaleString("zh-CN")}；{Number.isSafeInteger(outputBound) && outputBound > 0 ? `建议设置为 ${(inputBound + outputBound).toLocaleString("zh-CN")}，预留一次完整回复。` : ""} 模型设置仍可保存。输入预留使用填写的可信上界，不代表实际发送量；请按官方说明填写，勿为通过检查虚填较低值。</p> : null}
+    {turnTokenCeiling !== undefined && !requestBoundAvailable && Number.isSafeInteger(inputBound) && inputBound > 0 && inputBound + outputBound > turnTokenCeiling && (editing || status === "unconfigured") ? <p className="compatibility-notice" role="status">此服务的一次调用需要预留 {inputBound.toLocaleString("zh-CN")} Token 输入。当前每轮额度为 {turnTokenCeiling.toLocaleString("zh-CN")}；至少 {(inputBound + 1).toLocaleString("zh-CN")} 才能留出输出空间，{Number.isSafeInteger(outputBound) && outputBound > 0 ? `预留一次完整回复需 ${(inputBound + outputBound).toLocaleString("zh-CN")}。` : ""} 群聊选人、多角色发言及重试仍共用整轮额度，需要更多余量。模型设置仍可保存。容量预留不代表实际发送量；请按官方说明填写，勿为通过检查虚填较低值。</p> : null}
     {isTauri() && (status === "unconfigured" || (editing && !managedUnsupported)) ? <form noValidate aria-busy={saving} onChangeCapture={() => setDirty(true)} onSubmit={event => void save(event)}>
       {submitAttempted && firstInvalidField ? <p className="app-alert" role="alert">尚未保存：{validationErrors[firstInvalidField]} 请修改标红的字段后再保存。</p> : null}
       <div className="model-setup-fields">
@@ -216,7 +231,7 @@ export function ModelSetup({ client, turnTokenCeiling, onConfigured = () => wind
         <p className="inline-hint">这是回复可用的最多 Token，不是每次固定用量。推理模型的思考也会占用此额度；聊天仍受每轮总额度约束。</p>
         {preset ? <p className="inline-hint">已匹配模型容量：上下文 {preset.context_tokens.toLocaleString("zh-CN")} Token，模型输出最多 {preset.output_tokens.toLocaleString("zh-CN")} Token。资料核对日期：{presetsReviewedAt}。{requestBoundAvailable ? "聊天按当前对话预留输入额度；无法核对时采用模型容量保守预留。" : "此服务暂按模型输入容量保守预留聊天额度。"}</p> : <p className="compatibility-notice">尚未匹配此服务与模型，请在高级设置按提供商文档填写输入容量。模型 ID 相同的第三方服务也需要单独核对。</p>}
         <details open={advancedOpen} onToggle={event => setAdvancedOpen(event.currentTarget.open)}>
-          <summary>高级设置：模型容量与自定义回复长度</summary>
+          <summary>高级设置：容量、超时与结构化输出</summary>
           {preset ? <label className="field"><span>输入容量来源</span><select disabled={saving} value={manualLimits ? "manual" : "auto"} onChange={event => { setManualLimits(event.target.value === "manual"); if (!inputLimit) setInputLimit(String(preset.input_tokens)); }}><option value="auto">自动匹配</option><option value="manual">手动指定（保留自定义值）</option></select></label> : null}
           <div className="model-setup-fields">
             <div className="field">
@@ -229,7 +244,15 @@ export function ModelSetup({ client, turnTokenCeiling, onConfigured = () => wind
               <input id={`${formId}-output_limit`} name="output_limit" type="number" min="1" max={outputMaximum} step="1" value={outputLimit} disabled={saving} onChange={event => setOutputLimit(event.target.value)} aria-invalid={Boolean(fieldError("output_limit"))} aria-describedby={fieldError("output_limit") ? `${formId}-output_limit-error` : undefined} />
               {fieldFeedback("output_limit")}
             </div> : null}
+            <div className="field">
+              <label htmlFor={`${formId}-timeout`}>请求超时（秒）</label>
+              <input id={`${formId}-timeout`} name="timeout" type="number" min="1" max="600" step="0.001" value={timeoutSeconds} disabled={saving} onChange={event => setTimeoutSeconds(event.target.value)} aria-invalid={Boolean(fieldError("timeout"))} aria-describedby={`${formId}-timeout-hint${fieldError("timeout") ? ` ${formId}-timeout-error` : ""}`} />
+              <span id={`${formId}-timeout-hint`} className="model-field-hint">默认 30 秒。模型思考较慢时可适当增加；超时后不会自动重发。</span>
+              {fieldFeedback("timeout")}
+            </div>
           </div>
+          <label className="streaming-setting"><input type="checkbox" checked={nativeJson} disabled={saving} onChange={event => setNativeJson(event.target.checked)} />该模型支持原生 JSON Schema（按厂商文档确认）</label>
+          <p className="inline-hint">开启后，主动联系和世界动态使用原生结构化输出，结果仍须通过本地校验。第三方代理与具体模型需分别确认；不支持时可关闭，沿用提示约束与本地校验。普通聊天可在同次回复中附带记忆和事件，不需要开启此项，也不额外调用模型。</p>
           <p className="inline-hint">手动输入容量必须按提供商文档核对。没有可靠请求上界的服务仍按此容量预留；请勿为了通过额度检查填写更小的数值。</p>
         </details>
       </div>

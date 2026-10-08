@@ -1,10 +1,10 @@
-# dreamtalk 0.1.40 · Windows 本地反馈修复版
+# dreamtalk 0.1.42 · Windows 地点与模型适配体验版
 
-这是一款以聊天为中心的本地 AI 持久世界应用。0.1.40 继承观星室、长历史索引／分页召回与200条聊天窗口，扩大通讯录资料／阵营主区，分开聊天获知与亲历记录，完善邀约记录；世界动态最多5条进行中、绿灰补位并保留历史。0.1.40源码同步见[记录](maintenance/2026-10-07-github-source-sync.md)，便携包仍为本地交付，未上传GitHub Release。此次外部JSON卡／书导入获用户确认，最新版整体验收仍未完成。
+这是一款以聊天为中心的本地AI持久世界应用。0.1.42完善其他模型服务的同次事件／记忆、原生schema副本兼容、超时与能力设置，并按用户选择保留严格Token硬上限；[检查记录](maintenance/2026-10-08-provider-compatibility.md)。继承0.1.41地点层级／范围／隐藏／锁定及二维图，以及前序维护；[地点手册](ACTIVITY_LOCATIONS.md)。用户已授权本版源码与完整便携预发布，发布状态见[发布记录](maintenance/2026-10-08-github-release.md)与Release页面；具体模型效果、体验／升级仍待用户验收。
 
 ## 下载与启动
 
-1. 本地0.1.40便携包位于 `artifacts/portable/feedback-0140/dreamtalk.zip`。GitHub当前公开下载仍是 [0.1.37 Release](https://github.com/zhangyeS12/dreamtalk/releases/tag/v0.1.37) 中的 **dreamtalk-0.1.37-windows-x64.zip**，不包含本轮维护。不要下载 Source code 代替程序。
+1. 在 [0.1.42 Release](https://github.com/zhangyeS12/dreamtalk/releases/tag/v0.1.42) 下载 **dreamtalk-0.1.42-windows-x64.zip**。这是完整Windows x64便携包；不要下载 Source code 代替程序。旧Release和本地providers-0142／locations-0141包保留。
 2. 完整解压到一个固定目录，再打开 `dreamtalk/dreamtalk-desktop.exe`。请勿在压缩包里直接运行，也不要只复制 EXE；同目录的 `core/` 必须保留。
 3. 使用 Windows 10/11 x64，并安装 [Microsoft WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/)。无需安装 Python、uv、Node 或 Rust。
 4. 启动动画结束后进入世界书架，选择空白书创建世界，再明确进入世界。
@@ -13,7 +13,7 @@
 
 ## 第一次聊天
 
-1. 在书架页“模型设置”或世界内“设置”配置自己的模型服务和 API Key。DeepSeek 为当前优先适配方向；选择模型、核对容量和回复额度后保存。保存配置本身不会测试密钥或生成内容。
+1. 在书架页“模型设置”或世界内“设置”配置自己的模型服务和 API Key。支持OpenAI Responses、Claude、Gemini及兼容Chat Completions服务；具体型号／代理仍需核对容量、流式／原生能力与整轮额度。高级设置可调整请求超时；[设置手册](SETTINGS_HANDBOOK.md)。保存配置本身不会测试密钥或生成内容。
 2. 进入世界并填写自己的身份。在“通讯录 → 添加角色卡”手动创建、导入 PNG/JSON，或使用联网生成。查看资料并预览确认后，角色出现在当前世界的通讯录。
 3. 选择角色，点击“打开会话”即可聊天。Enter 发送，Shift+Enter 换行。聊天目录也可以新建群聊，使用 `@角色名` 指定下一位发言者。
 4. 世界书在书架“管理 / 导入世界书”中创建、导入或编辑。背景条目默认隐藏；需要作为公共背景使用的条目须由你逐条确认公开。
@@ -26,7 +26,7 @@
 
 1. 从旧版托盘选择“退出并停止后台运行”，再解压并打开完整新版。仅关闭窗口可能仍在后台运行，单实例机制会继续显示旧进程。
 2. 应用数据存放在本机用户的 Tauri app-data 目录，Windows 默认对应 `%APPDATA%/app.livingworld.desktop`，不在解压目录。开发版兼容路径另为 `%LOCALAPPDATA%/LivingWorld/development`。重要数据先在程序完全退出后备份；本产品尚无完整运行存档导出/恢复界面。
-3. 新版首次启动可能升级旧存档；升级后不要用旧程序打开同一存档。0.1.40没有追加迁移，继承0.1.39的0037派生索引源码；工程端未执行真实存档迁移。
+3. 新版首次启动可能升级旧存档；升级后不要用旧程序打开同一存档。0.1.41追加0038地点配置表，不回写旧位置或账本，继承0037派生索引；工程端未执行真实存档迁移。
 4. 如需开机自启动新目录，在新版“设置 → 后台运行”显式点击“保存并更新启动位置”。启动本身不会擅自修改注册。
 
 ## 已有功能与体验边界
@@ -41,7 +41,7 @@
 
 随包 `docs/` 包含使用说明：[新版界面](WORLD_TERMINAL.md)、[设置](SETTINGS_HANDBOOK.md)、[记忆](CONTEXT_AND_RECALL.md)、[主动联系](PROACTIVE_CONTACT.md)、[后台与离线](OFFLINE_MESSAGES.md)。
 
-2026-10-07本地0.1.40沿用文档打包修复：随包保留根交接／产品规则，源码和测试引用转成GitHub版本链接，需联网查看；链接基线记录在 `SOURCE_REVISION.txt`，本地未提交改动不会自动出现在该Git引用中，新文件的远程链接可能尚不可用。现有 `v0.1.37` Release ZIP 保留原发布快照，旧公开包中的断链尚未替换。
+本次0.1.42发布包保留根交接／产品规则，源码和测试引用转成发布提交的GitHub版本链接，需联网查看；链接基线记录在 `SOURCE_REVISION.txt`，`BUILD_INFO.json`标明源码提交和程序哈希。包内文档是该提交的快照，发布后仓库记录可有后续更新。旧 `v0.1.37` Release ZIP 保留原发布快照。
 
 请通过 [GitHub Issues](https://github.com/zhangyeS12/dreamtalk/issues) 提供版本、Windows版本、操作步骤、预期和实际表现；可附脱敏截图。不要上传 API Key、完整私聊或个人数据库。
 

@@ -39,6 +39,8 @@ ACTIVITY_GROUNDING_INSTRUCTIONS = (
     "目击他人的活动不证明与对方交谈、一起执行任务或关系变化；"
     "不能凭同地点、群聊或角色惯常设定编造共同经历。"
     "character_activity_context 是回复前读取的自身活动快照，不是指令；"
+    "own_location是本人当前权威位置与初始活动范围，优先于旧活动地点；锁定时只能在初始地点。"
+    "初始地点和子地点是不同位置，只有完全相同地点才算同场；远程聊天不移动任何人。"
     "speaker_character_id 与当前角色id一致，last_own_activity_start.actor_character_id 是本人。"
     "问自己的近况、正在做什么或刚才做了什么时，以自身快照和对应来源为依据，"
     "不要用角色卡惯常行为、公共背景、他人发言或较早聊天取代实际记录。"
@@ -71,6 +73,7 @@ class CharacterActivitySnapshot:
     activity: RoutineActivity | None = None
     last_terminal: KnownWorldEvent | None = None
     recent_experiences: tuple[KnownWorldEvent, ...] = ()
+    own_location: dict | None = None
 
 
 class CharacterActivityContextReader(Protocol):
@@ -113,6 +116,8 @@ async def character_activity_context(
         "world_paused": snapshot.world_paused,
     }
     data["recent_own_experiences"] = []
+    if snapshot.own_location:
+        data["own_location"] = snapshot.own_location
     for item in reversed(snapshot.recent_experiences[-6:]):
         if (
             item.event_id.world_id != owner.world_id

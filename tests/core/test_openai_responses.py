@@ -549,7 +549,7 @@ def test_reasoning_summary_text_and_ciphertext_never_become_visible_or_repr_diag
     assert result.usage.reasoning_output_tokens == 5
 
 
-def test_native_structured_shape_original_schema_and_local_validation():
+def test_native_structured_wire_shape_and_original_local_validation():
     schema = {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -566,14 +566,14 @@ def test_native_structured_shape_original_schema_and_local_validation():
         "format": {
             "type": "json_schema",
             "name": "answer_schema",
-            "schema": schema,
+            "schema": {key: value for key, value in schema.items() if key != "$schema"},
             "strict": True,
         }
     }
     assert result.structured_result.value["answer"] == 42
 
 
-def test_structured_wire_name_is_stable_and_safe_without_rewriting_schema():
+def test_structured_wire_name_is_stable_and_safe_without_mutating_source_schema():
     schema = {"type": "object"}
     req = request(structured_output=StructuredOutputRequest("unsafe name / 私密", schema))
     first, second = Wire(response_body("{}")), Wire(response_body("{}"))
@@ -582,7 +582,12 @@ def test_structured_wire_name_is_stable_and_safe_without_rewriting_schema():
     wire_name = first.payloads[0]["text"]["format"]["name"]
     assert wire_name == second.payloads[0]["text"]["format"]["name"]
     assert wire_name.startswith("lw_") and len(wire_name) == 35
-    assert first.payloads[0]["text"]["format"]["schema"] == schema
+    assert first.payloads[0]["text"]["format"]["schema"] == {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": False,
+        "required": [],
+    }
 
 
 @pytest.mark.parametrize(

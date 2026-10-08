@@ -13,6 +13,7 @@ const errors: Record<string, string> = {
   director_consent_required: "首次开启需要确认后台模型用量。",
   director_characters_required: "上一批规划因当时没有已设置初始地点的角色而停止。请先设置至少一名角色的初始地点，再点击“重新规划”；刷新状态不会发起新规划。",
   director_world_capacity: "当前资料超过规划容量（16位角色、32个地点、64 KiB资料），请精简后再规划。",
+  director_location_scope_unavailable: "角色没有可进入的活动地点。请在通讯录中核对初始地点与隐藏分支开放范围。",
   director_background_capacity: "公共背景超过规划读取容量（512条启用条目，每条关键词和条件16 KiB），请精简公开范围或触发条件后再规划。",
   director_background_invalid: "公共背景资料格式异常，暂时不能规划，请检查或重新确认世界书。",
   director_background_changed: "本批采用的公共背景已隐藏或更新，计划未接纳，已开始的请求可能产生用量。不会自动重试；重新规划是新的模型任务。",
@@ -28,6 +29,7 @@ export function WorldActivities({ client, worldId, visible, paused, hasInitializ
   client: CoreClient; worldId: string; visible: boolean; paused: boolean; hasInitializedCharacters?: boolean | null; onNavigate?: BackgroundNavigate;
 }) {
   const [status, setStatus] = useState<DirectorStatus | null>(null);
+  const [locationReady, setLocationReady] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [loadError, setLoadError] = useState("");
@@ -54,8 +56,8 @@ export function WorldActivities({ client, worldId, visible, paused, hasInitializ
       if (busyRef.current) return;
       const serial = ++requestSerial.current;
       try {
-        const next = await client.directorStatus(worldId);
-        if (alive && serial === requestSerial.current) { setStatus(next); setLoadError(""); }
+        const [next, people] = await Promise.all([client.directorStatus(worldId), client.listActivityCharacters(worldId)]);
+        if (alive && serial === requestSerial.current) { setStatus(next); setLocationReady(people.items.some(person => person.initialized)); setLoadError(""); }
       } catch { if (alive && serial === requestSerial.current) setLoadError("未能读取自动活动状态，请检查核心连接。"); }
     };
     void read();
@@ -118,7 +120,7 @@ export function WorldActivities({ client, worldId, visible, paused, hasInitializ
 
   const state = status?.state;
   const reason = status?.error ? errors[status.error] ?? "自动活动暂时无法继续，请刷新核对。" : "";
-  const guidance = activityGuidance(status, paused, hasInitializedCharacters, loadError, reason);
+  const guidance = activityGuidance(status, paused, hasInitializedCharacters ?? locationReady, loadError, reason);
   return <section className="settings-section">
     <div className="section-heading"><h2>世界自动活动</h2><p>角色可以休息、工作或自由活动，并在已有地点之间移动。实际活动可以成为聊天话题。</p></div>
     <BackgroundTaskFeedback name="自动活动" guidance={guidance} onNavigate={onNavigate} disabled={busy} />

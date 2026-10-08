@@ -51,6 +51,7 @@ from livingworld.infrastructure.llm.http_transport import (
 from livingworld.infrastructure.llm.sse import SSEDecoder, SSEProtocolError, StreamLimits
 from livingworld.infrastructure.llm.structured import (
     InvalidStructuredSchema,
+    native_wire_schema,
     prepare_schema,
     process_structured,
 )
@@ -670,11 +671,10 @@ class AnthropicMessagesGateway:
         if request.structured_output is not None:
             try:
                 validator = prepare_schema(request.structured_output)
+                schema = native_wire_schema(validator.schema, "anthropic")
             except InvalidStructuredSchema:
                 raise self._error(request, LLMErrorCode.INVALID_REQUEST) from None
-            payload["output_config"] = {
-                "format": {"type": "json_schema", "schema": validator.schema}
-            }
+            payload["output_config"] = {"format": {"type": "json_schema", "schema": schema}}
         secret = await self._secret(request)
         wire = response = None
         transport_failure = None

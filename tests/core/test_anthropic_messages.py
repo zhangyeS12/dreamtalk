@@ -517,7 +517,7 @@ def test_tool_block_is_never_executed_or_exposed():
     assert tool_canary not in json.dumps(serialized(failure), default=str)
 
 
-def test_native_structured_output_sends_original_schema_and_validates_locally():
+def test_native_structured_output_adapts_wire_schema_and_validates_original_locally():
     schema = {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -532,7 +532,20 @@ def test_native_structured_output_sends_original_schema_and_validates_locally():
     result = asyncio.run(generate(wire, req))
     assert schema == original
     assert wire.payloads[0]["output_config"] == {
-        "format": {"type": "json_schema", "schema": original}
+        "format": {
+            "type": "json_schema",
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "value": {
+                        "type": "integer",
+                        "description": 'Local validation constraints: {"minimum":3}',
+                    }
+                },
+                "required": ["value"],
+                "additionalProperties": False,
+            },
+        }
     }
     assert "output_format" not in wire.payloads[0]
     assert result.structured_result.value["value"] == 3

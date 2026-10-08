@@ -1,7 +1,8 @@
 # dreamtalk 工作交接
 
-更新日期：**2026-10-07**。源码同步前维护基线：`4d280cc`，分支`codex/world-archive`；当前Desktop **0.1.40**源码同步见[记录](docs/maintenance/2026-10-07-github-source-sync.md)，实际HEAD以Git为准。用户确认本轮角色卡／世界书外部JSON导入通过并授权推送当前源码；其他待验收项保持。公开便携Release仍为`v0.1.37`，本地0.1.40交付证据见第6节；此前0.1.38／0.1.39包保留。共同联系由用户先等待并验收。
-前一步完成长历史索引／分页召回及200条聊天窗口（0037派生索引）。本轮给通讯录资料／阵营腾出空间，区分聊天获知与亲历记录，完善条件邀约／主动邀请记录，并按用户确认采用最多5条世界动态、绿灰补位。没有执行用户存档迁移，不改系统设置或主动联系选人／未回复门禁，不运行产品／测试／模型。规则读 [AGENTS.md](AGENTS.md)，逐项完成度读 [PROJECT_STATUS.md](docs/PROJECT_STATUS.md)，产品体验读 [PRODUCT.md](PRODUCT.md)。
+更新日期：**2026-10-08**。正式仓库`D:\LivingWorld`，分支`codex/world-archive`，本轮发布前HEAD为`0e6f2ee`；当前Desktop工作区 **0.1.42**。0.1.40源码已推送；2026-10-08用户授权将当前0.1.42源码及完整Windows便携包发布到GitHub，正在准备[v0.1.42预发布](https://github.com/zhangyeS12/dreamtalk/releases/tag/v0.1.42)，执行证据见[发布记录](docs/maintenance/2026-10-08-github-release.md)。既有v0.1.37和本地旧包保留。用户确认CCv2卡／World Info JSON导入通过；共同联系继续先等待用户验收。
+
+本轮发布沿用已经完成的build-only程序，更新包内说明、源码链接和校验文件，不运行应用或模型。此前完善四类模型服务同次事件／记忆接线、原生schema的wire副本兼容，以及设置中的超时／能力声明和严格额度提示。用户明确继续保留可信容量硬上限，不用Claude估算或其他Gemini协议计数冒充严格上界；[实现与检查](docs/maintenance/2026-10-08-provider-compatibility.md)。前一步0.1.41完成地点层级、初始范围／锁定、隐藏分支、二维图和严格同地点相遇；[地点维护记录](docs/maintenance/2026-10-07-location-scopes.md)。不执行本轮真实存档迁移、应用／测试／模型验收。0.1.40反馈及0.1.39长历史仍保留具体待验收范围。规则读[AGENTS.md](AGENTS.md)，完成度读[PROJECT_STATUS.md](docs/PROJECT_STATUS.md)。
 
 ## 1. 五分钟了解当前完成度
 
@@ -9,27 +10,27 @@
 
 | 分类 | 当前事实 | 接手时的处理 |
 | --- | --- | --- |
-| 已实现并交付代码/包 | 世界书架与封面、卡/书创作与联网生成、世界/玩家身份、私聊/群聊/流式、模型/额度/恢复、长期记忆/混合RAG、两块事件、日常生命周期/经历召回、相遇/共同休闲、在线/离线主动联系、红点、阵营/头像/三维关系网、Logo启动、世界内四页视觉。 | 按第3节定位实际实现；不能重新列为“待开发”。 |
+| 已实现并交付代码/包 | 世界书架与封面、卡/书创作与联网生成、世界/玩家身份、私聊/群聊/流式、模型/额度/恢复、长期记忆/混合RAG、两块事件、日常生命周期/经历召回、相遇/共同休闲、在线/离线主动联系、红点、阵营/头像/三维关系网、地点层级／范围／隐藏／锁定及二维位置图、Logo启动、世界内四页视觉。 | 按第3节定位实际实现；不能重新列为“待开发”。 |
 | 有明确使用反馈 | 用户报告卡/书生成、单聊、群聊@及无@正常，认可循环书架；0.1.23连接卡顿和0.1.30已读红点问题获确认解决。2026-10-07本轮CCv2角色卡与World Info JSON世界书外部导入获用户确认通过。 | 反馈只覆盖当次功能／资料，不代表最新版全量通过。 |
-| 已实现、待最新版验收 | 0.1.37视觉/操作；三维关系网/启动；长期记忆自然表现与权限边界；日常/相遇/共同休闲生命周期；双人共同联系、未回复门禁、离线联动及动态池完整流程。 | 先收集具体现象，按原契约修复；不因未验收就重做系统。 |
+| 已实现、待最新版验收 | 0.1.42其他厂商同次提取、超时／原生能力保存和严格额度提示；0.1.41地点层级、范围／隐藏／锁定及实际相遇；视觉／三维网／启动；长期记忆自然表现与权限；日常／相遇／共同休闲生命周期；双人共同联系、未回复门禁、离线联动及动态池。 | 先收集具体现象，按原契约修复；不因未验收就重做系统。 |
 | 尚未实现的愿景 | 完整离线演化、更广剧情/关系/知识演化、一键构建完整运行世界/持续资料更新、Checkpoint/Timeline Branch及runtime世界备份。 | 详见第4节。未冻结的产品行为须先讨论，不是默认下一步授权。 |
-| 发行未完成 | 最新版整体验收、签名安装/自动更新/正式发布；目前交付Windows便携包。 | 0.1.40源码推送获授权；公开体验下载仍0.1.37。本次不更新Release；构建成功或公开下载不等于产品完工。 |
+| 发行未完成 | 最新版整体验收、签名安装/自动更新/正式发布；目前交付Windows便携包。 | 0.1.42源码与完整便携预发布已获本轮明确授权；构建成功或公开下载不等于产品完工。 |
 | 已拒绝/未批准 | 共同委托、巡查、任务奖励、战斗、资产玩法，以及未经决定的云同步/市场。 | 不从历史建议、领域类名或“继续推进”推导新授权。 |
 
-**最近进展：** 0.1.37观星室已公开预发布。审查后，本轮更正文档旧状态/迁移head/产品决定表，补主动联系手册与后续打包链接，收拢聊天流程、资料投影、适配器通用处理、幂等回执恢复及迁移版本集合，清理旧CSS与未使用依赖。用户尚未收到共同联系消息，明确先等待；没有主动联系运行或验收结论。随后批准并实现长历史索引/分页召回及200条聊天窗口；详见[长历史维护](docs/maintenance/2026-10-07-long-history-recall.md)，前一步去重/文档记录见[维护记录](docs/maintenance/2026-10-07-code-and-docs.md)。
+**最近进展：** 0.1.42完善其他厂商同次提取、原生wire schema和设置接线，保留用户确认的严格硬上限；[适配记录](docs/maintenance/2026-10-08-provider-compatibility.md)。前序0.1.41地点包保留待验收。以下为之前维护脉络：0.1.37观星室已公开预发布。审查后，本轮更正文档旧状态/迁移head/产品决定表，补主动联系手册与后续打包链接，收拢聊天流程、资料投影、适配器通用处理、幂等回执恢复及迁移版本集合，清理旧CSS与未使用依赖。用户尚未收到共同联系消息，明确先等待；没有主动联系运行或验收结论。随后批准并实现长历史索引/分页召回及200条聊天窗口；详见[长历史维护](docs/maintenance/2026-10-07-long-history-recall.md)，前一步去重/文档记录见[维护记录](docs/maintenance/2026-10-07-code-and-docs.md)。
 
 ## 2. 仓库、运行和版本现场
 
-| 项 | 2026-10-07维护现场 / 已发布历史 |
+| 项 | 2026-10-08维护现场 / 已发布历史 |
 | --- | --- |
 | 正式仓库 | `D:\LivingWorld`。`C:\Users\zhang\Documents\ChatGPT\LivingWorld`是本次受限工具的可写工作目录，不是正式仓库搬迁。 |
-| 分支/基线 | `codex/world-archive`；0.1.40源码同步前基线`4d280cc`，本次同步提交包含0.1.38～0.1.40维护。既有Release源码标识`v0.1.37`，设计基线`b2bc430`，应用前序`e56c7f8`。实际HEAD每轮重查。 |
+| 分支/基线 | `codex/world-archive`；0.1.40源码同步前基线`4d280cc`，2026-10-07同步提交包含0.1.38～0.1.40维护，本轮发布前HEAD为0e6f2ee，新版源码以v0.1.42标签与发布记录定位。既有Release源码标识`v0.1.37`，设计基线`b2bc430`，应用前序`e56c7f8`。实际HEAD每轮重查。 |
 | 关键前序提交 | `8d56c99`：主动联系保存/启动最低展示；`42e675c`：Logo/三维启动；`167d5e8`：真三维人物网；`bd90ab3`：阵营/头像；`844259a`：离线门禁提示；`0a1539c`：已读红点修复；`ed5f844`：主动联系/通用未读。 |
-| 版本 | 当前Desktop package/Tauri/Cargo与对应锁文件为`0.1.40`，用于区分本地反馈修复包；公开发布版本仍为`0.1.37`。根npm/Web/Core的`0.1.0`为独立包版本，不能一并误改。 |
-| 协议/迁移 | [API契约](services/core/src/livingworld/domain/api_contract.json)为`api_protocol=1`，loopback`127.0.0.1`、随机Core端口；迁移源码head`0037_persistent_chat_recall`，前序0036。没有读取真实存档确认其迁移版本。 |
-| GitHub | `origin=https://github.com/zhangyeS12/dreamtalk.git`。0.1.40同步前fetch核对：main与codex/world-archive均为`4d280cc`；本次按用户授权快进同步当前源码。下载仍见[v0.1.37体验版](https://github.com/zhangyeS12/dreamtalk/releases/tag/v0.1.37)，本地0.1.40包未上传；不强推。 |
-| 最新便携入口 | `D:\LivingWorld\artifacts\portable\feedback-0140\dreamtalk\dreamtalk-desktop.exe`；Core与完整ZIP在同一便携目录，实际build-only结果见第6节。旧包保留，产物ignored，不随Git自动同步。 |
-| 存档/启动 | app identifier仍为`app.livingworld.desktop`；开发数据兼容位置为`%LOCALAPPDATA%/LivingWorld/development`。当前运行进程、用户存档与自启动注册未检查。换包须用户在新版显式“保存并更新启动位置”；启动本身不擅自改注册。 |
+| 版本 | 当前Desktop package/Tauri/Cargo与对应锁文件为`0.1.42`，用于本次地点与模型适配预发布；0.1.37历史包保留。根npm/Web/Core的`0.1.0`为独立包版本，不能一并误改。 |
+| 协议/迁移 | [API契约](services/core/src/livingworld/domain/api_contract.json)为`api_protocol=1`，loopback`127.0.0.1`、随机Core端口；迁移源码head`0038_location_policies`，前序0037。0.1.42不新增迁移，本轮不读取或迁移真实存档。 |
+| GitHub | `origin=https://github.com/zhangyeS12/dreamtalk.git`。0.1.40同步前fetch核对：main与codex/world-archive均为`4d280cc`；2026-10-07按用户授权快进同步0.1.40源码；本轮已获0.1.42发布授权，新版下载见[v0.1.42体验版](https://github.com/zhangyeS12/dreamtalk/releases/tag/v0.1.42)，准备与完成证据见发布记录；不强推。 |
+| 最新便携入口 | `D:\LivingWorld\artifacts\portable\providers-0142\dreamtalk\dreamtalk-desktop.exe`；build-only结果见模型适配维护记录。Core与完整ZIP在同一便携目录；旧locations-0141包保留，产物ignored，不随Git自动同步。 |
+| 存档/启动 | app identifier仍为`app.livingworld.desktop`；开发数据兼容位置为`%LOCALAPPDATA%/LivingWorld/development`。本轮未检查运行进程、用户存档或自启动注册。换包须用户在新版显式“保存并更新启动位置”；启动本身不擅自改注册。 |
 
 不要覆盖用户/其他任务改动，不强推、不改写历史。不能用旧便携版打开已升级存档；不要移动或删除DB/WAL。代码head、包版本和实际运行EXE是三种证据，必须分别核对。
 
@@ -55,9 +56,9 @@
 | 卡/书创建、编辑、导入、联网生成 | 通讯录`WorldContent.tsx`/`ContentEditor.tsx`管理角色，书架管理世界书 | [content_builder.py](services/core/src/livingworld/application/content_builder.py)、`content_authoring.py`、`infrastructure/content_research.py`、`infrastructure/imports/`、`persistence/world_content.py`：检索摘要/证据/冲突→可编辑草稿→预览确认→世界内容；0023。 |
 | 公共背景 | `WorldContent.tsx`、`PublicBackgroundReadiness.tsx` | [lore_activation.py](services/core/src/livingworld/application/lore_activation.py)：逐条公开且enabled，再按场景、常驻/关键词/次级条件及容量筛选。未变条目编辑保留范围，新增/修改重新确认；0022。 |
 | 私聊/群聊/流式/分页 | `ChatTranscript.tsx`、`GroupChat.tsx`、`useReplyStream.ts`、`useTranscriptPages.ts` | [chat_reply.py](services/core/src/livingworld/application/chat_reply.py)、[group_chat_reply.py](services/core/src/livingworld/application/group_chat_reply.py)、`chat_messages.py`、`chat_conversations.py`：持久回合、一次认领、校验后提交；唯一@选下一位，无@独立调度；0018～0021。 |
-| 模型、额度、费用、失败恢复 | `ModelSetup.tsx`、`ReplyRecoveryControls.tsx`、`ContextReferencePanel.tsx` | [chat_capacity.py](services/core/src/livingworld/application/chat_capacity.py)、`llm_execution.py`、`llm_preflight.py`、`llm_budget.py`、`persistence/chat_reply_recovery.py`/`chat_context_report.py`：可信容量裁剪、整尝试预算/账本、显式独立新attempt及参考来源；0031/0032。四类provider adapter在`infrastructure/llm/`，DeepSeek优先。 |
+| 模型、额度、费用、失败恢复 | `ModelSetup.tsx`、`ReplyRecoveryControls.tsx`、`ContextReferencePanel.tsx` | [chat_capacity.py](services/core/src/livingworld/application/chat_capacity.py)、`llm_execution.py`、`llm_preflight.py`、`llm_budget.py`、`persistence/chat_reply_recovery.py`/`chat_context_report.py`：可信容量裁剪、整尝试预算/账本、显式独立新attempt；0031/0032。四类adapter、wire转换在`infrastructure/llm/`，同次附带接线在`bootstrap/llm_runtime.py`，设置序列化在Tauri`llm_config.rs`；0.1.42不新增估算准入。 |
 | 长短期记忆/本地RAG/来源 | `LongChatMemoryPanel.tsx`、`ChatHistoryPanel.tsx`、`ConversationMemoryPanel.tsx`、`SourceMessageDialog.tsx` | [long_chat_memory.py](services/core/src/livingworld/infrastructure/persistence/long_chat_memory.py)、[chat_context.py](services/core/src/livingworld/application/chat_context.py)/`group_chat_context.py`、`conversation_memory.py`、[semantic_chat_retrieval.py](services/core/src/livingworld/infrastructure/semantic_chat_retrieval.py)、`chat_retrieval.py`/`local_vector_cache.py`：同次提取、纠正/停用、权限过滤后jieba/FTS5/BM25+BGE融合及DiskCache；SQLite持久全文/向量派生索引；摘要单独预览确认；0024/0029/0037。 |
-| 日常/地点/活动生命周期 | 设置`WorldLocations.tsx`、`CharacterActivitySetup.tsx`、`WorldActivities.tsx` | [director.py](services/core/src/livingworld/application/director.py)、`routine_lifecycle.py`、`character_activity_context.py`、`infrastructure/scheduler_runtime.py`：6小时批量提案，Kernel执行真实移动/休息/工作/自由活动及开始/结束/中断；0025/0026。 |
+| 日常/地点/活动生命周期 | 通讯录`LocationWorkspace.tsx`；设置`WorldActivities.tsx` | [director.py](services/core/src/livingworld/application/director.py)、`routine_lifecycle.py`、`character_activity_context.py`、`infrastructure/scheduler_runtime.py`：6小时批量提案，Kernel执行真实移动/休息/工作/自由活动及开始/结束/中断；0025/0026/0038。地点范围、隐藏与锁定共同判定见`location_rules.py`。 |
 | 聊天参考本人近况/亲历 | 聊天“本次参考内容”，自然回复 | [observed_events.py](services/core/src/livingworld/infrastructure/persistence/observed_events.py)、[experience_lifecycle.py](services/core/src/livingworld/application/experience_lifecycle.py)：只取发言者获准Observation/本人快照，当前状态优先，同次获准终态替代召回开始，不补造结果。 |
 | 相遇/共同休闲 | 设置角色活动，聊天自然提及 | [character_encounters.py](services/core/src/livingworld/application/character_encounters.py)、`encounter_policy.py`、[shared_activities.py](services/core/src/livingworld/application/shared_activities.py)、`persistence/shared_activity_authority.py`：同场/实际活动/授权核验、冷却/持续同场去重，原子事件/Observation/幂等回执；0033/0034。 |
 | 在线/双人主动联系、未回复门禁 | `ProactiveContactSettings.tsx`，私聊/固定双人群 | [proactive_contact.py](services/core/src/livingworld/application/proactive_contact.py)、`persistence/proactive_contact.py`、[contact_gate.py](services/core/src/livingworld/infrastructure/persistence/contact_gate.py)：真实休闲理由，双人同一次共同活动/同事由；线上线下共用持久等待回复，不逐机会选人API；0035。 |
@@ -79,7 +80,7 @@
 - **主动联系不保证一开就发**：合法实际休闲/许可/间隔/计划/门禁同时满足；双人须同一真实共同休闲、同一邀请目的。所有角色共享未回复限制，阅读/开关/重启不能释放；只在收到联系的会话回复才解锁。
 - **节奏固定**：Director常规6小时批次；原批至少2条且50%日常失效才提前重规划。每批问候+共同开始合计最多2次，首次见面每角色24世界小时最多一个新对象；共同开始每角色24小时一次，同对6小时冷却、15～30世界分钟。
 - **本地运行有限**：退出/关机不调用API；托盘仍运行不等于离线。恢复不补造错过的移动/相遇/共同成果。WorldTime是整数微秒逻辑时间，UTC是真实时间，不能隐式互换。
-- **模型兼容有限**：四类adapter已有，DeepSeek优先；未知型号/代理及各厂商结构化事件/记忆效果未全面验收。聊天尝试内部所有选人/回复/retry共用上限；资料/后台任务有独立预算，失败不自动付费重放。
+- **模型兼容有限**：四类adapter和同次事件／记忆接线已有；原生能力需具体模型确认，未知型号/代理及各厂商效果未全面验收。Claude/Gemini继续可信容量预留；聊天所有选人/回复/retry共用上限。资料/后台有独立预算，失败不自动付费重放。
 
 ### 4.2 真正尚未实现
 
@@ -91,22 +92,27 @@
 | 完整World Builder/来源更新 | 单卡/书摘要研究、证据、草稿确认 | 一键构建可运行世界、全文核验、持续来源更新。 |
 | Runtime世界备份/分支 | ledger/replay、authored内容包 | 普通用户完整Checkpoint/Timeline Branch/`.lworld`保存恢复未实现；内容包不是存档备份。 |
 | Director风格管理 | 批量日常与社交子集 | 完整参数/风格管理的产品行为未冻结。 |
-| 正式发行 | Windows便携包 | 最新版整体验收、性能/兼容结论、签名安装/自动更新/发布；不能自动创建Release。 |
+| 正式发行 | Windows便携包 | 最新版整体验收、性能/兼容结论、签名安装/自动更新；体验版按用户明确授权发布，不自动推定稳定发行。 |
 
 共同委托/巡查、奖励/战斗不是以上愿景的默认实现方法；用户已明确否定自行添加。完整SillyTavern行为兼容也未实现，现有卡/书格式兼容不等于概率/递归/脚本等全兼容。
 
 ## 5. 接下来从哪一步继续
 
-1. **先接收0.1.40反馈修复包的体验**：通讯录资料／阵营主区是否更宽高；条件邀约是否保留条件；亲历记录是否易区分；动态先5条、处理2条补2条，绿灰历史与旧版过量记录是否有序。保留0.1.39长历史验收范围及原视觉／草稿／未读边界。没有新反馈时不要把已有实现重新登记为未完成代码。
+1. **先接收0.1.42模型适配体验**：四类服务普通／流式私聊与群聊、同次事件／记忆、超时／原生能力保存读回与严格额度提示。0.1.41地点优化验收继续：多层包含、父节点停留与返回、隐藏祖先逐角色开放、锁定立即返回、头像／右侧初始－当前位置、严格同地点相遇。原0.1.40反馈验收范围继续保持：通讯录资料／阵营主区是否更宽高；条件邀约是否保留条件；亲历记录是否易区分；动态先5条、处理2条补2条，绿灰历史与旧版过量记录是否有序。保留0.1.39长历史验收范围及原视觉／草稿／未读边界。没有新反馈时不要把已有实现重新登记为未完成代码。
 2. **验收尚未确认的关键链路**（共同联系目前由用户先等待，不主动触发或排查）：记忆纠正/停用和旧事召回、活动真实终态/权限、动态池公共背景→生成→逐条发布→标记、在线单人/双人同事由→等待回复→原会话回复→合法下次机会、离线联动。主动联系失败先查保存状态/前提/终端原因，不靠反复开关或自动重放API排查。
 3. **只按证据修复**：记录现象、版本、受影响模块和可观察完成条件；新功能先调查成熟实现并确认新增范围。用户仍负责测试；未获新许可不运行自动测试、GUI smoke、真实存档/模型诊断。
-4. **新方向先讨论**：将4.2中的愿景与当前功能验收分开；0.1.37已获公开体验发布授权，后续版本发行仍须相应批准。现在没有等待补写的共同委托，也没有需要重新搭建的记忆底座。
+4. **新方向先讨论**：将4.2中的愿景与当前功能验收分开；0.1.42已获本轮公开预发布授权，后续版本发行仍须相应批准。现在没有等待补写的共同委托，也没有需要重新搭建的记忆底座。
 
 各功能操作/验收手册： [聊天恢复](docs/CHAT_FUNCTIONAL_EXPERIENCE.md)、[记忆与上下文](docs/CONTEXT_AND_RECALL.md)、[经历终态](docs/EXPERIENCE_STATE_RECALL.md)、[日常](docs/DIRECTOR_ACTIVITIES.md)、[相遇](docs/CHARACTER_ENCOUNTERS.md)、[共同休闲](docs/SHARED_LEISURE.md)、[主动联系](docs/PROACTIVE_CONTACT.md)、[离线消息](docs/OFFLINE_MESSAGES.md)、[事件](docs/WORLD_EVENT_JOURNAL.md)、[阵营](docs/CHARACTER_FACTIONS.md)、[启动](docs/CELESTIAL_STARTUP.md)。
 
 ## 6. 交付与证据
 
-### 当前体验反馈修复（2026-10-07，Desktop0.1.40）
+### 当前模型适配（2026-10-08，Desktop0.1.42）
+
+- 四类服务同次事件／记忆、厂商wire schema副本、超时／原生能力保存与严格额度说明完成；用户明确保留可信容量硬上限。具体代码、研究、检查与待验收见[适配记录](docs/maintenance/2026-10-08-provider-compatibility.md)。
+- build-only退出0，EXE文件／产品版本均0.1.42；入口providers-0142，旧包保留。ESLint／TypeScript、修改Python的Ruff／格式／AST、Rust格式和版本核对通过；未运行自动测试、应用、真实模型或迁移；适配构建结束时尚未提交／推送／发布，本轮公开交付状态见发布记录。
+
+### 前序体验反馈修复（2026-10-07，Desktop0.1.40）
 
 - 用户确认三次薇薇安主动联系之间均在原会话回复；没有未回复门禁失效证据。在线共同活动优先／批内稳定排序、离线模型按资料理由选人均无轮换保证，具体存档入选原因未读取确认；未修改选人或共同联系条件。
 - 通讯录压缩重复标题与操作区，桌面名单220px，资料／阵营主区前移并减少头像留白。条件邀约提示明确保留条件；在线邀请与离线`invite_chat`同事务保存原话，无新增API。亲历记录独立；用户所贴四条同文休息开始时间不同，不能按文案删除不同事实。

@@ -47,6 +47,7 @@ from livingworld.infrastructure.llm.http_transport import (
 from livingworld.infrastructure.llm.sse import SSEDecoder, SSEProtocolError, StreamLimits
 from livingworld.infrastructure.llm.structured import (
     InvalidStructuredSchema,
+    native_wire_schema,
     prepare_schema,
     process_structured,
 )
@@ -817,6 +818,10 @@ class OpenAICompatibleChatGateway:
             ):
                 raise self._error(request, LLMErrorCode.UNSUPPORTED_CAPABILITY)
             if self._profile.structured_output_mode is StructuredOutputMode.NATIVE_JSON_SCHEMA:
+                try:
+                    schema = native_wire_schema(schema, "openai")
+                except InvalidStructuredSchema:
+                    raise self._error(request, LLMErrorCode.INVALID_REQUEST) from None
                 payload["response_format"] = {
                     "type": "json_schema",
                     "json_schema": {

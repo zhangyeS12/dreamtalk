@@ -10,9 +10,11 @@ from livingworld.domain.actions import RoutineActivity
 from livingworld.domain.identifiers import CharacterId
 from livingworld.domain.values import WorldTime
 from livingworld.domain.world import ClockState
+from livingworld.infrastructure.persistence.location_rules import LocationRules
 from livingworld.infrastructure.persistence.mapping import to_domain
 from livingworld.infrastructure.persistence.models import (
     CharacterStateRecord,
+    LocationRecord,
     WorldClockRecord,
     WorldEventRecord,
 )
@@ -89,6 +91,31 @@ class SqlAlchemyCharacterActivityContextReader:
                 return None
             clock = to_domain(row[0])
             now = self._time_source.read(clock)
+            presence = await session.get(CharacterStateRecord, (owner.world_id.value, owner.value))
+            own_location = None
+            if presence:
+                rules = await LocationRules.load(session, owner.world_id.value)
+                initial, locked, _ = await rules.scope(session, owner.world_id.value, owner.value)
+                allowed_ids = {
+                    identity
+                    for identity in (presence.location_id, initial)
+                    if identity and rules.visible(owner.value, identity)
+                }
+                names = dict(
+                    (
+                        await session.execute(
+                            select(LocationRecord.location_id, LocationRecord.name).where(
+                                LocationRecord.world_id == owner.world_id.value,
+                                LocationRecord.location_id.in_(allowed_ids),
+                            )
+                        )
+                    ).all()
+                )
+                own_location = {
+                    "current_location": names.get(presence.location_id),
+                    "initial_location": names.get(initial),
+                    "locked": locked,
+                }
             own_seen = (
                 select(seen.c.event_id, seen.c.observed_at, seen.c.witnessed)
                 .join(event, event.event_id == seen.c.event_id)
@@ -113,7 +140,11 @@ class SqlAlchemyCharacterActivityContextReader:
             )
             if row.event_id is None:
                 return CharacterActivitySnapshot(
-                    owner, now, clock.state is ClockState.PAUSED, recent_experiences=recent
+                    owner,
+                    now,
+                    clock.state is ClockState.PAUSED,
+                    recent_experiences=recent,
+                    own_location=own_location,
                 )
             terminal_id = await session.scalar(
                 select(event.event_id)
@@ -159,4 +190,5 @@ class SqlAlchemyCharacterActivityContextReader:
                 activity=RoutineActivity(row.activity),
                 last_terminal=terminals[0] if terminals else None,
                 recent_experiences=recent,
+                own_location=own_location,
             )

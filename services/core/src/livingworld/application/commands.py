@@ -49,6 +49,12 @@ class Command:
                 require_type(self.location_id, LocationId, "location_id")
                 require_type(self.list_locally, bool, "list_locally")
                 same_world(self.world_id, self.location_id)
+                _location_options(self)
+            case ConfigureLocation():
+                require_text(self.name, "name")
+                require_type(self.expected_revision, Revision, "expected_revision")
+                same_world(self.world_id, self.location_id)
+                _location_options(self)
             case CreatePlayer():
                 require_type(self.player_id, PlayerId, "player_id")
                 require_type(self.initial_location_id, LocationId, "initial_location_id")
@@ -80,8 +86,17 @@ class Command:
                 if self.activity_player_id is not None:
                     require_type(self.activity_player_id, PlayerId, "activity_player_id")
                     same_world(self.world_id, self.activity_player_id)
-                    if self.expected_state_revision is not None:
+                    if self.expected_state_revision is not None and not self.activity_configure:
                         raise DomainInvariantError("Activity setup only permits initial placement")
+                require_type(self.activity_configure, bool, "activity_configure")
+                require_type(self.activity_locked, bool, "activity_locked")
+                if self.expected_location_policy_revision is not None and (
+                    type(self.expected_location_policy_revision) is not int
+                    or self.expected_location_policy_revision < 0
+                ):
+                    raise DomainInvariantError("Location policy revision must be nonnegative")
+                if self.activity_configure and self.activity_player_id is None:
+                    raise DomainInvariantError("Location configuration requires a local player")
             case ChangeRelationship():
                 _optional_revision(self.expected_relationship_revision)
                 require_type(self.source_id, (CharacterId, PlayerId), "source_id")
@@ -157,6 +172,19 @@ class CreateLocation(Command):
     location_id: LocationId
     name: str
     list_locally: bool = False
+    parent_id: LocationId | None = None
+    hidden: bool = False
+    allowed_characters: tuple[CharacterId, ...] = ()
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ConfigureLocation(Command):
+    location_id: LocationId
+    name: str
+    expected_revision: Revision
+    parent_id: LocationId | None = None
+    hidden: bool = False
+    allowed_characters: tuple[CharacterId, ...] = ()
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -194,6 +222,9 @@ class PlaceCharacter(Command):
     location_id: LocationId
     expected_state_revision: Revision | None
     activity_player_id: PlayerId | None = None
+    activity_configure: bool = False
+    activity_locked: bool = False
+    expected_location_policy_revision: int | None = None
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -252,6 +283,7 @@ class AcquireKnowledge(Command):
 type WorldCommand = (
     CreateWorld
     | CreateLocation
+    | ConfigureLocation
     | CreatePlayer
     | MovePlayer
     | SetPlayerAvailability
@@ -262,3 +294,14 @@ type WorldCommand = (
     | FormCharacterBelief
     | AcquireKnowledge
 )
+
+
+def _location_options(command):
+    require_type(command.hidden, bool, "hidden")
+    if command.parent_id is not None:
+        require_type(command.parent_id, LocationId, "parent_id")
+        same_world(command.world_id, command.parent_id)
+    require_type(command.allowed_characters, tuple, "allowed_characters")
+    for character in command.allowed_characters:
+        require_type(character, CharacterId, "allowed character")
+        same_world(command.world_id, character)

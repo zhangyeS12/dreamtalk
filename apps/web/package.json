@@ -12,6 +12,7 @@
     "@dreamtalk/api-client": "0.1.0",
     "@tauri-apps/api": "^2.0.0",
     "3d-force-graph": "1.80.1",
+    "d3-hierarchy": "3.1.2",
     "embla-carousel-react": "8.6.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
@@ -20,6 +21,7 @@
     "three": "0.186.1"
   },
   "devDependencies": {
+    "@types/d3-hierarchy": "3.1.7",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@types/three": "0.186.0",

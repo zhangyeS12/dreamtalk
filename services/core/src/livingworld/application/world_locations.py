@@ -5,10 +5,11 @@ from typing import TYPE_CHECKING, Protocol
 from unicodedata import category, normalize
 from uuid import uuid5
 
-from livingworld.application.commands import CreateLocation
+from livingworld.application.commands import ConfigureLocation, CreateLocation
 from livingworld.domain.contracts import RequestId
 from livingworld.domain.errors import DomainInvariantError
 from livingworld.domain.identifiers import CharacterId, LocationId, PlayerId, WorldId
+from livingworld.domain.values import Revision
 
 if TYPE_CHECKING:
     from livingworld.application.command_handler import CommandHandler
@@ -39,6 +40,10 @@ class LocalLocation:
     location_id: LocationId
     name: str
     is_home: bool = False
+    parent_id: LocationId | None = None
+    hidden: bool = False
+    allowed_characters: tuple[CharacterId, ...] = ()
+    revision: int = 0
 
 
 class LocalLocationDirectory(Protocol):
@@ -51,6 +56,14 @@ class LocalLocationCatalog(Protocol):
     async def check_initial_activity(
         self, character_id: CharacterId, location_id: LocationId, player_id: PlayerId
     ) -> None: ...
+    async def check_options(self, location_id, parent_id, hidden, allowed_characters) -> None: ...
+    async def check_edit(self, location_id, name) -> None: ...
+    async def configure(self, location_id, name, parent_id, hidden, allowed_characters) -> None: ...
+    async def check_character_config(
+        self, character_id, location_id, player_id, policy_revision
+    ) -> None: ...
+    async def configure_character(self, character_id, location_id, locked) -> None: ...
+    async def config_destination(self, character_id, root, locked, before): ...
 
 
 class WorldLocationsService:
@@ -60,7 +73,16 @@ class WorldLocationsService:
     async def list_locations(self, world_id: WorldId) -> tuple[LocalLocation, ...]:
         return await self._directory.list_locations(world_id)
 
-    async def create(self, world_id: WorldId, name: str, request_id: RequestId) -> LocalLocation:
+    async def create(
+        self,
+        world_id: WorldId,
+        name: str,
+        request_id: RequestId,
+        *,
+        parent_id=None,
+        hidden=False,
+        allowed_characters=(),
+    ) -> LocalLocation:
         name = name.strip()
         location_name_key(name)
         identity = LocationId(
@@ -73,6 +95,51 @@ class WorldLocationsService:
                 location_id=identity,
                 name=name,
                 list_locally=True,
+                parent_id=parent_id,
+                hidden=hidden,
+                allowed_characters=allowed_characters,
             )
         )
-        return LocalLocation(identity, name)
+        return LocalLocation(
+            identity,
+            name,
+            parent_id=parent_id,
+            hidden=hidden,
+            allowed_characters=allowed_characters,
+        )
+
+    async def edit(
+        self,
+        world_id,
+        location_id,
+        name,
+        revision,
+        request_id,
+        *,
+        parent_id=None,
+        hidden=False,
+        allowed_characters=(),
+    ):
+        name = name.strip()
+        location_name_key(name)
+        await self._commands.execute(
+            ConfigureLocation(
+                request_id=request_id,
+                world_id=world_id,
+                location_id=location_id,
+                name=name,
+                expected_revision=Revision(revision),
+                parent_id=parent_id,
+                hidden=hidden,
+                allowed_characters=allowed_characters,
+            )
+        )
+        # Retry response describes the committed request, never a later edit.
+        return LocalLocation(
+            location_id,
+            name,
+            parent_id=parent_id,
+            hidden=hidden,
+            allowed_characters=allowed_characters,
+            revision=revision + 1,
+        )

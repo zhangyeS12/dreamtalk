@@ -1,6 +1,6 @@
 # Structured Generation & Local Schema Validation — C-005C1
 
-状态：已实现 opt-in 非流式结构化生成。自动测试全部使用人工 fixtures / httpx.MockTransport；不使用真实凭据，不调用提供方。没有 production default wiring。
+状态：已实现opt-in非流式结构化生成，历史测试使用人工fixtures／httpx.MockTransport。0.1.42已接入桌面显式原生能力配置及wire副本适配，本轮不运行测试或真实模型；历史“无production wiring”的阶段结论不代表当前设置入口。见[适配记录](../maintenance/2026-10-08-provider-compatibility.md)。
 
 ```text
 valid provider text != valid JSON != schema-valid value
@@ -12,7 +12,7 @@ completed generation + unusable result still consumes factual reported usage
 
 ## 1. 官方依据与模式
 
-2026-09-18 核对 [OpenAI Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs)：Chat Completions 的 native response_format 使用 json_schema，包含 name、strict=true 和 schema；仅支持其文档子集，root 必须 object 且不能 root anyOf。本地合法 schema 不保证提供方接受，不自动重写 required/additionalProperties 等限制；其他 provider-subset 失败可返回 normalized INVALID_REQUEST。
+2026-10-08复核[OpenAI Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs)：Chat Completions的native response_format使用json_schema，包含name、strict=true和schema；仅支持其文档子集，root必须object且不能root anyOf。0.1.42仅在wire副本补齐required／closed object，原始schema仍本地权威；动态map等不支持的副本在网络前拒绝，其他provider-subset失败可返回normalized INVALID_REQUEST。不是通用schema编译器。
 
 [DeepSeek JSON Output](https://api-docs.deepseek.com/guides/json_mode/) 与 [Chat API](https://api-docs.deepseek.com/api/create-chat-completion/) 当前使用 response_format.type=json_object，提供 JSON syntax 保证，不代表已执行调用方 schema。提示中的 JSON 指令由调用方编写；adapter 不扫描关键字，不偷偷追加指令、示例或 schema。空输出与 length 需要独立处理。
 
@@ -63,4 +63,4 @@ LLMFailure.attempt 是 optional LLMAttemptSummary，普通 failure repr 隐藏�
 
 沿用 [C-005A fake](../../tests/application/test_llm_contracts.py)、[C-005B 文本测试](../../tests/core/test_openai_compatible.py)、[架构约束](../../tests/core/test_architecture.py) 和完整 Stage 0–3 Python 回归。没有 UI/desktop 改动，无 GUI smoke。
 
-未实测真实 API 兼容性；没有 streaming/SSE、retry/backoff/repair/fallback/routing、pricing/usage DB、tools/function calls、Responses API、Director/Character/Builder schema 或业务实现。停止于 C-005C1；后续阶段未开始。
+本节的历史C-005C1验证未实测真实API兼容性；后续streaming／retry／routing／accounting／Responses与业务接线见[LLM基础设施](LLM_INFRASTRUCTURE.md)、[生产组装](LLM_PRODUCTION_COMPOSITION.md)及[当前状态](../PROJECT_STATUS.md)，不再把这些已实现部分登记为未开发。0.1.42原生wire副本和具体服务效果仍待用户验收。

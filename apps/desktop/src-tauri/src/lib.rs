@@ -488,6 +488,8 @@ mod model_update_tests {
                 base_url: None,
                 max_billable_input_tokens: 20_000,
                 max_output_tokens: 2_000,
+                timeout_ms: 30_000,
+                native_json: false,
             };
             let original = llm_config::single_chat_document(&setup, old_reference).unwrap();
             llm_config::write_atomic(&config.llm_config_path, &original)

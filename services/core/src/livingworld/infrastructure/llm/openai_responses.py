@@ -54,6 +54,7 @@ from livingworld.infrastructure.llm.http_transport import (
 from livingworld.infrastructure.llm.sse import SSEDecoder, SSEProtocolError, StreamLimits
 from livingworld.infrastructure.llm.structured import (
     InvalidStructuredSchema,
+    native_wire_schema,
     prepare_schema,
     process_structured,
 )
@@ -897,13 +898,14 @@ class OpenAIResponsesGateway:
         if request.structured_output is not None:
             try:
                 validator = prepare_schema(request.structured_output)
+                schema = native_wire_schema(validator.schema, "openai")
             except InvalidStructuredSchema:
                 raise self._error(request, LLMErrorCode.INVALID_REQUEST) from None
             payload["text"] = {
                 "format": {
                     "type": "json_schema",
                     "name": _schema_wire_name(request.structured_output.schema_name),
-                    "schema": _plain(request.structured_output.schema),
+                    "schema": schema,
                     "strict": True,
                 }
             }

@@ -23,6 +23,7 @@ from livingworld.infrastructure.persistence.encounter_models import (
     EncounterSettingsRecord as EncounterSettings,
 )
 from livingworld.infrastructure.persistence.factions import known_pair
+from livingworld.infrastructure.persistence.location_rules import character_can_enter
 from livingworld.infrastructure.persistence.models import LocalPlayerBindingRecord
 from livingworld.infrastructure.persistence.models import WorldEventRecord as Event
 from livingworld.infrastructure.persistence.shared_activity_models import (
@@ -69,6 +70,13 @@ async def _current(session, characters, world, row):
         for identity in (row.first_character_id, row.second_character_id)
     )
     presences = tuple([await characters.state(owner) for owner in owners])
+    if not all(
+        [
+            await character_can_enter(session, world.value, owner.value, row.location_id)
+            for owner in owners
+        ]
+    ):
+        return "location_policy_changed", routines, presences, plan
     activity = "rest" if row.activity == "shared_rest" else "leisure"
     if any(
         routine is None

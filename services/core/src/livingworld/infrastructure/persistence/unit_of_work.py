@@ -144,6 +144,19 @@ class LocationRepository:
             self._session, to_record(location), EntityAlreadyExistsError("Location already exists")
         )
 
+    async def replace(self, location: Location, expected_revision: Revision) -> None:
+        result = await self._session.execute(
+            update(LocationRecord)
+            .where(
+                LocationRecord.world_id == location.world_id.value,
+                LocationRecord.location_id == location.location_id.value,
+                LocationRecord.revision == expected_revision.value,
+            )
+            .values(name=location.name, revision=location.revision.value)
+        )
+        if result.rowcount != 1:
+            raise _conflict("Location", location.location_id, expected_revision)
+
 
 class PlayerRepository:
     def __init__(self, session: AsyncSession):

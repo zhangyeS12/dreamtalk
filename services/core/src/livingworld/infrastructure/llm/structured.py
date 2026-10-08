@@ -1,9 +1,10 @@
-"""Strict local trust boundary. No HTTP, prompt changes, output repair or retries."""
+"""Local schema authority and provider wire shapes; no HTTP, repair or retries."""
 
 import json
 import math
 from collections.abc import Mapping
 from dataclasses import replace
+from typing import Literal
 
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import SchemaError
@@ -33,7 +34,7 @@ class InvalidStructuredSchema(ValueError):
 def _plain(value):
     if isinstance(value, Mapping):
         return {key: _plain(item) for key, item in value.items()}
-    if isinstance(value, tuple):
+    if isinstance(value, (tuple, list)):
         return [_plain(item) for item in value]
     return value
 
@@ -91,6 +92,78 @@ def prepare_schema(request: StructuredOutputRequest) -> Draft202012Validator:
     if invalid:
         raise InvalidStructuredSchema("invalid_structured_schema")
     return validator
+
+
+def native_wire_schema(schema, provider: Literal["openai", "anthropic"]):
+    """Adapt only the wire copy. The original validator remains authoritative.
+
+    Traverse schema positions, never ordinary property names or annotation data.
+    This is not a compiler for every provider's complete JSON Schema subset.
+    """
+    wire = _plain(schema)
+    if provider == "openai" and (
+        not isinstance(wire, dict) or wire.get("type") != "object" or "anyOf" in wire
+    ):
+        raise InvalidStructuredSchema("unsupported_native_root_schema")
+
+    def visit(node):
+        if not isinstance(node, dict):
+            return
+        node.pop("$schema", None)
+        if provider == "openai":
+            node.pop("default", None)
+        removed = {}
+        for keyword in ("minLength", "maxLength"):
+            if keyword in node:
+                removed[keyword] = node.pop(keyword)
+        if provider == "anthropic":
+            for keyword in (
+                "minimum",
+                "maximum",
+                "exclusiveMinimum",
+                "exclusiveMaximum",
+                "multipleOf",
+                "maxItems",
+                "uniqueItems",
+                "contains",
+                "minContains",
+                "maxContains",
+            ):
+                if keyword in node:
+                    removed[keyword] = node.pop(keyword)
+            if "minItems" in node and node["minItems"] not in (0, 1):
+                removed["minItems"] = node.pop("minItems")
+        if removed:
+            constraints = json.dumps(removed, ensure_ascii=False, separators=(",", ":"))
+            node["description"] = (
+                str(node.get("description", "")) + " Local validation constraints: " + constraints
+            ).strip()
+        types = node.get("type", ())
+        if (
+            types == "object"
+            or isinstance(types, list)
+            and "object" in types
+            or "properties" in node
+        ):
+            # Native grammars require a closed set of named fields. Do not
+            # silently discard an explicitly dynamic map's contract.
+            if node.get("additionalProperties", False) is not False or "patternProperties" in node:
+                raise InvalidStructuredSchema("unsupported_native_object_schema")
+            properties = node.setdefault("properties", {})
+            node["additionalProperties"] = False
+            if provider == "openai":
+                node["required"] = list(properties)
+        for keyword in ("properties", "$defs", "definitions", "dependentSchemas"):
+            for child in node.get(keyword, {}).values():
+                visit(child)
+        for keyword in ("anyOf", "allOf", "oneOf", "prefixItems"):
+            for child in node.get(keyword, []):
+                visit(child)
+        for keyword in ("items", "not", "if", "then", "else", "propertyNames"):
+            visit(node.get(keyword))
+
+    visit(wire)
+    return wire
 
 
 def _constant(_):

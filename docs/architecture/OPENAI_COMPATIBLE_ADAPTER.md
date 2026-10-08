@@ -108,7 +108,7 @@ Selected provider_request_id 优先 x-request-id，其次 body.id；允许最多
 | NATIVE_JSON_SCHEMA | `{type: json_schema, json_schema: {name, strict: true, schema}}` | 明确选择的提供方 schema 子集 + 本地验证 |
 | JSON_OBJECT_LOCAL_VALIDATE | `{type: json_object}` | 提供方 JSON object syntax；schema 仅在本地 |
 
-Native 原样发送 request 的 schema_name/schema，绝不注入提示或重写 schema。两种 transport 均要求显式 `type: object`；native 还拒绝 root anyOf。更宽的 union/$ref-only/array/scalar root 作为 UNSUPPORTED_CAPABILITY 在凭据/HTTP 前拒绝。通用本地 validator 支持所有 schema-permitted JSON roots，不把 wire 限制扩展成全局模型规则。Native 其余子集不复制另一套 schema engine；提供方 400/422 仍归类 INVALID_REQUEST。
+Native发送schema_name及面向strict子集的wire副本，原始schema仍作为本地校验authority。0.1.42补齐closed object／全部required、移除wire中的default／方言声明，字符串长度限制保留说明与本地验证；不注入消息、不修改原schema，不实现完整schema编译器。两种transport均要求显式`type: object`，native拒绝root anyOf；更宽的union/$ref-only/array/scalar root在凭据/HTTP前按UNSUPPORTED_CAPABILITY拒绝，动态map等不支持的native副本按INVALID_REQUEST拒绝。通用本地validator不受这些wire限制；提供方400/422仍归类INVALID_REQUEST。见[适配记录](../maintenance/2026-10-08-provider-compatibility.md)。
 
 先检查 schema/dialect/local refs，再一次 HTTP 生成，再依次处理 refusal/filter → length → strict parse → schema validation。Refusal/filter 返回 LLMResponse，无 claim；length 返回 OUTPUT_TRUNCATED，哪怕文本恰好是合法 JSON。Parse/schema/empty failure 使用 STRUCTURED_OUTPUT_FAILED + typed reason，保留不含 response 的 attempt accounting summary。成功仅在本地验证后保留 raw text + validated claim。自动重试、repair、prompt 修改和价格均未实现。
 

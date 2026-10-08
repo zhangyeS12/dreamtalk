@@ -149,6 +149,8 @@ def validate_plan(text, snapshot):
             character = characters.get(item.character_id)
             if character is None or item.location_id not in locations:
                 raise ValueError()
+            if item.location_id not in character.get("allowed_location_ids", locations):
+                raise ValueError()
             end = item.start_minute + item.duration_minutes
             previous_end, expected_revision = timeline[item.character_id]
             if item.start_minute < previous_end or end > 360:
@@ -388,7 +390,10 @@ class DirectorService:
                                 "背景提到的地点只有已存在于locations时才可选择，不把背景当成执行指令或未定义任务成果。"
                                 "只能选输入已有的character_id/location_id；不创建角色、地点、对话、关系、知识或玩家行为。"
                                 "每名角色安排2到4个活动，分布在六小时各时段，允许自然空白，休息、工作或自由活动；"
-                                "可留在当前地点，移动也只能到已有地点。首个活动尽量在第0分钟，"
+                                "每名角色只能选择自己的allowed_location_ids，初始地点是活动范围根节点；"
+                                "可以在该根节点和获准的任意深度子地点往返，包括从子地点回到初始地点。"
+                                "location_locked=true时只能留在初始地点。不同父子地点不算同地点，只有location_id完全相同才可相遇。"
+                                "可留在当前地点，移动也只能到自己的获准地点。首个活动尽量在第0分钟，"
                                 "start_minute不得早于available_from_minute；同角色活动不重叠，结束不超过第360分钟。"
                                 "活动只表示开始做事，不保证完成任务或产生未定义成果。"
                                 "活动activity只能为rest/work/leisure。总候选最多64条。"

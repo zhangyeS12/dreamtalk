@@ -74,10 +74,19 @@ def annotate_request(request):
         request,
         # Put the transport contract after role instructions and before the
         # unchanged conversation. Past plain-text replies must not override JSON.
-        messages=tuple(m for m in request.messages if m.role is MessageRole.SYSTEM)
-        + (
+        # Messages/Interactions accept one leading system instruction. Keep all
+        # existing blocks and append the same-call contract without changing roles
+        # or moving conversation data into that privileged instruction.
+        messages=(
             LLMMessage(
-                MessageRole.SYSTEM, (TextContent(ANNOTATION_INSTRUCTIONS + MEMORY_INSTRUCTIONS),)
+                MessageRole.SYSTEM,
+                tuple(
+                    block
+                    for message in request.messages
+                    if message.role is MessageRole.SYSTEM
+                    for block in message.content
+                )
+                + (TextContent("\n\n" + ANNOTATION_INSTRUCTIONS + MEMORY_INSTRUCTIONS),),
             ),
         )
         + tuple(m for m in request.messages if m.role is not MessageRole.SYSTEM),

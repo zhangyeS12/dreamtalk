@@ -9,6 +9,7 @@ from livingworld.application.commands import (
     AcquireKnowledge,
     AssertWorldTruth,
     ChangeRelationship,
+    ConfigureLocation,
     CreateCharacter,
     CreateLocation,
     CreatePlayer,
@@ -55,6 +56,17 @@ def id_input(
     return result
 
 
+def _location_options(command):
+    return {
+        "parent_id": id_input(command.parent_id) if command.parent_id else None,
+        "hidden": command.hidden,
+        "allowed_characters": [
+            id_input(item)
+            for item in sorted(command.allowed_characters, key=lambda item: str(item.value))
+        ],
+    }
+
+
 def semantic_input(command: WorldCommand) -> dict:
     common = {
         "fingerprint_version": 1,
@@ -79,6 +91,15 @@ def semantic_input(command: WorldCommand) -> dict:
             # Keep previously committed setup/onboarding fingerprints byte-compatible.
             if command.list_locally:
                 details["list_locally"] = True
+            if command.parent_id is not None or command.hidden or command.allowed_characters:
+                details.update(_location_options(command))
+        case ConfigureLocation():
+            details = {
+                "location_id": id_input(command.location_id),
+                "name": command.name,
+                "expected_revision": command.expected_revision.value,
+                **_location_options(command),
+            }
         case CreatePlayer():
             details = {
                 "player_id": id_input(command.player_id),
@@ -111,6 +132,11 @@ def semantic_input(command: WorldCommand) -> dict:
             }
             if command.activity_player_id is not None:
                 details["activity_player_id"] = id_input(command.activity_player_id)
+            if command.activity_configure:
+                details.update(activity_configure=True, activity_locked=command.activity_locked)
+                details["expected_location_policy_revision"] = (
+                    command.expected_location_policy_revision
+                )
         case ChangeRelationship():
             details = {
                 "source_id": id_input(command.source_id),

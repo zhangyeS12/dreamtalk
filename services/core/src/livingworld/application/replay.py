@@ -93,12 +93,14 @@ class _EventFold:
         self._handlers = {
             ("WorldCreated", 1): self._world_created,
             ("LocationCreated", 1): self._location_created,
+            ("LocationUpdated", 1): self._location_updated,
             ("PlayerCreated", 1): self._player_created,
             ("PlayerPlaced", 1): self._player_placed,
             ("PlayerMoved", 1): self._player_moved,
             ("PlayerAvailabilityChanged", 1): self._player_availability_changed,
             ("CharacterCreated", 1): self._character_created,
             ("CharacterPlaced", 1): self._character_placed,
+            ("CharacterLocationConfigured", 1): self._character_location_configured,
             ("CharactersMet", 1): self._characters_met,
             ("SharedActivityStarted", 1): self._shared_activity_started,
             ("SharedActivityEnded", 1): self._shared_activity_terminal,
@@ -226,6 +228,31 @@ class _EventFold:
             self.locations,
             identity,
             Location(self.world_id, identity, value["name"], Revision(value["revision"])),
+        )
+
+    def _character_location_configured(self, event):
+        value = event.payload
+        identity = self._id(CharacterId, value["character_id"])
+        location = self._id(LocationId, value["initial_location_id"])
+        _check(
+            identity in self.character_states and location in self.locations,
+            "Missing configured character/location",
+        )
+        _check(
+            self.character_states[identity].revision.value == _integer(value["revision"]),
+            "Configured character revision mismatch",
+        )
+
+    def _location_updated(self, event):
+        value = event.payload
+        identity = self._id(LocationId, value["location_id"])
+        before = self.locations[identity]
+        _check(
+            before.revision.value + 1 == _integer(value["revision"]), "Location revision mismatch"
+        )
+        _check(before.name == value["before_name"], "Location name mismatch")
+        self.locations[identity] = Location(
+            self.world_id, identity, value["name"], Revision(value["revision"])
         )
 
     def _player_created(self, event):

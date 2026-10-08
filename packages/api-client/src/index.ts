@@ -20,8 +20,9 @@ export interface CoreHealth {
   llm_status: LLMRuntimeStatus;
 }
 export interface WorldSummary { world_id: string; name: string }
-export interface ActivityLocation { location_id: string; name: string; is_home: boolean }
-export interface ActivityCharacter { character_id: string; name: string; initialized: boolean }
+export interface ActivityLocation { location_id: string; name: string; is_home: boolean; parent_id: string | null; hidden: boolean; allowed_character_ids: string[]; revision: number }
+export interface ActivityCharacter { character_id: string; name: string; initialized: boolean; root_import_id: string; initial_location_id: string | null; current_location_id: string | null; locked: boolean; revision: number | null; policy_revision: number }
+export interface LocationDraft { name: string; parent_id: string | null; hidden: boolean; allowed_character_ids: string[] }
 export interface ActivityCharacterDirectory { player_id: string | null; items: ActivityCharacter[] }
 export interface WorldSettings extends WorldSummary {
   world_time: string;
@@ -597,11 +598,17 @@ export class CoreClient {
   listActivityLocations(worldId: string): Promise<ActivityLocation[]> {
     return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/activity-locations`);
   }
-  createActivityLocation(worldId: string, name: string, requestId: string): Promise<ActivityLocation> {
+  createActivityLocation(worldId: string, name: string, requestId: string, options?: Omit<LocationDraft, "name">): Promise<ActivityLocation> {
     return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/activity-locations`, {
       method: "POST", headers: { "Content-Type": "application/json", "X-Request-Id": requestId },
-      body: JSON.stringify({ name }),
+      body: JSON.stringify({ name, ...options }),
     });
+  }
+  editActivityLocation(worldId: string, locationId: string, draft: LocationDraft, revision: number, requestId: string): Promise<ActivityLocation> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/activity-locations/${encodeURIComponent(locationId)}`, { method: "PUT", headers: { "Content-Type": "application/json", "X-Request-Id": requestId }, body: JSON.stringify({ ...draft, expected_revision: revision }) });
+  }
+  configureCharacterLocation(worldId: string, playerId: string, characterId: string, locationId: string, locked: boolean, revision: number | null, requestId: string, policyRevision = 0): Promise<{ character_id: string; initialized: boolean }> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/activity-characters/${encodeURIComponent(characterId)}/location-policy`, { method: "PUT", headers: { "Content-Type": "application/json", "X-Request-Id": requestId }, body: JSON.stringify({ player_id: playerId, location_id: locationId, locked, expected_revision: revision, expected_policy_revision: policyRevision }) });
   }
   listWorldCovers(signal?: AbortSignal): Promise<WorldCover[]> {
     return this.productRequest("/world-covers", { signal });

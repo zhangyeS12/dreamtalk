@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from urllib.parse import urlsplit
 from uuid import uuid4
 
 from livingworld.application.chat_context import DirectChatContextBuilder
@@ -119,26 +118,39 @@ def configure_group_chat_reply(
 
 
 def _capture_available(session, purpose="character_dialogue"):
+    """Optional same-call annotations use the existing text path for every adapter."""
+    models = _purpose_models(session, purpose)
+    return bool(models) and all(
+        (entry := session.runtime.registry.lookup(model)) is not None
+        and entry.enabled
+        and entry.capabilities.text_generation
+        for model in models
+    )
+
+
+def _purpose_models(session, purpose):
     runtime = session.runtime
     if runtime is None:
-        return False
+        return ()
     policy = runtime.configuration.routing.policy(LLMPurpose(purpose), RoutingProfile.BALANCED)
-    models = (
+    return (
         policy.candidates
         if policy
         else tuple(
             e.model for e in runtime.registry.models if e.enabled and e.capabilities.text_generation
         )
     )
+
+
+def _json_output_available(session, purpose="character_dialogue"):
+    """Required JSON tasks remain separate from optional dialogue annotations."""
+    models = _purpose_models(session, purpose)
     return bool(models) and all(
-        runtime.configuration.providers[m.provider_id].config.endpoint is not None
-        and urlsplit(
-            runtime.configuration.providers[m.provider_id].config.endpoint.base_url
-        ).hostname
-        == "api.deepseek.com"
-        and runtime.registry.lookup(m).capabilities.structured_output_mode
-        is StructuredOutputMode.JSON_OBJECT_LOCAL_VALIDATE
-        for m in models
+        (entry := session.runtime.registry.lookup(model)) is not None
+        and entry.enabled
+        and entry.capabilities.structured_output
+        and entry.capabilities.structured_output_mode is not StructuredOutputMode.NONE
+        for model in models
     )
 
 
@@ -148,7 +160,7 @@ def configure_offline_dialogue(session: ProductionLLMSession):
 
 
 def configure_proactive_dialogue(session: ProductionLLMSession):
-    return configure_offline_dialogue(session), _capture_available(session)
+    return configure_offline_dialogue(session), _json_output_available(session)
 
 
 def configure_director(session: ProductionLLMSession):
@@ -158,7 +170,10 @@ def configure_director(session: ProductionLLMSession):
 
 def configure_world_news(session):
     configured = _chat_reply_configuration(session, "director_plan")
-    return (configured[:6] if configured else None), _capture_available(session, "director_plan")
+    return (
+        configured[:6] if configured else None,
+        _json_output_available(session, "director_plan"),
+    )
 
 
 def configure_content_builder(session: ProductionLLMSession):

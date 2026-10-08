@@ -48,6 +48,10 @@ pub struct ChatModelSetup {
     pub base_url: Option<String>,
     pub max_billable_input_tokens: u64,
     pub max_output_tokens: u64,
+    #[serde(default = "default_timeout")]
+    pub timeout_ms: u64,
+    #[serde(default)]
+    pub native_json: bool,
 }
 
 pub struct ManagedChatConfiguration {
@@ -93,6 +97,13 @@ pub fn managed_chat_configuration(bytes: &[u8]) -> Result<ManagedChatConfigurati
             .transpose()?,
         max_billable_input_tokens: get_u64(&model["limits"], "max_billable_input_tokens")?,
         max_output_tokens: get_u64(&model["limits"], "max_output_tokens")?,
+        timeout_ms: get_u64(provider, "timeout_ms")?,
+        native_json: match model["capabilities"].get("structured_output") {
+            None => false,
+            Some(value) => value
+                .as_bool()
+                .ok_or("model_edit_requires_managed_single_chat_configuration")?,
+        },
     };
     let secret_ref = get_string(provider, "secret_ref")?;
     let streaming = match model["capabilities"].get("streaming") {
@@ -183,6 +194,7 @@ fn build_single_chat_document(
         || setup.model_id.chars().any(char::is_control)
         || !(1..=10_000_000).contains(&setup.max_billable_input_tokens)
         || !(1..=1_000_000).contains(&setup.max_output_tokens)
+        || !(1_000..=600_000).contains(&setup.timeout_ms)
     {
         return Err("model_setup_invalid");
     }
@@ -242,12 +254,12 @@ fn build_single_chat_document(
         "provider_id": provider_id,
         "adapter_kind": setup.provider_kind,
         "secret_ref": secret_ref,
-        "timeout_ms": 30_000,
+        "timeout_ms": setup.timeout_ms,
     });
     if let Some(base) = setup.base_url.as_ref() {
         provider["base_url"] = serde_json::Value::String(base.clone());
     }
-    let document = serde_json::json!({
+    let mut document = serde_json::json!({
         "version": 1,
         "providers": [provider],
         "models": [{
@@ -268,6 +280,17 @@ fn build_single_chat_document(
             "schedules": [], "aliases": [],
         },
     });
+    if setup.native_json {
+        let model = &mut document["models"][0];
+        model["capabilities"]["structured_output"] = serde_json::json!(true);
+        model["capabilities"]["structured_output_mode"] = serde_json::json!("native_json_schema");
+        if setup.provider_kind == "openai-compatible" {
+            model["adapter_profile"]["structured_output_mode"] =
+                serde_json::json!("native_json_schema");
+        } else {
+            model["adapter_profile"]["supports_native_structured_output"] = serde_json::json!(true);
+        }
+    }
     serde_json::to_vec(&document).map_err(|_| "model_setup_invalid")
 }
 
@@ -405,6 +428,8 @@ mod tests {
             base_url: base_url.map(str::to_owned),
             max_billable_input_tokens: 20_000,
             max_output_tokens: 2_000,
+            timeout_ms: default_timeout(),
+            native_json: false,
         }
     }
 
