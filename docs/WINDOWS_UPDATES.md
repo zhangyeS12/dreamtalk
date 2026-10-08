@@ -51,7 +51,7 @@ pwsh -File scripts/updater-signing.ps1 -Mode Import -RecoveryFile E:\Backup\drea
 
 ## 发布流程
 
-只有获得对应版本GitHub发布授权后执行。本次用户已明确授权，v0.1.47和固定频道已发布，见[记录](maintenance/2026-10-08-authored-deletion.md)。
+只有获得对应版本GitHub发布授权后执行。此前用户已授权更新发布，本轮修复版v0.1.48和固定频道已发布，见[修复记录](maintenance/2026-10-08-update-manifest-fix.md)。
 
 1. 编译签名完整包，更新`docs/releases/v<version>.md`中的用户可读说明，检查产物清单和SHA256。
 2. 创建版本Release（如`v0.1.47`，当前仍预发布），上传安装器、`.sig`、便携ZIP、SHA256SUMS及说明。

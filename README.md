@@ -22,7 +22,7 @@ dreamtalk 是持久化、事件驱动的多角色 AI 世界，不是普通聊天
 
 ## 开发状态
 
-截至2026-10-08，Desktop **0.1.48** 为当前修复版本；修正原安装包清单、增加静态交付核对及严格旧清单修复工具，包含前序删除及其他功能。[本轮记录](docs/maintenance/2026-10-08-update-manifest-fix.md)。项目处于体验和验收阶段；卡／书当轮外部JSON导入已有具体用户验收，不能扩大为最新版整体验收。工程端没有运行应用、安装器、测试、模型或真实迁移，也未修改当前系统入口。
+截至2026-10-08，Desktop **0.1.48** 修复版已公开，签名安装器／便携包和固定频道均可下载；修正原安装包清单、增加静态交付核对及严格旧清单修复工具，包含前序删除及其他功能。[本轮记录](docs/maintenance/2026-10-08-update-manifest-fix.md)。项目处于体验和验收阶段；卡／书当轮外部JSON导入已有具体用户验收，不能扩大为最新版整体验收。工程端只修复了已核对的旧程序清单，没有运行应用、安装器、测试、模型或真实迁移，也未修改当前系统入口。
 
 Q-001B 提供仅开发环境启用的 [开发者运行时检查器](docs/architecture/RUNTIME_INSPECTOR.md)，用于通过真实 API/application 路径观察时钟、位置、Scene、trigger、activation、WorldEvent、Observation 与 owner-scoped EpisodicMemory。它不是最终产品 UI，也没有加入 Activation consumer 或自动 Observation→Memory。
 
