@@ -1,15 +1,15 @@
-# dreamtalk 0.1.46 · Windows 更新入口版（本地未发布）
+# dreamtalk 0.1.47 · Windows 删除与更新体验版
 
-这是一款以聊天为中心的本地AI持久世界应用。0.1.46新增更新入口和完整签名安装流程，继承0.1.45封面修复、0.1.44移动和0.1.43世界独立模型。[本轮记录](maintenance/2026-10-08-desktop-updates.md)。本地build-only体验版未公开发布，最新公开下载仍v0.1.42；运行／升级／模型效果待用户验收。
+这是一款以聊天为中心的本地AI持久世界应用。v0.1.47新增角色卡／地点删除入口，继承世界独立模型、角色移动、封面回收和更新器；完整签名安装包／便携包已公开。源码、构建和下载证据见[发布记录](maintenance/2026-10-08-authored-deletion.md)，实际删除／升级／模型效果待用户验收。
 
 ## 下载与启动
 
-1. 本地新版完整包为artifacts/portable/cover-cache-0145/dreamtalk.zip；交付结果见本轮记录，尚未上传。其他用户可在[0.1.42 Release](https://github.com/zhangyeS12/dreamtalk/releases/tag/v0.1.42)下载dreamtalk-0.1.42-windows-x64.zip。解压完整包，不以Source code或单独EXE替代。旧0.1.43因自启动仍指向它暂留。
+1. 在[v0.1.47 Release](https://github.com/zhangyeS12/dreamtalk/releases/tag/v0.1.47)优先下载并运行dreamtalk_0.1.47_x64-setup.exe；便携用户下载dreamtalk-0.1.47-windows-x64.zip。GitHub Source code不是可运行程序，无需自行编译。
 2. 完整解压到一个固定目录，再打开 `dreamtalk/dreamtalk-desktop.exe`。请勿在压缩包里直接运行，也不要只复制 EXE；同目录的 `core/` 必须保留。
 3. 使用 Windows 10/11 x64，并安装 [Microsoft WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/)。无需安装 Python、uv、Node 或 Rust。
 4. 启动动画结束后进入世界书架，选择空白书创建世界，再明确进入世界。
 
-程序尚未签名，Windows 可能显示未知发布者提示；请使用完整便携目录或ZIP。公开Release另附 `SHA256SUMS.txt`。不用关闭系统安全防护。暂不提供macOS/Linux包。0.1.46附带更新器和程序清单；发布频道上线后可更新并迁入固定安装目录，旧公开v0.1.42需一次手动安装。参见[应用更新说明](WINDOWS_UPDATES.md)。
+更新包有Tauri完整性签名，尚无Windows发布者证书，首次安装可能显示未知发布者。Release附SHA256SUMS.txt；不要关闭系统安全防护。仅交付Windows x64。0.1.46可从应用内发现0.1.47；旧无更新器版本需先退出旧程序再手动安装，见[更新说明](WINDOWS_UPDATES.md)。
 
 ## 第一次聊天
 
@@ -41,7 +41,7 @@
 
 随包 `docs/` 包含使用说明：[新版界面](WORLD_TERMINAL.md)、[设置](SETTINGS_HANDBOOK.md)、[记忆](CONTEXT_AND_RECALL.md)、[主动联系](PROACTIVE_CONTACT.md)、[后台与离线](OFFLINE_MESSAGES.md)。
 
-本地0.1.46包保留根交接／产品规则，源码和测试引用转为GitHub基线链接，需联网查看；`SOURCE_REVISION.txt`记录链接基线。程序包含该基线后的未提交修改，新源码尚未上传，链接不能代替当前源码快照；完整变化以随包维护记录为准。公开v0.1.42与旧v0.1.37保留各自发布快照。
+v0.1.47包内文档是构建时发布准备快照，SOURCE_REVISION.txt引用应用提交580cdf5，源码已公开；发布后仓库状态记录有后续更新，不把随包快照称为最新仓库文档。历史v0.1.42／v0.1.37保留各自发布快照。
 
 请通过 [GitHub Issues](https://github.com/zhangyeS12/dreamtalk/issues) 提供版本、Windows版本、操作步骤、预期和实际表现；可附脱敏截图。不要上传 API Key、完整私聊或个人数据库。
 

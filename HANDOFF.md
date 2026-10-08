@@ -1,6 +1,6 @@
 # dreamtalk 工作交接
 
-更新日期：**2026-10-08**。Desktop **0.1.47** 发布准备，正式仓库 D:\LivingWorld，分支 codex/world-archive，起始 HEAD 85f8035。新增角色卡／地点删除及阵营提示，包含前序 0.1.43～0.1.46 授权改动；用户明确批准源码、签名安装器、便携包和更新频道发布，结果见[本轮记录](docs/maintenance/2026-10-08-authored-deletion.md)。API 协议 1，迁移源码 head 0040_authored_removal；未运行真实迁移或安装器，旧 0.1.43 自启动包暂留。
+更新日期：**2026-10-08**。Desktop **0.1.47** 已公开预发布；正式仓库 D:\LivingWorld，分支 codex/world-archive，本轮起始 HEAD 85f8035，应用源码／标签 `580cdf5c4c2f23f99fca2520d7f36e8024dd2441` 已快进推送至两分支。[v0.1.47](https://github.com/zhangyeS12/dreamtalk/releases/tag/v0.1.47) 提供完整签名NSIS／便携包，[固定更新频道](https://github.com/zhangyeS12/dreamtalk/releases/tag/update-preview)已上线；源码、构建、上传与完整匿名下载证据见[本轮记录](docs/maintenance/2026-10-08-authored-deletion.md)。API协议1，迁移源码head0040_authored_removal；未启动产物／安装器、运行真实迁移或修改当前系统入口。
 
 本轮删除保留历史和稳定事实，旧私聊／含删除角色的群聊只读；地点检查子地点和占用，阵营保持空阵营政策。仅源码／编译／build-only 与发布文件核对，运行及升级由用户验收；共同联系继续等待用户。
 
@@ -24,11 +24,11 @@
 | 项 | 2026-10-08维护现场 / 已发布历史 |
 | --- | --- |
 | 正式仓库 | `D:\LivingWorld`。`C:\Users\zhang\Documents\ChatGPT\LivingWorld`是本次受限工具的可写工作目录，不是正式仓库搬迁。 |
-| 分支/基线 | codex/world-archive；起始HEAD85f8035，0.1.43～0.1.46为未提交修改；最新公开应用源码bdf153d／v0.1.42。 |
+| 分支/基线 | codex/world-archive；起始85f8035。应用源码／v0.1.47标签580cdf5c4c2f23f99fca2520d7f36e8024dd2441，已正常快进公开；后续文档记录不移动标签。 |
 | 关键前序提交 | `8d56c99`：主动联系保存/启动最低展示；`42e675c`：Logo/三维启动；`167d5e8`：真三维人物网；`bd90ab3`：阵营/头像；`844259a`：离线门禁提示；`0a1539c`：已读红点修复；`ed5f844`：主动联系/通用未读。 |
-| 版本 | 当前Desktop package／Tauri／Cargo及锁文件0.1.46；公开包仍0.1.42。根npm／Web／Core独立0.1.0。 |
-| 协议/迁移 | API协议1，loopback随机端口；迁移源码head0039_character_mobility，前序0038地点／0037索引。本轮不运行真实迁移；模型配置继承0.1.43v1默认／v2覆盖。 |
-| GitHub | `origin=https://github.com/zhangyeS12/dreamtalk.git`。0.1.40同步前fetch核对：main与codex/world-archive均为`4d280cc`；2026-10-07按用户授权快进同步0.1.40源码；前序0.1.42发布轮已按授权快进推送0.1.42源码至main与codex/world-archive，并公开发布新版便携包，下载见[v0.1.42体验版](https://github.com/zhangyeS12/dreamtalk/releases/tag/v0.1.42)，提交、附件和公开下载证据见发布记录；不强推。 |
+| 版本 | Desktop package／Tauri／Cargo及对应锁文件0.1.47；公开安装器及便携均0.1.47，固定频道清单0.1.47。根npm／Web／Core独立0.1.0。当前运行版本未由工程端检查。 |
+| 协议/迁移 | API协议1；迁移源码head0040_authored_removal，0039移动字段保持。本轮没有运行真实迁移；模型配置继承v1默认／v2覆盖。 |
+| GitHub | 公开origin仓库zhangyeS12/dreamtalk；本轮main和codex/world-archive快进到应用源码580cdf5，v0.1.47固定。完整预发布和update-preview清单已公开，附件摘要／匿名下载核对一致，详见删除发布记录。不强推，不代用户运行升级。 |
 | 最新便携入口 | artifacts/portable/cover-cache-0145/dreamtalk/dreamtalk-desktop.exe；完整目录含core，检查／打包结果见本轮记录。旧world-models-0143因自启动仍指向它暂留。 |
 | 存档/启动 | app identifier仍为`app.livingworld.desktop`；开发数据兼容位置为`%LOCALAPPDATA%/LivingWorld/development`。开发／构建未读取用户存档；后续清理核对运行／启动入口，并按用户单独批准将dreamtalk自启动从0.1.41更新至0.1.43，保留--background；其他登记不改。 |
 
@@ -110,7 +110,7 @@
 
 本地旧包、重复发布副本与构建缓存已于2026-10-08按用户授权清理；以下旧路径、旧哈希及“保留”描述记录当时交付事实，不是当前本地入口。清理轮仅保留0.1.43；后续增加0.1.44～0.1.46，0.1.43因自启动暂留。旧工作源码压缩保护，用户数据保持；清理范围与最终核对见[清理记录](docs/maintenance/2026-10-08-local-cleanup.md)。
 
-### 当前删除与发布切片（Desktop 0.1.47）
+### 当前删除与发布交付（Desktop 0.1.47）
 
 入口：通讯录角色资料底部／角色卡管理“当前世界已保存”的删除按钮；地点编辑“删除此地点”；编辑阵营“删除阵营”。迁移 head 0040；身份过滤、聊天只读、后续活动与联系核验统一接线。发布结果与待验收见[记录](docs/maintenance/2026-10-08-authored-deletion.md)。
 

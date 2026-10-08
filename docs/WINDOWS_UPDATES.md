@@ -1,6 +1,6 @@
 # Windows 应用更新
 
-0.1.46起提供更新入口与完整安装包。本地实现不代表已上线：当前公开版本仍v0.1.42；首次发布0.1.46及更新频道后，用户才可从GitHub下载安装并发现后续更新。
+0.1.46起提供更新入口与完整安装包；当前[v0.1.47](https://github.com/zhangyeS12/dreamtalk/releases/tag/v0.1.47)完整签名安装器及便携版、[update-preview频道](https://github.com/zhangyeS12/dreamtalk/releases/tag/update-preview)已公开。0.1.46可从启动提示或手动入口发现0.1.47，真实跨版更新仍由用户验收。
 
 ## 使用
 
@@ -28,7 +28,7 @@
 
 ```powershell
 # 已初始化后构建；不启动产物、不运行测试、不发布
-pwsh -File scripts/updater-signing.ps1 -Mode Build -OutputName updates-0146
+pwsh -File scripts/updater-signing.ps1 -Mode Build -OutputName deletions-0147
 
 # 用户自行选择仓库外的备份位置，交互输入至少12字符密码
 pwsh -File scripts/updater-signing.ps1 -Mode Export -RecoveryFile E:\Backup\dreamtalk-updater-recovery.json
@@ -43,10 +43,10 @@ pwsh -File scripts/updater-signing.ps1 -Mode Import -RecoveryFile E:\Backup\drea
 
 ## 发布流程
 
-只有获得对应版本GitHub发布授权后执行；本轮未发布。
+只有获得对应版本GitHub发布授权后执行。本次用户已明确授权，v0.1.47和固定频道已发布，见[记录](maintenance/2026-10-08-authored-deletion.md)。
 
 1. 编译签名完整包，更新`docs/releases/v<version>.md`中的用户可读说明，检查产物清单和SHA256。
-2. 创建版本Release（如`v0.1.46`，当前仍预发布），上传安装器、`.sig`、便携ZIP、SHA256SUMS及说明。
+2. 创建版本Release（如`v0.1.47`，当前仍预发布），上传安装器、`.sig`、便携ZIP、SHA256SUMS及说明。
 3. 版本资产上传成功后，将该版本`windows.json`上传／替换到固定`update-preview` Release，文件名必须`windows.json`。首次需创建此频道Release；它承载当前预发布清单。
 4. 频道内容使用更高SemVer、对应完整安装器URL及签名。仅提交源码、仅发布便携包或只创建版本Release都不够。
 5. 用户验收跨版本下载／校验／等待任务／安装／Core重启／系统入口／旧文件回收。工程端不把产物存在当作这条链已验收。
