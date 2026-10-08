@@ -25,3 +25,28 @@
 ## 检查与交付现场
 
 修复工具PowerShell源码解析通过，已对D:\dreamtalk进行只读文件核对，1225项符合已知原包。PythonRuff／格式与AST、Git差异、文档链接及build-only结果在完成后补录。本轮不添加或运行自动测试，不运行应用／安装器／付费模型，不执行真实存档迁移。跨版本下载、排空、备份、安装、入口与清理仍由用户验收。
+
+
+## build-only结果（发布前）
+
+- 应用提交／v0.1.48标签`0f6a9d7836411ab0317383d834f122fb51b6ba80`，已正常快进推送main和codex/world-archive，保留既有CI／测试定义，提交用[skip ci]。
+- `pwsh -NoProfile -File scripts/updater-signing.ps1 -Mode Build -OutputName updater-fix-0148 -ArchiveReader <官方7-Zip路径>`退出0。日志artifacts/updater-fix-0148-build.log，安装器及归档核对在artifacts/installers/updater-fix-0148；便携在artifacts/portable/updater-fix-0148。
+- NSIS内含清单1232项全部匹配，包括实际主程序；结果ARCHIVE_VERIFICATION.json。便携清单1231项和ZIP1232项逐文件匹配，260个Core源码与本轮源码一致。EXE FileVersion／ProductVersion均0.1.48。签名文本／公钥ID格式核对符合，不代替实际更新插件验收。
+- PythonRuff／格式、AST、两个PowerShell源码解析、依赖锁文件仅Desktop版本变更核对通过。仓库966个本地文档目标、随包609个目标均0断链；Git差异无格式错误。
+- 既有非阻塞构建告警仍有大Web chunk、STATIC_VCRUNTIME弃用、PyInstaller可选hidden import缺少tzdata／pysqlite2／MySQLdb；未因此增加依赖，不宣称运行兼容验收。
+- 未运行应用／安装器／自动测试／真实存档迁移或模型。包内文档是应用提交的发布准备快照，后续发布和本机修复证据另行记录，不重写历史包或移动版本标签。
+
+| 文件 | 字节数 | SHA256 |
+| --- | --- | --- |
+| dreamtalk_0.1.48_x64-setup.exe | 110681156 | `d444f565a0a82c73e19e78776c97cf48190234a68f2477374560bd48e2b674ab` |
+| dreamtalk-0.1.48-windows-x64.zip | 145959822 | `d7bc2eaab3b7c08185594ba813e2991c3f61bc65481e76c079306b793fae9fc7` |
+| repair-update-manifest.ps1 | 6344 | `d3f69cf8b9cd3b94fe79482821f754061d992862d4f28eb9fd4a6b6f8a10b31b` |
+
+
+## 本机旧清单修复现场
+
+固定频道公开读取已确认0.1.48后才执行D:\dreamtalk清单修复。第一次-Apply因PowerShell把File.Replace的空备份路径绑定为空字符串而失败：旧清单未替换、原清单备份已创建、临时文件按finally清除，程序和存档未改。随后改为向File.Replace传入已核实的显式备份路径，原子保存原清单并替换清单；再次执行成功。
+
+修复后版本仍0.1.46，含原清单备份共1226项逐文件SHA256一致，主程序仍为原安装器SHA256 `8048749083df361e86fab4f2958f95b407e832d810c2725180a7b6444be8c33c`。仅本轮两个清单文件变化，没有安装／启动／迁移／修改系统入口。证据artifacts/release-0148/local-repair.json。实际应用更新仍须关闭旧弹窗重新检查，目标确认为0.1.48，由用户点击及验收。
+
+修复工具的PowerShell兼容修正属于独立辅助附件：后续源码提交和Release附件／SHA256SUMS将同步，不重打已核对的完整安装器／ZIP、不移动v0.1.48应用标签。先前匿名大文件下载证据仍对应同一安装器和ZIP；修正后的工具附件另行匿名核对。

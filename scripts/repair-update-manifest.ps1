@@ -110,18 +110,15 @@ Write-Output ('verified_release=' + $current.version + '; verified_files=' + ($e
 if ($alreadyRepaired) { Write-Output 'manifest_already_repaired'; return }
 if (-not $Apply) { Write-Output 'repair_available; rerun_with_Apply_to_write_manifest'; return }
 if ((File-Hash $markerPath) -cne $currentHash) { throw 'repair_manifest_changed_during_check' }
-if (-not (Test-Path -LiteralPath $backupPath)) {
-    $backup = [System.IO.File]::Open($backupPath, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::Write)
-    try { $backup.Write($originalBytes, 0, $originalBytes.Length); $backup.Flush($true) }
-    finally { $backup.Dispose() }
-}
 $temporaryPath = Owned-Path ('.dreamtalk-package.repair-' + [Guid]::NewGuid().ToString('N') + '.tmp')
 try {
     $repairedBytes = [System.Text.UTF8Encoding]::new($false).GetBytes(($original | ConvertTo-Json -Depth 10) + "`n")
     $temporary = [System.IO.File]::Open($temporaryPath, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::Write)
     try { $temporary.Write($repairedBytes, 0, $repairedBytes.Length); $temporary.Flush($true) }
     finally { $temporary.Dispose() }
-    [System.IO.File]::Replace($temporaryPath, $markerPath, $null)
+    # PowerShell can bind $null to an empty string for this overload. Supply the
+    # verified backup path instead; File.Replace atomically saves the original.
+    [System.IO.File]::Replace($temporaryPath, $markerPath, $backupPath)
 } finally {
     if (Test-Path -LiteralPath $temporaryPath) { Remove-Item -LiteralPath $temporaryPath }
 }
