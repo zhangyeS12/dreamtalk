@@ -33,6 +33,11 @@ class CharacterLocationRequest(InitialActivityRequest):
     expected_policy_revision: int = Field(ge=0)
 
 
+class CardInitialRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    location_id: UUID
+
+
 def character_activity_setup_router(
     service: CharacterActivitySetupService, authorize: Callable[..., None]
 ) -> APIRouter:
@@ -126,6 +131,59 @@ def character_activity_setup_router(
             raise HTTPException(409, "activity_presence_changed") from None
         except IdempotencyConflictError:
             raise HTTPException(409, "activity_request_conflict") from None
+        except EntityNotFoundError:
+            raise HTTPException(404, "activity_target_unavailable") from None
+        except (WorldCatchingUpError, WorldRuntimeUnavailableError):
+            raise HTTPException(503, "world_runtime_unavailable") from None
+
+    @router.put("/worlds/{world_id}/activity-cards/{import_id}/location-policy")
+    async def configure_card(
+        world_id: UUID,
+        import_id: UUID,
+        body: CharacterLocationRequest,
+        x_request_id: str | None = Header(default=None),
+    ):
+        try:
+            request_id = RequestId.parse(x_request_id or "")
+        except ValueError:
+            raise HTTPException(400, "valid_request_id_required") from None
+        world = WorldId(world_id)
+        try:
+            character = await service.configure_card(
+                world,
+                import_id,
+                PlayerId(world, body.player_id),
+                LocationId(world, body.location_id),
+                body.locked,
+                body.expected_revision,
+                request_id,
+                body.expected_policy_revision,
+                body.residency,
+            )
+            return {"character_id": str(character.value), "initialized": True}
+        except CharacterActivitySetupError as error:
+            raise HTTPException(409, str(error)) from None
+        except ConcurrencyConflictError:
+            raise HTTPException(409, "activity_presence_changed") from None
+        except IdempotencyConflictError:
+            raise HTTPException(409, "activity_request_conflict") from None
+        except EntityNotFoundError:
+            raise HTTPException(404, "activity_target_unavailable") from None
+        except (WorldCatchingUpError, WorldRuntimeUnavailableError):
+            raise HTTPException(503, "world_runtime_unavailable") from None
+
+    @router.post("/worlds/{world_id}/activity-cards/{import_id}/initial-location")
+    async def initialize_card(world_id: UUID, import_id: UUID, body: CardInitialRequest):
+        world = WorldId(world_id)
+        try:
+            character = await service.initialize_card(
+                world, import_id, LocationId(world, body.location_id)
+            )
+            return {"character_id": str(character.value), "initialized": True}
+        except CharacterActivitySetupError as error:
+            raise HTTPException(409, str(error)) from None
+        except (ConcurrencyConflictError, IdempotencyConflictError):
+            raise HTTPException(409, "activity_presence_changed") from None
         except EntityNotFoundError:
             raise HTTPException(404, "activity_target_unavailable") from None
         except (WorldCatchingUpError, WorldRuntimeUnavailableError):

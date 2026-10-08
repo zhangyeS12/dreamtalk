@@ -1,3 +1,4 @@
+import { InitialLocationChoice } from "./InitialLocationChoice";
 import { useEffect, useRef, useState } from "react";
 import { CoreClient, CoreRequestError, type ContentBuilderJob, type ContentEditorDraft,
   type ContentEditorEntry, type ContentResearch, type WorldContentItem } from "@dreamtalk/api-client";
@@ -97,6 +98,7 @@ export function ContentEditor({ client, worldId, kind, editing, onSaved, onCance
   const [generationId, setGenerationId] = useState<string | undefined>();
   const [recoverId, setRecoverId] = useState<string | null>(null);
   const [preview, setPreview] = useState<WorldContentItem | null>(null);
+  const [initialLocation, setInitialLocation] = useState("");
   const [error, setError] = useState("");
   const [checking, setChecking] = useState(false);
   const live = useRef(true);
@@ -209,13 +211,14 @@ export function ContentEditor({ client, worldId, kind, editing, onSaved, onCance
     finally { if (live.current) setBusy(false); }
   };
   const save = async () => {
-    if (!preview) return;
+    if (!preview || (preview.kind === "character" && !editing && !initialLocation)) return;
     setBusy(true); setError("");
     try {
-      const saved = await client.commitWorldContent(worldId, preview);
+      const saved = await client.commitWorldContent(worldId, preview, preview.kind === "character" && !editing ? initialLocation : undefined);
       if (!live.current) return;
       pending.current = null; onSaved(saved);
-    } catch (failure) { if (live.current) setError(failure instanceof CoreRequestError && failure.status === 422
+    } catch (failure) { if (live.current) setError(failure instanceof CoreRequestError && failure.code === "character_initial_location_pending"
+        ? "角色卡已保存，但初始地点尚未确认。请核对世界身份和地点后再次确认；不会重复创建角色。" : failure instanceof CoreRequestError && failure.status === 422
       ? "预览已过期，请返回编辑后重新预览。" : failure instanceof CoreRequestError && failure.status === 409
       ? "该内容已有更新，请重新打开最新版本。" : "未能确认保存结果。可以再次确认，同一份预览不会重复保存。"); }
     finally { if (live.current) setBusy(false); }
@@ -225,7 +228,7 @@ export function ContentEditor({ client, worldId, kind, editing, onSaved, onCance
     entries: old.entries.map((entry, i) => i === index ? { ...entry, ...change } : entry) }));
   const disabled = busy || generating || loading || loadFailed;
   const reviewActions = preview && (
-      <div className="profile-actions"><button type="button" className="primary-button" disabled={busy} onClick={() => void save()}>{busy ? "正在保存…" : editing ? "确认更新当前世界" : "确认加入当前世界"}</button>
+      <div className="profile-actions"><button type="button" className="primary-button" disabled={busy || (kind === "character" && !editing && !initialLocation)} onClick={() => void save()}>{busy ? "正在保存…" : editing ? "确认更新当前世界" : "确认加入当前世界"}</button>
         <button type="button" className="secondary-button" disabled={busy} onClick={() => { pending.current = null; void client.discardWorldContent(worldId, preview.import_id).catch(() => undefined); setPreview(null); }}>返回编辑</button></div>
   );
   return <div className="content-editor">
@@ -236,6 +239,7 @@ export function ContentEditor({ client, worldId, kind, editing, onSaved, onCance
     {preview ? <div className="editor-review"><h3 ref={previewHeading} tabIndex={-1} className="editor-feedback">保存预览</h3>
       <p className="app-notice" role="status">预览已准备好，内容尚未保存。请核对下方内容，再点击“确认{editing ? "更新" : "加入"}当前世界”。</p>
       <p className="inline-hint">{kind === "character" ? "确认后将在当前世界的通讯录中显示。" : editing ? "更新后显示实际保存的可见范围。" : "世界书条目默认隐藏，保存后可逐条设为公共背景。"}{editing && kind === "lorebook" && "完全未变且唯一对应的条目会保留原范围；新增或修改正文、触发条件的条目需要重新确认公开。"}</p>
+      {kind === "character" && !editing && <InitialLocationChoice client={client} worldId={worldId} value={initialLocation} onChange={setInitialLocation} disabled={busy} />}
       {reviewActions}
       <ContentDetails item={preview} />
       {reviewActions}

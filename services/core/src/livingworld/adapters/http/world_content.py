@@ -23,6 +23,7 @@ from livingworld.domain.identifiers import WorldId
 
 class Confirmation(BaseModel):
     model_config = ConfigDict(extra="forbid")
+    initial_location_id: UUID | None = None
     reviewed_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
 
 
@@ -90,7 +91,7 @@ def _view(item: AcceptedWorldContent, common_ids: set[tuple[UUID, UUID]] | None 
     }
 
 
-def world_content_router(service: WorldContentService, authorize) -> APIRouter:
+def world_content_router(service: WorldContentService, authorize, activities=None) -> APIRouter:
     router = APIRouter(
         prefix=f"/api/v{API_PROTOCOL}/worlds/{{world_id}}/content",
         dependencies=[Depends(authorize)],
@@ -142,7 +143,29 @@ def world_content_router(service: WorldContentService, authorize) -> APIRouter:
     async def commit(world_id: UUID, import_id: UUID, body: Confirmation) -> dict:
         try:
             identity = WorldId(world_id)
-            saved = await service.commit(identity, import_id, body.reviewed_hash)
+            saved = await service.commit(
+                identity,
+                import_id,
+                body.reviewed_hash,
+                initial_location_required=activities is not None,
+                initial_location_provided=body.initial_location_id is not None,
+            )
+            if (
+                saved.kind == "character"
+                and saved.replaces_import_id is None
+                and body.initial_location_id is not None
+                and activities is not None
+            ):
+                try:
+                    from livingworld.domain.identifiers import LocationId
+
+                    await activities.initialize_card(
+                        identity, saved.import_id, LocationId(identity, body.initial_location_id)
+                    )
+                except Exception:
+                    # The authored receipt remains durable. Retrying this exact
+                    # preview completes placement without duplicating the card.
+                    raise HTTPException(409, "character_initial_location_pending") from None
             common = {
                 (item.import_id, item.entry.content_id.value)
                 for item in await service.list_common_lore(identity)

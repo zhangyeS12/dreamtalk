@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from uuid import UUID
+from uuid import UUID, uuid5
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from livingworld.application.chat_conversations import (
     ChatConversation,
@@ -14,10 +14,14 @@ from livingworld.application.chat_conversations import (
 )
 from livingworld.application.errors import EntityNotFoundError, IdempotencyConflictError
 from livingworld.domain.identifiers import CharacterId, ConversationId, PlayerId, WorldId
+from livingworld.infrastructure.persistence.character_card_bindings import (
+    CharacterCardBindingRecord,
+)
 from livingworld.infrastructure.persistence.models import (
     CharacterRecord,
     ChatConversationRecord,
     ChatParticipantRecord,
+    WorldContentImportRecord,
 )
 
 
@@ -41,6 +45,64 @@ def _conversation(
 class SqlAlchemyChatConversationStore:
     def __init__(self, sessions) -> None:
         self._sessions = sessions
+
+    async def bind_contact(self, character_id, root_import_id):
+        async with self._sessions() as session, session.begin():
+            await session.connection(execution_options={"livingworld_write_intent": True})
+            previous = await session.get(
+                CharacterCardBindingRecord, (character_id.world_id.value, character_id.value)
+            )
+            if previous is None:
+                session.add(
+                    CharacterCardBindingRecord(
+                        world_id=character_id.world_id.value,
+                        character_id=character_id.value,
+                        root_import_id=root_import_id,
+                    )
+                )
+            elif previous.root_import_id != root_import_id:
+                raise IdempotencyConflictError("contact_identity_conflict")
+
+    async def activity_contacts(self, world_id):
+        async with self._sessions() as session:
+            imported = WorldContentImportRecord
+            # Identity metadata only: polling never deserializes every full card.
+            rows = (
+                await session.execute(
+                    select(
+                        imported.import_id,
+                        imported.replaces_import_id,
+                        imported.removed_at,
+                        func.json_extract(
+                            func.json_extract(imported.snapshot_json, "$[0]"), "$.data.display_name"
+                        ).label("name"),
+                    ).where(imported.world_id == world_id.value, imported.kind == "character")
+                )
+            ).all()
+            by_id = {row.import_id: row for row in rows}
+            superseded = {row.replaces_import_id for row in rows if row.replaces_import_id}
+            result = []
+            for row in rows:
+                if row.removed_at is not None or row.import_id in superseded:
+                    continue
+                root, seen = row, set()
+                while root.replaces_import_id is not None:
+                    if root.import_id in seen or root.replaces_import_id not in by_id:
+                        raise EntityNotFoundError("contact_lineage_invalid")
+                    seen.add(root.import_id)
+                    root = by_id[root.replaces_import_id]
+                if not isinstance(row.name, str) or not row.name:
+                    raise EntityNotFoundError("contact_lineage_invalid")
+                result.append(
+                    GroupChatParticipant(
+                        CharacterId(
+                            world_id, uuid5(root.import_id, "livingworld:chat-character:v1")
+                        ),
+                        root.import_id,
+                        row.name,
+                    )
+                )
+            return tuple(result)
 
     async def _read(self, session, world_id: WorldId, conversation_id: UUID) -> ChatConversation:
         result = await session.execute(

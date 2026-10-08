@@ -10,6 +10,9 @@ from livingworld.application.director import MAX_CHARACTERS, MAX_LOCATIONS, WIND
 from livingworld.application.errors import EntityNotFoundError
 from livingworld.application.lore_activation import select_common_background
 from livingworld.domain.actions import ActionRejectionReason
+from livingworld.infrastructure.persistence.character_card_bindings import (
+    CharacterCardBindingRecord,
+)
 from livingworld.infrastructure.persistence.character_mobility import (
     mobility_is_current,
     mobility_record,
@@ -26,6 +29,11 @@ from livingworld.infrastructure.persistence.director_models import (
 from livingworld.infrastructure.persistence.director_models import DirectorPlanRecord as Plan
 from livingworld.infrastructure.persistence.director_models import (
     DirectorSettingsRecord as Settings,
+)
+from livingworld.infrastructure.persistence.director_rotation import (
+    DirectorRotationRecord,
+    accept_cohort,
+    select_cohort,
 )
 from livingworld.infrastructure.persistence.encounter_models import (
     EncounterCandidateRecord as Encounter,
@@ -105,7 +113,10 @@ class SqlAlchemyDirectorStore(SharedDirectorMixin):
             encounter_owned = encounters is not None and encounters.player_id == bound
             shared = await session.get(SharedSettings, world.value)
             shared_owned = shared is not None and shared.player_id == bound
+            rotation = await session.get(DirectorRotationRecord, world.value)
             return {
+                "batch_size": rotation.batch_size if rotation else 8,
+                "batch_size_revision": rotation.settings_revision if rotation else 0,
                 "enabled": bool(owned and config.enabled),
                 "revision": config.revision if config else 0,
                 "state": config.state if owned else "off",
@@ -118,6 +129,31 @@ class SqlAlchemyDirectorStore(SharedDirectorMixin):
                 "shared_activity_revision": shared.revision if shared else 0,
                 "shared_activities_consented": bool(shared_owned),
             }
+
+    async def configure_batch_size(self, world, player, size, revision):
+        if type(size) is not int or not 1 <= size <= MAX_CHARACTERS:
+            raise DirectorError("director_batch_size_invalid")
+        async with self.sessions() as session:
+            await _write(session)
+            if player is None or player.value != await _binding(session, world):
+                raise DirectorError("director_player_required")
+            rotation = await session.get(DirectorRotationRecord, world.value)
+            if (rotation.settings_revision if rotation else 0) != revision:
+                raise DirectorError("director_settings_changed")
+            if rotation is None:
+                rotation = DirectorRotationRecord(
+                    world_id=world.value,
+                    cycle=0,
+                    window_end=0,
+                    accepted=True,
+                    cohort_json="[]",
+                    batch_size=8,
+                    settings_revision=0,
+                )
+                session.add(rotation)
+            rotation.batch_size = size
+            rotation.settings_revision += 1
+            await session.commit()
 
     async def configure(self, world, player, enabled, consent, revision, retry):
         async with self.sessions() as session:
@@ -326,6 +362,10 @@ class SqlAlchemyDirectorStore(SharedDirectorMixin):
         from livingworld.infrastructure.persistence.authored_lifecycle import removed_character_ids
 
         removed = await removed_character_ids(session, world.value)
+        rotation = await session.get(DirectorRotationRecord, world.value)
+        cohort = await select_cohort(
+            session, world.value, now, rotation.batch_size if rotation else 8, removed
+        )
         rows = (
             await session.execute(
                 select(CharacterStateRecord, CharacterRecord.name)
@@ -337,6 +377,7 @@ class SqlAlchemyDirectorStore(SharedDirectorMixin):
                 .where(
                     CharacterStateRecord.world_id == world.value,
                     CharacterStateRecord.character_id.not_in(removed),
+                    CharacterStateRecord.character_id.in_(cohort),
                 )
                 .order_by(CharacterStateRecord.character_id)
                 .limit(MAX_CHARACTERS + 1)
@@ -484,6 +525,9 @@ class SqlAlchemyDirectorStore(SharedDirectorMixin):
                 .limit(2)
             )
         ).all()
+        binding = await session.get(CharacterCardBindingRecord, (world.value, character_id))
+        if binding and binding.root_import_id not in roots:
+            roots = [*roots, binding.root_import_id]
         if len(roots) > 1:
             raise DirectorError("director_character_mapping_invalid")
         if roots:
@@ -663,6 +707,11 @@ class SqlAlchemyDirectorStore(SharedDirectorMixin):
                         )
                     )
             plan.candidate_count, plan.state = len(candidates), "ready"
+            await accept_cohort(
+                session,
+                world.value,
+                {UUID(item["character_id"]) for item in planned_input["characters"]},
+            )
             config.state, config.error = "ready", None
             await session.commit()
 

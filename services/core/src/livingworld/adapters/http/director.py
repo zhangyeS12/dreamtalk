@@ -25,6 +25,12 @@ class EncounterSettingRequest(BaseModel):
     expected_revision: int = Field(ge=0, le=2147483646, strict=True)
 
 
+class BatchSizeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    batch_size: int = Field(ge=1, le=16, strict=True)
+    expected_revision: int = Field(ge=0, le=2147483646, strict=True)
+
+
 def director_router(service, authorize):
     router = APIRouter(
         prefix="/api/v1/worlds/{world_id}/director", dependencies=[Depends(authorize)]
@@ -65,6 +71,12 @@ def director_router(service, authorize):
                 body.consent_background_usage,
                 body.expected_revision,
             )
+        )
+
+    @router.post("/batch-size")
+    async def configure_batch_size(world_id: UUID, body: BatchSizeRequest):
+        return await execute(
+            service.configure_batch_size(WorldId(world_id), body.batch_size, body.expected_revision)
         )
 
     @router.post("/shared-activities")

@@ -225,7 +225,13 @@ class WorldContentService:
             del self._pending[import_id]
 
     async def commit(
-        self, world_id: WorldId, import_id: UUID, reviewed_hash: str
+        self,
+        world_id: WorldId,
+        import_id: UUID,
+        reviewed_hash: str,
+        *,
+        initial_location_required=False,
+        initial_location_provided=False,
     ) -> AcceptedWorldContent:
         existing = await self.store.find(import_id)
         if existing is not None:
@@ -237,6 +243,13 @@ class WorldContentService:
             raise ContentImportError("preview_expired")
         if pending.item.world_id != world_id or pending.item.reviewed_hash != reviewed_hash:
             raise ContentConflictError("Import confirmation mismatch")
+        if (
+            initial_location_required
+            and pending.item.kind == "character"
+            and pending.item.replaces_import_id is None
+            and not initial_location_provided
+        ):
+            raise ContentImportError("character_initial_location_required")
         result = await self.store.accept(pending.item, pending.preview)
         self._pending.pop(import_id, None)
         return result

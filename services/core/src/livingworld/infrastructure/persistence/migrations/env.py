@@ -2,7 +2,11 @@
 
 from alembic import context
 
-from livingworld.infrastructure.persistence import location_policy_models  # noqa: F401
+from livingworld.infrastructure.persistence import (  # noqa: F401
+    character_card_bindings,
+    director_rotation,
+    location_policy_models,  # noqa: F401
+)
 from livingworld.infrastructure.persistence.content_builder import (
     ContentBuilderJobRecord,  # noqa: F401
 )

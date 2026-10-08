@@ -42,6 +42,8 @@ class GroupChatConversation:
 
 
 class ChatConversationStore(Protocol):
+    async def bind_contact(self, character_id: CharacterId, root_import_id: UUID) -> None: ...
+    async def activity_contacts(self, world_id: WorldId) -> tuple[GroupChatParticipant, ...]: ...
     async def open_direct(
         self,
         conversation_id: ConversationId,
@@ -100,7 +102,27 @@ class ChatConversationService:
                 name=_character(root).display_name,
             )
         )
+        await self._store.bind_contact(character_id, root.import_id)
         return character_id
+
+    async def ensure_contact(self, world_id: WorldId, import_id: UUID) -> GroupChatParticipant:
+        item = await self._imports.find(import_id)
+        if (
+            item is None
+            or item.world_id != world_id
+            or item.kind != "character"
+            or not await self._imports.is_current(import_id)
+        ):
+            raise EntityNotFoundError("contact_not_found")
+        root = await self._root(item)
+        return GroupChatParticipant(
+            await self._ensure_character(world_id, root),
+            root.import_id,
+            _character(item).display_name,
+        )
+
+    async def activity_contacts(self, world_id: WorldId) -> tuple[GroupChatParticipant, ...]:
+        return await self._store.activity_contacts(world_id)
 
     async def _root(self, item: AcceptedWorldContent) -> AcceptedWorldContent:
         seen: set[UUID] = set()

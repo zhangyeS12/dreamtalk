@@ -29,7 +29,7 @@ class CreateLocationRequest(BaseModel):
     parent_id: UUID | None = None
     hidden: bool = False
     is_region: bool = False
-    allowed_character_ids: list[UUID] = Field(default_factory=list, max_length=16)
+    allowed_character_ids: list[UUID] = Field(default_factory=list)
 
 
 class EditLocationRequest(CreateLocationRequest):

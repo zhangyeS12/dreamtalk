@@ -23,7 +23,7 @@ const messages: Record<string, string> = {
   activity_presence_changed: "角色已移动，请刷新当前位置后再保存；草稿仍保留。",
   activity_player_changed: "当前玩家身份已变化，请重新进入通讯录。",
   activity_location_hidden: "角色未获准进入这个隐藏分支，请先在地点编辑中对其开放。",
-  activity_character_capacity: "当前世界最多支持 16 位活动角色。",
+
   activity_location_unavailable: "所选地点已不可用，请刷新后重新选择。",
   world_runtime_unavailable: "世界暂时不可修改，请恢复后用原请求重试。",
 };
@@ -70,6 +70,9 @@ export function LocationManager({ client, worldId, locations, directory, refresh
   const busyRef = useRef(false), alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   useEffect(() => { onDirtyChange(changed || !!pending || busy); return () => onDirtyChange(false); }, [changed, pending, busy, onDirtyChange]);
+  const [accessSearch, setAccessSearch] = useState(""), [accessPage, setAccessPage] = useState(0);
+  const accessPeople = (directory?.items ?? []).filter(person => person.name.toLocaleLowerCase().includes(accessSearch.trim().toLocaleLowerCase()));
+  const accessLast = Math.max(0, Math.ceil(accessPeople.length / 50) - 1), accessShown = Math.min(accessPage, accessLast);
   const paths = locationPaths(locations);
   const choose = (item: ActivityLocation | null) => {
     if (busyRef.current || ((changed || pending) && !window.confirm("当前地点编辑尚未保存或结果未确认。请先核对列表；确定放弃草稿和本次重试吗？"))) return;
@@ -103,7 +106,7 @@ export function LocationManager({ client, worldId, locations, directory, refresh
     <form className="location-editor" onSubmit={event => void save(event)}><h3>{editing ? `编辑 ${editing.name}` : "添加地点"}</h3><label className="field"><span>地点名称</span><input maxLength={120} placeholder="例如：璃月城" disabled={busy || !!pending} value={draft.name} onChange={event => update({ name: event.target.value })} /></label><label className="field"><span>包含它的父地点</span><select value={draft.parent_id ?? ""} disabled={busy || !!pending} onChange={event => update({ parent_id: event.target.value || null })}><option value="">无父地点 · 独立区域</option>{locations.filter(place => !descendants(place.location_id)).map(place => <option key={place.location_id} value={place.location_id}>{paths.get(place.location_id)}</option>)}</select></label>
     <label className="location-check"><input type="checkbox" checked={draft.is_region} disabled={busy || !!pending} onChange={event => update({ is_region: event.target.checked })} /><span><strong>将此地点标记为地区</strong><small>例如璃月、蒙德。地区内可日常走动，跨地区只会极少远行；子地点归属最近的地区。未标记时按最上层地点划分。</small></span></label>
     <label className="location-check"><input type="checkbox" checked={draft.hidden} disabled={busy || !!pending} onChange={event => update({ hidden: event.target.checked })} /><span><strong>隐藏这个分支</strong><small>角色默认不能进入，也不会在活动规划中看到未获准地点。</small></span></label>
-    {draft.hidden && <fieldset className="location-access"><legend>对以下角色开放</legend>{directory?.items.length ? directory.items.map(person => <label key={person.character_id} className="location-check"><input type="checkbox" disabled={busy || !!pending} checked={draft.allowed_character_ids.includes(person.character_id)} onChange={event => update({ allowed_character_ids: event.target.checked ? [...draft.allowed_character_ids, person.character_id] : draft.allowed_character_ids.filter(id => id !== person.character_id) })} />{person.name}</label>) : <p className="inline-hint">先在角色资料中保存初始地点，或打开一次会话，即可在这里选择开放对象。</p>}<p className="inline-hint">父地点隐藏时，整个分支继承限制；子地点也隐藏时，还需在子地点单独开放。</p></fieldset>}
+    {draft.hidden && <fieldset className="location-access"><legend>对以下角色开放</legend><input aria-label="搜索地点开放对象" placeholder="搜索角色名称" value={accessSearch} disabled={busy || !!pending} onChange={event => { setAccessSearch(event.target.value); setAccessPage(0); }} />{directory?.items.length ? accessPeople.slice(accessShown * 50, (accessShown + 1) * 50).map(person => <label key={person.character_id} className="location-check"><input type="checkbox" disabled={busy || !!pending} checked={draft.allowed_character_ids.includes(person.character_id)} onChange={event => update({ allowed_character_ids: event.target.checked ? [...draft.allowed_character_ids, person.character_id] : draft.allowed_character_ids.filter(id => id !== person.character_id) })} />{person.name}</label>) : <p className="inline-hint">先在角色资料中保存初始地点，或打开一次会话，即可在这里选择开放对象。</p>}{accessPeople.length > 50 && <div className="profile-actions"><button type="button" disabled={busy || !accessShown} onClick={() => setAccessPage(accessShown - 1)}>上一页</button><span>{accessShown + 1} / {accessLast + 1}</span><button type="button" disabled={busy || accessShown === accessLast} onClick={() => setAccessPage(accessShown + 1)}>下一页</button></div>}<p className="inline-hint">父地点隐藏时，整个分支继承限制；子地点也隐藏时，还需在子地点单独开放。</p></fieldset>}
     <button className="primary-button" type="submit" disabled={busy || (!pending && (!changed || !draft.name.trim()))}>{busy ? "正在保存…" : pending ? "用原请求重试" : editing ? "保存地点" : "添加地点"}</button>{pending && !busy && <button type="button" className="text-action" onClick={() => { if (window.confirm("原请求可能已经保存，请先刷新核对。确定结束重试并继续编辑吗？")) setPending(null); }}>结束本次重试</button>}
     {editing && <button type="button" className="text-action destructive-action" disabled={busy || !!pending} onClick={() => void remove()}>删除此地点</button>}
     {error && <p className="app-alert" role="alert">{error}</p>}{notice && <p className="app-notice" role="status">{notice}</p>}<p className="inline-hint">手动编辑不调用模型。自动活动会在已批准的常规批次中，将角色获准地点提供给已配置的模型。</p></form></div></section>;
@@ -122,11 +125,10 @@ export function CharacterLocationEditor({ client, worldId, person, activity, dir
   const paths = locationPaths(locations), activeRoot = dirty || pending ? root : activity?.initial_location_id ?? root, activeLocked = dirty || pending ? locked : activity?.locked ?? locked, activeResidency = dirty || pending ? residency : activity?.residency ?? residency;
   async function save(event: FormEvent) {
     event.preventDefault(); if (busyRef.current || !activeRoot || !directory?.player_id) return;
-    let request = pending ?? { root: activeRoot, locked: activeLocked, residency: activeResidency, requestId: crypto.randomUUID(), characterId: activity?.character_id ?? null, revision: activity?.revision ?? null, policyRevision: activity?.policy_revision ?? 0 };
+    const request = pending ?? { root: activeRoot, locked: activeLocked, residency: activeResidency, requestId: crypto.randomUUID(), characterId: activity?.character_id ?? null, revision: activity?.revision ?? null, policyRevision: activity?.policy_revision ?? 0 };
     const playerId = directory.player_id; setPending(request); busyRef.current = true; setBusy(true); setError(""); setNotice("");
     try {
-      if (!request.characterId) { const contact = await client.openDirectConversation(worldId, person.current_import_id); request = { ...request, characterId: contact.character_id }; if (alive.current) setPending(request); }
-      await client.configureCharacterLocation(worldId, playerId, request.characterId!, request.root, request.locked, request.revision, request.requestId, request.policyRevision, request.residency);
+      await client.configureCardLocation(worldId, person.current_import_id, playerId, request.root, request.locked, request.revision, request.requestId, request.policyRevision, request.residency);
       if (!alive.current) return; setPending(null); setDirty(false); setRoot(request.root); setLocked(request.locked); setResidency(request.residency); setNotice(request.locked ? "已返回并锁定初始地点。" : "常驻中心与移动倾向已保存。新的倾向在下一常规规划批次使用。"); await refresh();
     } catch (failure) { if (alive.current) { setError(failureText(failure)); if (terminal(failure)) setPending(null); } }
     finally { busyRef.current = false; if (alive.current) setBusy(false); }
@@ -135,21 +137,31 @@ export function CharacterLocationEditor({ client, worldId, person, activity, dir
 }
 
 interface MapNode { id: string; kind: "root" | "place" | "label" | "person"; name: string; hidden?: boolean; person?: SocialSnapshot["characters"][number]; children?: MapNode[] }
-export function LocationMap({ locations, directory, social, urls, selected, onSelect, onChat, openingChat, onEdit }: {
-  locations: ActivityLocation[]; directory: ActivityCharacterDirectory | null; social: SocialSnapshot; urls: Record<string, string>; selected: string | null; onSelect: (root: string) => void; onChat: (id: string) => void; openingChat: boolean; onEdit: () => void;
+export function LocationMap({ locations, directory, social, urls, selected, onSelect, onChat, openingChat, onEdit, onAvatarDigests }: {
+  locations: ActivityLocation[]; directory: ActivityCharacterDirectory | null; social: SocialSnapshot; urls: Record<string, string>; selected: string | null; onSelect: (root: string) => void; onChat: (id: string) => void; openingChat: boolean; onEdit: () => void; onAvatarDigests?: (digests: string) => void;
 }) {
   const prefix = useId().replace(/:/g, ""), svgRef = useRef<SVGSVGElement>(null);
   const [view, setView] = useState({ x: 0, y: 0, size: 1000 }), drag = useRef<{ x: number; y: number; view: typeof view; moved: boolean } | null>(null), moved = useRef(false);
+  const [mapPage, setMapPage] = useState(0), [mapSearch, setMapSearch] = useState("");
+  const matchedPeople = useMemo(() => (directory?.items ?? []).filter(person => person.initialized && person.name.toLocaleLowerCase().includes(mapSearch.trim().toLocaleLowerCase())), [directory, mapSearch]);
+  const mapLast = Math.max(0, Math.ceil(matchedPeople.length / 200) - 1), mapShown = Math.min(mapPage, mapLast);
+  const visiblePeople = useMemo(() => {
+    const items = matchedPeople.slice(mapShown * 200, (mapShown + 1) * 200);
+    const focused = directory?.items.find(person => person.root_import_id === selected && person.initialized);
+    return focused && !items.some(person => person.root_import_id === selected) ? [...items, focused] : items;
+  }, [matchedPeople, mapShown, directory, selected]);
+  const shownAvatarDigests = [...new Set(visiblePeople.map(person => social.characters.find(item => item.root_import_id === person.root_import_id)?.avatar_digest).filter((digest): digest is string => !!digest))].sort().join(",");
+  useEffect(() => { onAvatarDigests?.(shownAvatarDigests); return () => onAvatarDigests?.(""); }, [shownAvatarDigests, onAvatarDigests]);
   const layout = useMemo(() => {
     const build = (place: ActivityLocation, ancestors: Set<string>): MapNode => {
       const children: MapNode[] = [{ id: `label:${place.location_id}`, kind: "label", name: place.name, hidden: place.hidden }];
       for (const child of locations.filter(value => value.parent_id === place.location_id && !ancestors.has(value.location_id))) children.push(build(child, new Set([...ancestors, child.location_id])));
-      for (const activity of directory?.items.filter(value => value.current_location_id === place.location_id) ?? []) { const person = social.characters.find(value => value.root_import_id === activity.root_import_id); if (person) children.push({ id: person.root_import_id, kind: "person", name: person.name, person }); }
+      for (const activity of visiblePeople.filter(value => value.current_location_id === place.location_id)) { const person = social.characters.find(value => value.root_import_id === activity.root_import_id); if (person) children.push({ id: person.root_import_id, kind: "person", name: person.name, person }); }
       return { id: place.location_id, kind: "place", name: place.name, hidden: place.hidden, children };
     };
     const tree: MapNode = { id: "world", kind: "root", name: "", children: locations.filter(place => !place.parent_id || !locations.some(value => value.location_id === place.parent_id)).map(place => build(place, new Set([place.location_id]))) };
     return pack<MapNode>().size([1000, 1000]).padding(22)(hierarchy(tree).sum(node => node.kind === "label" ? 3 : node.kind === "person" ? 1 : 0).sort((a, b) => (b.value ?? 0) - (a.value ?? 0) || a.data.id.localeCompare(b.data.id))).descendants();
-  }, [locations, directory, social]);
+  }, [locations, visiblePeople, social]);
   const person = social.characters.find(value => value.root_import_id === selected), activity = directory?.items.find(value => value.root_import_id === selected);
   const placeName = (id: string | null | undefined) => locations.find(place => place.location_id === id)?.name ?? "尚未设置";
   const zoom = useCallback((factor: number) => { setView(current => { const size = Math.min(2000, Math.max(160, current.size * factor)); return { x: current.x + (current.size - size) / 2, y: current.y + (current.size - size) / 2, size }; }); }, []);
@@ -163,5 +175,5 @@ export function LocationMap({ locations, directory, social, urls, selected, onSe
     {layout.filter(node => node.data.kind === "person").map(node => <g key={node.data.id} role="button" tabIndex={0} aria-label={`${node.data.name}，${node.parent?.data.name ?? ""}`} className={`location-map-person ${selected === node.data.id ? "selected" : ""}`} onClick={() => focus(node.data.id)} onKeyDown={event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); moved.current = false; focus(node.data.id); } }}><circle cx={node.x} cy={node.y} r={node.r} />{urls[node.data.person?.avatar_digest ?? ""] ? <image href={urls[node.data.person?.avatar_digest ?? ""]} x={node.x - node.r} y={node.y - node.r} width={node.r * 2} height={node.r * 2} preserveAspectRatio="xMidYMid slice" clipPath={`url(#${prefix}-${node.data.id})`} /> : <text x={node.x} y={node.y} textAnchor="middle" dominantBaseline="central" fontSize={node.r}>{Array.from(node.data.name)[0]}</text>}<title>{node.data.name}</title></g>)}
   </svg>{!locations.length && <div className="location-map-empty"><p>先为这个世界添加地点。</p><button type="button" className="secondary-button" onClick={onEdit}>添加地点</button></div>}
   {person && <aside className="social-focus-panel location-focus-panel" aria-label="选中角色地点"><button className="text-action social-close" onClick={() => onSelect("")}>收起详情</button><ContactAvatar className="social-focus-avatar" name={person.name} url={urls[person.avatar_digest ?? ""]} /><h3>{person.name}</h3><p>初始地点－当前位置</p><strong className="location-route">{placeName(activity?.initial_location_id)}－{placeName(activity?.current_location_id)}</strong><p>{activity?.locked ? "已锁定在初始地点" : activity?.initialized ? "以初始地点为常驻中心活动" : "尚未设置初始地点"}</p><button className="primary-button" disabled={!directory?.player_id || openingChat} onClick={() => onChat(person.current_import_id)}>打开会话</button></aside>}
-  <div className="location-map-controls"><button onClick={() => zoom(.8)} aria-label="放大地点图">＋</button><button onClick={() => zoom(1.25)} aria-label="缩小地点图">－</button><button onClick={() => { setView({ x: 0, y: 0, size: 1000 }); onSelect(""); }}>总览</button><button onClick={onEdit}>编辑地点</button></div>{social.characters.some(value => !placed.has(value.root_import_id)) && <div className="location-unplaced"><span>未设置位置</span>{social.characters.filter(value => !placed.has(value.root_import_id)).map(value => <button key={value.root_import_id} onClick={() => onSelect(value.root_import_id)}>{value.name}</button>)}</div>}</div>;
+  <div className="location-map-controls"><input aria-label="搜索地点图角色" placeholder="搜索角色" value={mapSearch} onChange={event => { setMapSearch(event.target.value); setMapPage(0); }} />{matchedPeople.length > 200 && <><button type="button" disabled={!mapShown} onClick={() => setMapPage(mapShown - 1)}>上一组</button><span>{mapShown + 1} / {mapLast + 1} · 每组200位</span><button type="button" disabled={mapShown === mapLast} onClick={() => setMapPage(mapShown + 1)}>下一组</button></>}<button onClick={() => zoom(.8)} aria-label="放大地点图">＋</button><button onClick={() => zoom(1.25)} aria-label="缩小地点图">－</button><button onClick={() => { setView({ x: 0, y: 0, size: 1000 }); onSelect(""); }}>总览</button><button onClick={onEdit}>编辑地点</button></div>{social.characters.some(value => !placed.has(value.root_import_id)) && <div className="location-unplaced"><span>未设置位置</span>{social.characters.filter(value => !placed.has(value.root_import_id)).slice(0, 50).map(value => <button key={value.root_import_id} onClick={() => onSelect(value.root_import_id)}>{value.name}</button>)}</div>}</div>;
 }

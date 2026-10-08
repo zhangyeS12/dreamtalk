@@ -34,7 +34,7 @@ from livingworld.domain.values import Revision, WorldTime
 from livingworld.domain.world import ClockState
 
 WINDOW_US = 6 * 60 * 60 * 1_000_000
-MAX_CHARACTERS = 16
+MAX_CHARACTERS = 16  # Per planning cohort, never a world population limit.
 MAX_LOCATIONS = 32
 MAX_CANDIDATES = 64
 
@@ -273,6 +273,11 @@ class DirectorService:
         await self.store.configure_encounters(world, player, enabled, consent, revision)
         await self.actions.advance_routines(world)
         self.wake_signal.wake(world)
+        return await self.snapshot(world)
+
+    async def configure_batch_size(self, world, size, revision):
+        player = await self.players.selected_player(world)
+        await self.store.configure_batch_size(world, player, size, revision)
         return await self.snapshot(world)
 
     async def configure_shared_activities(self, world, enabled, consent, revision):

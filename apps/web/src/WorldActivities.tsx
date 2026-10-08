@@ -1,3 +1,4 @@
+import { useDesktopUpdateBlock } from "./DesktopUpdates";
 import { useEffect, useRef, useState } from "react";
 import { CoreClient, CoreRequestError, type DirectorStatus } from "@dreamtalk/api-client";
 
@@ -12,7 +13,7 @@ const errors: Record<string, string> = {
   director_settings_changed: "设置已变化，请刷新状态后重试。",
   director_consent_required: "首次开启需要确认后台模型用量。",
   director_characters_required: "上一批规划因当时没有已设置初始地点的角色而停止。请先设置至少一名角色的初始地点，再点击“重新规划”；刷新状态不会发起新规划。",
-  director_world_capacity: "当前资料超过规划容量（16位角色、32个地点、64 KiB资料），请精简后再规划。",
+  director_world_capacity: "本批资料超过规划容量（32个地点、64 KiB资料）。可减少每批规划人数或精简角色资料；世界角色总数不受此限制。",
   director_location_scope_unavailable: "角色没有可进入的活动地点。请在通讯录中核对初始地点与隐藏分支开放范围。",
   director_location_scope_changed: "本批地点或常驻规则已改变，计划未接纳。已开始的模型请求可能产生用量；不会自动重试，可核对后手动重新规划。",
   director_background_capacity: "公共背景超过规划读取容量（512条启用条目，每条关键词和条件16 KiB），请精简公开范围或触发条件后再规划。",
@@ -33,6 +34,7 @@ export function WorldActivities({ client, worldId, visible, paused, hasInitializ
   const [locationReady, setLocationReady] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
+  const [batchSize, setBatchSize] = useState<number | null>(null);
   const [loadError, setLoadError] = useState("");
   const [operationError, setOperationError] = useState("");
   const [operationCode, setOperationCode] = useState<string | null>(null);
@@ -46,7 +48,7 @@ export function WorldActivities({ client, worldId, visible, paused, hasInitializ
   const currentWorld = useRef(worldId);
   currentWorld.current = worldId;
   useEffect(() => {
-    setStatus(null); setNotice(""); setLoadError(""); setOperationError(""); setOperationCode(null);
+    setBatchSize(null); setStatus(null); setNotice(""); setLoadError(""); setOperationError(""); setOperationCode(null);
     setConsentOpen(false); setEncounterConsentOpen(false); setSharedConsentOpen(false);
     ++requestSerial.current;
   }, [worldId]);
@@ -119,6 +121,17 @@ export function WorldActivities({ client, worldId, visible, paused, hasInitializ
     } finally { busyRef.current = false; if (mounted.current) setBusy(false); }
   }
 
+  async function saveBatchSize() {
+    if (!status || busyRef.current || batchSize === null) return;
+    busyRef.current = true; ++requestSerial.current; setBusy(true); setOperationError(""); setOperationCode(null);
+    try {
+      const next = await client.configureDirectorBatchSize(worldId, batchSize, status.batch_size_revision ?? 0);
+      if (!mounted.current || currentWorld.current !== worldId) return;
+      setStatus(next); setBatchSize(null); setNotice("每批规划人数已保存，从下一个新的轮换批次生效；此次保存没有调用模型。");
+    } catch { if (mounted.current && currentWorld.current === worldId) setOperationError("未能确认规划人数，请刷新状态后核对再保存。"); }
+    finally { busyRef.current = false; if (mounted.current) setBusy(false); }
+  }
+  useDesktopUpdateBlock(busy ? "角色活动设置正在保存，请等结果确认。" : batchSize !== null && batchSize !== (status?.batch_size ?? 8) ? "每批规划人数尚未保存。" : null);
   const state = status?.state;
   const reason = status?.error ? errors[status.error] ?? "自动活动暂时无法继续，请刷新核对。" : "";
   const guidance = activityGuidance(status, paused, hasInitializedCharacters ?? locationReady, loadError, reason);
@@ -128,6 +141,7 @@ export function WorldActivities({ client, worldId, visible, paused, hasInitializ
     <p className="inline-hint">每批覆盖6小时世界时间，采用当前模型{status?.model ? `「${status.model}」` : ""}，独立于聊天额度，后台规划会产生模型用量。应用关闭后不调用模型。</p>
     <p className="inline-hint">自动活动需要电脑保持开机且程序未退出，最小化或设置为关闭到托盘可继续运行。退出或关机后停止；重开会推进未暂停的世界时间，但目前不会完整补演错过的活动。离线主动消息可在“离线期间的消息”中单独开启。</p>
     <p className="inline-hint">日常规划也会参考你在书架世界管理中公开的背景：条目按来源条件和背景容量参与，关键词匹配角色名和当前地点名。修改在下一批规划时生效。</p>
+    <div className="editor-panel"><label className="field"><span>每批规划人数</span><select value={batchSize ?? status?.batch_size ?? 8} disabled={!status || busy} onChange={event => setBatchSize(Number(event.target.value))}>{Array.from({ length: 16 }, (_, index) => <option key={index + 1} value={index + 1}>{index + 1} 位{index === 7 ? "（默认）" : ""}</option>)}</select></label><p className="inline-hint">所有角色都可设置初始地点。每批随机轮换少量角色，其他角色保持真实位置；整轮轮到后再开始下一轮。角色越多，每位角色轮到新活动的间隔越长。返程中断的角色有少量优先名额。</p><button type="button" disabled={busy || !status || batchSize === null || batchSize === (status.batch_size ?? 8)} onClick={() => void saveBatchSize()}>保存规划人数</button></div>
     <div className="setting-row">
       <button type="button" disabled={!status || busy} onClick={() => {
         if (status?.enabled) void configure(false);

@@ -10,7 +10,11 @@ from alembic import command
 from alembic.config import Config
 from sqlalchemy import CheckConstraint, Connection, MetaData, UniqueConstraint, inspect, text
 
-from livingworld.infrastructure.persistence import location_policy_models  # noqa: F401
+from livingworld.infrastructure.persistence import (  # noqa: F401
+    character_card_bindings,
+    director_rotation,
+    location_policy_models,  # noqa: F401
+)
 from livingworld.infrastructure.persistence.content_builder import (
     ContentBuilderJobRecord,  # noqa: F401
 )
@@ -94,7 +98,8 @@ FACTION_REVISION = "0036_character_factions"
 RECALL_REVISION = "0037_persistent_chat_recall"
 LOCATION_REVISION = "0038_location_policies"
 MOBILITY_REVISION = "0039_character_mobility"
-HEAD_REVISION = "0040_authored_removal"
+REMOVAL_REVISION = "0040_authored_removal"
+HEAD_REVISION = "0041_director_rotation"
 
 # One reviewed linear chain replaces repeated hand-maintained suffix sets.
 _SUPPORTED_REVISIONS = (
@@ -137,6 +142,7 @@ _SUPPORTED_REVISIONS = (
     RECALL_REVISION,
     LOCATION_REVISION,
     MOBILITY_REVISION,
+    REMOVAL_REVISION,
     HEAD_REVISION,
 )
 _REVISION_RANGES = {
@@ -148,6 +154,7 @@ LOCATION_POLICY_TABLES = {
     "location_character_access",
     "character_location_policies",
 }
+ROTATION_TABLES = {"director_rotation", "director_rotation_members", "character_card_bindings"}
 FACTION_TABLES = {
     "character_factions",
     "character_faction_members",
@@ -341,7 +348,8 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
     pre_recall_revision = revision not in _REVISION_RANGES[RECALL_REVISION]
     pre_location_policy_revision = revision not in _REVISION_RANGES[LOCATION_REVISION]
     pre_mobility_revision = revision not in _REVISION_RANGES[MOBILITY_REVISION]
-    pre_removal_revision = revision != HEAD_REVISION
+    pre_removal_revision = revision not in _REVISION_RANGES[REMOVAL_REVISION]
+    pre_rotation_revision = revision != HEAD_REVISION
     pre_faction_revision = revision not in _REVISION_RANGES[FACTION_REVISION]
     pre_proactive_revision = revision not in _REVISION_RANGES[PROACTIVE_REVISION]
     pre_shared_revision = revision not in _REVISION_RANGES[SHARED_REVISION]
@@ -513,6 +521,8 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         expected -= {"recall_documents"}
     else:
         expected |= FTS_TABLES
+    if pre_rotation_revision:
+        expected -= ROTATION_TABLES
     if pre_faction_revision:
         expected -= FACTION_TABLES
     if pre_location_policy_revision:
@@ -580,6 +590,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
             pre_location_policy_revision=pre_location_policy_revision,
             pre_mobility_revision=pre_mobility_revision,
             pre_removal_revision=pre_removal_revision,
+            pre_rotation_revision=pre_rotation_revision,
         )
     if revision in {
         CONTENT_REVISION,
@@ -670,6 +681,7 @@ def _validate_domain_shape(
     pre_location_policy_revision: bool = True,
     pre_mobility_revision: bool = True,
     pre_removal_revision: bool = True,
+    pre_rotation_revision: bool = True,
 ) -> None:
     """Detect partial/mismatched schemas; never infer a revision from them."""
 
@@ -695,6 +707,8 @@ def _validate_domain_shape(
         "ck_command_receipt_command_result",
     }
     for table in metadata.sorted_tables:
+        if pre_rotation_revision and table.name in ROTATION_TABLES:
+            continue
         if pre_mobility_revision and table.name == "character_mobility":
             continue
         if pre_location_policy_revision and table.name in LOCATION_POLICY_TABLES:

@@ -186,7 +186,10 @@ def main():
     installer = output / source.name
     shutil.copy2(source, installer)
     shutil.copy2(source.with_suffix(".exe.sig"), installer.with_suffix(".exe.sig"))
-    notes = (root / "docs/releases" / f"v{version}.md").read_text(encoding="utf-8")
+    notes_path = root / "docs/releases" / f"v{version}.md"
+    notes = (
+        notes_path.read_text(encoding="utf-8") if notes_path.is_file() else f"dreamtalk {version}\n"
+    )
     manifest = {
         "version": version,
         "notes": notes,
@@ -201,7 +204,7 @@ def main():
     (output / "windows.json").write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
-    shutil.copy2(root / "docs/releases" / f"v{version}.md", output / "RELEASE_NOTES.md")
+    (output / "RELEASE_NOTES.md").write_text(notes, encoding="utf-8")
     shutil.copy2(root / "scripts/repair-update-manifest.ps1", output / "repair-update-manifest.ps1")
     checksums = [
         f"{file_hash(path)}  {path.name}"

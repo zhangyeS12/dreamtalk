@@ -49,6 +49,7 @@ export interface OfflineContactStatus {
   unread: Array<{ message_id: string; conversation_id: string }>;
 }
 export interface DirectorStatus {
+  batch_size?: number; batch_size_revision?: number;
   enabled: boolean; revision: number; state: "off" | "idle" | "planning" | "ready" | "attention";
   error: string | null; consented: boolean; model_available: boolean; model: string | null;
   encounters_enabled: boolean; encounter_revision: number; encounters_consented: boolean;
@@ -582,9 +583,9 @@ export class CoreClient {
     return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/content/editor/research/${encodeURIComponent(requestId)}`);
   }
 
-  commitWorldContent(worldId: string, preview: WorldContentItem): Promise<WorldContentItem> {
+  commitWorldContent(worldId: string, preview: WorldContentItem, initialLocationId?: string): Promise<WorldContentItem> {
     return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/content/${preview.import_id}/commit`, {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ reviewed_hash: preview.reviewed_hash }),
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ reviewed_hash: preview.reviewed_hash, initial_location_id: initialLocationId }),
     });
   }
   discardWorldContent(worldId: string, importId: string): Promise<{ discarded: boolean }> {
@@ -761,6 +762,15 @@ export class CoreClient {
     return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/stories/chat/${encodeURIComponent(entry.entry_id)}`, { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ hidden, correction, expected_revision: entry.revision }),
     });
+  }
+  configureDirectorBatchSize(worldId: string, batchSize: number, revision: number): Promise<DirectorStatus> {
+    return this.productRequest(`/worlds/${worldId}/director/batch-size`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ batch_size: batchSize, expected_revision: revision }) });
+  }
+  configureCardLocation(worldId: string, importId: string, playerId: string, locationId: string, locked: boolean, revision: number | null, requestId: string, policyRevision = 0, residency: Residency = "strong"): Promise<{ character_id: string; initialized: boolean }> {
+    return this.productRequest(`/worlds/${worldId}/activity-cards/${importId}/location-policy`, { method: "PUT", headers: { "Content-Type": "application/json", "X-Request-Id": requestId }, body: JSON.stringify({ player_id: playerId, location_id: locationId, locked, expected_revision: revision, expected_policy_revision: policyRevision, residency }) });
+  }
+  initializeCardLocation(worldId: string, importId: string, locationId: string): Promise<{ character_id: string; initialized: boolean }> {
+    return this.productRequest(`/worlds/${worldId}/activity-cards/${importId}/initial-location`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ location_id: locationId }) });
   }
   directorStatus(worldId: string): Promise<DirectorStatus> {
     return this.productRequest(`/worlds/${worldId}/director`);

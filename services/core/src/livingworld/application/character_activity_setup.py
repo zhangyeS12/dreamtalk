@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from typing import Protocol
+from uuid import UUID, uuid5
 
 from livingworld.application.chat_conversations import ChatConversationService
 from livingworld.application.command_handler import CommandHandler
@@ -9,6 +10,7 @@ from livingworld.application.commands import PlaceCharacter
 from livingworld.application.errors import CharacterActivitySetupError
 from livingworld.application.player_event_feed import PlayerEventFeedService
 from livingworld.domain.contracts import RequestId
+from livingworld.domain.errors import ConcurrencyConflictError
 from livingworld.domain.identifiers import CharacterId, LocationId, PlayerId, WorldId
 from livingworld.domain.values import Revision
 
@@ -51,9 +53,7 @@ class CharacterActivitySetupService:
         player = await self._players.selected_player(world_id)
         if player is None:
             return None, ()
-        contacts = await self._chats.list_for_world(world_id)
-        if any(item.player_id != player for item in contacts):
-            raise CharacterActivitySetupError("activity_player_changed")
+        contacts = await self._chats.activity_contacts(world_id)
         locations = await self._directory.locations(
             player, tuple(item.character_id for item in contacts)
         )
@@ -77,6 +77,53 @@ class CharacterActivitySetupService:
                 )
             )
         return player, tuple(characters)
+
+    async def initialize_card(self, world_id, import_id: UUID, location_id):
+        player = await self._players.selected_player(world_id)
+        if player is None:
+            raise CharacterActivitySetupError("activity_player_changed")
+        contact = await self._chats.ensure_contact(world_id, import_id)
+        existing = await self._directory.locations(player, (contact.character_id,))
+        if contact.character_id in existing:
+            return contact.character_id
+        request = RequestId(
+            uuid5(contact.root_import_id, f"livingworld:card-initial:v1:{location_id.value}")
+        )
+        try:
+            await self.configure(player, contact.character_id, location_id, False, None, request, 0)
+        except ConcurrencyConflictError:
+            if contact.character_id not in await self._directory.locations(
+                player, (contact.character_id,)
+            ):
+                raise
+        return contact.character_id
+
+    async def configure_card(
+        self,
+        world_id,
+        import_id,
+        player_id,
+        location_id,
+        locked,
+        revision,
+        request_id,
+        policy_revision,
+        residency,
+    ):
+        if await self._players.selected_player(world_id) != player_id:
+            raise CharacterActivitySetupError("activity_player_changed")
+        contact = await self._chats.ensure_contact(world_id, import_id)
+        await self.configure(
+            player_id,
+            contact.character_id,
+            location_id,
+            locked,
+            revision,
+            request_id,
+            policy_revision,
+            residency,
+        )
+        return contact.character_id
 
     async def initialize(
         self,

@@ -6,7 +6,7 @@ from uuid import uuid5
 from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 
-from livingworld.application.director import MAX_CHARACTERS, MAX_LOCATIONS
+from livingworld.application.director import MAX_LOCATIONS
 from livingworld.application.errors import CharacterActivitySetupError, EntityNotFoundError
 from livingworld.application.world_locations import (
     LocalLocation,
@@ -15,6 +15,9 @@ from livingworld.application.world_locations import (
 )
 from livingworld.domain.identifiers import CharacterId, LocationId, PlayerId, WorldId
 from livingworld.infrastructure.persistence.authored_lifecycle import removed_character_ids
+from livingworld.infrastructure.persistence.character_card_bindings import (
+    CharacterCardBindingRecord,
+)
 from livingworld.infrastructure.persistence.character_mobility import (
     mobility_record,
     record_arrival,
@@ -43,7 +46,7 @@ def _home_id(world_id: WorldId):
 
 
 def _owned_direct_characters(player_id: PlayerId):
-    return (
+    direct = (
         select(ChatParticipantRecord.character_id)
         .join(
             ChatConversationRecord,
@@ -61,6 +64,15 @@ def _owned_direct_characters(player_id: PlayerId):
             ChatConversationRecord.kind == "direct",
         )
     )
+    permitted = direct.union(
+        select(CharacterCardBindingRecord.character_id).where(
+            CharacterCardBindingRecord.world_id == player_id.world_id.value
+        )
+    )
+    return select(CharacterRecord.character_id).where(
+        CharacterRecord.world_id == player_id.world_id.value,
+        CharacterRecord.character_id.in_(permitted),
+    )
 
 
 class SqlAlchemyCharacterActivityDirectory:
@@ -77,16 +89,16 @@ class SqlAlchemyCharacterActivityDirectory:
             if selected != player_id.value:
                 raise CharacterActivitySetupError("activity_player_changed")
             permitted = _owned_direct_characters(player_id).subquery()
-            states = (
-                await session.scalars(
-                    select(CharacterStateRecord)
-                    .join(permitted, CharacterStateRecord.character_id == permitted.c.character_id)
-                    .where(
-                        CharacterStateRecord.world_id == player_id.world_id.value,
-                        CharacterStateRecord.character_id.in_([item.value for item in characters]),
-                    )
+            statement = (
+                select(CharacterStateRecord)
+                .join(permitted, CharacterStateRecord.character_id == permitted.c.character_id)
+                .where(CharacterStateRecord.world_id == player_id.world_id.value)
+            )
+            if len(characters) <= 256:
+                statement = statement.where(
+                    CharacterStateRecord.character_id.in_([item.value for item in characters])
                 )
-            ).all()
+            states = (await session.scalars(statement)).all()
             rules = await LocationRules.load(session, player_id.world_id.value)
             result = {}
             for state in states:
@@ -299,10 +311,7 @@ class SqlAlchemyLocalLocationCatalog:
             or location_id.value in rules.ancestors(parent_id.value)
         ):
             raise LocationCatalogError("location_parent_invalid")
-        if (
-            len(set(allowed_characters)) != len(allowed_characters)
-            or len(allowed_characters) > MAX_CHARACTERS
-        ):
+        if len(set(allowed_characters)) != len(allowed_characters):
             raise LocationCatalogError("location_access_invalid")
         removed = await removed_character_ids(self._session, world)
         for character in allowed_characters:
@@ -394,7 +403,7 @@ class SqlAlchemyLocalLocationCatalog:
         if (
             await self._session.scalar(
                 _owned_direct_characters(player_id)
-                .where(ChatParticipantRecord.character_id == character_id.value)
+                .where(CharacterRecord.character_id == character_id.value)
                 .limit(1)
             )
             is None
@@ -410,22 +419,6 @@ class SqlAlchemyLocalLocationCatalog:
             raise CharacterActivitySetupError("activity_location_policy_changed")
         if not rules.visible(character_id.value, location_id.value):
             raise CharacterActivitySetupError("activity_location_hidden")
-        state = await self._session.get(
-            CharacterStateRecord, (player_id.world_id.value, character_id.value)
-        )
-        if state is None:
-            count = await self._session.scalar(
-                select(func.count())
-                .select_from(CharacterStateRecord)
-                .where(
-                    CharacterStateRecord.world_id == player_id.world_id.value,
-                    CharacterStateRecord.character_id.not_in(
-                        await removed_character_ids(self._session, player_id.world_id.value)
-                    ),
-                )
-            )
-            if count >= MAX_CHARACTERS:
-                raise CharacterActivitySetupError("activity_character_capacity")
 
     async def configure_character(
         self, character_id, location_id, locked, residency="strong", now=None
@@ -534,7 +527,7 @@ class SqlAlchemyLocalLocationCatalog:
             raise CharacterActivitySetupError("activity_player_changed")
         permitted = await self._session.scalar(
             _owned_direct_characters(player_id)
-            .where(ChatParticipantRecord.character_id == character_id.value)
+            .where(CharacterRecord.character_id == character_id.value)
             .limit(1)
         )
         if permitted is None:
@@ -570,15 +563,3 @@ class SqlAlchemyLocalLocationCatalog:
         )
         if exists is not None:
             raise CharacterActivitySetupError("activity_initial_already_set")
-        count = await self._session.scalar(
-            select(func.count())
-            .select_from(CharacterStateRecord)
-            .where(
-                CharacterStateRecord.world_id == character_id.world_id.value,
-                CharacterStateRecord.character_id.not_in(
-                    await removed_character_ids(self._session, character_id.world_id.value)
-                ),
-            )
-        )
-        if count is None or count >= MAX_CHARACTERS:
-            raise CharacterActivitySetupError("activity_character_capacity")

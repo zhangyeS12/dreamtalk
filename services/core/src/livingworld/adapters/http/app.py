@@ -141,7 +141,7 @@ def create_app(
     if world_content is not None:
         from livingworld.adapters.http.world_content import world_content_router
 
-        app.include_router(world_content_router(world_content, authorize))
+        app.include_router(world_content_router(world_content, authorize, character_activity_setup))
         if content_builder is not None and content_repository is not None:
             from livingworld.adapters.http.content_authoring import content_authoring_router
 

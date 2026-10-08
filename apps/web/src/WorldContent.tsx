@@ -1,3 +1,5 @@
+import { UnplacedCharactersEditor } from "./UnplacedCharactersEditor";
+import { InitialLocationChoice } from "./InitialLocationChoice";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CharacterLocationEditor, LocationManager, LocationMap, useLocationDirectory } from "./LocationWorkspace";
 import { ContentEditor, ResearchDetails } from "./ContentEditor";
@@ -76,6 +78,7 @@ export function WorldImports({ client, worldId, onlyKind, onSaved, onDirtyChange
   const [kind, setKind] = useState<"character" | "lorebook">(onlyKind ?? "character");
   const [replacement, setReplacement] = useState<WorldContentItem | null>(null);
   const [preview, setPreview] = useState<WorldContentItem | null>(null);
+  const [initialLocation, setInitialLocation] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const savedNotice = useRef<HTMLParagraphElement>(null);
@@ -117,10 +120,10 @@ export function WorldImports({ client, worldId, onlyKind, onSaved, onDirtyChange
     finally { setBusy(false); }
   };
   const commit = async () => {
-    if (!preview) return;
+    if (!preview || (preview.kind === "character" && !replacement && !initialLocation)) return;
     setBusy(true); setError("");
     try {
-      const saved = await client.commitWorldContent(worldId, preview);
+      const saved = await client.commitWorldContent(worldId, preview, preview.kind === "character" && !replacement ? initialLocation : undefined);
       if (!active.current) return;
       onSaved?.();
       setAccepted(items => items.some(item => item.import_id === saved.import_id)
@@ -128,7 +131,8 @@ export function WorldImports({ client, worldId, onlyKind, onSaved, onDirtyChange
       pendingId.current = null; setPreview(null); setReplacement(null);
       setMessage(saved.replaces_import_id ? "当前世界的内容已更新。" : preview.kind === "character" ? "已加入当前世界，可在通讯录查看角色。" : "世界书已加入当前世界。");
     } catch (failure) {
-      setError(failure instanceof CoreRequestError && failure.status === 422
+      setError(failure instanceof CoreRequestError && failure.code === "character_initial_location_pending"
+        ? "角色卡已保存，但初始地点尚未确认。请核对世界身份和地点后再次确认；不会重复创建角色。" : failure instanceof CoreRequestError && failure.status === 422
         ? "预览已过期，请重新选择文件。" : failure instanceof CoreRequestError && failure.status === 409
           ? "该内容已有更新，当前预览无法覆盖。请重新选择最新版本。"
           : "未能确认保存结果。可以再次确认，同一次导入不会重复保存。");
@@ -191,9 +195,9 @@ export function WorldImports({ client, worldId, onlyKind, onSaved, onDirtyChange
     {!onlyKind && <label className="field"><span>内容类型</span><select value={kind} disabled={busy || !!preview || !!replacement || !!editor} onChange={event => setKind(event.target.value as typeof kind)}><option value="character">角色卡（PNG / JSON）</option><option value="lorebook">世界书（JSON）</option></select></label>}
     <label className="field import-file"><span>选择文件</span><input type="file" disabled={loading || loadFailed || busy || !!changingEntry || !!editor} accept={kind === "character" ? ".png,.json" : ".json"} onChange={event => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void upload(file); }} /></label>
     </details>{loading && <p role="status">正在读取已保存的内容…</p>}{busy && <p role="status">正在处理…</p>}{error && <p role="alert" className="app-alert">{error}</p>}{loadFailed && <button type="button" className="secondary-button" disabled={loading || busy || !!editor || !!preview} onClick={() => { setError(""); setReload(value => value + 1); }}>重新读取已保存内容</button>}{message && <p ref={savedNotice} tabIndex={-1} role="status" className="app-notice editor-feedback">{message}</p>}
-    {preview && <div className="import-preview"><h3>导入预览</h3><ContentDetails item={preview} />
+    {preview && <div className="import-preview"><h3>导入预览</h3>{preview.kind === "character" && !replacement && <InitialLocationChoice client={client} worldId={worldId} value={initialLocation} onChange={setInitialLocation} disabled={busy} />}<ContentDetails item={preview} />
       {!!preview.warnings?.length && <div className="compatibility-notice"><p>部分来源内容无法完整映射，原始数据仍会保留。确认前请检查以下提示。</p><ul>{preview.warnings.map((warning, index) => <li key={index}>{warning.code === "lore_activation_metadata_preserved_inert" ? "导入不会执行触发设定；聊天支持范围见各条目说明。" : warning.code.includes("blank_tags") ? "空白标签已从角色标签中省略。" : warning.code.includes("empty_content") ? "空白条目已从世界书中省略。" : warning.code.includes("secondary_keys") ? "存在含义不明确的次级关键词，未作猜测转换。" : "存在兼容性差异，请核对预览内容。"}</li>)}</ul></div>}
-      <div className="profile-actions"><button className="primary-button" type="button" disabled={busy} onClick={() => void commit()}>{replacement ? "确认更新当前世界" : "确认加入当前世界"}</button><button className="secondary-button" type="button" disabled={busy} onClick={() => { pendingId.current = null; void client.discardWorldContent(worldId, preview.import_id).catch(() => undefined); setPreview(null); }}>取消</button></div>
+      <div className="profile-actions"><button className="primary-button" type="button" disabled={busy || (preview.kind === "character" && !replacement && !initialLocation)} onClick={() => void commit()}>{replacement ? "确认更新当前世界" : "确认加入当前世界"}</button><button className="secondary-button" type="button" disabled={busy} onClick={() => { pendingId.current = null; void client.discardWorldContent(worldId, preview.import_id).catch(() => undefined); setPreview(null); }}>取消</button></div>
     </div>}
     {visibleItems.length > 0 && <div className="accepted-content"><h3>当前世界已保存</h3><button type="button" className="text-action" disabled={commonDisabled || !!changingEntry} onClick={refreshAccepted}>刷新已保存内容与范围</button>{onlyKind === "lorebook" && <p className="inline-hint">公开范围选择后立即保存。通过界面编辑世界书时，完全未变且有原条目对应的内容保留原范围；新增、修改正文或触发条件、从文件替换的条目需要重新确认公开。编辑或预览期间，请先完成内容保存，再设置范围。</p>}{visibleItems.map(item => <div key={item.import_id} className="accepted-item"><details><summary>{item.characters[0]?.name ?? item.lorebooks[0]?.name ?? "导入内容"} · {item.kind === "character" ? "角色卡" : "世界书"}</summary><ContentDetails item={item} onCommonChange={item.kind === "lorebook" ? (entryId, common) => void setCommon(item.import_id, entryId, common) : undefined} changingEntry={changingEntry} commonDisabled={commonDisabled} exposureFeedback={exposureFeedback} onCommonRefresh={refreshAccepted} /></details><button type="button" className="text-action" disabled={loading || loadFailed || busy || !!changingEntry || !!preview || !!editor} onClick={() => { setEditor({ kind: item.kind, item }); setError(""); setMessage(""); }}>编辑</button><button type="button" className="text-action" disabled={loading || loadFailed || busy || !!changingEntry || !!preview || !!editor} onClick={() => { setReplacement(item); setKind(item.kind); setMessage(""); }}>从文件更新</button>{item.kind === "character" && <button type="button" className="text-action destructive-action" disabled={commonDisabled || !!changingEntry} onClick={() => void removeCard(item)}>删除角色卡</button>}</div>)}</div>}
   </section>;
@@ -222,10 +226,14 @@ export function WorldContacts({ client, worldId, onSettings, onIdentity, onOpenC
   const [locationOpen, setLocationOpen] = useState(false), [positionDirty, setPositionDirty] = useState(false);
   const locationEditor = useRef<HTMLDetailsElement>(null);
   const places = useLocationDirectory(client, worldId, visible);
+  const [catalogDirty, setCatalogDirty] = useState(false), [bulkDirty, setBulkDirty] = useState(false);
+  useEffect(() => { onLocationDirty(catalogDirty || bulkDirty); return () => onLocationDirty(false); }, [catalogDirty, bulkDirty, onLocationDirty]);
   const reportPositionDirty = useCallback((dirty: boolean) => { setPositionDirty(dirty); onCharacterLocationDirty(dirty); }, [onCharacterLocationDirty]);
   const selectMode = (next: typeof mode) => { if (next !== mode && positionDirty && !window.confirm("角色位置规则尚未保存或结果未确认，确定离开并放弃本次编辑吗？")) return; setMode(next); };
   const editLocations = () => { setLocationOpen(true); window.requestAnimationFrame(() => locationEditor.current?.scrollIntoView({ block: "start" })); };
   const [search, setSearch] = useState("");
+  const [peoplePage, setPeoplePage] = useState(0);
+  useEffect(() => setPeoplePage(0), [search, worldId]);
   const [graphRoot, setGraphRoot] = useState<string | null>(null);
   const [urls, setUrls] = useState<Record<string, string>>({});
   const [socialBusy, setSocialBusy] = useState(false);
@@ -256,7 +264,12 @@ export function WorldContacts({ client, worldId, onSettings, onIdentity, onOpenC
     void Promise.all([client.worldContent(worldId), client.socialSnapshot(worldId)]).then(([result, people]) => { if (active) { setItems(result); setSocial(people); setSelected(current => current ? result.find(item => item.import_id === current.import_id) ?? null : null); } }).catch(() => { if (active) setFailed(true); }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [client, worldId, refreshKey, reload, visible]);
-  const avatarDigests = [...new Set(social?.characters.map(person => person.avatar_digest).filter((digest): digest is string => !!digest) ?? [])].sort().join(",");
+  const characters = items.filter(item => item.characters.length > 0);
+  const matchingCharacters = characters.filter(item => item.characters[0].name.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()));
+  const current = social?.characters.find(person => person.current_import_id === selected?.import_id);
+  const [mapAvatarDigests, setMapAvatarDigests] = useState("");
+  const visibleImports = new Set(matchingCharacters.slice(Math.min(peoplePage, Math.max(0, Math.ceil(matchingCharacters.length / 50) - 1)) * 50, (Math.min(peoplePage, Math.max(0, Math.ceil(matchingCharacters.length / 50) - 1)) + 1) * 50).map(item => item.import_id));
+  const avatarDigests = [...new Set([...(social?.characters.filter(person => mode === "graph" || visibleImports.has(person.current_import_id) || person.root_import_id === current?.root_import_id).map(person => person.avatar_digest).filter((digest): digest is string => !!digest) ?? []), ...(mode === "locations" && mapAvatarDigests ? mapAvatarDigests.split(",") : [])])].sort().join(",");
   useEffect(() => {
     if (!visible) return;
     let active = true;
@@ -267,9 +280,6 @@ export function WorldContacts({ client, worldId, onSettings, onIdentity, onOpenC
     })).then(found => { for (const entry of found) if (entry) created.push(entry[1]); if (active) setUrls(Object.fromEntries(found.filter((entry): entry is readonly [string, string] => !!entry))); else created.forEach(URL.revokeObjectURL); });
     return () => { active = false; created.forEach(URL.revokeObjectURL); };
   }, [client, avatarDigests, visible, worldId]);
-  const characters = items.filter(item => item.characters.length > 0);
-  const matchingCharacters = characters.filter(item => item.characters[0].name.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()));
-  const current = social?.characters.find(person => person.current_import_id === selected?.import_id);
   const selectedRoot = current?.root_import_id ?? null;
   const selectedFactions = social?.memberships.filter(item => item.root_import_id === selectedRoot).map(item => social.factions.find(faction => faction.faction_id === item.faction_id)?.name).filter((name): name is string => !!name) ?? [];
   const change = async (operation: () => Promise<unknown>) => {
@@ -284,14 +294,15 @@ export function WorldContacts({ client, worldId, onSettings, onIdentity, onOpenC
     if (file.size > 10 * 1024 * 1024) { setSocialError("头像不能超过 10 MB。"); return; }
     await change(async () => { const image = await client.uploadCoverImage(worldId, file); await client.setCharacterAvatar(worldId, selectedRoot, image.digest); });
   };
-  return <><details ref={locationEditor} className="contacts-management location-management" open={locationOpen} onToggle={event => setLocationOpen(event.currentTarget.open)}><summary><strong>添加／编辑地点</strong><span>地点层级、隐藏分支与角色开放范围</span></summary><LocationManager client={client} worldId={worldId} locations={places.locations} directory={places.directory} refresh={places.refresh} onDirtyChange={onLocationDirty} /></details><div className={`chat-workspace contacts-workspace ${selected && mode === "profile" ? "thread-open" : ""}`}><aside className="conversation-list" aria-label="当前世界角色"><div className="directory-heading"><strong>世界中的人</strong><small>{loading ? "读取中" : failed ? "读取未完成" : `${characters.length} 位角色`}</small></div>
+  return <><details ref={locationEditor} className="contacts-management location-management" open={locationOpen} onToggle={event => setLocationOpen(event.currentTarget.open)}><summary><strong>添加／编辑地点</strong><span>地点层级、隐藏分支与角色开放范围</span></summary><LocationManager client={client} worldId={worldId} locations={places.locations} directory={places.directory} refresh={places.refresh} onDirtyChange={setCatalogDirty} /></details><UnplacedCharactersEditor client={client} worldId={worldId} directory={places.directory} social={social} locations={places.locations} refresh={places.refresh} onDirtyChange={setBulkDirty} /><div className={`chat-workspace contacts-workspace ${selected && mode === "profile" ? "thread-open" : ""}`}><aside className="conversation-list" aria-label="当前世界角色"><div className="directory-heading"><strong>世界中的人</strong><small>{loading ? "读取中" : failed ? "读取未完成" : `${characters.length} 位角色`}</small></div>
     <DirectorySearch label="搜索角色名称" value={search} onChange={setSearch} />
-    {loading ? <p className="thread-hint">正在读取角色…</p> : failed ? <><p className="app-alert" role="alert">无法读取通讯录或阵营。</p><button type="button" onClick={() => setReload(value => value + 1)}>重试读取</button></> : characters.length === 0 ? <div className="empty-state"><h2>当前世界还没有角色</h2><p>在这里新建、联网生成或导入角色卡，确认后加入当前世界。</p><button className="text-action" onClick={onSettings}>添加角色卡</button></div> : matchingCharacters.map(item => { const person = social?.characters.find(value => value.current_import_id === item.import_id); return <button key={item.import_id} className={`conversation-row ${selected?.import_id === item.import_id ? "selected" : ""}`} aria-pressed={selected?.import_id === item.import_id} onClick={() => { if (positionDirty && selected?.import_id !== item.import_id && !window.confirm("位置规则尚未保存，确定切换角色并放弃本次编辑吗？")) return; setSelected(item); setGraphRoot(person?.root_import_id ?? null); }}><ContactAvatar name={item.characters[0].name} url={urls[person?.avatar_digest ?? ""]} /><span className="row-copy"><strong>{item.characters[0].name}</strong><small>查看角色资料与阵营</small></span></button>; })}
+    {loading ? <p className="thread-hint">正在读取角色…</p> : failed ? <><p className="app-alert" role="alert">无法读取通讯录或阵营。</p><button type="button" onClick={() => setReload(value => value + 1)}>重试读取</button></> : characters.length === 0 ? <div className="empty-state"><h2>当前世界还没有角色</h2><p>在这里新建、联网生成或导入角色卡，确认后加入当前世界。</p><button className="text-action" onClick={onSettings}>添加角色卡</button></div> : matchingCharacters.slice(Math.min(peoplePage, Math.max(0, Math.ceil(matchingCharacters.length / 50) - 1)) * 50, (Math.min(peoplePage, Math.max(0, Math.ceil(matchingCharacters.length / 50) - 1)) + 1) * 50).map(item => { const person = social?.characters.find(value => value.current_import_id === item.import_id); return <button key={item.import_id} className={`conversation-row ${selected?.import_id === item.import_id ? "selected" : ""}`} aria-pressed={selected?.import_id === item.import_id} onClick={() => { if (positionDirty && selected?.import_id !== item.import_id && !window.confirm("位置规则尚未保存，确定切换角色并放弃本次编辑吗？")) return; setSelected(item); setGraphRoot(person?.root_import_id ?? null); }}><ContactAvatar name={item.characters[0].name} url={urls[person?.avatar_digest ?? ""]} /><span className="row-copy"><strong>{item.characters[0].name}</strong><small>查看角色资料与阵营</small></span></button>; })}
+    {matchingCharacters.length > 50 && <div className="profile-actions"><button type="button" disabled={peoplePage === 0} onClick={() => setPeoplePage(old => Math.max(0, old - 1))}>上一页</button><span>{Math.min(peoplePage + 1, Math.ceil(matchingCharacters.length / 50))} / {Math.ceil(matchingCharacters.length / 50)}</span><button type="button" disabled={peoplePage >= Math.ceil(matchingCharacters.length / 50) - 1} onClick={() => setPeoplePage(old => old + 1)}>下一页</button></div>}
     {!loading && !failed && characters.length > 0 && matchingCharacters.length === 0 && <p className="thread-hint" role="status">没有找到这个名字，试试其他关键词。</p>}
   </aside><div className="conversation-detail"><div className="contacts-view-switch"><button type="button" className="secondary-button" aria-pressed={mode === "profile"} onClick={() => selectMode("profile")}>角色资料</button><button type="button" className="secondary-button" aria-pressed={mode === "factions"} onClick={() => selectMode("factions")}>编辑阵营</button><button type="button" className="secondary-button" aria-pressed={mode === "graph"} onClick={() => selectMode("graph")}>人物关系网</button><button type="button" className="secondary-button" aria-pressed={mode === "locations"} onClick={() => selectMode("locations")}>地点</button><button type="button" className="text-action" disabled={socialBusy || loading} onClick={() => setReload(value => value + 1)}>刷新</button></div>
     {places.error && <div className="app-alert" role="alert">{places.error}<button className="text-action" onClick={() => void places.refresh()}>刷新地点</button></div>}
     {socialError && <p className="app-alert" role="alert">{socialError}</p>}
-    {mode === "locations" && social ? <LocationMap locations={places.locations} directory={places.directory} social={social} urls={urls} selected={graphRoot} onSelect={root => { setGraphRoot(root); setSelected(items.find(item => item.import_id === social.characters.find(person => person.root_import_id === root)?.current_import_id) ?? null); }} onChat={importId => void onOpenChat(importId)} openingChat={openingChat} onEdit={editLocations} /> : mode === "graph" && social ? <SocialGraph visible={visible} social={social} urls={urls} selected={graphRoot} onSelect={root => { setGraphRoot(root); setSelected(items.find(item => item.import_id === social.characters.find(person => person.root_import_id === root)?.current_import_id) ?? null); }} onChat={importId => void onOpenChat(importId)} canChat={canOpenChat} openingChat={openingChat} />
+    {mode === "locations" && social ? <LocationMap onAvatarDigests={setMapAvatarDigests} locations={places.locations} directory={places.directory} social={social} urls={urls} selected={graphRoot} onSelect={root => { setGraphRoot(root); setSelected(items.find(item => item.import_id === social.characters.find(person => person.root_import_id === root)?.current_import_id) ?? null); }} onChat={importId => void onOpenChat(importId)} openingChat={openingChat} onEdit={editLocations} /> : mode === "graph" && social ? <SocialGraph visible={visible} social={social} urls={urls} selected={graphRoot} onSelect={root => { setGraphRoot(root); setSelected(items.find(item => item.import_id === social.characters.find(person => person.root_import_id === root)?.current_import_id) ?? null); }} onChat={importId => void onOpenChat(importId)} canChat={canOpenChat} openingChat={openingChat} />
       : mode === "factions" && social ? <FactionManager social={social} selectedRoot={selectedRoot} busy={socialBusy} onSelect={root => { setSelected(items.find(item => item.import_id === social.characters.find(person => person.root_import_id === root)?.current_import_id) ?? null); }} onCreate={(name, parent) => change(() => client.createFaction(worldId, name, parent))} onEdit={(id, name, parent) => change(() => client.editFaction(worldId, id, name, parent))} onRemove={id => { if (window.confirm("确定删除这个空阵营吗？")) void change(() => client.removeFaction(worldId, id)); }} onMembership={(id, root, enabled) => void change(() => client.setFactionMember(worldId, id, root, enabled))} />
       : selected ? <><div className="thread-heading"><button className="text-action" onClick={() => setSelected(null)}>返回通讯录</button><h2>角色档案</h2></div>
         <div className="contact-dossier"><header className="dossier-hero">
