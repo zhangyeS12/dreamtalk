@@ -1,5 +1,6 @@
 """World-scoped creator directory; other runtime locations are never enumerated."""
 
+from datetime import UTC, datetime
 from uuid import uuid5
 
 from sqlalchemy import delete, func, select
@@ -13,6 +14,11 @@ from livingworld.application.world_locations import (
     location_name_key,
 )
 from livingworld.domain.identifiers import CharacterId, LocationId, PlayerId, WorldId
+from livingworld.infrastructure.persistence.authored_lifecycle import removed_character_ids
+from livingworld.infrastructure.persistence.character_mobility import (
+    mobility_record,
+    record_arrival,
+)
 from livingworld.infrastructure.persistence.location_policy_models import (
     CharacterLocationPolicyRecord,
     LocationAccessRecord,
@@ -27,6 +33,7 @@ from livingworld.infrastructure.persistence.models import (
     LocalLocationCatalogRecord,
     LocalPlayerBindingRecord,
     LocationRecord,
+    PlayerPresenceRecord,
     WorldRecord,
 )
 
@@ -92,6 +99,7 @@ class SqlAlchemyCharacterActivityDirectory:
                     locked,
                     state.revision,
                     policy_revision,
+                    rules.residencies.get(state.character_id, "strong"),
                 )
             return result
 
@@ -150,7 +158,10 @@ class SqlAlchemyLocalLocationDirectory:
                     (LocalLocationCatalogRecord.world_id == LocationRecord.world_id)
                     & (LocalLocationCatalogRecord.location_id == LocationRecord.location_id),
                 )
-                .where(LocalLocationCatalogRecord.world_id == world_id.value)
+                .where(
+                    LocalLocationCatalogRecord.world_id == world_id.value,
+                    LocalLocationCatalogRecord.removed_at.is_(None),
+                )
                 .order_by(LocationRecord.name, LocationRecord.location_id)
                 .limit(MAX_LOCATIONS + 1)
             )
@@ -172,6 +183,7 @@ class SqlAlchemyLocalLocationDirectory:
                         if loc == row.location_id
                     ),
                     revision=row.revision,
+                    is_region=row.location_id in rules.regions,
                 )
                 for row in rows
             ]
@@ -188,6 +200,66 @@ class SqlAlchemyLocalLocationDirectory:
                 )
             return tuple(locations)
 
+    async def remove_location(self, identity: LocationId, expected_revision: int) -> None:
+        world = identity.world_id.value
+        async with self._sessions() as session, session.begin():
+            await session.connection(execution_options={"livingworld_write_intent": True})
+            if identity.value == _home_id(identity.world_id):
+                raise LocationCatalogError("location_home_reserved")
+            catalog = await session.get(LocalLocationCatalogRecord, (world, identity.value))
+            location = await session.get(LocationRecord, (world, identity.value))
+            if catalog is None or location is None:
+                raise EntityNotFoundError("location_not_found")
+            if catalog.removed_at is not None:
+                return
+            if location.revision != expected_revision:
+                raise LocationCatalogError("location_revision_changed")
+            child = await session.scalar(
+                select(LocationPolicyRecord.location_id)
+                .join(
+                    LocalLocationCatalogRecord,
+                    (LocalLocationCatalogRecord.world_id == LocationPolicyRecord.world_id)
+                    & (LocalLocationCatalogRecord.location_id == LocationPolicyRecord.location_id),
+                )
+                .where(
+                    LocationPolicyRecord.world_id == world,
+                    LocationPolicyRecord.parent_id == identity.value,
+                    LocalLocationCatalogRecord.removed_at.is_(None),
+                )
+                .limit(1)
+            )
+            if child is not None:
+                raise LocationCatalogError("location_has_children")
+            occupied = await session.scalar(
+                select(PlayerPresenceRecord.player_id)
+                .where(
+                    PlayerPresenceRecord.world_id == world,
+                    PlayerPresenceRecord.location_id == identity.value,
+                )
+                .limit(1)
+            )
+            if occupied is not None:
+                raise LocationCatalogError("location_player_present")
+            removed = await removed_character_ids(session, world)
+            rules = await LocationRules.load(session, world)
+            states = (
+                await session.scalars(
+                    select(CharacterStateRecord).where(
+                        CharacterStateRecord.world_id == world,
+                    )
+                )
+            ).all()
+            for state in states:
+                if state.character_id in removed:
+                    continue
+                initial, _, _ = await rules.scope(session, world, state.character_id)
+                if state.location_id == identity.value or initial == identity.value:
+                    raise LocationCatalogError("location_character_present")
+            catalog.removed_at = datetime.now(UTC)
+            # Free the public name without rebuilding SQLite's referenced table.
+            catalog.name_key = f"\x01removed:{identity.value}"
+            # Canonical location, old policy, facts and observations remain intact.
+
 
 class SqlAlchemyLocalLocationCatalog:
     def __init__(self, session) -> None:
@@ -200,11 +272,10 @@ class SqlAlchemyLocalLocationCatalog:
                 is not None
             )
         return (
-            await self._session.get(
+            catalog := await self._session.get(
                 LocalLocationCatalogRecord, (identity.world_id.value, identity.value)
             )
-            is not None
-        )
+        ) is not None and catalog.removed_at is None
 
     async def check_edit(self, identity, name):
         if identity.value == _home_id(identity.world_id) or not await self._catalogued(identity):
@@ -214,6 +285,7 @@ class SqlAlchemyLocalLocationCatalog:
                 LocalLocationCatalogRecord.world_id == identity.world_id.value,
                 LocalLocationCatalogRecord.name_key == location_name_key(name),
                 LocalLocationCatalogRecord.location_id != identity.value,
+                LocalLocationCatalogRecord.removed_at.is_(None),
             )
         )
         if duplicate is not None:
@@ -232,7 +304,10 @@ class SqlAlchemyLocalLocationCatalog:
             or len(allowed_characters) > MAX_CHARACTERS
         ):
             raise LocationCatalogError("location_access_invalid")
+        removed = await removed_character_ids(self._session, world)
         for character in allowed_characters:
+            if character.value in removed:
+                raise LocationCatalogError("location_access_invalid")
             if await self._session.get(CharacterRecord, (world, character.value)) is None:
                 raise LocationCatalogError("location_access_invalid")
         changed = LocationRules(
@@ -241,6 +316,9 @@ class SqlAlchemyLocalLocationCatalog:
             set(rules.hidden),
             set(rules.grants),
             dict(rules.scopes),
+            rules.regions,
+            dict(rules.residencies),
+            rules.catalogued | {location_id.value},
         )
         changed.parents[location_id.value] = parent_id.value if parent_id else None
         changed.hidden.discard(location_id.value)
@@ -255,6 +333,8 @@ class SqlAlchemyLocalLocationCatalog:
             )
         ).all()
         for state in states:
+            if state.character_id in removed:
+                continue
             initial, _, _ = await rules.scope(self._session, world, state.character_id)
             if (
                 initial
@@ -273,13 +353,16 @@ class SqlAlchemyLocalLocationCatalog:
             ):
                 raise LocationCatalogError("location_scope_conflict")
 
-    async def configure(self, location_id, name, parent_id, hidden, allowed_characters):
+    async def configure(
+        self, location_id, name, parent_id, hidden, allowed_characters, is_region=False
+    ):
         world = location_id.world_id.value
         policy = await self._session.get(LocationPolicyRecord, (world, location_id.value))
         if policy is None:
             policy = LocationPolicyRecord(world_id=world, location_id=location_id.value)
             self._session.add(policy)
         policy.parent_id, policy.hidden = parent_id.value if parent_id else None, hidden
+        policy.is_region = is_region
         catalog = await self._session.get(LocalLocationCatalogRecord, (world, location_id.value))
         if catalog:
             catalog.name_key = location_name_key(name)
@@ -297,6 +380,10 @@ class SqlAlchemyLocalLocationCatalog:
             )
 
     async def check_character_config(self, character_id, location_id, player_id, policy_revision):
+        if character_id.value in await removed_character_ids(
+            self._session, character_id.world_id.value
+        ):
+            raise CharacterActivitySetupError("activity_character_unavailable")
         selected = await self._session.scalar(
             select(LocalPlayerBindingRecord.player_id).where(
                 LocalPlayerBindingRecord.world_id == player_id.world_id.value
@@ -330,12 +417,19 @@ class SqlAlchemyLocalLocationCatalog:
             count = await self._session.scalar(
                 select(func.count())
                 .select_from(CharacterStateRecord)
-                .where(CharacterStateRecord.world_id == player_id.world_id.value)
+                .where(
+                    CharacterStateRecord.world_id == player_id.world_id.value,
+                    CharacterStateRecord.character_id.not_in(
+                        await removed_character_ids(self._session, player_id.world_id.value)
+                    ),
+                )
             )
             if count >= MAX_CHARACTERS:
                 raise CharacterActivitySetupError("activity_character_capacity")
 
-    async def configure_character(self, character_id, location_id, locked):
+    async def configure_character(
+        self, character_id, location_id, locked, residency="strong", now=None
+    ):
         world = character_id.world_id.value
         policy = await self._session.get(CharacterLocationPolicyRecord, (world, character_id.value))
         if policy is None:
@@ -346,6 +440,13 @@ class SqlAlchemyLocalLocationCatalog:
         else:
             policy.revision += 1
         policy.initial_location_id, policy.locked = location_id.value, locked
+        policy.residency = residency
+        if now is not None:
+            rules = await LocationRules.load(self._session, world)
+            state = await self._session.get(CharacterStateRecord, (world, character_id.value))
+            if state is not None:
+                record = await mobility_record(self._session, world, character_id.value)
+                record_arrival(record, rules, state.location_id, location_id.value, now)
 
     async def config_destination(self, character_id, root, locked, before):
         rules = await LocationRules.load(self._session, character_id.world_id.value)
@@ -372,6 +473,7 @@ class SqlAlchemyLocalLocationCatalog:
             select(LocalLocationCatalogRecord.location_id).where(
                 LocalLocationCatalogRecord.world_id == world_id.value,
                 LocalLocationCatalogRecord.name_key == key,
+                LocalLocationCatalogRecord.removed_at.is_(None),
             )
         )
         if duplicate is not None:
@@ -381,7 +483,15 @@ class SqlAlchemyLocalLocationCatalog:
         count = await self._session.scalar(
             select(func.count())
             .select_from(LocationRecord)
-            .where(LocationRecord.world_id == world_id.value)
+            .outerjoin(
+                LocalLocationCatalogRecord,
+                (LocalLocationCatalogRecord.world_id == LocationRecord.world_id)
+                & (LocalLocationCatalogRecord.location_id == LocationRecord.location_id),
+            )
+            .where(
+                LocationRecord.world_id == world_id.value,
+                LocalLocationCatalogRecord.removed_at.is_(None),
+            )
         )
         home = await self._session.scalar(
             select(LocationRecord.location_id).where(
@@ -409,6 +519,10 @@ class SqlAlchemyLocalLocationCatalog:
     async def check_initial_activity(
         self, character_id: CharacterId, location_id: LocationId, player_id: PlayerId
     ) -> None:
+        if character_id.value in await removed_character_ids(
+            self._session, character_id.world_id.value
+        ):
+            raise CharacterActivitySetupError("activity_character_unavailable")
         # The Kernel reserves the writer first: authorization, capacity, null-CAS,
         # event, state and command receipt all use this one transaction.
         selected = await self._session.scalar(
@@ -429,6 +543,7 @@ class SqlAlchemyLocalLocationCatalog:
             select(LocalLocationCatalogRecord.location_id).where(
                 LocalLocationCatalogRecord.world_id == location_id.world_id.value,
                 LocalLocationCatalogRecord.location_id == location_id.value,
+                LocalLocationCatalogRecord.removed_at.is_(None),
             )
         )
         home = (
@@ -458,7 +573,12 @@ class SqlAlchemyLocalLocationCatalog:
         count = await self._session.scalar(
             select(func.count())
             .select_from(CharacterStateRecord)
-            .where(CharacterStateRecord.world_id == character_id.world_id.value)
+            .where(
+                CharacterStateRecord.world_id == character_id.world_id.value,
+                CharacterStateRecord.character_id.not_in(
+                    await removed_character_ids(self._session, character_id.world_id.value)
+                ),
+            )
         )
         if count is None or count >= MAX_CHARACTERS:
             raise CharacterActivitySetupError("activity_character_capacity")

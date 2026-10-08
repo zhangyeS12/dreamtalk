@@ -36,6 +36,146 @@ struct HostDocument {
     pricing_catalog: Option<serde_json::Value>,
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct WorldHostDocument {
+    version: u32,
+    default: HostDocument,
+    worlds: std::collections::BTreeMap<String, HostDocument>,
+}
+
+pub fn validate_world_scope(world: Option<&str>) -> Result<(), &'static str> {
+    if let Some(world) = world {
+        validate_secret_ref(world).map_err(|_| "model_world_scope_invalid")?;
+    }
+    Ok(())
+}
+
+fn host_documents(bytes: &[u8]) -> Result<Vec<HostDocument>, &'static str> {
+    if bytes.len() > 1_048_576 {
+        return Err("model_configuration_invalid");
+    }
+    let value: serde_json::Value =
+        serde_json::from_slice(bytes).map_err(|_| "model_configuration_invalid")?;
+    if value["version"] == 2 {
+        let scoped: WorldHostDocument =
+            serde_json::from_value(value).map_err(|_| "model_configuration_invalid")?;
+        if scoped.version != 2 {
+            return Err("model_configuration_invalid");
+        }
+        let mut documents = vec![scoped.default];
+        for (world, document) in scoped.worlds {
+            validate_world_scope(Some(&world))?;
+            documents.push(document);
+        }
+        Ok(documents)
+    } else {
+        Ok(vec![
+            serde_json::from_slice(bytes).map_err(|_| "model_configuration_invalid")?
+        ])
+    }
+}
+
+pub fn credential_references(bytes: &[u8]) -> Result<Vec<String>, &'static str> {
+    let mut references = Vec::new();
+    for document in host_documents(bytes)? {
+        if document.version != 1 {
+            return Err("model_configuration_invalid");
+        }
+        let _ = (
+            document.models.len(),
+            document.routes.len(),
+            document.execution_policy.as_ref(),
+            document.pricing_catalog.as_ref(),
+        );
+        let mut ids = HashSet::new();
+        for provider in document.providers {
+            if provider.provider_id.is_empty()
+                || !ids.insert(provider.provider_id)
+                || ![
+                    "openai-compatible",
+                    "anthropic",
+                    "gemini",
+                    "openai-responses",
+                ]
+                .contains(&provider.adapter_kind.as_str())
+                || validate_secret_ref(&provider.secret_ref).is_err()
+                || provider.timeout_ms == 0
+                || provider
+                    .base_url
+                    .as_ref()
+                    .is_some_and(|value| value.contains('@'))
+            {
+                return Err("model_configuration_invalid");
+            }
+            if !references.contains(&provider.secret_ref) {
+                references.push(provider.secret_ref);
+            }
+        }
+    }
+    Ok(references)
+}
+
+/// The default remains intact when a world saves its own provider and key.
+pub fn scope_document(bytes: &[u8], world: Option<&str>) -> Result<(Vec<u8>, bool), &'static str> {
+    validate_world_scope(world)?;
+    credential_references(bytes)?;
+    let value: serde_json::Value =
+        serde_json::from_slice(bytes).map_err(|_| "model_configuration_invalid")?;
+    if value["version"] != 2 {
+        return Ok((bytes.to_vec(), world.is_some()));
+    }
+    let selected = world.and_then(|world| value["worlds"].get(world));
+    let inherited = world.is_some() && selected.is_none();
+    Ok((
+        serde_json::to_vec(selected.unwrap_or(&value["default"]))
+            .map_err(|_| "model_configuration_invalid")?,
+        inherited,
+    ))
+}
+
+pub fn replace_scope(
+    bytes: &[u8],
+    document: &[u8],
+    world: Option<&str>,
+) -> Result<Vec<u8>, &'static str> {
+    validate_world_scope(world)?;
+    credential_references(bytes)?;
+    let mut value: serde_json::Value =
+        serde_json::from_slice(bytes).map_err(|_| "model_configuration_invalid")?;
+    if value["version"] != 2 && world.is_none() {
+        return Ok(document.to_vec());
+    }
+    if value["version"] != 2 {
+        value = serde_json::json!({"version": 2, "default": value, "worlds": {}});
+    }
+    let document: serde_json::Value =
+        serde_json::from_slice(document).map_err(|_| "model_configuration_invalid")?;
+    if let Some(world) = world {
+        value["worlds"][world] = document;
+    } else {
+        value["default"] = document;
+    }
+    let output = serde_json::to_vec(&value).map_err(|_| "model_configuration_invalid")?;
+    credential_references(&output)?;
+    Ok(output)
+}
+
+pub fn inherit_default(bytes: &[u8], world: &str) -> Result<Vec<u8>, &'static str> {
+    validate_world_scope(Some(world))?;
+    credential_references(bytes)?;
+    let mut value: serde_json::Value =
+        serde_json::from_slice(bytes).map_err(|_| "model_configuration_invalid")?;
+    if value["version"] != 2 {
+        return Ok(bytes.to_vec());
+    }
+    value["worlds"]
+        .as_object_mut()
+        .ok_or("model_configuration_invalid")?
+        .remove(world);
+    serde_json::to_vec(&value).map_err(|_| "model_configuration_invalid")
+}
+
 pub struct HostLlmConfiguration {
     pub credential_refs: Vec<String>,
 }
@@ -364,54 +504,8 @@ pub async fn load(path: &Path) -> Result<HostLlmConfiguration, &'static str> {
     let bytes = tokio::fs::read(path)
         .await
         .map_err(|_| "llm_config_read_failed")?;
-    let document: HostDocument = match serde_json::from_slice(&bytes) {
-        Ok(document) => document,
-        Err(_) => {
-            return Ok(HostLlmConfiguration {
-                credential_refs: Vec::new(),
-            })
-        }
-    };
-    if document.version != 1 {
-        return Ok(HostLlmConfiguration {
-            credential_refs: Vec::new(),
-        });
-    }
-    let _ = (
-        document.models.len(),
-        document.routes.len(),
-        document.execution_policy.as_ref(),
-        document.pricing_catalog.as_ref(),
-    );
-    let kinds = [
-        "openai-compatible",
-        "anthropic",
-        "gemini",
-        "openai-responses",
-    ];
-    let mut provider_ids = HashSet::new();
-    let mut references = Vec::new();
-    for provider in document.providers {
-        if provider.provider_id.is_empty()
-            || !provider_ids.insert(provider.provider_id)
-            || !kinds.contains(&provider.adapter_kind.as_str())
-            || validate_secret_ref(&provider.secret_ref).is_err()
-            || provider.timeout_ms == 0
-            || provider
-                .base_url
-                .as_ref()
-                .is_some_and(|value| value.contains('@'))
-        {
-            return Ok(HostLlmConfiguration {
-                credential_refs: Vec::new(),
-            });
-        }
-        if !references.contains(&provider.secret_ref) {
-            references.push(provider.secret_ref);
-        }
-    }
     Ok(HostLlmConfiguration {
-        credential_refs: references,
+        credential_refs: credential_references(&bytes).unwrap_or_default(),
     })
 }
 

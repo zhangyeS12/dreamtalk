@@ -4,15 +4,17 @@ All engineering agents must read AGENTS.md before modifying the repository.
 
 ## 下载体验（Windows）
 
-**[下载 dreamtalk 0.1.42 地点与模型适配体验版](https://github.com/zhangyeS12/dreamtalk/releases/tag/v0.1.42)** · [直接下载 Windows x64 便携包](https://github.com/zhangyeS12/dreamtalk/releases/download/v0.1.42/dreamtalk-0.1.42-windows-x64.zip)
+**[dreamtalk 0.1.47 发布准备](https://github.com/zhangyeS12/dreamtalk/releases/tag/v0.1.47)** · [Windows x64 安装包](https://github.com/zhangyeS12/dreamtalk/releases/download/v0.1.47/dreamtalk_0.1.47_x64-setup.exe) · [完整便携包](https://github.com/zhangyeS12/dreamtalk/releases/download/v0.1.47/dreamtalk-0.1.47-windows-x64.zip)
 
-1. 下载 Release 附件中的 `dreamtalk-0.1.42-windows-x64.zip`，完整解压后运行 `dreamtalk/dreamtalk-desktop.exe`。GitHub 自动生成的 **Source code** 是源码，不是可运行程序。
+本次发布已获用户批准，构建和上传结果见[记录](docs/maintenance/2026-10-08-authored-deletion.md)。公开前仍可使用历史 v0.1.42。
+
+1. 优先下载并运行完整安装器 `dreamtalk_0.1.47_x64-setup.exe`；便携版则完整解压 `dreamtalk-0.1.47-windows-x64.zip` 后运行 `dreamtalk/dreamtalk-desktop.exe`。GitHub 自动生成的 **Source code** 是源码，不是可运行程序。
 2. 支持 Windows 10/11 x64，需要 [Microsoft WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/)。无需安装 Python、Node 或 Rust；请保留同目录的 `core/`。
-3. 创建世界，在模型设置中配置自己的模型服务和 API Key，在通讯录创建或导入角色卡，然后打开聊天。模型使用可能产生服务商费用；后台功能默认关闭。
+3. 创建世界，配置自己的模型服务和API Key（书架设置是默认，各世界可独立覆盖；0.1.47包含删除入口和签名更新），在通讯录创建或导入角色卡，然后打开聊天。模型使用可能产生服务商费用；后台功能默认关闭。
 
-这是未签名的 **预发布体验版**，没有自动更新，尚无最新版整体验收结论。更新前从旧版托盘退出程序并备份重要应用数据。详细操作、升级和反馈方式见 [Windows 便携版说明](docs/PORTABLE_WINDOWS.md)。
+公开v0.1.42是未签名的 **预发布体验版**，没有自动更新。本地0.1.46已实现更新入口和签名安装打包，尚未公开新包／更新频道，仍无最新版整体验收结论。详见[应用更新](docs/WINDOWS_UPDATES.md)。更新前从旧版托盘退出程序并备份重要应用数据。详细操作、升级和反馈方式见 [Windows 便携版说明](docs/PORTABLE_WINDOWS.md)。
 
-当前逐项完成度、待验收、明确限制与接续顺序见 [当前状态清单](docs/PROJECT_STATUS.md)；工作规则见 [AGENTS.md](AGENTS.md)，模块入口、0.1.42模型适配、0.1.41地点优化及公开产物状态见 [HANDOFF.md](HANDOFF.md)。以下架构介绍不替代当前进度清单。
+当前逐项完成度、待验收、明确限制与接续顺序见 [当前状态清单](docs/PROJECT_STATUS.md)；工作规则见 [AGENTS.md](AGENTS.md)，模块入口、0.1.46应用更新、0.1.45封面修复、0.1.44移动优化／0.1.43世界独立模型、0.1.42模型适配、0.1.41地点优化及公开产物状态见 [HANDOFF.md](HANDOFF.md)。以下架构介绍不替代当前进度清单。
 
 ## 项目定位
 
@@ -20,7 +22,7 @@ dreamtalk 是持久化、事件驱动的多角色 AI 世界，不是普通聊天
 
 ## 开发状态
 
-截至2026-10-08，当前Desktop工作区为 **0.1.42**，完善四类服务同次事件／记忆、原生schema兼容、超时／能力设置和严格额度提示；继承0.1.41地点优化。2026-10-08已按用户授权推送当前源码并公开Windows完整便携预发布，发布源码提交为`bdf153d`／标签`v0.1.42`，执行证据见[发布记录](docs/maintenance/2026-10-08-github-release.md)；具体检查与待验收见[适配记录](docs/maintenance/2026-10-08-provider-compatibility.md)和[地点维护](docs/maintenance/2026-10-07-location-scopes.md)。此前已推送的0.1.40源码同步包含0.1.38代码去重／文档维护、0.1.39持久全文索引／历史向量分页／200条聊天窗口，以及0.1.40通讯录空间、条件邀约与5条世界动态窗口修复。同步范围见[记录](docs/maintenance/2026-10-07-github-source-sync.md)，前轮检查与本地build-only证据见[长历史维护](docs/maintenance/2026-10-07-long-history-recall.md)和[反馈修复](docs/maintenance/2026-10-07-experience-feedback.md)。用户在2026-10-07确认本轮CCv2角色卡／World Info JSON世界书外部导入通过，并授权当时0.1.40源码推送；0.1.41～0.1.42纳入本次0.1.42预发布，其他具体待验收项保持。**新版按预发布提供完整Windows便携包，已在上方Release入口公开下载；旧0.1.37保留。** 项目处于产品体验与验收阶段，仍未完成最终发行；长期记忆／本地RAG、日常／相遇／共同休闲、在线与同目的双人主动联系、阵营／头像／三维关系网已有实现，具体已完成、待验收和未实现见状态清单，不从以下历史Stage介绍推断未完成。C-007A的情景记忆基础已完成：Character可从自身已授权Observation显式形成不可变、带证据的EpisodicMemory，并由owner-scoped查询读取。Observation不自动创建Memory；Memory不授予Truth、Knowledge或Belief，也不进入authored content package或projection replay。详见[Episodic Memory](docs/architecture/EPISODIC_MEMORY.md)与[Memory Model](docs/architecture/MEMORY_MODEL.md)。
+截至2026-10-08，当前Desktop工作区 **0.1.46**，已build-only交付完整签名安装器及便携包，新增更新入口，继承封面缓存修复、角色移动及默认／世界独立模型；[本轮记录](docs/maintenance/2026-10-08-desktop-updates.md)。本地源码及产物未提交／推送／发布，更新频道尚未上线，公开仍上方v0.1.42完整预发布。项目处于体验和验收阶段，卡／书当轮外部JSON导入已获用户验收，其他功能不据此推定通过；已完成、待验收和未实现见状态清单。前轮旧包清理及自启动切至0.1.43见[记录](docs/maintenance/2026-10-08-local-cleanup.md)，工程端本轮未运行安装器、改当前启动注册或删在用旧入口。
 
 Q-001B 提供仅开发环境启用的 [开发者运行时检查器](docs/architecture/RUNTIME_INSPECTOR.md)，用于通过真实 API/application 路径观察时钟、位置、Scene、trigger、activation、WorldEvent、Observation 与 owner-scoped EpisodicMemory。它不是最终产品 UI，也没有加入 Activation consumer 或自动 Observation→Memory。
 
@@ -28,7 +30,7 @@ Q-001B 提供仅开发环境启用的 [开发者运行时检查器](docs/archite
 
 Stage 5 — World Kernel & Simulation Runtime 已完成并冻结。C-006D 的 clock reconciliation、C-006C sparse activation/coalescing 与 C-006B deterministic Action/Scene/event-time perception 继续作为 Stage 6 substrate。详见 [Stage 5 验收](docs/architecture/STAGE5_ACCEPTANCE.md)、[Clock Reconciliation](docs/architecture/CLOCK_RECONCILIATION.md)、[Sparse Activation](docs/architecture/SPARSE_ACTIVATION.md)、[Action Resolution](docs/architecture/ACTION_RESOLUTION.md) 和 [Scenes and Perception](docs/architecture/SCENES_AND_PERCEPTION.md)。
 
-Stage 4 — LLM Infrastructure 已完成并冻结。C-005E5 将四种 provider adapter、ModelRegistry、purpose routing、retry、accounting/pricing、Budget Guard 和 session credentials 接入单一生产 composition root。桌面 API key 由 OS credential facilities 持久化；Python Core 只接收内存 session credential。非秘密配置使用严格 version 1 JSON；桌面设置提供单模型首次配置入口，常见型号使用经核对的容量预设，未知型号在高级设置确认可信Token上界。启动和配置都不会发现模型、验证 key 或发起生成。全部验收保持离线，没有真实付费 API；可选 live smoke 必须显式 opt-in。详见 [生产组装](docs/architecture/LLM_PRODUCTION_COMPOSITION.md)、[Stage 4 验收](docs/architecture/STAGE4_ACCEPTANCE.md)、[OpenAI Responses adapter](docs/architecture/OPENAI_RESPONSES_ADAPTER.md)、[Gemini Interactions adapter](docs/architecture/GEMINI_INTERACTIONS_ADAPTER.md)、[Anthropic Messages adapter](docs/architecture/ANTHROPIC_MESSAGES_ADAPTER.md)、[LLM routing](docs/architecture/LLM_ROUTING.md)、[Budget Guard](docs/architecture/LLM_BUDGET_GUARD.md)、[LLM accounting](docs/architecture/LLM_ACCOUNTING.md)、[执行策略](docs/architecture/LLM_EXECUTION_POLICY.md)、[基础契约](docs/architecture/LLM_INFRASTRUCTURE.md)、[结构化生成](docs/architecture/STRUCTURED_GENERATION.md) 和 [真实文本流](docs/architecture/LLM_STREAMING.md)。
+Stage 4 — LLM Infrastructure 已完成并冻结。C-005E5 将四种 provider adapter、ModelRegistry、purpose routing、retry、accounting/pricing、Budget Guard 和 session credentials 接入单一生产 composition root。桌面 API key 由 OS credential facilities 持久化；Python Core 只接收内存 session credential。非秘密配置的内层使用严格version 1 JSON，0.1.43支持默认／世界覆盖的version 2容器，旧v1作为默认兼容；桌面设置提供单模型首次配置入口，常见型号使用经核对的容量预设，未知型号在高级设置确认可信Token上界。启动和配置都不会发现模型、验证 key 或发起生成。全部验收保持离线，没有真实付费 API；可选 live smoke 必须显式 opt-in。详见 [生产组装](docs/architecture/LLM_PRODUCTION_COMPOSITION.md)、[Stage 4 验收](docs/architecture/STAGE4_ACCEPTANCE.md)、[OpenAI Responses adapter](docs/architecture/OPENAI_RESPONSES_ADAPTER.md)、[Gemini Interactions adapter](docs/architecture/GEMINI_INTERACTIONS_ADAPTER.md)、[Anthropic Messages adapter](docs/architecture/ANTHROPIC_MESSAGES_ADAPTER.md)、[LLM routing](docs/architecture/LLM_ROUTING.md)、[Budget Guard](docs/architecture/LLM_BUDGET_GUARD.md)、[LLM accounting](docs/architecture/LLM_ACCOUNTING.md)、[执行策略](docs/architecture/LLM_EXECUTION_POLICY.md)、[基础契约](docs/architecture/LLM_INFRASTRUCTURE.md)、[结构化生成](docs/architecture/STRUCTURED_GENERATION.md) 和 [真实文本流](docs/architecture/LLM_STREAMING.md)。
 
 Stage 3 已完成 canonical authored-content、Character Card/Lorebook 离线导入、Draft/Preview/confirmed Commit、外部 JSON 导出和 `.lwcontent` 原生内容包。原生包支持显式 roots 的依赖闭包、shared references、完整来源、本地 SHA-256 资产、六种三方冲突与事务化 accepted baseline。详见 [Stage 3 验收](docs/architecture/STAGE_3_ACCEPTANCE.md)、[原生内容包](docs/architecture/NATIVE_CONTENT_PACKAGE.md)、[内容模型](docs/architecture/CONTENT_MODEL.md)、[导入](docs/architecture/IMPORT_MODEL.md)、[导出](docs/architecture/EXPORT_MODEL.md) 和 [持久化](docs/architecture/PERSISTENCE_MODEL.md)。
 

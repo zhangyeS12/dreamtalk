@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+from contextlib import nullcontext
 from datetime import timedelta, timezone
 from typing import Literal
 from uuid import uuid5
@@ -17,6 +18,7 @@ from livingworld.application.llm import (
     MessageRole,
     TextContent,
 )
+from livingworld.application.world_model_config import model_for_world
 
 
 class OfflineContactError(ValueError):
@@ -32,6 +34,7 @@ class ContactPlan(BaseModel):
 
 class OfflineContactService:
     def __init__(self, store, players, planner, dialogue, credentials_ready=lambda: True):
+        self.maintenance = None
         self.store, self.players = store, players
         self.planner, self.dialogue = planner, dialogue
         self._credentials_ready = credentials_ready
@@ -39,17 +42,19 @@ class OfflineContactService:
         self._closing = False
         self._worker = self._job = None
 
-    def available(self):
-        return bool(self.planner and self.dialogue and self.planner[4]() and self.dialogue[4]())
+    def available(self, world=None):
+        planner = model_for_world(self.planner, world)
+        dialogue = model_for_world(self.dialogue, world)
+        return bool(planner and dialogue and planner[4]() and dialogue[4]())
 
     async def snapshot(self, world):
         player = await self.players.selected_player(world)
         result = await self.store.snapshot(world, player)
-        result["model_available"] = self.available()
+        result["model_available"] = self.available(world)
         return result
 
     async def configure(self, world, enabled, hours, consent, revision):
-        if enabled and not self.available():
+        if enabled and not self.available(world):
             raise OfflineContactError("offline_model_unavailable")
         player = await self.players.selected_player(world)
         await self.store.configure(world, player, enabled, hours, consent, revision)
@@ -72,11 +77,19 @@ class OfflineContactService:
         while not self._closing:
             self._wake.clear()
             try:
-                await self.store.pulse()
-                if self._job is None and self._credentials_ready():
-                    claim = await self.store.claim_ready()
-                    if claim:
-                        self._job = asyncio.create_task(self._contact(claim))
+                with (
+                    self.maintenance.operation() if self.maintenance else nullcontext(True)
+                ) as admitted:
+                    if admitted:
+                        await self.store.pulse()
+                        if self._job is None and self._credentials_ready():
+                            claim = await self.store.claim_ready()
+                            if claim:
+                                self._job = (
+                                    self.maintenance.spawn
+                                    if self.maintenance
+                                    else asyncio.create_task
+                                )(self._contact(claim))
             except asyncio.CancelledError:
                 raise
             except Exception:
@@ -105,6 +118,8 @@ class OfflineContactService:
 
     async def _contact(self, claim):
         identity = claim["episode_id"]
+        planner = model_for_world(self.planner, claim["world_id"])
+        dialogue = model_for_world(self.dialogue, claim["world_id"])
         try:
             data = claim["input"]
             # Strict public field projection: no chat text, private memory or player metadata.
@@ -121,7 +136,7 @@ class OfflineContactService:
             chooser["offline_to_local"] = claim["offline_to"].astimezone(offset).isoformat()
             chooser["schema"] = ContactPlan.model_json_schema()
             response, plan_bound = await self._generate(
-                self.planner,
+                planner,
                 uuid5(identity, "offline-contact-plan"),
                 "director_plan",
                 "你为一次离线恢复批量决定是否主动联系，只输出schema JSON。最多选择一个已有角色。"
@@ -152,7 +167,7 @@ class OfflineContactService:
                 "common_world_background": data.get("common_world_background", []),
             }
             response, dialogue_bound = await self._generate(
-                self.dialogue,
+                dialogue,
                 uuid5(identity, "offline-character-dialogue"),
                 "character_dialogue",
                 "你是资料中的角色，写一条自然简短的私聊消息，只输出最终台词，不输出JSON或解释。"

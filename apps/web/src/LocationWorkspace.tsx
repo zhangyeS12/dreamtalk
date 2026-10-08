@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type FormEvent } from "react";
 import { hierarchy, pack } from "d3-hierarchy";
-import { CoreClient, CoreRequestError, type ActivityCharacter, type ActivityCharacterDirectory, type ActivityLocation, type LocationDraft, type SocialSnapshot } from "@dreamtalk/api-client";
+import { CoreClient, CoreRequestError, type ActivityCharacter, type ActivityCharacterDirectory, type ActivityLocation, type LocationDraft, type Residency, type SocialSnapshot } from "@dreamtalk/api-client";
 import { ContactAvatar } from "./ContactSocial";
 import "./locations.css";
 
@@ -15,6 +15,10 @@ const messages: Record<string, string> = {
   location_revision_changed: "地点已被更新，请刷新并重新选择这个地点后再编辑。草稿仍保留。",
   location_access_invalid: "开放对象已变化，请刷新角色列表。",
   location_catalog_capacity: "当前世界最多支持 32 个地点（含“家”）。",
+  location_has_children: "此地点还有子地点。请先删除子地点，或修改子地点的父地点后再删除。",
+  location_character_present: "有角色的初始地点或当前位置在这里。请先在角色资料中修改初始地点，将角色移到其他地点。",
+  location_player_present: "玩家当前在这里，不能删除。请先调整玩家位置。",
+  location_not_found: "此地点已不可用，请刷新地点目录。",
   activity_location_policy_changed: "位置规则已被更新，请刷新核对后重新保存。草稿仍保留。",
   activity_presence_changed: "角色已移动，请刷新当前位置后再保存；草稿仍保留。",
   activity_player_changed: "当前玩家身份已变化，请重新进入通讯录。",
@@ -55,7 +59,7 @@ export function useLocationDirectory(client: CoreClient, worldId: string, visibl
   return { locations, directory, error, refresh };
 }
 
-const blank: LocationDraft = { name: "", parent_id: null, hidden: false, allowed_character_ids: [] };
+const blank: LocationDraft = { name: "", parent_id: null, hidden: false, is_region: false, allowed_character_ids: [] };
 export function LocationManager({ client, worldId, locations, directory, refresh, onDirtyChange }: {
   client: CoreClient; worldId: string; locations: ActivityLocation[]; directory: ActivityCharacterDirectory | null; refresh: () => Promise<void>; onDirtyChange: (dirty: boolean) => void;
 }) {
@@ -65,11 +69,11 @@ export function LocationManager({ client, worldId, locations, directory, refresh
   const [pending, setPending] = useState<{ draft: LocationDraft; editing: ActivityLocation | null; requestId: string } | null>(null);
   const busyRef = useRef(false), alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
-  useEffect(() => { onDirtyChange(changed || !!pending); return () => onDirtyChange(false); }, [changed, pending, onDirtyChange]);
+  useEffect(() => { onDirtyChange(changed || !!pending || busy); return () => onDirtyChange(false); }, [changed, pending, busy, onDirtyChange]);
   const paths = locationPaths(locations);
   const choose = (item: ActivityLocation | null) => {
     if (busyRef.current || ((changed || pending) && !window.confirm("当前地点编辑尚未保存或结果未确认。请先核对列表；确定放弃草稿和本次重试吗？"))) return;
-    setEditing(item); setDraft(item ? { name: item.name, parent_id: item.parent_id, hidden: item.hidden, allowed_character_ids: [...item.allowed_character_ids] } : blank); setChanged(false); setPending(null); setError(""); setNotice("");
+    setEditing(item); setDraft(item ? { name: item.name, parent_id: item.parent_id, hidden: item.hidden, is_region: item.is_region, allowed_character_ids: [...item.allowed_character_ids] } : blank); setChanged(false); setPending(null); setError(""); setNotice("");
   };
   const update = (value: Partial<LocationDraft>) => { setDraft(current => ({ ...current, ...value })); setChanged(true); };
   const descendants = (id: string) => { const seen = new Set<string>(); let parent: string | null = id; while (parent && !seen.has(parent)) { if (parent === editing?.location_id) return true; seen.add(parent); parent = locations.find(place => place.location_id === parent)?.parent_id ?? null; } return false; };
@@ -80,16 +84,28 @@ export function LocationManager({ client, worldId, locations, directory, refresh
     try {
       if (request.editing) await client.editActivityLocation(worldId, request.editing.location_id, request.draft, request.editing.revision, request.requestId);
       else await client.createActivityLocation(worldId, request.draft.name, request.requestId, request.draft);
-      if (!alive.current) return; setPending(null); setChanged(false); setEditing(null); setDraft(blank); setNotice("地点已保存。活动按新范围执行，规划在下一常规批次使用新目录。"); await refresh();
+      if (!alive.current) return; setPending(null); setChanged(false); setEditing(null); setDraft(blank); setNotice("地点已保存。新的包含关系与地区标记在下一常规规划批次使用。"); await refresh();
     } catch (failure) { if (alive.current) { setError(failureText(failure)); if (terminal(failure)) setPending(null); } }
     finally { busyRef.current = false; if (alive.current) setBusy(false); }
   }
+  async function remove() {
+    if (!editing || busyRef.current || pending || !window.confirm(`删除地点“${editing.name}”？\n历史事件保留。存在子地点、玩家或未删除角色的初始／当前位置时，会提示先调整。${changed ? "\n当前未保存的地点编辑将被放弃。" : ""}`)) return;
+    busyRef.current = true; setBusy(true); setError(""); setNotice("");
+    try {
+      await client.removeActivityLocation(worldId, editing.location_id, editing.revision);
+      if (!alive.current) return;
+      setEditing(null); setDraft(blank); setChanged(false); setNotice("地点已删除，历史事件保留。"); await refresh();
+    } catch (failure) { if (alive.current) setError(failure instanceof CoreRequestError && messages[failure.code ?? ""] ? messages[failure.code!] : "删除结果尚未确认，请刷新目录核对；可以再次删除同一地点。"); }
+    finally { busyRef.current = false; if (alive.current) setBusy(false); }
+  }
   return <section className="location-manager" aria-label="添加与编辑地点"><div className="location-manager-heading"><div><h2>地点目录</h2><p>每个圆是一处可停留的地点，大圆包含小圆。</p></div><button className="text-action" disabled={busy} onClick={() => void refresh()}>刷新</button></div>
-    <div className="location-editor-grid"><div className="location-catalog"><button type="button" className={`location-catalog-row ${!editing ? "selected" : ""}`} disabled={busy} onClick={() => choose(null)}>＋ 添加地点</button>{locations.map(item => <button type="button" key={item.location_id} className={`location-catalog-row ${editing?.location_id === item.location_id ? "selected" : ""}`} disabled={busy || item.is_home} onClick={() => choose(item)}><span>{paths.get(item.location_id)}</span><small>{item.is_home ? "系统初始地点" : item.hidden ? "隐藏分支" : "公开地点"}</small></button>)}</div>
+    <div className="location-editor-grid"><div className="location-catalog"><button type="button" className={`location-catalog-row ${!editing ? "selected" : ""}`} disabled={busy} onClick={() => choose(null)}>＋ 添加地点</button>{locations.map(item => <button type="button" key={item.location_id} className={`location-catalog-row ${editing?.location_id === item.location_id ? "selected" : ""}`} disabled={busy || item.is_home} onClick={() => choose(item)}><span>{paths.get(item.location_id)}</span><small>{item.is_home ? "系统初始地点" : item.hidden ? "隐藏分支" : item.is_region ? "地区节点" : "公开地点"}</small></button>)}</div>
     <form className="location-editor" onSubmit={event => void save(event)}><h3>{editing ? `编辑 ${editing.name}` : "添加地点"}</h3><label className="field"><span>地点名称</span><input maxLength={120} placeholder="例如：璃月城" disabled={busy || !!pending} value={draft.name} onChange={event => update({ name: event.target.value })} /></label><label className="field"><span>包含它的父地点</span><select value={draft.parent_id ?? ""} disabled={busy || !!pending} onChange={event => update({ parent_id: event.target.value || null })}><option value="">无父地点 · 独立区域</option>{locations.filter(place => !descendants(place.location_id)).map(place => <option key={place.location_id} value={place.location_id}>{paths.get(place.location_id)}</option>)}</select></label>
+    <label className="location-check"><input type="checkbox" checked={draft.is_region} disabled={busy || !!pending} onChange={event => update({ is_region: event.target.checked })} /><span><strong>将此地点标记为地区</strong><small>例如璃月、蒙德。地区内可日常走动，跨地区只会极少远行；子地点归属最近的地区。未标记时按最上层地点划分。</small></span></label>
     <label className="location-check"><input type="checkbox" checked={draft.hidden} disabled={busy || !!pending} onChange={event => update({ hidden: event.target.checked })} /><span><strong>隐藏这个分支</strong><small>角色默认不能进入，也不会在活动规划中看到未获准地点。</small></span></label>
     {draft.hidden && <fieldset className="location-access"><legend>对以下角色开放</legend>{directory?.items.length ? directory.items.map(person => <label key={person.character_id} className="location-check"><input type="checkbox" disabled={busy || !!pending} checked={draft.allowed_character_ids.includes(person.character_id)} onChange={event => update({ allowed_character_ids: event.target.checked ? [...draft.allowed_character_ids, person.character_id] : draft.allowed_character_ids.filter(id => id !== person.character_id) })} />{person.name}</label>) : <p className="inline-hint">先在角色资料中保存初始地点，或打开一次会话，即可在这里选择开放对象。</p>}<p className="inline-hint">父地点隐藏时，整个分支继承限制；子地点也隐藏时，还需在子地点单独开放。</p></fieldset>}
     <button className="primary-button" type="submit" disabled={busy || (!pending && (!changed || !draft.name.trim()))}>{busy ? "正在保存…" : pending ? "用原请求重试" : editing ? "保存地点" : "添加地点"}</button>{pending && !busy && <button type="button" className="text-action" onClick={() => { if (window.confirm("原请求可能已经保存，请先刷新核对。确定结束重试并继续编辑吗？")) setPending(null); }}>结束本次重试</button>}
+    {editing && <button type="button" className="text-action destructive-action" disabled={busy || !!pending} onClick={() => void remove()}>删除此地点</button>}
     {error && <p className="app-alert" role="alert">{error}</p>}{notice && <p className="app-notice" role="status">{notice}</p>}<p className="inline-hint">手动编辑不调用模型。自动活动会在已批准的常规批次中，将角色获准地点提供给已配置的模型。</p></form></div></section>;
 }
 
@@ -98,23 +114,24 @@ export function CharacterLocationEditor({ client, worldId, person, activity, dir
 }) {
   const [root, setRoot] = useState(activity?.initial_location_id ?? ""), [locked, setLocked] = useState(activity?.locked ?? false);
   const [dirty, setDirty] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState(""), [notice, setNotice] = useState("");
-  const [pending, setPending] = useState<{ root: string; locked: boolean; requestId: string; characterId: string | null; revision: number | null; policyRevision: number } | null>(null);
+  const [residency, setResidency] = useState<Residency>(activity?.residency ?? "strong");
+  const [pending, setPending] = useState<{ root: string; locked: boolean; residency: Residency; requestId: string; characterId: string | null; revision: number | null; policyRevision: number } | null>(null);
   const busyRef = useRef(false), alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   useEffect(() => { onDirtyChange(dirty || !!pending); return () => onDirtyChange(false); }, [dirty, pending, onDirtyChange]);
-  const paths = locationPaths(locations), activeRoot = dirty || pending ? root : activity?.initial_location_id ?? root, activeLocked = dirty || pending ? locked : activity?.locked ?? locked;
+  const paths = locationPaths(locations), activeRoot = dirty || pending ? root : activity?.initial_location_id ?? root, activeLocked = dirty || pending ? locked : activity?.locked ?? locked, activeResidency = dirty || pending ? residency : activity?.residency ?? residency;
   async function save(event: FormEvent) {
     event.preventDefault(); if (busyRef.current || !activeRoot || !directory?.player_id) return;
-    let request = pending ?? { root: activeRoot, locked: activeLocked, requestId: crypto.randomUUID(), characterId: activity?.character_id ?? null, revision: activity?.revision ?? null, policyRevision: activity?.policy_revision ?? 0 };
+    let request = pending ?? { root: activeRoot, locked: activeLocked, residency: activeResidency, requestId: crypto.randomUUID(), characterId: activity?.character_id ?? null, revision: activity?.revision ?? null, policyRevision: activity?.policy_revision ?? 0 };
     const playerId = directory.player_id; setPending(request); busyRef.current = true; setBusy(true); setError(""); setNotice("");
     try {
       if (!request.characterId) { const contact = await client.openDirectConversation(worldId, person.current_import_id); request = { ...request, characterId: contact.character_id }; if (alive.current) setPending(request); }
-      await client.configureCharacterLocation(worldId, playerId, request.characterId!, request.root, request.locked, request.revision, request.requestId, request.policyRevision);
-      if (!alive.current) return; setPending(null); setDirty(false); setRoot(request.root); setLocked(request.locked); setNotice(request.locked ? "已返回并锁定初始地点。" : "初始地点与活动范围已保存。"); await refresh();
+      await client.configureCharacterLocation(worldId, playerId, request.characterId!, request.root, request.locked, request.revision, request.requestId, request.policyRevision, request.residency);
+      if (!alive.current) return; setPending(null); setDirty(false); setRoot(request.root); setLocked(request.locked); setResidency(request.residency); setNotice(request.locked ? "已返回并锁定初始地点。" : "常驻中心与移动倾向已保存。新的倾向在下一常规规划批次使用。"); await refresh();
     } catch (failure) { if (alive.current) { setError(failureText(failure)); if (terminal(failure)) setPending(null); } }
     finally { busyRef.current = false; if (alive.current) setBusy(false); }
   }
-  return <form className="character-location-editor" onSubmit={event => void save(event)}><div><h3>初始地点与活动范围</h3><p className="inline-hint">角色可在初始地点及其获准子地点往返，不能越出此范围。</p></div><label className="field"><span>初始地点</span><select value={activeRoot} disabled={busy || !!pending || !directory?.player_id} onChange={event => { setRoot(event.target.value); setLocked(activeLocked); setDirty(true); }}><option value="">选择初始地点</option>{locations.map(place => <option key={place.location_id} value={place.location_id} disabled={!canSee(locations, activity?.character_id, place.location_id)}>{paths.get(place.location_id)}{canSee(locations, activity?.character_id, place.location_id) ? "" : " · 未开放"}</option>)}</select><small>首次保存或更改初始地点，会把角色放置到这里；已有活动会结束或中断。</small></label><label className="location-check"><input type="checkbox" checked={activeLocked} disabled={busy || !!pending || !activeRoot || !directory?.player_id} onChange={event => { setLocked(event.target.checked); setRoot(activeRoot); setDirty(true); }} /><span><strong>锁定在初始地点</strong><small>若已在子地点，会立即返回；原活动结束。解锁后恢复范围内活动。</small></span></label>{activity?.current_location_id && <p className="location-current">当前位置：{paths.get(activity.current_location_id) ?? "目录外地点"}</p>}<button className="secondary-button" type="submit" disabled={busy || !activeRoot || !directory?.player_id || (!dirty && !pending)}>{busy ? "正在保存…" : pending ? "用原请求重试" : "保存位置规则"}</button>{!directory?.player_id && <p className="inline-hint">先在“我”中进入世界，再设置位置。</p>}{pending && !busy && <button className="text-action" type="button" onClick={() => { if (window.confirm("保存可能已完成，请先刷新核对。确定结束本次重试吗？")) setPending(null); }}>结束本次重试</button>}{error && <p className="app-alert" role="alert">{error}</p>}{notice && <p className="app-notice" role="status">{notice}</p>}</form>;
+  return <form className="character-location-editor" onSubmit={event => void save(event)}><div><h3>初始地点与移动倾向</h3><p className="inline-hint">初始地点是常驻中心。角色可前往父地点、子地点和兄弟地点，离常驻中心越远越少见，并倾向返回；跨地区只会极少远行。</p></div><label className="field"><span>初始地点（常驻中心）</span><select value={activeRoot} disabled={busy || !!pending || !directory?.player_id} onChange={event => { setRoot(event.target.value); setLocked(activeLocked); setResidency(activeResidency); setDirty(true); }}><option value="">选择初始地点</option>{locations.map(place => <option key={place.location_id} value={place.location_id} disabled={!canSee(locations, activity?.character_id, place.location_id)}>{paths.get(place.location_id)}{canSee(locations, activity?.character_id, place.location_id) ? "" : " · 未开放"}</option>)}</select><small>首次保存或更改初始地点，会把角色放置到这里；已有活动会结束或中断。</small></label><label className="location-check"><input type="checkbox" checked={activeLocked} disabled={busy || !!pending || !activeRoot || !directory?.player_id} onChange={event => { setLocked(event.target.checked); setRoot(activeRoot); setResidency(activeResidency); setDirty(true); }} /><span><strong>锁定在初始地点</strong><small>若已在其他地点，会立即返回；原活动结束或中断。解锁后按常驻倾向活动。</small></span></label><label className="field"><span>常驻倾向</span><select value={activeResidency} disabled={busy || !!pending || !directory?.player_id} onChange={event => { setResidency(event.target.value as Residency); setRoot(activeRoot); setLocked(activeLocked); setDirty(true); }}><option value="normal">一般</option><option value="strong">强（默认）</option><option value="very_strong">很强</option></select><small>倾向越强，越常留在初始地点。锁定时此选项不产生移动；解锁后生效。</small></label>{activity?.current_location_id && <p className="location-current">当前位置：{paths.get(activity.current_location_id) ?? "目录外地点"}</p>}<button className="secondary-button" type="submit" disabled={busy || !activeRoot || !directory?.player_id || (!dirty && !pending)}>{busy ? "正在保存…" : pending ? "用原请求重试" : "保存位置规则"}</button>{!directory?.player_id && <p className="inline-hint">先在“我”中进入世界，再设置位置。</p>}{pending && !busy && <button className="text-action" type="button" onClick={() => { if (window.confirm("保存可能已完成，请先刷新核对。确定结束本次重试吗？")) setPending(null); }}>结束本次重试</button>}{error && <p className="app-alert" role="alert">{error}</p>}{notice && <p className="app-notice" role="status">{notice}</p>}</form>;
 }
 
 interface MapNode { id: string; kind: "root" | "place" | "label" | "person"; name: string; hidden?: boolean; person?: SocialSnapshot["characters"][number]; children?: MapNode[] }
@@ -145,6 +162,6 @@ export function LocationMap({ locations, directory, social, urls, selected, onSe
     {layout.filter(node => node.data.kind === "label").map(node => <text key={node.data.id} x={node.x} y={node.y} className="location-map-label" textAnchor="middle" dominantBaseline="middle" fontSize={Math.min(22, node.r * 1.5 / Math.max(2, Math.min(11, Array.from(node.data.name).length) + (node.data.hidden ? 2 : 0)))}><title>{node.data.name}</title>{node.data.hidden ? "◇ " : ""}{Array.from(node.data.name).length > 10 ? Array.from(node.data.name).slice(0, 10).join("") + "…" : node.data.name}</text>)}
     {layout.filter(node => node.data.kind === "person").map(node => <g key={node.data.id} role="button" tabIndex={0} aria-label={`${node.data.name}，${node.parent?.data.name ?? ""}`} className={`location-map-person ${selected === node.data.id ? "selected" : ""}`} onClick={() => focus(node.data.id)} onKeyDown={event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); moved.current = false; focus(node.data.id); } }}><circle cx={node.x} cy={node.y} r={node.r} />{urls[node.data.person?.avatar_digest ?? ""] ? <image href={urls[node.data.person?.avatar_digest ?? ""]} x={node.x - node.r} y={node.y - node.r} width={node.r * 2} height={node.r * 2} preserveAspectRatio="xMidYMid slice" clipPath={`url(#${prefix}-${node.data.id})`} /> : <text x={node.x} y={node.y} textAnchor="middle" dominantBaseline="central" fontSize={node.r}>{Array.from(node.data.name)[0]}</text>}<title>{node.data.name}</title></g>)}
   </svg>{!locations.length && <div className="location-map-empty"><p>先为这个世界添加地点。</p><button type="button" className="secondary-button" onClick={onEdit}>添加地点</button></div>}
-  {person && <aside className="social-focus-panel location-focus-panel" aria-label="选中角色地点"><button className="text-action social-close" onClick={() => onSelect("")}>收起详情</button><ContactAvatar className="social-focus-avatar" name={person.name} url={urls[person.avatar_digest ?? ""]} /><h3>{person.name}</h3><p>初始地点－当前位置</p><strong className="location-route">{placeName(activity?.initial_location_id)}－{placeName(activity?.current_location_id)}</strong><p>{activity?.locked ? "已锁定在初始地点" : activity?.initialized ? "可在初始地点范围内活动" : "尚未设置初始地点"}</p><button className="primary-button" disabled={!directory?.player_id || openingChat} onClick={() => onChat(person.current_import_id)}>打开会话</button></aside>}
+  {person && <aside className="social-focus-panel location-focus-panel" aria-label="选中角色地点"><button className="text-action social-close" onClick={() => onSelect("")}>收起详情</button><ContactAvatar className="social-focus-avatar" name={person.name} url={urls[person.avatar_digest ?? ""]} /><h3>{person.name}</h3><p>初始地点－当前位置</p><strong className="location-route">{placeName(activity?.initial_location_id)}－{placeName(activity?.current_location_id)}</strong><p>{activity?.locked ? "已锁定在初始地点" : activity?.initialized ? "以初始地点为常驻中心活动" : "尚未设置初始地点"}</p><button className="primary-button" disabled={!directory?.player_id || openingChat} onClick={() => onChat(person.current_import_id)}>打开会话</button></aside>}
   <div className="location-map-controls"><button onClick={() => zoom(.8)} aria-label="放大地点图">＋</button><button onClick={() => zoom(1.25)} aria-label="缩小地点图">－</button><button onClick={() => { setView({ x: 0, y: 0, size: 1000 }); onSelect(""); }}>总览</button><button onClick={onEdit}>编辑地点</button></div>{social.characters.some(value => !placed.has(value.root_import_id)) && <div className="location-unplaced"><span>未设置位置</span>{social.characters.filter(value => !placed.has(value.root_import_id)).map(value => <button key={value.root_import_id} onClick={() => onSelect(value.root_import_id)}>{value.name}</button>)}</div>}</div>;
 }

@@ -90,6 +90,9 @@ class Command:
                         raise DomainInvariantError("Activity setup only permits initial placement")
                 require_type(self.activity_configure, bool, "activity_configure")
                 require_type(self.activity_locked, bool, "activity_locked")
+                require_type(self.activity_residency, str, "activity_residency")
+                if self.activity_residency not in {"normal", "strong", "very_strong"}:
+                    raise DomainInvariantError("invalid_location_residency")
                 if self.expected_location_policy_revision is not None and (
                     type(self.expected_location_policy_revision) is not int
                     or self.expected_location_policy_revision < 0
@@ -175,6 +178,7 @@ class CreateLocation(Command):
     parent_id: LocationId | None = None
     hidden: bool = False
     allowed_characters: tuple[CharacterId, ...] = ()
+    is_region: bool = False
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -185,6 +189,7 @@ class ConfigureLocation(Command):
     parent_id: LocationId | None = None
     hidden: bool = False
     allowed_characters: tuple[CharacterId, ...] = ()
+    is_region: bool = False
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -225,6 +230,7 @@ class PlaceCharacter(Command):
     activity_configure: bool = False
     activity_locked: bool = False
     expected_location_policy_revision: int | None = None
+    activity_residency: str = "strong"
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -298,6 +304,7 @@ type WorldCommand = (
 
 def _location_options(command):
     require_type(command.hidden, bool, "hidden")
+    require_type(command.is_region, bool, "is_region")
     if command.parent_id is not None:
         require_type(command.parent_id, LocationId, "parent_id")
         same_world(command.world_id, command.parent_id)

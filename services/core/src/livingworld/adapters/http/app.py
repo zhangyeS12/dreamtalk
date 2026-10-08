@@ -2,6 +2,7 @@ import secrets
 from collections.abc import Callable
 from contextlib import asynccontextmanager
 from typing import Annotated
+from uuid import UUID
 
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -22,6 +23,7 @@ from livingworld.application.runtime import RuntimeStatus, ShutdownRequests
 from livingworld.application.world_content import WorldContentService
 from livingworld.application.world_settings import WorldSettingsService
 from livingworld.domain.contracts import API_PROTOCOL, LOOPBACK_HOST, RequestId
+from livingworld.domain.identifiers import WorldId
 from livingworld.infrastructure.logging import StructuredLogger
 
 
@@ -64,6 +66,7 @@ def create_app(
     character_activity_setup=None,
     world_covers=None,
     factions=None,
+    maintenance=None,
 ) -> FastAPI:
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
@@ -89,6 +92,10 @@ def create_app(
         allow_methods=["GET", "POST", "PUT", "DELETE"],
         allow_headers=["Authorization", "X-Request-Id"],
     )
+    if maintenance is not None:
+        from livingworld.adapters.http.update_maintenance import UpdateMaintenanceMiddleware
+
+        app.add_middleware(UpdateMaintenanceMiddleware, maintenance=maintenance)
     bearer = HTTPBearer(auto_error=False)
 
     def authorize(
@@ -191,14 +198,32 @@ def create_app(
         return {"live": True}
 
     @app.get("/system/health", dependencies=[Depends(authorize)])
-    async def health() -> HealthResponse:
+    async def health(world_id: UUID | None = None) -> HealthResponse:
         return HealthResponse(
             ready=status.ready and not shutdown.requested,
             core_version=status.core_version,
             api_protocol=API_PROTOCOL,
             generation=status.generation,
-            llm_status=status.llm_status,
+            llm_status=(
+                status.llm_status_for_world(WorldId(world_id))
+                if world_id is not None
+                else status.llm_status
+            ),
         )
+
+    if maintenance is not None:
+
+        @app.post("/system/update/prepare", dependencies=[Depends(authorize)])
+        async def prepare_update():
+            return maintenance.prepare()
+
+        @app.get("/system/update/status", dependencies=[Depends(authorize)])
+        async def update_status():
+            return maintenance.snapshot()
+
+        @app.post("/system/update/cancel", dependencies=[Depends(authorize)])
+        async def cancel_update():
+            return maintenance.cancel()
 
     @app.post("/system/shutdown", dependencies=[Depends(authorize)])
     async def stop(x_request_id: Annotated[str | None, Header()] = None) -> dict[str, bool | str]:

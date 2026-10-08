@@ -18,12 +18,13 @@ interface Options {
   suggestedDraft?: string | null;
   onSuggestionUsed?: () => void;
   onDirtyChange?: (dirty: boolean) => void;
+  readOnly?: boolean;
 }
 
 /** Save retries reuse one request ID; uncertain model calls are only inspected. */
 export function useChatReplyWorkflow({
   client, worldId, playerId, conversationId, kind, speakers, tokenCeiling,
-  suggestedDraft, onSuggestionUsed, onDirtyChange,
+  suggestedDraft, onSuggestionUsed, onDirtyChange, readOnly = false,
 }: Options) {
   const [refresh, setRefresh] = useState(0);
   const [availability, setAvailability] = useState<ChatReplyAvailability | null>(null);
@@ -38,7 +39,7 @@ export function useChatReplyWorkflow({
   const actionLock = useRef(false);
   const stream = useReplyStream();
   const transcript = useTranscriptPages(client, worldId, conversationId, refresh, true);
-  const available = availability?.available === true && !availabilityReading && !availabilityFailed;
+  const available = !readOnly && availability?.available === true && !availabilityReading && !availabilityFailed;
   const budgetFeedback = chatTokenReservationFeedback(availability, tokenCeiling, kind);
   const sending = phase !== null || recoveryBusy;
 

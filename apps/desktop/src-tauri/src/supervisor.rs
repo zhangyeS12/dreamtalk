@@ -232,6 +232,7 @@ impl CoreSupervisor {
         };
         let mut command = Command::new(executable);
         command.current_dir(&config.project_root);
+        command.env("PYTHONDONTWRITEBYTECODE", "1");
         if !packaged {
             command.args(["-m", "livingworld.bootstrap"]);
         }
@@ -335,14 +336,22 @@ impl CoreSupervisor {
     }
 
     pub async fn authenticated_health(&mut self) -> Result<Health, &'static str> {
+        self.authenticated_health_for_world(None).await
+    }
+
+    pub async fn authenticated_health_for_world(
+        &mut self,
+        world_id: Option<&str>,
+    ) -> Result<Health, &'static str> {
         let session = self.session.as_ref().ok_or("core_session_missing")?;
-        let response = self
+        let mut request = self
             .http
             .get(format!("{}/system/health", session.endpoint))
-            .bearer_auth(&session.token)
-            .send()
-            .await
-            .map_err(|_| "core_health_failed");
+            .bearer_auth(&session.token);
+        if let Some(world_id) = world_id {
+            request = request.query(&[("world_id", world_id)]);
+        }
+        let response = request.send().await.map_err(|_| "core_health_failed");
         let result = match response {
             Ok(response) if response.status().is_success() => response
                 .json::<Health>()
@@ -422,6 +431,36 @@ impl CoreSupervisor {
         self.state = SupervisorState::Restarting;
         event("supervisor_restarting");
         self.start(config).await
+    }
+
+    /// Updates have already drained HTTP/background work. A timeout must never
+    /// turn an upgrade into the ordinary quit path's forced process termination.
+    pub async fn stop_for_update(&mut self, grace: Duration) -> Result<(), &'static str> {
+        let session = self.session.as_ref().ok_or("core_session_missing")?;
+        self.http
+            .post(format!("{}/system/shutdown", session.endpoint))
+            .bearer_auth(&session.token)
+            .header("X-Request-Id", Uuid::new_v4().to_string())
+            .send()
+            .await
+            .map_err(|_| "update_core_shutdown_failed")?
+            .error_for_status()
+            .map_err(|_| "update_core_shutdown_failed")?;
+        if let Some(child) = self.child.as_mut() {
+            child.stdin.take();
+        }
+        let deadline = tokio::time::Instant::now() + grace;
+        while let Some(child) = self.child.as_mut() {
+            if child.try_wait().map_err(|_| "core_wait_failed")?.is_some() {
+                break;
+            }
+            if tokio::time::Instant::now() >= deadline {
+                return Err("update_core_shutdown_timeout");
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        self.stop(Duration::ZERO).await?;
+        Ok(())
     }
 
     pub async fn stop(&mut self, grace: Duration) -> Result<StopReport, &'static str> {

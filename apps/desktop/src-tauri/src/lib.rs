@@ -3,6 +3,7 @@ pub mod credentials;
 pub mod host_control;
 pub mod llm_config;
 pub mod supervisor;
+pub mod updater;
 
 use serde::Serialize;
 use std::{
@@ -157,10 +158,17 @@ async fn configure_chat_model(
     setup: llm_config::ChatModelSetup,
     mut secret: String,
     streaming: Option<bool>,
+    world_id: Option<String>,
     config: State<'_, LaunchConfig>,
     credentials: State<'_, SharedCredentialStore>,
     supervisor: State<'_, SharedSupervisor>,
+    updates: State<'_, updater::UpdateState>,
 ) -> Result<(), String> {
+    let _update_guard = updates
+        .operation
+        .try_lock()
+        .map_err(|_| "update_busy".to_owned())?;
+    llm_config::validate_world_scope(world_id.as_deref()).map_err(str::to_owned)?;
     if secret.is_empty() || secret.len() > 4096 {
         return Err("model_setup_invalid".to_owned());
     }
@@ -169,21 +177,22 @@ async fn configure_chat_model(
         llm_config::single_chat_document_streaming(&setup, &reference, streaming.unwrap_or(false))
             .map_err(str::to_owned)?;
     let mut supervisor = supervisor.lock().await;
-    if supervisor
-        .authenticated_health()
+    let health = supervisor
+        .authenticated_health_for_world(world_id.as_deref())
         .await
-        .map_err(str::to_owned)?
-        .llm_status
-        != "unconfigured"
-    {
-        return Err("model_setup_requires_empty_configuration".to_owned());
-    }
+        .map_err(str::to_owned)?;
     let previous = tokio::fs::read(&config.llm_config_path)
         .await
         .map_err(|_| "llm_config_read_failed".to_owned())?;
-    if !llm_config::is_empty_configuration(&previous) {
+    let (selected, inherited) =
+        llm_config::scope_document(&previous, world_id.as_deref()).map_err(str::to_owned)?;
+    if !(world_id.is_some() && inherited)
+        && (health.llm_status != "unconfigured" || !llm_config::is_empty_configuration(&selected))
+    {
         return Err("model_setup_requires_empty_configuration".to_owned());
     }
+    let document = llm_config::replace_scope(&previous, &document, world_id.as_deref())
+        .map_err(str::to_owned)?;
     credentials
         .put(&reference, &secret)
         .map_err(credential_error)?;
@@ -198,7 +207,7 @@ async fn configure_chat_model(
     let started = supervisor.restart(&config).await.is_ok();
     let ready = started
         && supervisor
-            .authenticated_health()
+            .authenticated_health_for_world(world_id.as_deref())
             .await
             .is_ok_and(|health| health.llm_status == "ready");
     if !ready {
@@ -218,18 +227,30 @@ async fn configure_chat_model(
 
 #[tauri::command]
 async fn managed_chat_model_setup(
+    world_id: Option<String>,
     config: State<'_, LaunchConfig>,
 ) -> Result<Option<serde_json::Value>, String> {
     let bytes = tokio::fs::read(&config.llm_config_path)
         .await
         .map_err(|_| "llm_config_read_failed".to_owned())?;
-    if llm_config::is_empty_configuration(&bytes) {
+    let (selected, inherited) =
+        llm_config::scope_document(&bytes, world_id.as_deref()).map_err(str::to_owned)?;
+    if llm_config::is_empty_configuration(&selected) {
         return Ok(None);
     }
-    let managed = llm_config::managed_chat_configuration(&bytes).map_err(str::to_owned)?;
+    let managed = llm_config::managed_chat_configuration(&selected).map_err(|error| {
+        if inherited {
+            "model_world_inherits_advanced_default".to_owned()
+        } else if world_id.is_some() {
+            "model_world_has_advanced_configuration".to_owned()
+        } else {
+            error.to_owned()
+        }
+    })?;
     let mut setup =
         serde_json::to_value(managed.setup).map_err(|_| "model_setup_invalid".to_owned())?;
     setup["streaming"] = serde_json::json!(managed.streaming);
+    setup["inherited"] = serde_json::json!(inherited);
     Ok(Some(setup))
 }
 
@@ -243,10 +264,16 @@ async fn update_chat_model(
     setup: llm_config::ChatModelSetup,
     secret: String,
     streaming: Option<bool>,
+    world_id: Option<String>,
     config: State<'_, LaunchConfig>,
     credentials: State<'_, SharedCredentialStore>,
     supervisor: State<'_, SharedSupervisor>,
+    updates: State<'_, updater::UpdateState>,
 ) -> Result<ModelUpdateOutcome, String> {
+    let _update_guard = updates
+        .operation
+        .try_lock()
+        .map_err(|_| "update_busy".to_owned())?;
     let mut supervisor = supervisor.lock().await;
     update_chat_model_streaming_with(
         setup,
@@ -255,6 +282,7 @@ async fn update_chat_model(
         &config,
         credentials.inner().as_ref(),
         &mut supervisor,
+        world_id.as_deref(),
     )
     .await
 }
@@ -267,7 +295,8 @@ async fn update_chat_model_with(
     credentials: &dyn CredentialStore,
     supervisor: &mut CoreSupervisor,
 ) -> Result<ModelUpdateOutcome, String> {
-    update_chat_model_streaming_with(setup, secret, None, config, credentials, supervisor).await
+    update_chat_model_streaming_with(setup, secret, None, config, credentials, supervisor, None)
+        .await
 }
 
 async fn update_chat_model_streaming_with(
@@ -277,23 +306,39 @@ async fn update_chat_model_streaming_with(
     config: &LaunchConfig,
     credentials: &dyn CredentialStore,
     supervisor: &mut CoreSupervisor,
+    world_id: Option<&str>,
 ) -> Result<ModelUpdateOutcome, String> {
+    llm_config::validate_world_scope(world_id).map_err(str::to_owned)?;
     if secret.len() > 4096 {
         return Err("model_setup_invalid".to_owned());
     }
     let health = supervisor
-        .authenticated_health()
+        .authenticated_health_for_world(world_id)
         .await
         .map_err(str::to_owned)?;
-    if !matches!(health.llm_status.as_str(), "ready" | "partially_configured") {
+    if !matches!(
+        health.llm_status.as_str(),
+        "ready" | "partially_configured" | "unconfigured"
+    ) {
         return Err("model_update_unavailable".to_owned());
     }
     let previous = tokio::fs::read(&config.llm_config_path)
         .await
         .map_err(|_| "llm_config_read_failed".to_owned())?;
-    let managed = llm_config::managed_chat_configuration(&previous).map_err(str::to_owned)?;
+    let (selected, _) = llm_config::scope_document(&previous, world_id).map_err(str::to_owned)?;
+    let managed = llm_config::managed_chat_configuration(&selected).map_err(str::to_owned)?;
     if secret.is_empty()
-        && (managed.setup.provider_kind != setup.provider_kind || health.llm_status != "ready")
+        && (managed.setup.provider_kind != setup.provider_kind
+            || managed
+                .setup
+                .base_url
+                .as_deref()
+                .map(|url| url.trim_end_matches('/'))
+                != setup
+                    .base_url
+                    .as_deref()
+                    .map(|url| url.trim_end_matches('/'))
+            || health.llm_status != "ready")
     {
         return Err("model_update_new_secret_required".to_owned());
     }
@@ -305,6 +350,8 @@ async fn update_chat_model_streaming_with(
         streaming.unwrap_or(managed.streaming),
     )
     .map_err(str::to_owned)?;
+    let document =
+        llm_config::replace_scope(&previous, &document, world_id).map_err(str::to_owned)?;
     if let Some(reference) = new_reference.as_deref() {
         credentials
             .put(reference, &secret)
@@ -323,7 +370,7 @@ async fn update_chat_model_streaming_with(
     let started = supervisor.restart(config).await.is_ok();
     let ready = started
         && supervisor
-            .authenticated_health()
+            .authenticated_health_for_world(world_id)
             .await
             .is_ok_and(|health| health.llm_status == "ready");
     if !ready {
@@ -343,10 +390,67 @@ async fn update_chat_model_streaming_with(
         }
         return Err("model_setup_failed".to_owned());
     }
-    let old_credential_cleanup_incomplete =
-        new_reference.is_some() && credentials.delete(&managed.secret_ref).is_err();
+    let retained = llm_config::credential_references(&document).map_err(str::to_owned)?;
+    let old_credential_cleanup_incomplete = new_reference.is_some()
+        && !retained.contains(&managed.secret_ref)
+        && credentials.delete(&managed.secret_ref).is_err();
     Ok(ModelUpdateOutcome {
         old_credential_cleanup_incomplete,
+    })
+}
+
+#[tauri::command]
+async fn use_default_chat_model(
+    world_id: String,
+    config: State<'_, LaunchConfig>,
+    credentials: State<'_, SharedCredentialStore>,
+    supervisor: State<'_, SharedSupervisor>,
+    updates: State<'_, updater::UpdateState>,
+) -> Result<ModelUpdateOutcome, String> {
+    let _update_guard = updates
+        .operation
+        .try_lock()
+        .map_err(|_| "update_busy".to_owned())?;
+    llm_config::validate_world_scope(Some(&world_id)).map_err(str::to_owned)?;
+    let mut supervisor = supervisor.lock().await;
+    let previous = tokio::fs::read(&config.llm_config_path)
+        .await
+        .map_err(|_| "llm_config_read_failed".to_owned())?;
+    let document = llm_config::inherit_default(&previous, &world_id).map_err(str::to_owned)?;
+    if document == previous {
+        return Ok(ModelUpdateOutcome {
+            old_credential_cleanup_incomplete: false,
+        });
+    }
+    llm_config::write_atomic(&config.llm_config_path, &document)
+        .await
+        .map_err(str::to_owned)?;
+    let healthy = supervisor.restart(&config).await.is_ok()
+        && supervisor
+            .authenticated_health_for_world(Some(&world_id))
+            .await
+            .is_ok_and(|health| health.llm_status != "degraded");
+    if !healthy {
+        if llm_config::write_atomic(&config.llm_config_path, &previous)
+            .await
+            .is_err()
+            || supervisor.restart(&config).await.is_err()
+        {
+            let _ = supervisor.stop(Duration::from_secs(3)).await;
+            return Err("model_setup_recovery_failed".to_owned());
+        }
+        return Err("model_setup_failed".to_owned());
+    }
+    let retained = llm_config::credential_references(&document).map_err(str::to_owned)?;
+    let previous_refs = llm_config::credential_references(&previous).map_err(str::to_owned)?;
+    let mut cleanup_incomplete = false;
+    for reference in previous_refs {
+        if !retained.contains(&reference) && credentials.delete(&reference).is_err() {
+            cleanup_incomplete = true;
+        }
+    }
+    Ok(ModelUpdateOutcome {
+        old_credential_cleanup_incomplete: cleanup_incomplete,
     })
 }
 
@@ -366,6 +470,7 @@ pub fn run() {
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             Some(vec!["--background"]),
         ))
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .on_window_event(|window, event| {
             if matches!(event, tauri::WindowEvent::Focused(false)) {
                 background::hide_presence(window.app_handle());
@@ -392,9 +497,17 @@ pub fn run() {
             configure_chat_model,
             managed_chat_model_setup,
             update_chat_model,
+            use_default_chat_model,
             background::desktop_background_status,
             background::configure_desktop_background,
-            background::report_desktop_presence
+            background::report_desktop_presence,
+            updater::desktop_update_status,
+            updater::configure_desktop_updates,
+            updater::check_desktop_update,
+            updater::claim_desktop_update_popup,
+            updater::dismiss_desktop_update_popup,
+            updater::install_desktop_update,
+            updater::acknowledge_desktop_update
         ])
         .setup(|app| {
             let mut app_data = app.path().app_data_dir()?;
@@ -404,6 +517,7 @@ pub fn run() {
                 }
             }
             app.manage(background::BackgroundState::load(&app_data));
+            app.manage(updater::UpdateState::load(&app_data));
             background::install_tray(app)?;
             let executable_dir = std::env::current_exe()?
                 .parent()

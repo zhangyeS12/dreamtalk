@@ -84,9 +84,14 @@ pub fn desktop_background_status(
 pub fn configure_desktop_background(
     app: tauri::AppHandle,
     state: State<'_, BackgroundState>,
+    updates: State<'_, crate::updater::UpdateState>,
     autostart: bool,
     close_to_tray: bool,
 ) -> Result<BackgroundStatus, String> {
+    let _update_guard = updates
+        .operation
+        .try_lock()
+        .map_err(|_| "update_busy".to_owned())?;
     let mut current = state
         .preferences
         .lock()

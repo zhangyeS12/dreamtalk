@@ -325,6 +325,7 @@ class CommandHandler:
                             command.parent_id,
                             command.hidden,
                             command.allowed_characters,
+                            command.is_region,
                         )
 
             case ConfigureLocation():
@@ -365,6 +366,7 @@ class CommandHandler:
                         command.parent_id,
                         command.hidden,
                         command.allowed_characters,
+                        command.is_region,
                     )
 
             case CreatePlayer():
@@ -489,7 +491,11 @@ class CommandHandler:
 
                         async def apply_config() -> None:
                             await uow.local_locations.configure_character(
-                                command.character_id, command.location_id, command.activity_locked
+                                command.character_id,
+                                command.location_id,
+                                command.activity_locked,
+                                command.activity_residency,
+                                logical_time.microseconds,
                             )
 
                         return await self._finish(
@@ -547,7 +553,11 @@ class CommandHandler:
                     await uow.characters.put_state(state, command.expected_state_revision)
                     if command.activity_player_id is not None:
                         await uow.local_locations.configure_character(
-                            command.character_id, command.location_id, command.activity_locked
+                            command.character_id,
+                            command.location_id,
+                            command.activity_locked,
+                            command.activity_residency,
+                            logical_time.microseconds,
                         )
                         await uow.observations.add(
                             Observation(

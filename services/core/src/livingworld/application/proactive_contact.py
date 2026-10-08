@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+from contextlib import nullcontext
 from typing import Literal
 from uuid import uuid5
 
@@ -17,6 +18,7 @@ from livingworld.application.llm import (
     StructuredOutputRequest,
     TextContent,
 )
+from livingworld.application.world_model_config import any_model_available, model_for_world
 
 
 class ProactiveContactError(ValueError):
@@ -48,21 +50,26 @@ class ProactiveContactService:
         credentials_ready=lambda: True,
         json_output=False,
     ):
+        self.maintenance = None
         self.store, self.unread, self.players, self.configured = store, unread, players, configured
         self.credentials_ready = credentials_ready
         self.json_output = json_output
         self.worker = None
         self.wake = asyncio.Event()
 
-    def available(self):
-        return bool(self.configured and self.configured[4]())
+    def available(self, world=None):
+        configured = model_for_world(self.configured, world)
+        return bool(configured and configured[4]())
 
     async def snapshot(self, world):
         player = await self.players.selected_player(world)
-        return {**await self.store.snapshot(world, player), "model_available": self.available()}
+        return {
+            **await self.store.snapshot(world, player),
+            "model_available": self.available(world),
+        }
 
     async def configure(self, world, enabled, minutes, consent, revision, expected_player):
-        if enabled and not self.available():
+        if enabled and not self.available(world):
             raise ProactiveContactError("proactive_model_unavailable")
         player = await self.players.selected_player(world)
         if player is None or player.value != expected_player:
@@ -90,10 +97,14 @@ class ProactiveContactService:
         while True:
             self.wake.clear()
             try:
-                if self.available() and self.credentials_ready():
-                    claim = await self.store.claim_ready()
-                    if claim:
-                        await self._contact(claim)
+                with (
+                    self.maintenance.operation() if self.maintenance else nullcontext(True)
+                ) as admitted:
+                    if admitted:
+                        if any_model_available(self.configured) and self.credentials_ready():
+                            claim = await self.store.claim_ready()
+                            if claim:
+                                await self._contact(claim)
             except asyncio.CancelledError:
                 raise
             except Exception:
@@ -105,7 +116,10 @@ class ProactiveContactService:
                 pass
 
     async def _contact(self, claim):
+        configured = model_for_world(self.configured, claim["world_id"])
         try:
+            if not configured or not configured[4]():
+                raise ProactiveContactError("proactive_model_unavailable")
             data = claim["input"]
             payload = {
                 k: data[k] for k in ("location", "activity", "purpose", "common_world_background")
@@ -116,13 +130,13 @@ class ProactiveContactService:
             payload["schema"] = OutreachDialogue.model_json_schema()
             request = LLMRequest(
                 invocation_id=InvocationId(uuid5(claim["episode_id"], "proactive-dialogue")),
-                model=self.configured[2],
+                model=configured[2],
                 purpose=LLMPurpose("character_dialogue"),
-                max_output_tokens=min(8192, self.configured[3]),
+                max_output_tokens=min(8192, configured[3]),
                 structured_output=StructuredOutputRequest(
                     "proactive_dialogue", OutreachDialogue.model_json_schema()
                 )
-                if self.json_output
+                if model_for_world(self.json_output, claim["world_id"])
                 else None,
                 messages=(
                     LLMMessage(
@@ -143,9 +157,7 @@ class ProactiveContactService:
                     ),
                 ),
             )
-            response, bound = await generate_bounded_text(
-                self.configured, request, include_bound=True
-            )
+            response, bound = await generate_bounded_text(configured, request, include_bound=True)
             text = response.text
             if len(text.encode("utf-8")) > 8192:
                 raise ProactiveContactError("proactive_dialogue_invalid")

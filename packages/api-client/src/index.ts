@@ -20,9 +20,10 @@ export interface CoreHealth {
   llm_status: LLMRuntimeStatus;
 }
 export interface WorldSummary { world_id: string; name: string }
-export interface ActivityLocation { location_id: string; name: string; is_home: boolean; parent_id: string | null; hidden: boolean; allowed_character_ids: string[]; revision: number }
-export interface ActivityCharacter { character_id: string; name: string; initialized: boolean; root_import_id: string; initial_location_id: string | null; current_location_id: string | null; locked: boolean; revision: number | null; policy_revision: number }
-export interface LocationDraft { name: string; parent_id: string | null; hidden: boolean; allowed_character_ids: string[] }
+export type Residency = "normal" | "strong" | "very_strong";
+export interface ActivityLocation { location_id: string; name: string; is_home: boolean; parent_id: string | null; hidden: boolean; is_region: boolean; allowed_character_ids: string[]; revision: number }
+export interface ActivityCharacter { character_id: string; name: string; initialized: boolean; root_import_id: string; initial_location_id: string | null; current_location_id: string | null; locked: boolean; residency: Residency; revision: number | null; policy_revision: number }
+export interface LocationDraft { name: string; parent_id: string | null; hidden: boolean; is_region: boolean; allowed_character_ids: string[] }
 export interface ActivityCharacterDirectory { player_id: string | null; items: ActivityCharacter[] }
 export interface WorldSettings extends WorldSummary {
   world_time: string;
@@ -177,11 +178,13 @@ export interface ChatConversation {
   root_import_id: string;
   character_name: string;
   kind: "direct";
+  read_only?: boolean;
 }
 export interface GroupChatConversation {
   conversation_id: string;
   player_id: string;
   kind: "group";
+  read_only?: boolean;
   participants: Array<{ character_id: string; root_import_id: string; character_name: string }>;
 }
 export interface ChatMessage {
@@ -259,8 +262,10 @@ export class CoreClient {
     if (!connection.token || !connection.generation) throw new Error("missing_core_session");
   }
 
-  async health(signal?: AbortSignal): Promise<CoreHealth> {
-    const response = await this.fetcher(new URL("/system/health", this.endpoint), {
+  async health(signal?: AbortSignal, worldId?: string): Promise<CoreHealth> {
+    const url = new URL("/system/health", this.endpoint);
+    if (worldId) url.searchParams.set("world_id", worldId);
+    const response = await this.fetcher(url, {
       headers: { Authorization: `Bearer ${this.connection.token}` }, signal,
       credentials: "omit", cache: "no-store",
     });
@@ -585,6 +590,9 @@ export class CoreClient {
   discardWorldContent(worldId: string, importId: string): Promise<{ discarded: boolean }> {
     return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/content/${importId}/discard`, { method: "POST" });
   }
+  removeCharacterCard(worldId: string, importId: string): Promise<{ removed: boolean }> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/content/${encodeURIComponent(importId)}`, { method: "DELETE" });
+  }
 
   listActivityCharacters(worldId: string): Promise<ActivityCharacterDirectory> {
     return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/activity-characters`);
@@ -607,8 +615,11 @@ export class CoreClient {
   editActivityLocation(worldId: string, locationId: string, draft: LocationDraft, revision: number, requestId: string): Promise<ActivityLocation> {
     return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/activity-locations/${encodeURIComponent(locationId)}`, { method: "PUT", headers: { "Content-Type": "application/json", "X-Request-Id": requestId }, body: JSON.stringify({ ...draft, expected_revision: revision }) });
   }
-  configureCharacterLocation(worldId: string, playerId: string, characterId: string, locationId: string, locked: boolean, revision: number | null, requestId: string, policyRevision = 0): Promise<{ character_id: string; initialized: boolean }> {
-    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/activity-characters/${encodeURIComponent(characterId)}/location-policy`, { method: "PUT", headers: { "Content-Type": "application/json", "X-Request-Id": requestId }, body: JSON.stringify({ player_id: playerId, location_id: locationId, locked, expected_revision: revision, expected_policy_revision: policyRevision }) });
+  removeActivityLocation(worldId: string, locationId: string, revision: number): Promise<{ removed: boolean }> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/activity-locations/${encodeURIComponent(locationId)}`, { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ expected_revision: revision }) });
+  }
+  configureCharacterLocation(worldId: string, playerId: string, characterId: string, locationId: string, locked: boolean, revision: number | null, requestId: string, policyRevision = 0, residency: Residency = "strong"): Promise<{ character_id: string; initialized: boolean }> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/activity-characters/${encodeURIComponent(characterId)}/location-policy`, { method: "PUT", headers: { "Content-Type": "application/json", "X-Request-Id": requestId }, body: JSON.stringify({ player_id: playerId, location_id: locationId, locked, residency, expected_revision: revision, expected_policy_revision: policyRevision }) });
   }
   listWorldCovers(signal?: AbortSignal): Promise<WorldCover[]> {
     return this.productRequest("/world-covers", { signal });

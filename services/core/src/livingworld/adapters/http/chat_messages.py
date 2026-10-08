@@ -35,6 +35,7 @@ from livingworld.application.errors import (
     IdempotencyConflictError,
 )
 from livingworld.application.group_chat_reply import GroupChatReplyService
+from livingworld.application.world_model_config import model_for_world
 from livingworld.domain.contracts import API_PROTOCOL, RequestId
 from livingworld.domain.identifiers import ChatTurnId, ConversationId, MessageId, PlayerId, WorldId
 
@@ -148,7 +149,9 @@ def _stream_failure(error: Exception) -> tuple[int, str]:
     if isinstance(error, ChatReplyIntegrityError):
         return 503, "chat_accounting_unavailable"
     if isinstance(error, ChatTurnUnavailableError):
-        return 409, "chat_turn_already_claimed"
+        return 409, "chat_contact_removed" if str(
+            error
+        ) == "chat_contact_removed" else "chat_turn_already_claimed"
     if isinstance(error, EntityNotFoundError):
         return 404, "chat_turn_not_found"
     if isinstance(error, ChatReplyValidationError):
@@ -236,12 +239,12 @@ def chat_message_router(
     )
 
     @router.get("/reply-availability")
-    async def reply_availability() -> dict:
-        return _reply_availability(reply_service)
+    async def reply_availability(world_id: UUID) -> dict:
+        return _reply_availability(model_for_world(reply_service, WorldId(world_id)))
 
     @router.get("/group-reply-availability")
-    async def group_reply_availability() -> dict:
-        return _reply_availability(group_reply_service)
+    async def group_reply_availability(world_id: UUID) -> dict:
+        return _reply_availability(model_for_world(group_reply_service, WorldId(world_id)))
 
     @router.get("/{conversation_id}/messages")
     async def list_messages(world_id: UUID, conversation_id: UUID) -> list[dict]:
@@ -338,8 +341,13 @@ def chat_message_router(
             raise HTTPException(404, "conversation_not_found") from None
         except IdempotencyConflictError:
             raise HTTPException(409, "chat_request_conflict") from None
-        except ChatTurnUnavailableError:
-            raise HTTPException(409, "group_turn_unavailable") from None
+        except ChatTurnUnavailableError as error:
+            raise HTTPException(
+                409,
+                "chat_contact_removed"
+                if str(error) == "chat_contact_removed"
+                else "group_turn_unavailable",
+            ) from None
         except ValueError:
             raise HTTPException(422, "chat_message_invalid") from None
         return {
@@ -373,8 +381,13 @@ def chat_message_router(
             raise HTTPException(404, "conversation_not_found") from None
         except IdempotencyConflictError:
             raise HTTPException(409, "chat_request_conflict") from None
-        except ChatTurnUnavailableError:
-            raise HTTPException(409, "group_turn_unavailable") from None
+        except ChatTurnUnavailableError as error:
+            raise HTTPException(
+                409,
+                "chat_contact_removed"
+                if str(error) == "chat_contact_removed"
+                else "group_turn_unavailable",
+            ) from None
         except ValueError:
             raise HTTPException(422, "chat_message_invalid") from None
         return {
@@ -399,7 +412,8 @@ def chat_message_router(
 
     @router.post("/{conversation_id}/group-turns/{turn_id}/reply")
     async def generate_group_reply(world_id: UUID, conversation_id: UUID, turn_id: UUID) -> dict:
-        if group_reply_service is None:
+        configured_reply = model_for_world(group_reply_service, WorldId(world_id))
+        if configured_reply is None:
             raise HTTPException(503, "chat_model_unavailable")
         conversation = ConversationId(WorldId(world_id), conversation_id)
         try:
@@ -410,11 +424,16 @@ def chat_message_router(
                 return _group_turn_view(current)
             if current.state == "claimed":
                 raise HTTPException(409, "chat_turn_already_claimed")
-            return _group_turn_view(await group_reply_service.reply(current.sent))
+            return _group_turn_view(await configured_reply.reply(current.sent))
         except EntityNotFoundError:
             raise HTTPException(404, "chat_turn_not_found") from None
-        except ChatTurnUnavailableError:
-            raise HTTPException(409, "chat_turn_already_claimed") from None
+        except ChatTurnUnavailableError as error:
+            raise HTTPException(
+                409,
+                "chat_contact_removed"
+                if str(error) == "chat_contact_removed"
+                else "chat_turn_already_claimed",
+            ) from None
         except ChatReplyBudgetError as error:
             raise HTTPException(422, _budget_failure_code(error)) from None
         except ChatReplyUnavailableError:
@@ -441,7 +460,8 @@ def chat_message_router(
 
     @router.post("/{conversation_id}/turns/{turn_id}/reply")
     async def generate_reply(world_id: UUID, conversation_id: UUID, turn_id: UUID) -> dict:
-        if reply_service is None:
+        configured_reply = model_for_world(reply_service, WorldId(world_id))
+        if configured_reply is None:
             raise HTTPException(503, "chat_model_unavailable")
         conversation = ConversationId(WorldId(world_id), conversation_id)
         try:
@@ -452,12 +472,17 @@ def chat_message_router(
                 return _turn_view(current)
             if current.state == "claimed":
                 raise HTTPException(409, "chat_turn_already_claimed")
-            await reply_service.reply(current.sent)
+            await configured_reply.reply(current.sent)
             return _turn_view(await service.direct_turn(conversation, current.sent.turn_id))
         except EntityNotFoundError:
             raise HTTPException(404, "chat_turn_not_found") from None
-        except ChatTurnUnavailableError:
-            raise HTTPException(409, "chat_turn_already_claimed") from None
+        except ChatTurnUnavailableError as error:
+            raise HTTPException(
+                409,
+                "chat_contact_removed"
+                if str(error) == "chat_contact_removed"
+                else "chat_turn_already_claimed",
+            ) from None
         except ChatReplyBudgetError as error:
             raise HTTPException(422, _budget_failure_code(error)) from None
         except ChatReplyUnavailableError:
@@ -471,7 +496,8 @@ def chat_message_router(
 
     @router.post("/{conversation_id}/turns/{turn_id}/reply/stream")
     async def stream_direct_reply(world_id: UUID, conversation_id: UUID, turn_id: UUID):
-        if reply_service is None:
+        configured_reply = model_for_world(reply_service, WorldId(world_id))
+        if configured_reply is None:
             raise HTTPException(503, "chat_model_unavailable")
         try:
             current = await service.direct_turn(
@@ -484,11 +510,12 @@ def chat_message_router(
             raise HTTPException(409, "direct_turn_required") from None
         if current.state == "claimed":
             raise HTTPException(409, "chat_turn_already_claimed")
-        return _stream_response(current, reply_service)
+        return _stream_response(current, configured_reply)
 
     @router.post("/{conversation_id}/group-turns/{turn_id}/reply/stream")
     async def stream_group_reply(world_id: UUID, conversation_id: UUID, turn_id: UUID):
-        if group_reply_service is None:
+        configured_reply = model_for_world(group_reply_service, WorldId(world_id))
+        if configured_reply is None:
             raise HTTPException(503, "chat_model_unavailable")
         try:
             current = await service.group_turn(
@@ -501,7 +528,7 @@ def chat_message_router(
             raise HTTPException(409, "group_turn_required") from None
         if current.state == "claimed":
             raise HTTPException(409, "chat_turn_already_claimed")
-        return _stream_response(current, group_reply_service)
+        return _stream_response(current, configured_reply)
 
     @router.get("/{conversation_id}/context-reports/{turn_id}")
     async def context_reports(world_id: UUID, conversation_id: UUID, turn_id: UUID):

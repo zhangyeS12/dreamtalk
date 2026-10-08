@@ -111,6 +111,9 @@ async def run(
         "native_runtime_ready" if native_ready else "native_runtime_unavailable",
         level="INFO" if native_ready else "WARNING",
     )
+    from livingworld.application.update_maintenance import UpdateMaintenance
+
+    maintenance = UpdateMaintenance()
     shutdown = ShutdownRequests()
     ready_path = bootstrap_path.parent / "ready.json"
     ready_path.unlink(missing_ok=True)
@@ -226,7 +229,9 @@ async def run(
                 mutation_barrier=simulation_runtime,
             ),
             wake_signal,
-            credentials_ready=lambda: not desktop or llm_session.credentials.sync_complete,
+            credentials_ready=lambda: (
+                not maintenance.preparing and (not desktop or llm_session.credentials.sync_complete)
+            ),
         )
         from livingworld.application.world_story import WorldNewsKernel, WorldStoryService
 
@@ -238,13 +243,20 @@ async def run(
             news_configured,
             WorldNewsKernel(database.unit_of_work, wall_clock, time_source, simulation_runtime),
             wake_signal,
-            credentials_ready=lambda: not desktop or llm_session.credentials.sync_complete,
+            credentials_ready=lambda: (
+                not maintenance.preparing and (not desktop or llm_session.credentials.sync_complete)
+            ),
             json_output=news_json,
         )
 
+        director.maintenance = world_story.maintenance = maintenance
+
         async def world_work(world, now):
-            deadlines = [await director.tick(world, now), await world_story.tick(world, now)]
-            return min((value for value in deadlines if value is not None), default=None)
+            with maintenance.operation() as admitted:
+                if not admitted:
+                    return None
+                deadlines = [await director.tick(world, now), await world_story.tick(world, now)]
+                return min((value for value in deadlines if value is not None), default=None)
 
         scheduler_runtime.set_world_work(world_work)
         await world_story.start()
@@ -256,8 +268,11 @@ async def run(
             player_event_feed,
             configure_director(llm_session),
             configure_offline_dialogue(llm_session),
-            credentials_ready=lambda: not desktop or llm_session.credentials.sync_complete,
+            credentials_ready=lambda: (
+                not maintenance.preparing and (not desktop or llm_session.credentials.sync_complete)
+            ),
         )
+        offline_contact.maintenance = maintenance
         await offline_contact.start()
         from livingworld.application.proactive_contact import ProactiveContactService
         from livingworld.bootstrap.llm_runtime import configure_proactive_dialogue
@@ -269,10 +284,26 @@ async def run(
             database.chat_unread_store(),
             player_event_feed,
             proactive_configured,
-            credentials_ready=lambda: not desktop or llm_session.credentials.sync_complete,
+            credentials_ready=lambda: (
+                not maintenance.preparing and (not desktop or llm_session.credentials.sync_complete)
+            ),
             json_output=proactive_json,
         )
+        proactive_contact.maintenance = maintenance
         await proactive_contact.start()
+
+        # A world-work deadline may have been suppressed by the update barrier.
+        # Cancellation/lease expiry must wake the existing schedulers again;
+        # their durable claim rules still prohibit replaying failed provider jobs.
+        def resume_after_update():
+            if not shutdown.requested:
+                director.credentials_changed()
+                world_story.credentials_changed()
+                offline_contact.credentials_changed()
+                proactive_contact.credentials_changed()
+
+        maintenance.on_resume = resume_after_update
+
         from livingworld.application.long_chat_memory import LongChatMemoryService
 
         long_memory_store = database.long_chat_memory_store()
@@ -326,7 +357,12 @@ async def run(
             DDGSContentResearch(),
             configure_content_builder(llm_session),
         )
-        status = RuntimeStatus(version("dreamtalk-core"), generation, llm_health=llm_session.health)
+        status = RuntimeStatus(
+            version("dreamtalk-core"),
+            generation,
+            llm_health=llm_session.health,
+            world_llm_health=llm_session.health,
+        )
         if desktop:
             # Read from the unbuffered OS pipe so interpreter shutdown cannot race
             # a BufferedReader lock held by the control thread.
@@ -368,6 +404,7 @@ async def run(
             group_chat_reply,
             content_builder,
             database.content_repository(),
+            maintenance=maintenance,
             chat_recall=earlier_chat_recall,
             conversation_memory=conversation_memory,
             long_chat_memory=long_memory,

@@ -1,0 +1,34 @@
+.desktop-update-entry { display: inline-flex; align-items: center; gap: 7px; border: 0; background: transparent; color: #445d59; font: inherit; cursor: pointer; padding: 8px 10px; white-space: nowrap; }
+.desktop-update-entry svg { width: 18px; height: 18px; }
+.desktop-update-entry.has-update { color: #604913; background: #f2e5bb; border: 1px solid #b7a572; border-radius: 6px; }
+.archive-header .desktop-update-entry + .text-action { margin-left: auto; }
+.archive-header:has(.desktop-update-entry) .archive-header-label { margin-right: 0; }
+.world-workspace .desktop-update-entry.has-update { color: var(--gold); background: var(--raised); border-color: var(--gold); }
+.desktop-update-entry:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
+.desktop-update-dialog { color-scheme: dark; box-sizing: border-box; width: min(580px, calc(100vw - 32px)); max-height: calc(100dvh - 48px); padding: 0; border: 1px solid #536078; border-radius: 14px; color: #edf0f8; background: #151b28; box-shadow: 0 28px 90px #0007; overflow: auto; }
+.desktop-update-dialog::backdrop { background: #050914b3; }
+.update-dialog-heading { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 22px 28px 10px; }
+.update-dialog-heading .dreamtalk-brand { color: #edf0f8; font-size: 18px; }
+.update-dialog-heading .dreamtalk-brand img { width: 38px; height: 38px; object-fit: contain; }
+.desktop-update-dialog button { cursor: pointer; font: inherit; color: #edf0f8; background: #252f44; border: 1px solid #758199; border-radius: 6px; padding: 9px 24px; }
+.desktop-update-dialog button:disabled { opacity: .55; cursor: default; }
+.desktop-update-dialog button:hover:not(:disabled) { filter: brightness(1.1); }
+.desktop-update-dialog :is(button,input):focus-visible { outline: 2px solid #e4d098; outline-offset: 3px; }
+.desktop-update-dialog .update-close { background: transparent; border: 0; font-size: 24px; padding: 4px 10px; }
+.update-dialog-body { padding: 12px 28px 0; }
+.update-version { color: #bcc8df; font-size: 13px; margin: 0 0 10px; font-variant-numeric: tabular-nums; }
+.update-version span { margin: 0 8px; color: #e4d098; }
+.update-dialog-body h2 { font-size: 26px; font-weight: 500; margin: 0 0 12px; letter-spacing: -.02em; }
+.update-intro { font-size: 14px; line-height: 1.7; color: #bcc8df; }
+.update-release-notes { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 260px; overflow: auto; border-block: 1px solid #3c465b; padding: 18px 0; margin-top: 18px; font-size: 14px; line-height: 1.8; }
+.update-dialog-actions { display: flex; justify-content: flex-end; gap: 12px; padding: 24px 28px 18px; }
+.desktop-update-dialog .update-primary { color: #131927; background: #e4d098; border-color: #e4d098; font-weight: 600; }
+.update-reminder { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0; padding: 16px 28px 22px; border-top: 1px solid #3c465b; font-size: 13px; cursor: pointer; }
+.update-reminder input { accent-color: #e4d098; }
+.update-reminder span { color: #bcc8df; font-size: 12px; margin-left: auto; }
+.update-error { color: #ffb9b2; font-size: 14px; line-height: 1.7; }
+.update-warning { color: #e4d098; font-size: 14px; line-height: 1.7; }
+.update-progress { color: #bcc8df; font-size: 14px; }
+.update-progress progress { display: block; width: 100%; accent-color: #e4d098; }
+.update-progress small { display: block; text-align: right; margin-top: 6px; }
+@media (max-width: 650px) { .archive-header { flex-wrap: wrap; } .update-dialog-heading, .update-dialog-body { padding-inline: 20px; } .update-dialog-actions, .update-reminder { padding-inline: 20px; } .update-reminder span { flex-basis: 100%; margin-left: 22px; } }

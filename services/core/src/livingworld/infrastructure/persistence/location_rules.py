@@ -1,6 +1,8 @@
 """One policy evaluator for authoring, planning and authoritative execution."""
 
-from uuid import UUID
+import hashlib
+import json
+from uuid import UUID, uuid5
 
 from sqlalchemy import func, select
 
@@ -9,13 +11,30 @@ from livingworld.infrastructure.persistence.location_policy_models import (
     LocationAccessRecord,
     LocationPolicyRecord,
 )
-from livingworld.infrastructure.persistence.models import LocationRecord, WorldEventRecord
+from livingworld.infrastructure.persistence.models import (
+    LocalLocationCatalogRecord,
+    LocationRecord,
+    WorldEventRecord,
+)
 
 
 class LocationRules:
-    def __init__(self, locations, parents, hidden, grants, scopes):
+    def __init__(
+        self,
+        locations,
+        parents,
+        hidden,
+        grants,
+        scopes,
+        regions=(),
+        residencies=None,
+        catalogued=None,
+    ):
         self.locations, self.parents = locations, parents
         self.hidden, self.grants, self.scopes = hidden, grants, scopes
+        self.regions = set(regions)
+        self.residencies = residencies or {}
+        self.catalogued = set(locations if catalogued is None else catalogued)
 
     @classmethod
     async def load(cls, session, world):
@@ -49,6 +68,17 @@ class LocationRules:
             {p.location_id for p in policies if p.hidden},
             {(location, character) for location, character in grants},
             {p.character_id: (p.initial_location_id, p.locked, p.revision) for p in scopes},
+            {p.location_id for p in policies if p.is_region},
+            {p.character_id: p.residency for p in scopes},
+            set(
+                await session.scalars(
+                    select(LocalLocationCatalogRecord.location_id).where(
+                        LocalLocationCatalogRecord.world_id == world,
+                        LocalLocationCatalogRecord.removed_at.is_(None),
+                    )
+                )
+            )
+            | {uuid5(world, "livingworld:local-home:v1")},
         )
 
     def ancestors(self, location):
@@ -91,13 +121,51 @@ class LocationRules:
         initial, locked, _ = await self.scope(session, world, character)
         return (
             initial is not None
-            and initial in self.ancestors(destination)
+            and initial in self.locations
+            and (destination in self.catalogued or destination == initial)
             and (not locked or destination == initial)
             and self.visible(character, destination)
         )
 
+    def region(self, location):
+        path = self.ancestors(location)
+        # Explicit regional boundaries take precedence; unmarked trees use their
+        # real root. A virtual world connector never becomes a real location.
+        return next((node for node in path if node in self.regions), path[-1] if path else None)
+
+    def distance(self, first, second):
+        left, right = self.ancestors(first), self.ancestors(second)
+        if not left or not right:
+            return 1_000
+        shared = next((node for node in left if node in right), None)
+        steps = left.index(shared) + right.index(shared) if shared else len(left) + len(right)
+        return steps + (6 if self.region(first) != self.region(second) else 0)
+
+    async def movement_signature(self, session, world, character):
+        initial, locked, _ = await self.scope(session, world, character)
+        allowed = sorted(
+            [
+                node
+                for node in self.locations
+                if await self.allowed(session, world, character, node)
+            ],
+            key=str,
+        )
+        value = [
+            str(initial),
+            locked,
+            # A tendency change affects the next batch, not admission of an
+            # already legal route. Authoring CAS still uses the policy revision.
+            [[str(node), str(self.parents.get(node)), node in self.regions] for node in allowed],
+        ]
+        return hashlib.sha256(json.dumps(value, separators=(",", ":")).encode()).hexdigest()
+
 
 async def character_can_enter(session, world, character, destination):
+    from livingworld.infrastructure.persistence.authored_lifecycle import removed_character_ids
+
+    if character in await removed_character_ids(session, world):
+        return False
     return await (await LocationRules.load(session, world)).allowed(
         session, world, character, destination
     )

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import os
 import re
 import shutil
@@ -12,6 +14,11 @@ import zipfile
 from pathlib import Path
 
 from portable_docs import copy_portable_docs
+
+
+def file_hash(path: Path) -> str:
+    with path.open("rb") as stream:
+        return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
 def main() -> None:
@@ -100,6 +107,22 @@ def main() -> None:
     shutil.copytree(root / "docs" / "licenses", package / "third-party-licenses")
     shutil.copy2(root / "docs" / "PORTABLE_WINDOWS.md", package / "README.md")
     copy_portable_docs(root, package)
+    version = json.loads((root / "apps/desktop/package.json").read_text(encoding="utf-8"))[
+        "version"
+    ]
+    # Enables narrowly scoped migration/cleanup; does not include the marker itself.
+    manifest = {
+        "identity": "app.livingworld.desktop",
+        "version": version,
+        "files": {
+            source.relative_to(package).as_posix(): file_hash(source)
+            for source in sorted(package.rglob("*"))
+            if source.is_file()
+        },
+    }
+    (package / ".dreamtalk-package.json").write_text(
+        json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
+    )
     if not args.build_only:
         environment = os.environ.copy()
         environment["DREAMTALK_PACKAGED_CORE_ROOT"] = str(package)

@@ -15,6 +15,7 @@ from livingworld.application.llm import (
     MessageRole,
     TextContent,
 )
+from livingworld.application.world_model_config import model_for_world
 from livingworld.domain.identifiers import CharacterId, ConversationId, PlayerId
 
 
@@ -57,10 +58,12 @@ class ConversationMemoryService:
     async def snapshot(self, conversation):
         view = await self.store.snapshot(conversation, await self._player(conversation))
         view["draft"] = self._status(view["draft"])
-        view["model_available"] = self.configured is not None and self.configured[4]()
+        configured = model_for_world(self.configured, conversation.world_id)
+        view["model_available"] = configured is not None and configured[4]()
         return view
 
     async def generate(self, conversation, request_id, base_revision, mode):
+        configured = model_for_world(self.configured, conversation.world_id)
         player = await self._player(conversation)
         claimed, draft = await self.store.claim(
             conversation, player, request_id, base_revision, mode
@@ -71,14 +74,14 @@ class ConversationMemoryService:
         try:
             if len(self._active) > 2:
                 raise ConversationMemoryError("memory_capacity_reached")
-            if self.configured is None or not self.configured[4]():
+            if configured is None or not configured[4]():
                 raise ConversationMemoryError("memory_model_unavailable")
             previous, sources = await self.store.generation_input(conversation, player, request_id)
             request = LLMRequest(
                 invocation_id=InvocationId(request_id),
-                model=self.configured[2],
+                model=configured[2],
                 purpose=LLMPurpose("content_builder"),
-                max_output_tokens=min(8192, self.configured[3]),
+                max_output_tokens=min(8192, configured[3]),
                 messages=(
                     LLMMessage(
                         MessageRole.SYSTEM,
@@ -111,7 +114,7 @@ class ConversationMemoryService:
                     ),
                 ),
             )
-            response = await generate_authoring_text(self.configured, request)
+            response = await generate_authoring_text(configured, request)
             content = validate_summary(response.text)
             await self.store.finish(conversation, player, request_id, "ready", content=content)
         except asyncio.CancelledError:

@@ -1,3 +1,4 @@
+import { DesktopUpdateProvider, DesktopUpdateEntry, useDesktopUpdateBlock } from "./DesktopUpdates";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { BackgroundSettings, type DesktopStatus } from "./BackgroundSettings";
 import { OfflineContactSettings } from "./OfflineContactSettings";
@@ -71,7 +72,7 @@ function savedTokenCeiling(): number {
   return 50_000;
 }
 
-export function ProductApp({ client, onStartupStatus }: { client: CoreClient; onStartupStatus?: (ready: boolean) => void }) {
+export function ProductApp({ client, onStartupStatus, startupReady = false }: { client: CoreClient; onStartupStatus?: (ready: boolean) => void; startupReady?: boolean }) {
   useEffect(() => {
     const preventFileNavigation = (event: DragEvent) => {
       if (event.dataTransfer?.types.includes("Files")) event.preventDefault();
@@ -82,10 +83,10 @@ export function ProductApp({ client, onStartupStatus }: { client: CoreClient; on
   }, []);
   const [entered, setEntered] = useState<{ worldId: string; hasIdentity: boolean } | null>(null);
   const [previewId, setPreviewId] = useState(savedWorldId);
-  return entered ? <WorldWorkspace key={entered.worldId} client={client} initialWorldId={entered.worldId}
+  return <DesktopUpdateProvider ready={startupReady}>{entered ? <WorldWorkspace key={entered.worldId} client={client} initialWorldId={entered.worldId}
     initialTab={entered.hasIdentity ? "chats" : "me"} onArchive={() => { setPreviewId(entered.worldId); setEntered(null); }} />
     : <WorldArchivePage client={client} initialWorldId={previewId} displayTime={displayTime} onStartupStatus={onStartupStatus}
-      onEnter={(worldId, hasIdentity) => setEntered({ worldId, hasIdentity })} />;
+      onEnter={(worldId, hasIdentity) => setEntered({ worldId, hasIdentity })} />}</DesktopUpdateProvider>;
 }
 
 function WorldWorkspace({ client, initialWorldId, initialTab, onArchive }: {
@@ -234,7 +235,7 @@ function WorldWorkspace({ client, initialWorldId, initialTab, onArchive }: {
     }).catch(() => { if (active) { setConversationsFailed(true); setError("无法读取当前世界的群聊，请重新读取或检查核心连接。"); } });
     void Promise.allSettled([directRead, groupRead]).finally(() => { if (active) setConversationsLoading(false); });
     return () => { active = false; controller.abort(); };
-  }, [client, worldId, selectedPlayer, tab, conversationsRefresh, unreadDirectoryKey]);
+  }, [client, worldId, selectedPlayer, tab, conversationsRefresh, unreadDirectoryKey, contactsRefresh]);
   useEffect(() => {
     let active = true;
     setKnownEvents(null);
@@ -297,6 +298,8 @@ function WorldWorkspace({ client, initialWorldId, initialTab, onArchive }: {
     setEventsOpen(false);
   };
   const suggestedFor = (conversationId: string) => draftSuggestion?.worldId === worldId && draftSuggestion.playerId === selectedPlayer && draftSuggestion.conversationId === conversationId ? draftSuggestion.text : null;
+  useDesktopUpdateBlock(worldProfileDirty || generalProfileDirty || worldContentDirty || worldLocationsDirty || characterActivityDirty || chatDirty || modelDirty || backgroundDirty || Number(tokenCeilingInput) !== tokenCeiling
+    ? "当前世界有未保存的编辑或聊天草稿。" : busy || offlineContact.busy ? "当前请求正在处理。" : null);
   const returnArchive = () => {
     if ((worldProfileDirty || generalProfileDirty || worldContentDirty || worldLocationsDirty || characterActivityDirty || chatDirty || modelDirty || backgroundDirty || offlineContact.busy || Number(tokenCeilingInput) !== tokenCeiling || busy)
       && !window.confirm("有尚未保存的编辑或正在处理的请求，是否返回书架？已发起的生成可能继续并产生用量。")) return;
@@ -353,9 +356,9 @@ function WorldWorkspace({ client, initialWorldId, initialTab, onArchive }: {
         {world ? <>
           <details className="contacts-management" open={contactsManagementOpen} onToggle={event => setContactsManagementOpen(event.currentTarget.open)}>
             <summary ref={contactsManager}><strong>添加／编辑角色卡</strong>{worldContentDirty && <span>有未保存的编辑 · 草稿保留中</span>}</summary>
-            <WorldImports key={`content:${world.world_id}`} client={client} worldId={world.world_id} onlyKind="character" onDirtyChange={setWorldContentDirty} onSaved={() => setContactsRefresh(value => value + 1)} />
+            <WorldImports key={`content:${world.world_id}`} client={client} worldId={world.world_id} onlyKind="character" refreshKey={contactsRefresh} onDirtyChange={setWorldContentDirty} onSaved={() => setContactsRefresh(value => value + 1)} />
           </details>
-          <WorldContacts key={world.world_id} client={client} worldId={world.world_id} refreshKey={contactsRefresh} visible={tab === "contacts"} onSettings={openContactsManager} onIdentity={() => setTab("me")} onOpenChat={openChat} canOpenChat={!!selectedPlayer} openingChat={busy} identityKey={selectedPlayer} onLocationDirty={setWorldLocationsDirty} onCharacterLocationDirty={setCharacterActivityDirty} />
+          <WorldContacts key={world.world_id} client={client} worldId={world.world_id} refreshKey={contactsRefresh} visible={tab === "contacts"} onSettings={openContactsManager} onIdentity={() => setTab("me")} onOpenChat={openChat} canOpenChat={!!selectedPlayer} openingChat={busy} identityKey={selectedPlayer} onLocationDirty={setWorldLocationsDirty} onCharacterLocationDirty={setCharacterActivityDirty} onRemoved={() => setContactsRefresh(value => value + 1)} removalDisabled={worldContentDirty} />
         </> : <div className="page-section"><div className="empty-state"><h2>先创建一个世界</h2><p>在世界档案库创建世界，然后新建或导入角色卡。</p><button className="text-action" onClick={returnArchive}>前往世界档案库</button></div></div>}
       </div>}
 
@@ -364,7 +367,7 @@ function WorldWorkspace({ client, initialWorldId, initialTab, onArchive }: {
         panels={{
           model: <>
             <SettingsFold title="模型服务与回复" summary={modelSummary?.model ? `${modelSummary.model} · 单次回复上限 ${modelSummary.replyTokens?.toLocaleString("zh-CN") ?? "待核对"} Token` : modelSummary?.status === "unconfigured" ? "尚未配置，展开完成首次设置" : modelSummary?.status ? "已读取配置状态，展开查看模型设置" : "正在读取模型配置…"} open>
-              <ModelSetup client={client} turnTokenCeiling={tokenCeiling} onDirtyChange={setModelDirty} onSummaryChange={setModelSummary} />
+              <ModelSetup key={worldId} client={client} worldId={worldId} turnTokenCeiling={tokenCeiling} onDirtyChange={setModelDirty} onSummaryChange={setModelSummary} />
             </SettingsFold>
             <SettingsFold title="聊天额度" summary={`已应用 ${tokenCeiling.toLocaleString("zh-CN")} Token / 轮${Number(tokenCeilingInput) !== tokenCeiling ? " · 新数值尚未应用" : ""}`}>
               <section className="settings-section"><div className="section-heading"><h2>聊天额度</h2><p>每轮输入和输出共用上限。系统按可信上界预留，额度不足时不会开始下一次模型调用。</p></div>
@@ -391,7 +394,7 @@ function WorldWorkspace({ client, initialWorldId, initialTab, onArchive }: {
           }}>{selectedPlayerState.availability === "available" ? "设为忙碌" : "设为可用"}</button></div>
         </section>} {world && selectedPlayer && <><ProactiveContactSettings key={`proactive:${world.world_id}:${selectedPlayer}`} client={client} worldId={world.world_id} playerId={selectedPlayer} /><OfflineContactSettings key={`offline:${world.world_id}:${selectedPlayer}`} status={offlineContact.status} busy={offlineContact.busy} refreshing={offlineContact.refreshing} error={offlineContact.error} onRefresh={offlineContact.refresh} onSave={offlineContact.save} paused={world.clock_state === "paused"} availability={selectedPlayerState?.availability ?? null} onNavigate={navigateBackgroundTask} /></>}{!selectedPlayer && <section className="settings-section"><p className="inline-hint">先在“我”中进入当前世界，再设置离线联系。</p><button type="button" className="text-action" onClick={() => setTab("me")}>前往我</button></section>}</>,
           news: <>{world && selectedPlayer && <WorldNewsSettings key={`news:${world.world_id}:${selectedPlayer}`} client={client} worldId={world.world_id} visible={tab === "settings" && settingsPage === "news"} paused={world.clock_state === "paused"} onNavigate={navigateBackgroundTask} />}{!selectedPlayer && <section className="settings-section"><p className="inline-hint">先在“我”中进入当前世界，再设置世界动态。</p><button type="button" className="text-action" onClick={() => setTab("me")}>前往我</button></section>}</>,
-          about: <SettingsDiagnostics client={client} visible={tab === "settings" && settingsPage === "about"} desktop={desktopStatus} onBackground={() => setSettingsPage("background")} />,
+          about: <><DesktopUpdateEntry settings /><SettingsDiagnostics key={worldId} client={client} worldId={worldId} visible={tab === "settings" && settingsPage === "about"} desktop={desktopStatus} onBackground={() => setSettingsPage("background")} /></>,
         }} />
 
       {(tab === "me" || meVisited) && <div className="settings-page profile-page" hidden={tab !== "me"}><ProfileEditor client={client} onDirtyChange={setGeneralProfileDirty} /><section className="settings-section"><div className="section-heading"><h2>我在当前世界</h2><p>每个世界选择一个自己的玩家身份；世界事件按此身份的已知范围显示。</p></div>

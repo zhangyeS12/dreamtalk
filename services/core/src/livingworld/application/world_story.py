@@ -16,6 +16,7 @@ from livingworld.application.llm import (
     StructuredOutputRequest,
     TextContent,
 )
+from livingworld.application.world_model_config import model_for_world
 from livingworld.domain.contracts import RequestId
 from livingworld.domain.events import WorldEvent
 from livingworld.domain.identifiers import EventId
@@ -109,18 +110,21 @@ class WorldStoryService:
         self.kernel, self.wake_signal = kernel, wake_signal
         self._credentials_ready = credentials_ready
         self._json_output = json_output
+        self.maintenance = None
         self._jobs, self._worlds = {}, set()
         self._closing = False
 
-    def available(self):
-        return self.configured is not None and self.configured[4]()
+    def available(self, world=None):
+        configured = model_for_world(self.configured, world)
+        return configured is not None and configured[4]()
 
     async def snapshot(self, world):
         player = await self.players.selected_player(world)
         result = await self.store.snapshot(world, player)
+        configured = model_for_world(self.configured, world)
         result.update(
-            model_available=self.available(),
-            model=self.configured[2].model_id if self.configured else None,
+            model_available=self.available(world),
+            model=configured[2].model_id if configured else None,
         )
         return result
 
@@ -141,7 +145,7 @@ class WorldStoryService:
         return {"saved": True}
 
     async def configure(self, world, enabled, consent, revision, replenish=False):
-        if enabled and not self.available():
+        if enabled and not self.available(world):
             raise WorldStoryError("news_model_unavailable")
         await self.store.configure(
             world, await self.players.selected_player(world), enabled, consent, revision, replenish
@@ -158,7 +162,9 @@ class WorldStoryService:
             if world_id not in self._jobs and self._credentials_ready() and len(self._jobs) < 2:
                 claim = await self.store.claim(world_id, now.microseconds, uuid4())
                 if claim:
-                    self._jobs[world_id] = asyncio.create_task(self._generate(world_id, claim))
+                    self._jobs[world_id] = (
+                        self.maintenance.spawn if self.maintenance else asyncio.create_task
+                    )(self._generate(world_id, claim))
             return await self.kernel.publish(world_id)
         except Exception:
             try:
@@ -169,20 +175,21 @@ class WorldStoryService:
 
     async def _generate(self, world, claim):
         batch_id, revision, snapshot = claim
+        configured = model_for_world(self.configured, world)
         try:
             if not await self.store.can_dispatch(world, batch_id, revision):
                 raise WorldStoryError("news_interrupted")
-            if not self.available():
+            if not self.available(world):
                 raise WorldStoryError("news_model_unavailable")
             request = LLMRequest(
                 invocation_id=InvocationId(batch_id),
-                model=self.configured[2],
+                model=configured[2],
                 purpose=LLMPurpose("director_plan"),
-                max_output_tokens=min(8192, self.configured[3]),
+                max_output_tokens=min(8192, configured[3]),
                 structured_output=StructuredOutputRequest(
                     "world_news_batch", NewsBatch.model_json_schema()
                 )
-                if self._json_output
+                if model_for_world(self._json_output, world)
                 else None,
                 messages=(
                     LLMMessage(
@@ -233,7 +240,7 @@ class WorldStoryService:
                     ),
                 ),
             )
-            response = await generate_bounded_text(self.configured, request)
+            response = await generate_bounded_text(configured, request)
             if len(response.text.encode("utf-8")) > 65536:
                 raise WorldStoryError("news_plan_invalid")
             try:

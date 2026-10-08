@@ -32,6 +32,7 @@ from livingworld.domain.identifiers import (
     PlayerId,
     WorldId,
 )
+from livingworld.infrastructure.persistence.authored_lifecycle import require_active_conversation
 from livingworld.infrastructure.persistence.chat_context_report import ChatContextReportMixin
 from livingworld.infrastructure.persistence.chat_reply_recovery import ChatReplyRecoveryMixin
 from livingworld.infrastructure.persistence.long_chat_memory import record_chat_memories
@@ -175,6 +176,9 @@ class SqlAlchemyChatMessageStore(ChatContextReportMixin, ChatReplyRecoveryMixin)
                     existing.token_ceiling,
                     existing.status,
                 )
+            await require_active_conversation(
+                session, conversation_id.world_id.value, conversation_id.value
+            )
             position = (
                 await session.scalar(
                     select(func.max(ChatMessageRecord.position)).where(
@@ -461,6 +465,9 @@ class SqlAlchemyChatMessageStore(ChatContextReportMixin, ChatReplyRecoveryMixin)
             conversation = await self._conversation(session, conversation_id, player_id)
             if conversation.kind != "direct":
                 raise ChatTurnUnavailableError("direct_turn_required")
+            await require_active_conversation(
+                session, conversation_id.world_id.value, conversation_id.value
+            )
             turn = await session.get(
                 ChatTurnRecord, (conversation_id.world_id.value, turn_id.value)
             )
@@ -513,6 +520,9 @@ class SqlAlchemyChatMessageStore(ChatContextReportMixin, ChatReplyRecoveryMixin)
             conversation = await self._conversation(session, conversation_id, player_id)
             if conversation.kind != "group":
                 raise ChatTurnUnavailableError("group_turn_required")
+            await require_active_conversation(
+                session, conversation_id.world_id.value, conversation_id.value
+            )
             turn = await session.get(
                 ChatTurnRecord, (conversation_id.world_id.value, turn_id.value)
             )
@@ -589,6 +599,9 @@ class SqlAlchemyChatMessageStore(ChatContextReportMixin, ChatReplyRecoveryMixin)
             conversation = await self._conversation(session, conversation_id, player_id)
             if conversation.kind != "direct":
                 raise ChatTurnUnavailableError("direct_turn_required")
+            await require_active_conversation(
+                session, conversation_id.world_id.value, conversation_id.value
+            )
             turn = await session.get(
                 ChatTurnRecord, (conversation_id.world_id.value, turn_id.value)
             )
@@ -749,6 +762,9 @@ class SqlAlchemyChatMessageStore(ChatContextReportMixin, ChatReplyRecoveryMixin)
             conversation = await self._conversation(session, conversation_id, player_id)
             if conversation.kind != "group":
                 raise ChatTurnUnavailableError("group_turn_required")
+            await require_active_conversation(
+                session, conversation_id.world_id.value, conversation_id.value
+            )
             turn = await session.get(
                 ChatTurnRecord, (conversation_id.world_id.value, turn_id.value)
             )

@@ -1,10 +1,12 @@
-"""A saved reply, never a read flag, releases the shared online/offline contact gate."""
+"""Saved replies release the gate; retired conversations cannot await a reply."""
 
 from sqlalchemy import exists, func, select
 from sqlalchemy.orm import aliased
 
+from livingworld.infrastructure.persistence.authored_lifecycle import removed_character_roots
 from livingworld.infrastructure.persistence.models import ChatConversationRecord as Conversation
 from livingworld.infrastructure.persistence.models import ChatMessageRecord as Message
+from livingworld.infrastructure.persistence.models import ChatParticipantRecord as Participant
 from livingworld.infrastructure.persistence.models import ChatTurnRecord as Turn
 from livingworld.infrastructure.persistence.offline_contact_models import (
     OfflineContactEpisodeRecord as Offline,
@@ -32,9 +34,14 @@ async def waiting_conversation(session, world, player):
         .group_by(Message.conversation_id, Message.turn_id)
         .subquery()
     )
+    removed = await removed_character_roots(session, world)
+    retired = select(Participant.conversation_id).where(
+        Participant.world_id == world, Participant.root_import_id.in_(removed)
+    )
     return await session.scalar(
         select(delivered.c.conversation_id)
         .where(
+            delivered.c.conversation_id.not_in(retired),
             ~exists(
                 select(reply.message_id).where(
                     reply.world_id == world,
@@ -42,7 +49,7 @@ async def waiting_conversation(session, world, player):
                     reply.sender_player_id == player,
                     reply.position > delivered.c.position,
                 )
-            )
+            ),
         )
         .order_by(delivered.c.conversation_id)
         .limit(1)

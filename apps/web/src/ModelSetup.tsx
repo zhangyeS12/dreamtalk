@@ -12,6 +12,7 @@ type ChatModelSetup = {
   streaming?: boolean;
   timeout_ms?: number;
   native_json?: boolean;
+  inherited?: boolean;
 };
 type ModelUpdateOutcome = { old_credential_cleanup_incomplete: boolean };
 const cleanupWarningKey = "dreamtalk-model-cleanup-warning";
@@ -38,8 +39,9 @@ const statusText: Record<LLMRuntimeStatus, string> = {
 
 export type ModelSetupSummary = { status: LLMRuntimeStatus | null; model: string | null; replyTokens: number | null };
 
-export function ModelSetup({ client, turnTokenCeiling, onConfigured = () => window.location.reload(), onDirtyChange, onSummaryChange }: {
+export function ModelSetup({ client, worldId, turnTokenCeiling, onConfigured = () => window.location.reload(), onDirtyChange, onSummaryChange }: {
   client: CoreClient;
+  worldId?: string;
   turnTokenCeiling?: number;
   onConfigured?: () => void;
   onDirtyChange?: (dirty: boolean) => void;
@@ -48,6 +50,9 @@ export function ModelSetup({ client, turnTokenCeiling, onConfigured = () => wind
   const [status, setStatus] = useState<LLMRuntimeStatus | null>(null);
   const [managed, setManaged] = useState<ChatModelSetup | null>(null);
   const [managedUnsupported, setManagedUnsupported] = useState(false);
+  const [advancedDefault, setAdvancedDefault] = useState(false);
+  const [inherited, setInherited] = useState(Boolean(worldId));
+  const scopedWarningKey = worldId ? `${cleanupWarningKey}:${worldId}` : cleanupWarningKey;
   useEffect(() => { onSummaryChange?.({ status, model: managed?.model_id ?? null, replyTokens: managed?.max_output_tokens ?? null }); }, [status, managed, onSummaryChange]);
   const [providerKind, setProviderKind] = useState<ProviderKind>("openai-responses");
   const [modelId, setModelId] = useState("");
@@ -70,22 +75,23 @@ export function ModelSetup({ client, turnTokenCeiling, onConfigured = () => wind
 
   const [error, setError] = useState(() => {
     try {
-      const warning = window.sessionStorage.getItem(cleanupWarningKey);
-      window.sessionStorage.removeItem(cleanupWarningKey);
+      const warning = window.sessionStorage.getItem(scopedWarningKey);
+      window.sessionStorage.removeItem(scopedWarningKey);
       return warning ?? "";
     } catch { return ""; }
   });
 
   useEffect(() => {
     let active = true;
-    void client.health().then(async health => {
+    void client.health(undefined, worldId).then(async health => {
       if (!active) return;
       setStatus(health.llm_status);
-      if (!isTauri() || health.llm_status === "unconfigured") return;
+      if (!isTauri()) return;
       try {
-        const existing = await invoke<ChatModelSetup | null>("managed_chat_model_setup");
+        const existing = await invoke<ChatModelSetup | null>("managed_chat_model_setup", { worldId: worldId ?? null });
         if (!active || !existing) return;
         setManaged(existing);
+        setInherited(existing.inherited ?? Boolean(worldId));
         setStreaming(existing.streaming ?? false);
         setTimeoutSeconds(String((existing.timeout_ms ?? 30_000) / 1000));
         setNativeJson(existing.native_json ?? false);
@@ -100,10 +106,18 @@ export function ModelSetup({ client, turnTokenCeiling, onConfigured = () => wind
         setManualLimits(manual);
         setAdvancedOpen(manual || ![2048, 8192, 16384].includes(existing.max_output_tokens)
           || Boolean(existing.native_json) || (existing.timeout_ms ?? 30_000) !== 30_000);
-      } catch { if (active) setManagedUnsupported(true); }
+      } catch (failure) {
+        if (active) {
+          if (worldId && failure === "model_world_inherits_advanced_default") setAdvancedDefault(true);
+          else {
+            if (worldId && failure === "model_world_has_advanced_configuration") setInherited(false);
+            setManagedUnsupported(true);
+          }
+        }
+      }
     }).catch(() => { if (active) setError("无法读取模型状态，请检查核心连接。"); });
     return () => { active = false; };
-  }, [client]);
+  }, [client, worldId]);
 
   const preset = findModelPreset(providerKind, modelId, baseUrl);
   const inputBound = preset && !manualLimits ? preset.input_tokens : Number(inputLimit);
@@ -113,8 +127,10 @@ export function ModelSetup({ client, turnTokenCeiling, onConfigured = () => wind
   const resetCapacity = () => { setManualLimits(false); setInputLimit(""); setNativeJson(false); };
   const rawTimeoutMs = Number(timeoutSeconds) * 1000;
   const timeoutMs = Math.round(rawTimeoutMs);
-  const editing = status !== "unconfigured" && managed !== null;
-  const secretRequired = !editing || status !== "ready" || providerKind !== managed?.provider_kind;
+  const editing = managed !== null;
+  const endpointChanged = providerKind === "openai-compatible"
+    && baseUrl.replace(/\/+$/, "") !== (managed?.base_url ?? "").replace(/\/+$/, "");
+  const secretRequired = !editing || status !== "ready" || providerKind !== managed?.provider_kind || endpointChanged;
   const validationErrors: Partial<Record<SetupField, string>> = {};
   if (!modelId) validationErrors.model_id = "请填写提供商的 API 模型 ID。";
   else if (/\s/.test(modelId) || Array.from(modelId).some(character => {
@@ -159,7 +175,7 @@ export function ModelSetup({ client, turnTokenCeiling, onConfigured = () => wind
       });
       return;
     }
-    if (!isTauri() || (status !== "unconfigured" && !editing)) {
+    if (!isTauri() || (status !== "unconfigured" && !editing && !advancedDefault)) {
       setError("当前无法保存模型设置，请重新打开桌面应用的设置页面。");
       return;
     }
@@ -177,29 +193,55 @@ export function ModelSetup({ client, turnTokenCeiling, onConfigured = () => wind
         },
         secret,
         streaming,
+        worldId: worldId ?? null,
       });
       setSecret("");
       if (outcome?.old_credential_cleanup_incomplete) {
-        try { window.sessionStorage.setItem(cleanupWarningKey, "模型已更新，但旧凭据未能从 Windows 安全凭据存储清理。请检查本机凭据存储。"); } catch { /* The update remains committed. */ }
+        try { window.sessionStorage.setItem(scopedWarningKey, "模型已更新，但旧凭据未能从 Windows 安全凭据存储清理。请检查本机凭据存储。"); } catch { /* The update remains committed. */ }
       }
       setDirty(false);
       onConfigured();
     } catch (failure) {
       if (failure === "secure_storage_unavailable") setError("Windows 安全凭据存储不可用，密钥未保存。");
       else if (failure === "model_edit_requires_managed_single_chat_configuration") setError("当前模型配置含有高级设置，不能从此页面覆盖。");
-      else if (failure === "model_update_new_secret_required") setError("更换提供商或补齐缺失凭据时，请填写新 API 密钥。");
+      else if (failure === "model_update_new_secret_required") setError("更换提供商、服务地址或补齐缺失凭据时，请填写新 API 密钥。");
       else if (failure === "model_setup_requires_empty_configuration") setError("模型状态已变化，请重新打开设置页面后再编辑。已有配置未被覆盖。");
       else if (failure === "model_setup_recovery_failed") setError("模型更新和恢复均未完成。请重启应用后检查模型状态。");
       else setError("模型设置未完成。请核对模型名称、服务地址和回复长度，或重新启动程序后重试。");
     } finally { setSaving(false); }
   };
 
+  const restoreDefault = async () => {
+    if (!worldId || !isTauri() || saving || inherited) return;
+    setSaving(true);
+    setError("");
+    try {
+      const outcome = await invoke<ModelUpdateOutcome>("use_default_chat_model", { worldId });
+      if (outcome.old_credential_cleanup_incomplete) {
+        try { window.sessionStorage.setItem(scopedWarningKey, "已恢复默认模型，但旧凭据清理未完成。请检查本机凭据存储。"); } catch { /* The configuration is already saved. */ }
+      }
+      setSecret("");
+      setDirty(false);
+      onConfigured();
+    } catch (failure) {
+      setError(failure === "model_setup_recovery_failed"
+        ? "恢复默认模型和恢复原配置均未完成。请重启应用后检查模型状态。"
+        : "未能恢复默认模型，请检查核心连接后重试；本次失败会尝试恢复原配置。");
+    }
+    finally { setSaving(false); }
+  };
+
   return <section className="settings-section model-setup" aria-label="聊天模型">
-    <div className="section-heading"><h2>聊天模型</h2><p>{status === null ? "正在读取模型状态…" : statusText[status]}</p></div>
+    <div className="section-heading"><h2>{worldId ? "当前世界模型" : "默认模型配置"}</h2><p>{status === null ? "正在读取模型状态…" : statusText[status]}</p></div>
+    <p className="inline-hint">{worldId
+      ? inherited ? "当前使用书架默认配置。保存后成为这个世界的独立配置，不会修改书架默认配置或其他世界。" : "当前世界使用独立配置。API、模型、密钥、容量、超时和流式设置只用于这个世界。"
+      : "这里保存书架默认配置，供尚未单独设置的世界使用。已保存独立配置的世界不受这里的修改影响。"}</p>
+    {worldId && !inherited && isTauri() ? <div className="group-actions"><button type="button" className="secondary-button" disabled={saving} onClick={() => void restoreDefault()}>恢复使用书架默认配置</button></div> : null}
     {error ? <p className="app-alert" role="alert">{error}</p> : null}
     {managedUnsupported && status !== "unconfigured" ? <p className="inline-hint">当前配置由高级方式管理；此处不会覆盖其中的路由、定价或其他设置。</p> : null}
-    {turnTokenCeiling !== undefined && !requestBoundAvailable && Number.isSafeInteger(inputBound) && inputBound > 0 && inputBound + outputBound > turnTokenCeiling && (editing || status === "unconfigured") ? <p className="compatibility-notice" role="status">此服务的一次调用需要预留 {inputBound.toLocaleString("zh-CN")} Token 输入。当前每轮额度为 {turnTokenCeiling.toLocaleString("zh-CN")}；至少 {(inputBound + 1).toLocaleString("zh-CN")} 才能留出输出空间，{Number.isSafeInteger(outputBound) && outputBound > 0 ? `预留一次完整回复需 ${(inputBound + outputBound).toLocaleString("zh-CN")}。` : ""} 群聊选人、多角色发言及重试仍共用整轮额度，需要更多余量。模型设置仍可保存。容量预留不代表实际发送量；请按官方说明填写，勿为通过检查虚填较低值。</p> : null}
-    {isTauri() && (status === "unconfigured" || (editing && !managedUnsupported)) ? <form noValidate aria-busy={saving} onChangeCapture={() => setDirty(true)} onSubmit={event => void save(event)}>
+    {advancedDefault ? <p className="inline-hint">书架默认配置由高级方式管理。下方可以为当前世界另建独立模型配置，原默认配置会保留。</p> : null}
+    {turnTokenCeiling !== undefined && !requestBoundAvailable && Number.isSafeInteger(inputBound) && inputBound > 0 && inputBound + outputBound > turnTokenCeiling && (editing || advancedDefault || status === "unconfigured") ? <p className="compatibility-notice" role="status">此服务的一次调用需要预留 {inputBound.toLocaleString("zh-CN")} Token 输入。当前每轮额度为 {turnTokenCeiling.toLocaleString("zh-CN")}；至少 {(inputBound + 1).toLocaleString("zh-CN")} 才能留出输出空间，{Number.isSafeInteger(outputBound) && outputBound > 0 ? `预留一次完整回复需 ${(inputBound + outputBound).toLocaleString("zh-CN")}。` : ""} 群聊选人、多角色发言及重试仍共用整轮额度，需要更多余量。模型设置仍可保存。容量预留不代表实际发送量；请按官方说明填写，勿为通过检查虚填较低值。</p> : null}
+    {isTauri() && status !== null && status !== "degraded" && !managedUnsupported && (status === "unconfigured" || editing || advancedDefault) ? <form noValidate aria-busy={saving} onChangeCapture={() => setDirty(true)} onSubmit={event => void save(event)}>
       {submitAttempted && firstInvalidField ? <p className="app-alert" role="alert">尚未保存：{validationErrors[firstInvalidField]} 请修改标红的字段后再保存。</p> : null}
       <div className="model-setup-fields">
         <label className="field"><span>提供商</span><select value={providerKind} disabled={saving} onChange={event => { setProviderKind(event.target.value as ProviderKind); resetCapacity(); }}><option value="openai-responses">OpenAI</option><option value="anthropic">Anthropic</option><option value="gemini">Gemini</option><option value="openai-compatible">兼容 Chat Completions 的服务</option></select></label>
@@ -214,6 +256,7 @@ export function ModelSetup({ client, turnTokenCeiling, onConfigured = () => wind
           <label htmlFor={`${formId}-base_url`}>服务地址</label>
           <input id={`${formId}-base_url`} name="base_url" type="url" value={baseUrl} disabled={saving} onChange={event => { setBaseUrl(event.target.value); resetCapacity(); }} placeholder="https://example.com/v1" aria-invalid={Boolean(fieldError("base_url"))} aria-describedby={fieldError("base_url") ? `${formId}-base_url-error` : undefined} />
           {fieldFeedback("base_url")}
+          <span className="model-field-hint">Kimi、GLM 等提供兼容接口的服务可在这里接入。填写控制台给出的基础地址（不含 /chat/completions）、准确模型 ID 和对应 API 密钥；未匹配的型号还需在高级设置核对输入容量。</span>
         </div> : null}
         <div className="field">
           <label htmlFor={`${formId}-secret`}>{secretRequired ? "API 密钥" : "新 API 密钥（可留空）"}</label>
@@ -256,7 +299,7 @@ export function ModelSetup({ client, turnTokenCeiling, onConfigured = () => wind
           <p className="inline-hint">手动输入容量必须按提供商文档核对。没有可靠请求上界的服务仍按此容量预留；请勿为了通过额度检查填写更小的数值。</p>
         </details>
       </div>
-      <div className="group-actions"><button type="submit" className="primary-button" disabled={saving}>{saving ? "正在保存并重启核心…" : editing ? "更新模型设置" : "保存模型设置"}</button></div>
+      <div className="group-actions"><button type="submit" className="primary-button" disabled={saving}>{saving ? "正在保存并重启核心…" : worldId ? "保存当前世界模型" : editing ? "更新默认模型配置" : "保存默认模型配置"}</button></div>
       <p className="inline-hint">保存后核心会重新启动，页面自动连接。不会测试密钥有效性，也不会在设置时产生模型费用。更新失败时会恢复原配置。</p>
     </form> : null}
     {status === "unconfigured" && !isTauri() ? <p className="inline-hint">当前浏览器开发入口不保存模型密钥。请在桌面应用完成首次设置。</p> : null}

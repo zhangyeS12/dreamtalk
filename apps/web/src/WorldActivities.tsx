@@ -14,6 +14,7 @@ const errors: Record<string, string> = {
   director_characters_required: "上一批规划因当时没有已设置初始地点的角色而停止。请先设置至少一名角色的初始地点，再点击“重新规划”；刷新状态不会发起新规划。",
   director_world_capacity: "当前资料超过规划容量（16位角色、32个地点、64 KiB资料），请精简后再规划。",
   director_location_scope_unavailable: "角色没有可进入的活动地点。请在通讯录中核对初始地点与隐藏分支开放范围。",
+  director_location_scope_changed: "本批地点或常驻规则已改变，计划未接纳。已开始的模型请求可能产生用量；不会自动重试，可核对后手动重新规划。",
   director_background_capacity: "公共背景超过规划读取容量（512条启用条目，每条关键词和条件16 KiB），请精简公开范围或触发条件后再规划。",
   director_background_invalid: "公共背景资料格式异常，暂时不能规划，请检查或重新确认世界书。",
   director_background_changed: "本批采用的公共背景已隐藏或更新，计划未接纳，已开始的请求可能产生用量。不会自动重试；重新规划是新的模型任务。",

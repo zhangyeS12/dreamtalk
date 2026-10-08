@@ -23,6 +23,7 @@ class ChatConversation:
     character_id: CharacterId
     root_import_id: UUID
     character_name: str
+    read_only: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,6 +38,7 @@ class GroupChatConversation:
     conversation_id: ConversationId
     player_id: PlayerId
     participants: tuple[GroupChatParticipant, ...]
+    read_only: bool = False
 
 
 class ChatConversationStore(Protocol):
@@ -139,9 +141,9 @@ class ChatConversationService:
         )
         return replace(conversation, character_name=current_character.display_name)
 
-    async def _current_names(self, world_id: WorldId) -> dict[UUID, str]:
+    async def _current_names(self, world_id: WorldId, *, include_removed=False) -> dict[UUID, str]:
         names: dict[UUID, str] = {}
-        for item in await self._imports.list_imports(world_id):
+        for item in await self._imports.list_imports(world_id, include_removed=include_removed):
             if item.kind == "character":
                 names[(await self._root(item)).import_id] = _character(item).display_name
         return names
@@ -203,9 +205,15 @@ class ChatConversationService:
         player = await self._players.selected_player(world_id)
         if player is None:
             return ()
-        names = await self._current_names(world_id)
+        names = await self._current_names(world_id, include_removed=True)
+        active_names = await self._current_names(world_id)
         return tuple(
-            self._named_group(group, names)
+            replace(
+                self._named_group(group, names),
+                read_only=any(
+                    member.root_import_id not in active_names for member in group.participants
+                ),
+            )
             for group in await self._store.list_groups_for_player(player)
         )
 
@@ -216,9 +224,14 @@ class ChatConversationService:
         conversations = await self._store.list_for_player(player)
         if not conversations:
             return ()
-        current_names = await self._current_names(world_id)
+        current_names = await self._current_names(world_id, include_removed=True)
+        active_names = await self._current_names(world_id)
         return tuple(
-            replace(conversation, character_name=current_names[conversation.root_import_id])
+            replace(
+                conversation,
+                character_name=current_names[conversation.root_import_id],
+                read_only=conversation.root_import_id not in active_names,
+            )
             for conversation in conversations
             if conversation.root_import_id in current_names
         )
@@ -254,7 +267,7 @@ class ChatConversationService:
             ),
             None,
         )
-        if group is None:
+        if group is None or group.read_only:
             raise EntityNotFoundError("conversation_not_found")
         required = {participant.root_import_id for participant in group.participants}
         current: dict[UUID, CharacterDefinition] = {}

@@ -5,6 +5,7 @@ import { CoreClient, CoreRequestError, type WorldContentItem } from "@dreamtalk/
 import { ContactAvatar, FactionManager, SocialGraph } from "./ContactSocial";
 import type { SocialSnapshot } from "@dreamtalk/api-client";
 import { CelestialEmpty, DirectorySearch, WorkspaceIcon } from "./WorkspacePrimitives";
+import { useDesktopUpdateBlock } from "./DesktopUpdates";
 
 function originalCardGreeting(authored: Record<string, unknown>): string | null {
   const card = authored.character_card;
@@ -43,9 +44,21 @@ export function ContentDetails({ item, onCommonChange, changingEntry, commonDisa
 
 const ignoreDirty = () => undefined;
 
-export function WorldImports({ client, worldId, onlyKind, onSaved, onDirtyChange = ignoreDirty }: {
+function cardRemovalError(failure: unknown): string {
+  return failure instanceof CoreRequestError && failure.code === "character_card_reply_running"
+    ? "该角色参与的会话仍在生成回复。请等本轮结束，或停止生成后再删除。"
+    : failure instanceof CoreRequestError && failure.code === "character_card_changed"
+      ? "角色卡已有更新，请刷新并选择最新版本后删除。"
+      : "删除结果尚未确认。请刷新列表核对；可以再次删除同一张卡，历史聊天会保留。";
+}
+function confirmCardRemoval(item: WorldContentItem) {
+  return window.confirm(`删除角色卡“${item.characters[0]?.name ?? "此角色"}”？\n角色将从通讯录及后续活动中移除。历史消息和事件保留，已有私聊及包含该角色的群聊变为只读。重新导入会创建新的角色身份。`);
+}
+
+export function WorldImports({ client, worldId, onlyKind, onSaved, onDirtyChange = ignoreDirty, refreshKey = 0 }: {
   client: CoreClient; worldId: string; onlyKind?: "character" | "lorebook";
   onSaved?: () => void; onDirtyChange?: (dirty: boolean) => void;
+  refreshKey?: number;
 }) {
   const [editor, setEditor] = useState<{ kind: "character" | "lorebook"; item?: WorldContentItem } | null>(null);
   const active = useRef(true);
@@ -85,7 +98,7 @@ export function WorldImports({ client, worldId, onlyKind, onSaved, onDirtyChange
       .catch(() => { if (mounted && read === contentRead.current) { setLoadFailed(true); setError("无法读取当前世界的已保存内容，请点击“重新读取已保存内容”后再试。"); } })
       .finally(() => { if (mounted && read === contentRead.current) setLoading(false); });
     return () => { mounted = false; };
-  }, [client, worldId, reload]);
+  }, [client, worldId, reload, refreshKey]);
   useEffect(() => { onDirtyChange(!!editor || !!preview || !!replacement || busy || !!changingEntry); }, [editor, preview, replacement, busy, changingEntry, onDirtyChange]);
   useEffect(() => () => onDirtyChange(false), [onDirtyChange]);
   const upload = async (file: File) => {
@@ -156,6 +169,18 @@ export function WorldImports({ client, worldId, onlyKind, onSaved, onDirtyChange
     }
   };
   const commonDisabled = loading || loadFailed || busy || !!editor || !!preview || !!replacement;
+  const removeCard = async (item: WorldContentItem) => {
+    if (commonDisabled || changingEntry || commonWrite.current || !confirmCardRemoval(item)) return;
+    const owner = epoch.current, job = Symbol(); commonWrite.current = job; ++contentRead.current;
+    setBusy(true); setError(""); setMessage("");
+    try {
+      await client.removeCharacterCard(worldId, item.import_id);
+      if (!active.current || owner !== epoch.current) return;
+      setAccepted(items => items.filter(value => value.import_id !== item.import_id));
+      setMessage("角色卡已删除，历史消息与事件保留。相关会话可继续查看。"); onSaved?.();
+    } catch (failure) { if (active.current && owner === epoch.current) setError(cardRemovalError(failure)); }
+    finally { if (commonWrite.current === job) commonWrite.current = null; if (active.current && owner === epoch.current) setBusy(false); }
+  };
   const visibleItems = accepted.filter(item => !onlyKind || item.kind === onlyKind);
   return <section className="settings-section import-section"><div className="section-heading"><h2>{onlyKind === "lorebook" ? "创建与导入世界书" : onlyKind === "character" ? "角色卡" : "角色卡与世界书"}</h2><p>直接创建、联网生成，或导入已有内容。确认后加入当前世界。</p></div>
     <div className="profile-actions">{onlyKind !== "lorebook" && <button type="button" className="secondary-button" disabled={loading || loadFailed || busy || !!changingEntry || !!preview || !!editor} onClick={() => { setEditor({ kind: "character" }); setError(""); setMessage(""); }}>新建角色卡</button>}{onlyKind !== "character" && <button type="button" className="secondary-button" disabled={loading || loadFailed || busy || !!changingEntry || !!preview || !!editor} onClick={() => { setEditor({ kind: "lorebook" }); setError(""); setMessage(""); }}>新建世界书</button>}</div>
@@ -170,11 +195,11 @@ export function WorldImports({ client, worldId, onlyKind, onSaved, onDirtyChange
       {!!preview.warnings?.length && <div className="compatibility-notice"><p>部分来源内容无法完整映射，原始数据仍会保留。确认前请检查以下提示。</p><ul>{preview.warnings.map((warning, index) => <li key={index}>{warning.code === "lore_activation_metadata_preserved_inert" ? "导入不会执行触发设定；聊天支持范围见各条目说明。" : warning.code.includes("blank_tags") ? "空白标签已从角色标签中省略。" : warning.code.includes("empty_content") ? "空白条目已从世界书中省略。" : warning.code.includes("secondary_keys") ? "存在含义不明确的次级关键词，未作猜测转换。" : "存在兼容性差异，请核对预览内容。"}</li>)}</ul></div>}
       <div className="profile-actions"><button className="primary-button" type="button" disabled={busy} onClick={() => void commit()}>{replacement ? "确认更新当前世界" : "确认加入当前世界"}</button><button className="secondary-button" type="button" disabled={busy} onClick={() => { pendingId.current = null; void client.discardWorldContent(worldId, preview.import_id).catch(() => undefined); setPreview(null); }}>取消</button></div>
     </div>}
-    {visibleItems.length > 0 && <div className="accepted-content"><h3>当前世界已保存</h3><button type="button" className="text-action" disabled={commonDisabled || !!changingEntry} onClick={refreshAccepted}>刷新已保存内容与范围</button>{onlyKind === "lorebook" && <p className="inline-hint">公开范围选择后立即保存。通过界面编辑世界书时，完全未变且有原条目对应的内容保留原范围；新增、修改正文或触发条件、从文件替换的条目需要重新确认公开。编辑或预览期间，请先完成内容保存，再设置范围。</p>}{visibleItems.map(item => <div key={item.import_id} className="accepted-item"><details><summary>{item.characters[0]?.name ?? item.lorebooks[0]?.name ?? "导入内容"} · {item.kind === "character" ? "角色卡" : "世界书"}</summary><ContentDetails item={item} onCommonChange={item.kind === "lorebook" ? (entryId, common) => void setCommon(item.import_id, entryId, common) : undefined} changingEntry={changingEntry} commonDisabled={commonDisabled} exposureFeedback={exposureFeedback} onCommonRefresh={refreshAccepted} /></details><button type="button" className="text-action" disabled={loading || loadFailed || busy || !!changingEntry || !!preview || !!editor} onClick={() => { setEditor({ kind: item.kind, item }); setError(""); setMessage(""); }}>编辑</button><button type="button" className="text-action" disabled={loading || loadFailed || busy || !!changingEntry || !!preview || !!editor} onClick={() => { setReplacement(item); setKind(item.kind); setMessage(""); }}>从文件更新</button></div>)}</div>}
+    {visibleItems.length > 0 && <div className="accepted-content"><h3>当前世界已保存</h3><button type="button" className="text-action" disabled={commonDisabled || !!changingEntry} onClick={refreshAccepted}>刷新已保存内容与范围</button>{onlyKind === "lorebook" && <p className="inline-hint">公开范围选择后立即保存。通过界面编辑世界书时，完全未变且有原条目对应的内容保留原范围；新增、修改正文或触发条件、从文件替换的条目需要重新确认公开。编辑或预览期间，请先完成内容保存，再设置范围。</p>}{visibleItems.map(item => <div key={item.import_id} className="accepted-item"><details><summary>{item.characters[0]?.name ?? item.lorebooks[0]?.name ?? "导入内容"} · {item.kind === "character" ? "角色卡" : "世界书"}</summary><ContentDetails item={item} onCommonChange={item.kind === "lorebook" ? (entryId, common) => void setCommon(item.import_id, entryId, common) : undefined} changingEntry={changingEntry} commonDisabled={commonDisabled} exposureFeedback={exposureFeedback} onCommonRefresh={refreshAccepted} /></details><button type="button" className="text-action" disabled={loading || loadFailed || busy || !!changingEntry || !!preview || !!editor} onClick={() => { setEditor({ kind: item.kind, item }); setError(""); setMessage(""); }}>编辑</button><button type="button" className="text-action" disabled={loading || loadFailed || busy || !!changingEntry || !!preview || !!editor} onClick={() => { setReplacement(item); setKind(item.kind); setMessage(""); }}>从文件更新</button>{item.kind === "character" && <button type="button" className="text-action destructive-action" disabled={commonDisabled || !!changingEntry} onClick={() => void removeCard(item)}>删除角色卡</button>}</div>)}</div>}
   </section>;
 }
 
-export function WorldContacts({ client, worldId, onSettings, onIdentity, onOpenChat, canOpenChat, openingChat, refreshKey = 0, visible = true, onLocationDirty = ignoreDirty, onCharacterLocationDirty = ignoreDirty, identityKey = null }: {
+export function WorldContacts({ client, worldId, onSettings, onIdentity, onOpenChat, canOpenChat, openingChat, refreshKey = 0, visible = true, onLocationDirty = ignoreDirty, onCharacterLocationDirty = ignoreDirty, onRemoved, removalDisabled = false, identityKey = null }: {
   client: CoreClient;
   worldId: string;
   onSettings: () => void;
@@ -187,6 +212,8 @@ export function WorldContacts({ client, worldId, onSettings, onIdentity, onOpenC
   onLocationDirty?: (dirty: boolean) => void;
   onCharacterLocationDirty?: (dirty: boolean) => void;
   identityKey?: string | null;
+  onRemoved?: () => void;
+  removalDisabled?: boolean;
 }) {
   const [items, setItems] = useState<WorldContentItem[]>([]);
   const [selected, setSelected] = useState<WorldContentItem | null>(null);
@@ -203,6 +230,22 @@ export function WorldContacts({ client, worldId, onSettings, onIdentity, onOpenC
   const [urls, setUrls] = useState<Record<string, string>>({});
   const [socialBusy, setSocialBusy] = useState(false);
   const [socialError, setSocialError] = useState("");
+  const [removing, setRemoving] = useState(false);
+  const removalBusy = useRef(false);
+  useDesktopUpdateBlock(removing ? "角色卡正在删除，请等结果确认。" : null);
+  const removeSelected = async () => {
+    if (!selected || socialBusy || loading || removalDisabled || removalBusy.current) return;
+    if (positionDirty && !window.confirm("位置规则尚未保存。删除角色卡将放弃这份编辑，确定继续吗？")) return;
+    if (!confirmCardRemoval(selected)) return;
+    removalBusy.current = true; setRemoving(true); setSocialError("");
+    try {
+      await client.removeCharacterCard(worldId, selected.import_id);
+      setItems(values => values.filter(item => item.import_id !== selected.import_id));
+      setSelected(null); setGraphRoot(null); setReload(value => value + 1);
+      onRemoved?.(); void places.refresh();
+    } catch (failure) { setSocialError(cardRemovalError(failure)); }
+    finally { removalBusy.current = false; setRemoving(false); }
+  };
   const [reload, setReload] = useState(0);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
@@ -230,7 +273,7 @@ export function WorldContacts({ client, worldId, onSettings, onIdentity, onOpenC
   const selectedRoot = current?.root_import_id ?? null;
   const selectedFactions = social?.memberships.filter(item => item.root_import_id === selectedRoot).map(item => social.factions.find(faction => faction.faction_id === item.faction_id)?.name).filter((name): name is string => !!name) ?? [];
   const change = async (operation: () => Promise<unknown>) => {
-    if (socialBusy) return false;
+    if (socialBusy || removalBusy.current) return false;
     setSocialBusy(true); setSocialError("");
     try { await operation(); setSocial(await client.socialSnapshot(worldId)); return true; }
     catch (failure) { setSocialError(failure instanceof CoreRequestError ? ({ faction_name_taken: "同层已有这个阵营名称。", faction_cycle: "不能把阵营移动到自己的子阵营。", faction_not_empty: "先移除成员和子阵营，再删除此阵营。", faction_character_not_found: "角色卡已更新，请刷新通讯录。", cover_image_size_limit: "头像不能超过 10 MB。", cover_image_format: "请选择 JPG、PNG 或 WebP 静态图片。", cover_image_invalid: "无法读取这张图片，请换一张图片。", cover_image_dimensions_limit: "图片尺寸超出允许范围，请缩小后上传。" } as Record<string, string>)[failure.code ?? ""] ?? "保存未完成，请检查核心连接后刷新。" : "保存未完成，请检查核心连接后刷新。"); return false; }
@@ -258,6 +301,6 @@ export function WorldContacts({ client, worldId, onSettings, onIdentity, onOpenC
         </header>
         {current && <details className="dossier-avatar-options"><summary>编辑角色头像</summary><div className="contact-avatar-edit"><label>上传角色头像（JPG、PNG 或 WebP，最大 10 MB）<input type="file" accept="image/jpeg,image/png,image/webp" disabled={socialBusy} onChange={event => { void uploadAvatar(event.target.files?.[0]); event.target.value = ""; }} /></label>{current.avatar_digest && <button type="button" className="text-action" disabled={socialBusy} onClick={() => void change(() => client.setCharacterAvatar(worldId, current.root_import_id, null))}>移除头像</button>}</div></details>}
         {current && <CharacterLocationEditor key={`${identityKey}:${current.root_import_id}`} client={client} worldId={worldId} person={current} activity={places.directory?.items.find(person => person.root_import_id === current.root_import_id)} directory={places.directory} locations={places.locations} refresh={places.refresh} onDirtyChange={reportPositionDirty} />}
-        <p className="inline-hint">同阵营直接成员默认相互认识；相遇仍可记录新见闻。</p><ContentDetails item={selected} hideCharacterTitle /></div></> : <CelestialEmpty title="在这里，认识彼此">选择一个名字，打开人物档案。<br />他们的资料、所属阵营和相识关系，都在这里。</CelestialEmpty>}
+        <p className="inline-hint">同阵营直接成员默认相互认识；相遇仍可记录新见闻。</p><ContentDetails item={selected} hideCharacterTitle /><div className="profile-actions"><button type="button" className="secondary-button destructive-action" disabled={socialBusy || removing || loading || removalDisabled} onClick={() => void removeSelected()}>{removing ? "正在删除…" : "删除角色卡"}</button><small>历史会话和世界事件保留。</small></div></div></> : <CelestialEmpty title="在这里，认识彼此">选择一个名字，打开人物档案。<br />他们的资料、所属阵营和相识关系，都在这里。</CelestialEmpty>}
   </div></div></>;
 }

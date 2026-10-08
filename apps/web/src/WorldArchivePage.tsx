@@ -1,3 +1,4 @@
+import { DesktopUpdateEntry, useDesktopUpdateBlock } from "./DesktopUpdates";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { CoreClient, CoreRequestError, type WorldSettings, type WorldContentItem } from "@dreamtalk/api-client";
@@ -172,9 +173,10 @@ export function WorldArchivePage({ client, initialWorldId, onEnter, displayTime,
       .catch(() => { if (active.current) setError("世界档案仍无法读取，请检查核心连接。"); })
       .finally(() => { if (active.current) setLoading(false); });
   };
+  useDesktopUpdateBlock(coverDirty || contentDirty || modelDirty || (creating && Boolean(name.trim())) ? "书架有未保存的编辑。" : busy || entering || coverBusy || pendingCreation ? "书架请求正在处理。" : null);
   const contentChanged = useCallback(() => setContentRevision(value => value + 1), []);
   return <div className="product-shell archive-shell">
-    <header className="archive-header"><Brand /><span className="archive-header-label">世界档案库</span>
+    <header className="archive-header"><Brand /><span className="archive-header-label">世界档案库</span><DesktopUpdateEntry />
       <button type="button" className="text-action" disabled={busy || entering || coverBusy} onClick={() => {
         if (modelOpen) { leaveEditor(); return; }
         if (leaveEditor()) { clearSelection(); setModelOpen(true); }
@@ -187,7 +189,7 @@ export function WorldArchivePage({ client, initialWorldId, onEnter, displayTime,
       {error && <p className="app-alert" role="alert">{error} <button type="button" className="text-action" disabled={busy || entering || coverBusy || loading} onClick={refreshArchive}>刷新书架</button></p>}
       {covers.error && <p className="app-alert" role="alert">{covers.error}</p>}
       {notice && <p className="app-notice" role="status">{notice}</p>}
-      {modelOpen && <div className="archive-editor"><div className="archive-editor-heading"><h2>模型连接</h2><button type="button" className="text-action" onClick={() => { leaveEditor(); }}>收起</button></div><ModelSetup client={client} onDirtyChange={setModelDirty} /><p className="inline-hint">保存会重新连接核心；聊天和联网创作使用现有模型配置。</p></div>}
+      {modelOpen && <div className="archive-editor"><div className="archive-editor-heading"><h2>默认模型配置</h2><button type="button" className="text-action" onClick={() => { leaveEditor(); }}>收起</button></div><ModelSetup client={client} onDirtyChange={setModelDirty} /><p className="inline-hint">保存会重新连接核心；尚未单独设置的世界使用这里的默认配置。</p></div>}
       <div ref={layout} className={`archive-layout ${selectionKey ? "has-selection" : ""}`}>
         <WorldShelf worlds={worlds} appearances={covers.appearances} selectedKey={selectionKey} initialWorldId={initialWorldId} loading={loading} disabled={busy || entering || coverBusy}
           onSelect={select} onCreate={selectBlank} onClose={closeSelection} onSettled={settled} />

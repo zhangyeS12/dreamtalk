@@ -42,7 +42,7 @@ export function ChatTranscript({ client, worldId, playerId, conversation, avatar
     messages, failed, hasOlder, loadingOlder, loadOlder, followingLatest, showLatest, visibleStreamDraft,
     latestPlayerMessage, checkReply, generateSavedReply, send,
   } = useChatReplyWorkflow({
-    client, worldId, playerId, conversationId: conversation.conversation_id, kind: "direct",
+    client, worldId, playerId, conversationId: conversation.conversation_id, kind: "direct", readOnly: conversation.read_only,
     speakers: [conversation.character_id], tokenCeiling, suggestedDraft, onSuggestionUsed, onDirtyChange,
   });
   const readReceipt = useConversationRead(client, worldId, conversation.conversation_id, messages);
@@ -54,7 +54,7 @@ export function ChatTranscript({ client, worldId, playerId, conversation, avatar
       onMemory={() => setMemoryOpen(true)} onHistory={() => setHistoryOpen(true)} />
     {referenceTurn ? <ContextReferencePanel key={`${worldId}:${conversation.conversation_id}:${referenceTurn}`} client={client} worldId={worldId} conversationId={conversation.conversation_id} turnId={referenceTurn} names={new Map([[conversation.character_id, conversation.character_name]])} onClose={() => setReferenceTurn(null)} /> : null}
     {longMemoryOpen ? <LongChatMemoryPanel client={client} worldId={worldId} conversationId={conversation.conversation_id} characters={[{ character_id: conversation.character_id, character_name: conversation.character_name }]} onClose={() => setLongMemoryOpen(false)} /> : null}
-    {memoryOpen ? <ConversationMemoryPanel client={client} worldId={worldId} conversationId={conversation.conversation_id} senderName={message => message.sender_kind === "player" && message.sender_id === playerId ? "我" : conversation.character_name} canGenerate={!sending && !pendingSend} onClose={() => setMemoryOpen(false)} /> : null}
+    {memoryOpen ? <ConversationMemoryPanel client={client} worldId={worldId} conversationId={conversation.conversation_id} senderName={message => message.sender_kind === "player" && message.sender_id === playerId ? "我" : conversation.character_name} canGenerate={!conversation.read_only && !sending && !pendingSend} onClose={() => setMemoryOpen(false)} /> : null}
     {historyOpen ? <ChatHistoryPanel client={client} worldId={worldId} conversationId={conversation.conversation_id} senderName={message => message.sender_kind === "player" && message.sender_id === playerId ? "我" : conversation.character_name} canQuote={available && !sending && !pendingSend} onClose={() => setHistoryOpen(false)} onQuote={text => {
       if (!available || sending || pendingSend) return false;
       const combined = draft.trim() ? `${draft}\n\n${text}` : text;
@@ -81,7 +81,7 @@ export function ChatTranscript({ client, worldId, playerId, conversation, avatar
               </div>
             </li></Fragment>;
           })}{visibleStreamDraft ? <StreamingReplyBubble name={conversation.character_name} avatarUrl={avatarUrl} text={visibleStreamDraft.text} /> : null}</ol></>}
-    <form className="chat-composer" onSubmit={event => void send(event)}>
+    {conversation.read_only ? <p className="thread-hint" role="status">角色卡已删除，此会话保留为只读历史。</p> : <form className="chat-composer" onSubmit={event => void send(event)}>
       {phase || feedback ? <p role="status" aria-live="polite" className="chat-feedback">{(phase === "replying" && stream.stage === "preparing" ? "消息已保存，正在准备角色回复…" : chatPhaseFeedback(phase, "direct")) || feedback}</p> : null}
       <ReplyRecoveryControls client={client} worldId={worldId} conversationId={conversation.conversation_id} sourceTurnId={latestPlayerMessage?.turn_id} refresh={refresh} tokenCeiling={tokenCeiling} blocked={!available || phase !== null || !!pendingSend} onGenerate={generateSavedReply} onBusyChange={setRecoveryBusy} />
       {budgetFeedback ? <p className="chat-feedback" role="alert">{budgetFeedback}</p> : null}
@@ -91,6 +91,6 @@ export function ChatTranscript({ client, worldId, playerId, conversation, avatar
       <label htmlFor="direct-chat-draft" className="sr-only">发送给{conversation.character_name}的消息</label>
       <textarea ref={draftInput} id="direct-chat-draft" value={draft} onChange={event => setDraft(event.target.value)} onKeyDown={submitChatOnEnter} disabled={!available || sending || !!pendingSend} maxLength={65536} placeholder="输入消息…" rows={3} />
       <div className="chat-composer-actions"><small>回车发送 · Shift+回车换行 · 本轮输入与输出共用 {tokenCeiling.toLocaleString("zh-CN")} Token 上限</small>{latestPlayerMessage ? <button type="button" className="text-action" disabled={sending || !!pendingSend} onClick={() => void checkReply()}>检查回复状态</button> : null}{phase === "replying" ? <button type="button" className="text-action" disabled={stream.stopping} onClick={stream.stop}>{stream.stopping ? "正在停止…" : "停止生成"}</button> : null}<button type="submit" className="primary-button" disabled={!available || sending || (!!budgetFeedback && !pendingSend) || (!draft.trim() && !pendingSend)}>{phase === "saving" ? "正在保存…" : phase === "replying" ? "等待回复…" : phase === "checking" ? "检查中…" : pendingSend ? "重试保存" : "发送"}</button></div>
-    </form>
+    </form>}
   </section>;
 }

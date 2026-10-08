@@ -10,6 +10,12 @@ from livingworld.application.director import MAX_CHARACTERS, MAX_LOCATIONS, WIND
 from livingworld.application.errors import EntityNotFoundError
 from livingworld.application.lore_activation import select_common_background
 from livingworld.domain.actions import ActionRejectionReason
+from livingworld.infrastructure.persistence.character_mobility import (
+    mobility_is_current,
+    mobility_record,
+    plan_mobility,
+    record_arrival,
+)
 from livingworld.infrastructure.persistence.director_background import (
     background_is_current,
     read_director_background,
@@ -34,6 +40,7 @@ from livingworld.infrastructure.persistence.models import (
     CharacterRecord,
     CharacterStateRecord,
     ChatParticipantRecord,
+    LocalLocationCatalogRecord,
     LocalPlayerBindingRecord,
     LocationRecord,
     WorldClockRecord,
@@ -316,6 +323,9 @@ class SqlAlchemyDirectorStore(SharedDirectorMixin):
             return request_id, generation, snapshot
 
     async def planning_input(self, session, world, now):
+        from livingworld.infrastructure.persistence.authored_lifecycle import removed_character_ids
+
+        removed = await removed_character_ids(session, world.value)
         rows = (
             await session.execute(
                 select(CharacterStateRecord, CharacterRecord.name)
@@ -324,7 +334,10 @@ class SqlAlchemyDirectorStore(SharedDirectorMixin):
                     (CharacterRecord.world_id == CharacterStateRecord.world_id)
                     & (CharacterRecord.character_id == CharacterStateRecord.character_id),
                 )
-                .where(CharacterStateRecord.world_id == world.value)
+                .where(
+                    CharacterStateRecord.world_id == world.value,
+                    CharacterStateRecord.character_id.not_in(removed),
+                )
                 .order_by(CharacterStateRecord.character_id)
                 .limit(MAX_CHARACTERS + 1)
             )
@@ -332,7 +345,15 @@ class SqlAlchemyDirectorStore(SharedDirectorMixin):
         locations = (
             await session.scalars(
                 select(LocationRecord)
-                .where(LocationRecord.world_id == world.value)
+                .outerjoin(
+                    LocalLocationCatalogRecord,
+                    (LocalLocationCatalogRecord.world_id == LocationRecord.world_id)
+                    & (LocalLocationCatalogRecord.location_id == LocationRecord.location_id),
+                )
+                .where(
+                    LocationRecord.world_id == world.value,
+                    LocalLocationCatalogRecord.removed_at.is_(None),
+                )
                 .order_by(LocationRecord.location_id)
                 .limit(MAX_LOCATIONS + 1)
             )
@@ -351,7 +372,7 @@ class SqlAlchemyDirectorStore(SharedDirectorMixin):
                 if await rules.allowed(session, world.value, state.character_id, loc.location_id)
             ]
             initial, locked, _ = await rules.scope(session, world.value, state.character_id)
-            if not allowed:
+            if not allowed or initial not in allowed:
                 raise DirectorError("director_location_scope_unavailable")
             permitted_locations.update(allowed)
             active_end = await session.scalar(
@@ -374,6 +395,18 @@ class SqlAlchemyDirectorStore(SharedDirectorMixin):
                     0, ((active_end or now) - now + 59_999_999) // 60_000_000
                 ),
             }
+            character.update(
+                await plan_mobility(
+                    session,
+                    world.value,
+                    state,
+                    rules,
+                    initial,
+                    locked,
+                    allowed,
+                    now,
+                )
+            )
             character.update(await self.approved_persona(session, world, state.character_id))
             characters.append(character)
         snapshot = {
@@ -384,6 +417,7 @@ class SqlAlchemyDirectorStore(SharedDirectorMixin):
                 {
                     "location_id": str(loc.location_id),
                     "name": loc.name,
+                    "is_region": loc.location_id in rules.regions,
                     "parent_id": str(rules.parents[loc.location_id])
                     if rules.parents.get(loc.location_id) in permitted_locations
                     else None,
@@ -495,6 +529,7 @@ class SqlAlchemyDirectorStore(SharedDirectorMixin):
                     .where(
                         imported.world_id == world.value,
                         imported.import_id == current,
+                        imported.removed_at.is_(None),
                         func.json_extract(safe_part, "$.kind") == "character_definition",
                     )
                     .limit(2)
@@ -527,6 +562,8 @@ class SqlAlchemyDirectorStore(SharedDirectorMixin):
                 return False
             if not await background_is_current(session, world, plan.input_json):
                 raise DirectorError("director_background_changed")
+            if not await mobility_is_current(session, world.value, json.loads(plan.input_json)):
+                raise DirectorError("director_location_scope_changed")
             return True
 
     async def finish(self, world, request_id, generation, candidates, encounters=(), shared=()):
@@ -548,6 +585,11 @@ class SqlAlchemyDirectorStore(SharedDirectorMixin):
                 return
             if not await background_is_current(session, world, plan.input_json):
                 plan.state, plan.error = "failed", "director_background_changed"
+                config.state, config.error = "attention", plan.error
+                await session.commit()
+                return
+            if not await mobility_is_current(session, world.value, json.loads(plan.input_json)):
+                plan.state, plan.error = "failed", "director_location_scope_changed"
                 config.state, config.error = "attention", plan.error
                 await session.commit()
                 return
@@ -741,10 +783,16 @@ class DirectorKernelRepository(SharedKernelMixin):
 
     def __init__(self, session):
         self.session = session
+        self._mobility_arrivals = {}
 
     async def candidate(self, proposal, occurred_at):
         world, payload = proposal.world_id, proposal.payload
         row = await self.session.get(Candidate, (world.value, payload.candidate_id))
+        from livingworld.infrastructure.persistence.authored_lifecycle import removed_character_ids
+
+        if row and row.character_id in await removed_character_ids(self.session, world.value):
+            self.invalidate(row)
+            return None
         config = await self.session.get(Settings, world.value)
         if (
             not row
@@ -769,11 +817,38 @@ class DirectorKernelRepository(SharedKernelMixin):
             or occurred_at.microseconds >= plan.window_end
         ):
             return None
-        if not await character_can_enter(
-            self.session, world.value, row.character_id, row.location_id
+        rules = await LocationRules.load(self.session, world.value)
+        snapshot = json.loads(plan.input_json)
+        owner = next(
+            (
+                item
+                for item in snapshot["characters"]
+                if item["character_id"] == str(row.character_id)
+            ),
+            None,
+        )
+        if (
+            not await rules.allowed(self.session, world.value, row.character_id, row.location_id)
+            or owner is None
+            or (
+                owner.get("mobility_signature") is not None
+                and (
+                    owner["mobility_signature"]
+                    != await rules.movement_signature(self.session, world.value, row.character_id)
+                    or str(row.location_id) not in owner["mobility_route_ids"]
+                )
+            )
         ):
             self.invalidate(row, ActionRejectionReason.INVALID_DESTINATION)
             return None
+        initial, _, _ = await rules.scope(self.session, world.value, row.character_id)
+        record = await mobility_record(self.session, world.value, row.character_id)
+        self._mobility_arrivals[row.candidate_id] = (
+            record,
+            rules,
+            initial,
+            occurred_at.microseconds,
+        )
         return row
 
     async def occupied(self, character, now):
@@ -796,6 +871,10 @@ class DirectorKernelRepository(SharedKernelMixin):
 
     def start(self, row):
         row.state = "active"
+        arrival = self._mobility_arrivals.pop(row.candidate_id, None)
+        if arrival is not None:
+            record, rules, initial, now = arrival
+            record_arrival(record, rules, row.location_id, initial, now)
 
     async def active(self, world, character=None):
         query = select(Candidate).where(

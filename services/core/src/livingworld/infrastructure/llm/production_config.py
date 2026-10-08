@@ -8,7 +8,7 @@ from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import urlsplit
 from uuid import UUID
 
@@ -45,6 +45,7 @@ from livingworld.application.llm_routing import (
     RoutingConfiguration,
     RoutingProfile,
 )
+from livingworld.domain.identifiers import WorldId
 from livingworld.infrastructure.llm.anthropic_messages import (
     AnthropicMessagesProfile,
     AnthropicTemperaturePolicy,
@@ -196,6 +197,12 @@ class LLMConfigDocument(_ConfigModel):
     )
 
 
+class WorldLLMConfigDocument(_ConfigModel):
+    version: Literal[2]
+    default: LLMConfigDocument
+    worlds: dict[str, LLMConfigDocument]
+
+
 @dataclass(frozen=True, slots=True)
 class ConfiguredProvider:
     adapter_kind: AdapterKind
@@ -254,17 +261,30 @@ def _reject_secret_keys(value) -> None:
 
 
 def load_configuration(path: Path | None) -> ProductionLLMConfiguration:
+    return load_world_configurations(path)[0]
+
+
+def load_world_configurations(path: Path | None):
+    """Legacy v1 remains the default; v2 keeps independent world snapshots."""
     if path is None or not path.exists():
-        return empty_configuration()
+        return empty_configuration(), {}
     try:
         if not path.is_file() or path.is_symlink() or path.stat().st_size > MAX_CONFIG_BYTES:
             raise LLMProductionConfigurationError()
         raw = json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=_unique_object)
         _reject_secret_keys(raw)
-        document = LLMConfigDocument.model_validate_json(
-            json.dumps(raw, ensure_ascii=False, separators=(",", ":")), strict=True
-        )
-        return _convert(document)
+        encoded = json.dumps(raw, ensure_ascii=False, separators=(",", ":"))
+        if isinstance(raw, dict) and raw.get("version") == 2:
+            scoped = WorldLLMConfigDocument.model_validate_json(encoded, strict=True)
+            worlds = {}
+            for key, document in scoped.worlds.items():
+                identity = UUID(key)
+                if str(identity) != key:
+                    raise LLMProductionConfigurationError()
+                worlds[WorldId(identity)] = _convert(document)
+            return _convert(scoped.default), worlds
+        document = LLMConfigDocument.model_validate_json(encoded, strict=True)
+        return _convert(document), {}
     except LLMProductionConfigurationError:
         raise
     except (OSError, UnicodeError, ValueError, TypeError, ValidationError, LLMContractError):

@@ -180,6 +180,9 @@ class SqlAlchemyOfflineContactStore:
         return str(value) if value else "initial"
 
     async def _capture(self, session, cfg, now):
+        from livingworld.infrastructure.persistence.authored_lifecycle import removed_character_ids
+
+        removed = await removed_character_ids(session, cfg.world_id)
         binding = await session.get(Binding, cfg.world_id)
         presence = await session.get(Presence, (cfg.world_id, cfg.player_id))
         clock = await session.get(Clock, cfg.world_id)
@@ -217,6 +220,7 @@ class SqlAlchemyOfflineContactStore:
                     Conversation.world_id == cfg.world_id,
                     Conversation.player_id == cfg.player_id,
                     Conversation.kind == "direct",
+                    Participant.character_id.not_in(removed),
                 )
                 .order_by(Conversation.conversation_id)
                 .limit(17)
@@ -416,6 +420,9 @@ class SqlAlchemyOfflineContactStore:
             return False
         for c in data["characters"]:
             imported = UUID(c["accepted_import_id"])
+            current = await session.get(Imported, imported)
+            if current is None or current.world_id != ep.world_id or current.removed_at is not None:
+                return False
             if await session.scalar(
                 select(Imported.import_id)
                 .where(Imported.world_id == ep.world_id, Imported.replaces_import_id == imported)

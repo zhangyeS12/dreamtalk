@@ -24,6 +24,9 @@ from livingworld.domain.content.serialization import (
 from livingworld.domain.identifiers import WorldId
 from livingworld.infrastructure.persistence.content_repository import save_content_draft
 from livingworld.infrastructure.persistence.models import (
+    ChatParticipantRecord,
+    ChatReplyExecutionRecord,
+    ChatTurnRecord,
     WorldCommonLoreRecord,
     WorldContentImportRecord,
     WorldRecord,
@@ -50,10 +53,12 @@ class SqlAlchemyWorldContentStore:
             if await session.get(WorldRecord, world_id.value) is None:
                 raise EntityNotFoundError("world_not_found")
 
-    async def list_imports(self, world_id: WorldId) -> tuple[AcceptedWorldContent, ...]:
+    async def list_imports(
+        self, world_id: WorldId, *, include_removed: bool = False
+    ) -> tuple[AcceptedWorldContent, ...]:
         await self.require_world(world_id)
         async with self._sessions() as session:
-            rows = await session.scalars(
+            statement = (
                 select(WorldContentImportRecord)
                 .where(
                     WorldContentImportRecord.world_id == world_id.value,
@@ -65,6 +70,9 @@ class SqlAlchemyWorldContentStore:
                 )
                 .order_by(WorldContentImportRecord.accepted_at, WorldContentImportRecord.import_id)
             )
+            if not include_removed:
+                statement = statement.where(WorldContentImportRecord.removed_at.is_(None))
+            rows = await session.scalars(statement)
             return tuple(_load(row) for row in rows)
 
     async def find(self, import_id: UUID) -> AcceptedWorldContent | None:
@@ -74,12 +82,78 @@ class SqlAlchemyWorldContentStore:
 
     async def is_current(self, import_id: UUID) -> bool:
         async with self._sessions() as session:
+            imported = await session.get(WorldContentImportRecord, import_id)
+            if imported is None or imported.removed_at is not None:
+                return False
             successor = await session.scalar(
                 select(WorldContentImportRecord.import_id).where(
                     WorldContentImportRecord.replaces_import_id == import_id
                 )
             )
             return successor is None
+
+    async def remove_character(self, world_id: WorldId, import_id: UUID) -> None:
+        from livingworld.infrastructure.persistence.faction_models import (
+            CharacterAvatarRecord,
+            FactionMemberRecord,
+        )
+
+        async with self._sessions() as session, session.begin():
+            await session.connection(execution_options={"livingworld_write_intent": True})
+            imported = await session.get(WorldContentImportRecord, import_id)
+            if (
+                imported is None
+                or imported.world_id != world_id.value
+                or imported.kind != "character"
+            ):
+                raise EntityNotFoundError("character_card_not_found")
+            if imported.removed_at is not None:
+                return  # Repeated removal never resurrects an older revision.
+            successor = await session.scalar(
+                select(WorldContentImportRecord.import_id).where(
+                    WorldContentImportRecord.replaces_import_id == import_id,
+                )
+            )
+            if successor is not None:
+                raise ContentConflictError("character_card_changed")
+            root, seen = imported, set()
+            while root.replaces_import_id is not None:
+                if root.import_id in seen:
+                    raise ContentConflictError("character_card_changed")
+                seen.add(root.import_id)
+                root = await session.get(WorldContentImportRecord, root.replaces_import_id)
+                if root is None or root.world_id != world_id.value or root.kind != "character":
+                    raise ContentConflictError("character_card_changed")
+            conversations = select(ChatParticipantRecord.conversation_id).where(
+                ChatParticipantRecord.world_id == world_id.value,
+                ChatParticipantRecord.root_import_id == root.import_id,
+            )
+            running = await session.scalar(
+                select(ChatReplyExecutionRecord.turn_id)
+                .join(
+                    ChatTurnRecord,
+                    (ChatTurnRecord.world_id == ChatReplyExecutionRecord.world_id)
+                    & (ChatTurnRecord.turn_id == ChatReplyExecutionRecord.turn_id),
+                )
+                .where(
+                    ChatTurnRecord.world_id == world_id.value,
+                    ChatTurnRecord.conversation_id.in_(conversations),
+                    ChatReplyExecutionRecord.state == "running",
+                )
+                .limit(1)
+            )
+            if running is not None:
+                raise ContentConflictError("character_card_reply_running")
+            imported.removed_at = datetime.now(UTC)
+            for record in (FactionMemberRecord, CharacterAvatarRecord):
+                await session.execute(
+                    delete(record).where(
+                        record.world_id == world_id.value,
+                        record.root_import_id == root.import_id,
+                    )
+                )
+            # Keep canonical Character/State, messages, memories, observations,
+            # acquaintances and immutable imports; no physical departure is forged.
 
     async def list_common_lore(self, world_id: WorldId) -> tuple[CommonLoreEntry, ...]:
         """Only explicitly exposed entries from current imports in this world."""
@@ -94,6 +168,7 @@ class SqlAlchemyWorldContentStore:
                     .where(
                         WorldCommonLoreRecord.world_id == world_id.value,
                         WorldContentImportRecord.world_id == world_id.value,
+                        WorldContentImportRecord.removed_at.is_(None),
                         ~WorldContentImportRecord.import_id.in_(
                             select(WorldContentImportRecord.replaces_import_id).where(
                                 WorldContentImportRecord.replaces_import_id.is_not(None)
@@ -154,6 +229,7 @@ class SqlAlchemyWorldContentStore:
                 or imported.world_id != world_id.value
                 or imported.kind != "lorebook"
                 or successor is not None
+                or imported.removed_at is not None
                 or entry is None
                 or (common and not entry.enabled)
             ):
@@ -209,6 +285,7 @@ class SqlAlchemyWorldContentStore:
                         or previous.world_id != item.world_id.value
                         or previous.kind != item.kind
                         or successor is not None
+                        or previous.removed_at is not None
                     ):
                         raise ContentConflictError("Content replacement target is stale")
                 await save_content_draft(

@@ -3,8 +3,8 @@ import { isTauri } from "@tauri-apps/api/core";
 import { CoreClient, type CoreHealth } from "@dreamtalk/api-client";
 import type { DesktopStatus } from "./BackgroundSettings";
 
-export function SettingsDiagnostics({ client, visible, desktop, onBackground }: {
-  client: CoreClient; visible: boolean; desktop: DesktopStatus | null; onBackground: () => void;
+export function SettingsDiagnostics({ client, worldId, visible, desktop, onBackground }: {
+  client: CoreClient; worldId?: string; visible: boolean; desktop: DesktopStatus | null; onBackground: () => void;
 }) {
   const [health, setHealth] = useState<CoreHealth | null>(null);
   const [busy, setBusy] = useState(false);
@@ -14,10 +14,10 @@ export function SettingsDiagnostics({ client, visible, desktop, onBackground }: 
     pending.current?.abort(); const abort = new AbortController(); pending.current = abort;
     const timeout = window.setTimeout(() => abort.abort(), 10000);
     setBusy(true); setError("");
-    try { const result = await client.health(abort.signal); if (pending.current === abort && !abort.signal.aborted) setHealth(result); }
+    try { const result = await client.health(abort.signal, worldId); if (pending.current === abort && !abort.signal.aborted) setHealth(result); }
     catch { if (pending.current === abort) { setHealth(null); setError("未能读取本机核心状态，请检查连接后刷新。"); } }
     finally { window.clearTimeout(timeout); if (pending.current === abort) { pending.current = null; setBusy(false); } }
-  }, [client]);
+  }, [client, worldId]);
   useEffect(() => {
     if (visible) void refresh();
     return () => { const abort = pending.current; pending.current = null; abort?.abort(); };

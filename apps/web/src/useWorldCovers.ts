@@ -31,7 +31,9 @@ export function useWorldCovers(client: CoreClient, worldId?: string, enabled = t
   useEffect(() => {
     if (!enabled || !metadataReady) return;
     const controller = new AbortController();
+    const epoch = sequence.current;
     let cancelled = false;
+    const active = () => !cancelled && live.current && sequence.current === epoch;
     // Optional local artwork must never hold the launch hostage. On timeout,
     // finish every book's text appearance; explicit refresh can retry the images.
     const timer = window.setTimeout(() => controller.abort(), 5000);
@@ -48,10 +50,10 @@ export function useWorldCovers(client: CoreClient, worldId?: string, enabled = t
           if (!url && !controller.signal.aborted) {
             try {
               const blob = await client.coverImage(cover.world_id, display.digest, controller.signal);
-              if (cancelled) return;
+              if (!active()) return;
               url = URL.createObjectURL(blob); cache.current.set(key, url);
             } catch {
-              if (cancelled) return;
+              if (!active()) return;
               setError("部分封面图片无法读取，已保留文字外观。刷新书架可重试。");
             }
           }
@@ -60,11 +62,29 @@ export function useWorldCovers(client: CoreClient, worldId?: string, enabled = t
         result[cover.world_id] = { cover, urls };
       }
       clearTimeout(timer);
-      if (!cancelled) setAppearances(result);
+      if (active()) setAppearances(result);
     };
     void load();
     return () => { cancelled = true; clearTimeout(timer); controller.abort(); };
   }, [client, covers, enabled, metadataReady, worldId]);
+  useEffect(() => {
+    // Effects run after the new appearance commits. Keep the old artwork while
+    // its replacement loads, and protect current keys that a load may reuse.
+    const displayed = new Set(Object.values(appearances).flatMap(appearance => Object.values(appearance.urls)));
+    const needed = new Set<string>();
+    if (enabled) for (const cover of covers) {
+      if (cover.mode !== "image" || worldId && cover.world_id !== worldId) continue;
+      for (const face of ["front", "spine", "back"] as const) {
+        const display = cover.faces[face]?.display;
+        if (display) needed.add(`${cover.world_id}:${display.digest}`);
+      }
+    }
+    for (const [key, url] of cache.current) {
+      if (needed.has(key) || displayed.has(url)) continue;
+      URL.revokeObjectURL(url);
+      cache.current.delete(key);
+    }
+  }, [appearances, covers, enabled, worldId]);
   const saved = useCallback((cover: WorldCover) => {
     sequence.current += 1;
     setMetadataReady(true); setError(""); setCovers(current => [...current.filter(item => item.world_id !== cover.world_id), cover]);

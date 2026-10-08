@@ -1,6 +1,7 @@
 """Authenticated creator setup, limited to current local-Player direct contacts."""
 
 from collections.abc import Callable
+from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException
@@ -27,6 +28,7 @@ class InitialActivityRequest(BaseModel):
 
 class CharacterLocationRequest(InitialActivityRequest):
     locked: bool = False
+    residency: Literal["normal", "strong", "very_strong"] = "strong"
     expected_revision: int | None = Field(default=None, ge=0)
     expected_policy_revision: int = Field(ge=0)
 
@@ -53,6 +55,7 @@ def character_activity_setup_router(
                         "locked": item.locked,
                         "revision": item.revision,
                         "policy_revision": item.policy_revision,
+                        "residency": item.residency,
                     }
                     for item in characters
                 ],
@@ -114,6 +117,7 @@ def character_activity_setup_router(
                 body.expected_revision,
                 request_id,
                 body.expected_policy_revision,
+                body.residency,
             )
             return {"character_id": str(character_id), "initialized": True}
         except CharacterActivitySetupError as error:

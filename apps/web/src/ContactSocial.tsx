@@ -75,12 +75,16 @@ export function FactionManager({ social, selectedRoot, busy, onSelect, onCreate,
       <button type="submit" disabled={busy || !editName.trim()}>保存修改</button><button type="button" className="text-action" disabled={busy} onClick={() => setEditing(null)}>取消</button></form>}
     <div className="faction-tree">{hierarchy.length ? hierarchy.map(({ item, depth }) => {
       const members = social.memberships.filter(member => member.faction_id === item.faction_id).map(member => social.characters.find(person => person.root_import_id === member.root_import_id)?.name).filter(Boolean);
+      const hasMembers = social.memberships.some(member => member.faction_id === item.faction_id);
+      const hasChildren = social.factions.some(child => child.parent_id === item.faction_id);
+      const deletionHint = hasChildren && hasMembers ? "先移除直接成员，并删除或移走子阵营，再删除此阵营。" : hasChildren ? "先删除子阵营，或编辑子阵营并更换父阵营，再删除此阵营。" : hasMembers ? "先选择下方直接成员，取消所属阵营勾选，再删除此阵营。" : "删除空阵营不会清除已经建立的相识。";
       return <div key={item.faction_id} className="faction-branch" style={{ marginLeft: Math.min(depth, 10) * 18 }} title={paths.get(item.faction_id)}>
         <div className="faction-line"><span className="faction-indent">{depth ? "↳" : "◇"}</span><strong>{item.name}</strong>
           <button type="button" className="text-action" disabled={busy} onClick={() => { setNewParent(item.faction_id); setNewName(""); }}>创建子阵营</button>
           <button type="button" className="text-action" disabled={busy} onClick={() => { setEditing(item.faction_id); setEditName(item.name); setEditParent(item.parent_id ?? ""); }}>编辑</button>
-          <button type="button" className="text-action" disabled={busy} onClick={() => onRemove(item.faction_id)}>删除</button>
+          <button type="button" className="text-action destructive-action" disabled={busy || hasMembers || hasChildren || editing === item.faction_id} title={deletionHint} onClick={() => onRemove(item.faction_id)}>删除阵营</button>
         </div><p className="faction-members-copy">直接成员：{members.length ? members.join("、") : "尚无"}</p>
+        <p className="inline-hint">{deletionHint}</p>
         {selectedRoot && <label className="faction-member"><input type="checkbox" checked={memberships.has(item.faction_id)} disabled={busy} onChange={event => onMembership(item.faction_id, selectedRoot, event.target.checked)} />{social.characters.find(person => person.root_import_id === selectedRoot)?.name}属于该阵营</label>}
       </div>;
     }) : <p>尚无阵营。创建后，选择角色并勾选所属阵营。</p>}</div>

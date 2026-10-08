@@ -82,6 +82,7 @@ class LocalLocationCatalogRecord(Base):
     )
     location_id: Mapped[UUID] = mapped_column(UUIDStorage(), primary_key=True)
     name_key: Mapped[str] = mapped_column(Text, nullable=False)
+    removed_at: Mapped[datetime | None] = mapped_column(UTCTimestampStorage(), nullable=True)
     __table_args__ = (
         ForeignKeyConstraint(
             ["world_id", "location_id"], ["locations.world_id", "locations.location_id"]
@@ -1022,6 +1023,7 @@ class WorldContentImportRecord(Base):
     kind: Mapped[str] = mapped_column(String(16), nullable=False)
     snapshot_json: Mapped[str] = mapped_column(Text, nullable=False)
     accepted_at: Mapped[datetime] = mapped_column(UTCTimestampStorage(), nullable=False)
+    removed_at: Mapped[datetime | None] = mapped_column(UTCTimestampStorage(), nullable=True)
     __table_args__ = (
         CheckConstraint("kind IN ('character', 'lorebook')", name="ck_world_content_import_kind"),
         CheckConstraint("length(reviewed_hash) = 64", name="ck_world_content_import_hash"),

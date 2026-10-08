@@ -211,6 +211,10 @@ class SqlAlchemyProactiveContactStore:
             )
         if activity not in {"rest", "leisure"}:
             return None
+        from livingworld.infrastructure.persistence.authored_lifecycle import removed_character_ids
+
+        if set(identities) & await removed_character_ids(session, cfg.world_id):
+            return None
         characters = []
         for character, routine, revision in zip(identities, routines, revisions, strict=True):
             physical = await session.get(CharacterStateRecord, (cfg.world_id, character))

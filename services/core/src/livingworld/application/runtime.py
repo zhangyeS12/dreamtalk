@@ -13,6 +13,16 @@ class RuntimeStatus:
     generation: str
     ready: bool = False
     llm_health: Callable[[], str] = lambda: "unconfigured"
+    world_llm_health: Callable | None = None
+
+    def llm_status_for_world(self, world) -> str:
+        if self.world_llm_health is None:
+            return self.llm_status
+        try:
+            value = self.world_llm_health(world)
+            return value if value in _LLM_STATUS_VALUES else "degraded"
+        except Exception:
+            return "degraded"
 
     @property
     def llm_status(self) -> str:

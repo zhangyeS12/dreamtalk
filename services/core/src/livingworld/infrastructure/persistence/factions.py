@@ -41,7 +41,7 @@ async def _characters(session, world):
     current = {row.replaces_import_id for row in imports if row.replaces_import_id}
     result = {}
     for row in imports:
-        if row.import_id in current:
+        if row.import_id in current or row.removed_at is not None:
             continue
         origin, seen = row, set()
         while origin.replaces_import_id is not None:
@@ -70,10 +70,13 @@ async def _roots(session, world, allowed):
             )
         )
     ).all()
+    from livingworld.infrastructure.persistence.authored_lifecycle import removed_character_roots
+
+    removed = await removed_character_roots(session, world)
     return {
         uuid5(root, "livingworld:chat-character:v1"): root
         for root in roots
-        if uuid5(root, "livingworld:chat-character:v1") in allowed
+        if root not in removed and uuid5(root, "livingworld:chat-character:v1") in allowed
     }
 
 

@@ -172,3 +172,8 @@ knowledge、content 或 durable accounting state。
 dreamtalk identity 或 conversation identity。OpenAI usage 将 reasoning tokens 标记为
 `INCLUDED_IN_OUTPUT`，防止 output pricing 二次计费。完整契约和证据见
 [OPENAI_RESPONSES_ADAPTER.md](OPENAI_RESPONSES_ADAPTER.md)。无 migration、SDK 或新依赖。
+
+
+## 0.1.43默认与世界模型
+
+生产组装支持书架默认及WorldId覆盖；旧配置v1为默认，覆盖存储于v2容器，各内层保持原模型／能力／路由契约。按实际请求／任务世界选择，不从当前UI世界推断；所有协议adapter、保守预算和安全凭据边界保持。Kimi／GLM使用现有Chat Completions兼容入口，具体型号未做真实验收。[实现记录](../maintenance/2026-10-08-world-model-config.md)、[生产组装](LLM_PRODUCTION_COMPOSITION.md)。

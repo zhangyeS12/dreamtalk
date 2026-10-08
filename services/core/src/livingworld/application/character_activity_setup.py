@@ -24,6 +24,7 @@ class ActivityCharacter:
     locked: bool = False
     revision: int | None = None
     policy_revision: int = 0
+    residency: str = "strong"
 
 
 class CharacterActivityDirectory(Protocol):
@@ -58,8 +59,8 @@ class CharacterActivitySetupService:
         )
         characters = []
         for item in contacts:
-            initial, current, locked, revision, policy_revision = locations.get(
-                item.character_id, (None, None, False, None, 0)
+            initial, current, locked, revision, policy_revision, residency = locations.get(
+                item.character_id, (None, None, False, None, 0, "strong")
             )
             characters.append(
                 ActivityCharacter(
@@ -72,6 +73,7 @@ class CharacterActivitySetupService:
                     locked=locked,
                     revision=revision,
                     policy_revision=policy_revision,
+                    residency=residency,
                 )
             )
         return player, tuple(characters)
@@ -97,7 +99,15 @@ class CharacterActivitySetupService:
         )
 
     async def configure(
-        self, player_id, character_id, location_id, locked, revision, request_id, policy_revision
+        self,
+        player_id,
+        character_id,
+        location_id,
+        locked,
+        revision,
+        request_id,
+        policy_revision,
+        residency="strong",
     ):
         if await self._players.selected_player(player_id.world_id) != player_id:
             raise CharacterActivitySetupError("activity_player_changed")
@@ -111,6 +121,7 @@ class CharacterActivitySetupService:
                 activity_player_id=player_id,
                 activity_configure=True,
                 activity_locked=locked,
+                activity_residency=residency,
                 expected_location_policy_revision=policy_revision,
             )
         )

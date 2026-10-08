@@ -53,7 +53,7 @@ export function App({ discover, onReady }: Props) {
   return <>
     {client && state === "Ready" && <div className="startup-destination" inert={!revealed} aria-hidden={!revealed}>
       {developer ? <main><div className="brand"><Brand /><p role="status">核心已就绪</p></div><Inspector client={client} /></main>
-        : <ProductApp key={attempt} client={client} onStartupStatus={archiveStatus} />}
+        : <ProductApp key={attempt} client={client} onStartupStatus={archiveStatus} startupReady={revealed} />}
     </div>}
     {!revealed && <StartupSplash key={attempt} ready={ready} failed={failed} onRetry={retry} onComplete={complete} />}
   </>;

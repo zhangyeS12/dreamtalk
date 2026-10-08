@@ -1,20 +1,54 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "dreamtalk",
-  "version": "0.1.42",
+  "version": "0.1.47",
   "identifier": "app.livingworld.desktop",
   "build": {
-    "beforeDevCommand": { "script": "npm run dev:ui", "cwd": "../../.." },
+    "beforeDevCommand": {
+      "script": "npm run dev:ui",
+      "cwd": "../../.."
+    },
     "devUrl": "http://127.0.0.1:1420",
-    "beforeBuildCommand": { "script": "npm run build:web", "cwd": "../../.." },
+    "beforeBuildCommand": {
+      "script": "npm run build:web",
+      "cwd": "../../.."
+    },
     "frontendDist": "../../web/dist"
   },
   "app": {
-    "windows": [{ "label": "main", "title": "dreamtalk", "width": 1280, "height": 860, "visible": false, "dragDropEnabled": false }],
+    "windows": [
+      {
+        "label": "main",
+        "title": "dreamtalk",
+        "width": 1280,
+        "height": 860,
+        "visible": false,
+        "dragDropEnabled": false
+      }
+    ],
     "security": {
       "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:*; img-src 'self' data: blob:",
-      "capabilities": ["main"]
+      "capabilities": [
+        "main"
+      ]
     }
   },
-  "bundle": { "active": false, "icon": ["icons/icon.png", "icons/icon.ico"] }
+  "bundle": {
+    "active": false,
+    "icon": [
+      "icons/icon.png",
+      "icons/icon.ico"
+    ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDNCRjIxMDc2NDA4QjZGRkUKUldUK2I0dEFkaER5T3k0V3BFbW83NnpMUzZjYkpIbWgrbW1USitFRTYzc2RFM09Ib080YVU0Z00K",
+      "endpoints": [
+        "https://github.com/zhangyeS12/dreamtalk/releases/download/update-preview/windows.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  }
 }

@@ -182,6 +182,11 @@ def semantic_input(command: WorldCommand) -> dict:
             }
         case _:
             raise TypeError("Unsupported command type")
+    # New default options preserve old committed request fingerprints.
+    if isinstance(command, (CreateLocation, ConfigureLocation)) and command.is_region:
+        details["is_region"] = True
+    if isinstance(command, PlaceCharacter) and command.activity_residency != "strong":
+        details["activity_residency"] = command.activity_residency
     return common | details
 
 

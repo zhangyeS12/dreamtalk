@@ -160,6 +160,26 @@ def world_content_router(service: WorldContentService, authorize) -> APIRouter:
         service.discard(WorldId(world_id), import_id)
         return {"discarded": True}
 
+    @router.delete("/{import_id}")
+    async def remove_character(world_id: UUID, import_id: UUID) -> dict:
+        try:
+            await service.store.remove_character(WorldId(world_id), import_id)
+            return {"removed": True}
+        except EntityNotFoundError:
+            raise HTTPException(404, "character_card_not_found") from None
+        except ContentConflictError as error:
+            code = str(error)
+            raise HTTPException(
+                409,
+                code
+                if code
+                in {
+                    "character_card_changed",
+                    "character_card_reply_running",
+                }
+                else "character_card_changed",
+            ) from None
+
     @router.put("/{import_id}/entries/{entry_id}/common")
     async def set_common_lore(
         world_id: UUID, import_id: UUID, entry_id: UUID, body: LoreExposure

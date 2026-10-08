@@ -24,6 +24,7 @@ def _view(conversation: ChatConversation) -> dict:
         "root_import_id": str(conversation.root_import_id),
         "character_name": conversation.character_name,
         "kind": "direct",
+        "read_only": conversation.read_only,
     }
 
 
@@ -38,6 +39,7 @@ def _group_view(group: GroupChatConversation) -> dict:
         "conversation_id": str(group.conversation_id.value),
         "player_id": str(group.player_id.value),
         "kind": "group",
+        "read_only": group.read_only,
         "participants": [
             {
                 "character_id": str(item.character_id.value),

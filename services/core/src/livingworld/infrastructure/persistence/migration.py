@@ -92,7 +92,9 @@ SHARED_REVISION = "0034_shared_activities"
 PROACTIVE_REVISION = "0035_proactive_contact"
 FACTION_REVISION = "0036_character_factions"
 RECALL_REVISION = "0037_persistent_chat_recall"
-HEAD_REVISION = "0038_location_policies"
+LOCATION_REVISION = "0038_location_policies"
+MOBILITY_REVISION = "0039_character_mobility"
+HEAD_REVISION = "0040_authored_removal"
 
 # One reviewed linear chain replaces repeated hand-maintained suffix sets.
 _SUPPORTED_REVISIONS = (
@@ -133,6 +135,8 @@ _SUPPORTED_REVISIONS = (
     PROACTIVE_REVISION,
     FACTION_REVISION,
     RECALL_REVISION,
+    LOCATION_REVISION,
+    MOBILITY_REVISION,
     HEAD_REVISION,
 )
 _REVISION_RANGES = {
@@ -335,7 +339,9 @@ def _current_revision(connection: Connection) -> str:
 def _validate_managed_state(connection: Connection, revision: str) -> None:
     # Additive authored/job tables do not change the older runtime shapes.
     pre_recall_revision = revision not in _REVISION_RANGES[RECALL_REVISION]
-    pre_location_policy_revision = revision != HEAD_REVISION
+    pre_location_policy_revision = revision not in _REVISION_RANGES[LOCATION_REVISION]
+    pre_mobility_revision = revision not in _REVISION_RANGES[MOBILITY_REVISION]
+    pre_removal_revision = revision != HEAD_REVISION
     pre_faction_revision = revision not in _REVISION_RANGES[FACTION_REVISION]
     pre_proactive_revision = revision not in _REVISION_RANGES[PROACTIVE_REVISION]
     pre_shared_revision = revision not in _REVISION_RANGES[SHARED_REVISION]
@@ -511,6 +517,8 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         expected -= FACTION_TABLES
     if pre_location_policy_revision:
         expected -= LOCATION_POLICY_TABLES
+    if pre_mobility_revision:
+        expected -= {"character_mobility"}
     if pre_proactive_revision:
         expected -= PROACTIVE_TABLES
     if pre_shared_revision:
@@ -539,7 +547,12 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         expected -= WORLD_COMMON_LORE_TABLES
     if tables != expected:
         _fail("alembic_schema_state_mismatch")
-    _validate_auxiliary_objects(connection, domain_present, recall_present=not pre_recall_revision)
+    _validate_auxiliary_objects(
+        connection,
+        domain_present,
+        recall_present=not pre_recall_revision,
+        mobility_present=not pre_mobility_revision,
+    )
     if domain_present:
         _validate_domain_shape(
             connection,
@@ -565,6 +578,8 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
             pre_faction_revision=pre_faction_revision,
             pre_recall_revision=pre_recall_revision,
             pre_location_policy_revision=pre_location_policy_revision,
+            pre_mobility_revision=pre_mobility_revision,
+            pre_removal_revision=pre_removal_revision,
         )
     if revision in {
         CONTENT_REVISION,
@@ -597,12 +612,24 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
 
 
 def _validate_auxiliary_objects(
-    connection: Connection, domain_present: bool, *, recall_present: bool = False
+    connection: Connection,
+    domain_present: bool,
+    *,
+    recall_present: bool = False,
+    mobility_present: bool = False,
 ) -> None:
     objects = connection.execute(
         text("SELECT name, type, sql FROM sqlite_master WHERE type IN ('trigger', 'view')")
     ).all()
     expected = dict(_EVENT_TRIGGERS) if domain_present else {}
+    if mobility_present:
+        for operation in ("INSERT", "UPDATE"):
+            expected[f"character_residency_{operation.lower()}"] = (
+                f"CREATE TRIGGER character_residency_{operation.lower()} "
+                f"BEFORE {operation} ON character_location_policies "
+                "WHEN NEW.residency NOT IN ('normal','strong','very_strong') "
+                "BEGIN SELECT RAISE(ABORT, 'invalid_location_residency'); END"
+            )
     if recall_present:
         expected.update(FTS_TRIGGERS)
         sql = connection.scalar(text("SELECT sql FROM sqlite_master WHERE name='recall_fts'"))
@@ -641,6 +668,8 @@ def _validate_domain_shape(
     pre_faction_revision: bool = True,
     pre_recall_revision: bool = True,
     pre_location_policy_revision: bool = True,
+    pre_mobility_revision: bool = True,
+    pre_removal_revision: bool = True,
 ) -> None:
     """Detect partial/mismatched schemas; never infer a revision from them."""
 
@@ -666,6 +695,8 @@ def _validate_domain_shape(
         "ck_command_receipt_command_result",
     }
     for table in metadata.sorted_tables:
+        if pre_mobility_revision and table.name == "character_mobility":
+            continue
         if pre_location_policy_revision and table.name in LOCATION_POLICY_TABLES:
             continue
         if pre_recall_revision and table.name == "recall_documents":
@@ -826,6 +857,19 @@ def _validate_domain_shape(
                 else column.nullable,
             )
             for column in table.columns
+            if not (
+                pre_removal_revision
+                and column.name == "removed_at"
+                and table.name in {"world_content_imports", "local_location_catalog"}
+            )
+            if not (
+                pre_mobility_revision
+                and (table.name, column.name)
+                in {
+                    ("location_policies", "is_region"),
+                    ("character_location_policies", "residency"),
+                }
+            )
             if not (
                 pre_context_report_revision
                 and table.name == "chat_reply_executions"

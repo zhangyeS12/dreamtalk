@@ -23,9 +23,9 @@ Python Core bootstrap
 
 [llm_runtime.py](../../services/core/src/livingworld/bootstrap/llm_runtime.py) 是唯一生产组装入口。它按显式 `AdapterKind` 创建 OpenAI-compatible Chat Completions、Anthropic Messages、Gemini Interactions 和 OpenAI Responses adapter。应用层只得到受治理的 `RoutedModelGateway`；没有直接快速调用 provider 的分支。每个已启用 ModelRef 的 adapter/client 在启动时创建一次，由 `ProductionLLMRuntime` 持有并在 Core 关闭时 `aclose()`。凭据在每次 provider request 前按 `SecretRef` 解析，不写入 HTTP client 默认 headers。
 
-## 2. 非秘密配置 v1
+## 2. 非秘密配置：v1快照与v2世界容器
 
-桌面配置路径为 app-data `config/llm.json`，格式版本为 `1`。它是不可变的进程级 operational snapshot；C-005E5 不监视文件，也不把配置写入 WorldEvent、WorldTruth、Knowledge、Content、Memory 或 `.lwcontent`。
+桌面配置路径仍为app-data `config/llm.json`。旧version 1文档兼容为默认；0.1.43有世界覆盖时使用严格version 2容器，`default`及按canonical WorldId索引的`worlds`各存一个v1文档。未覆盖的世界继承默认。解析后为不可变进程快照，默认与独立世界分别组装adapter、路由及预留，按实际任务世界选择；C-005E5 不监视文件，也不把配置写入 WorldEvent、WorldTruth、Knowledge、Content、Memory 或 `.lwcontent`。
 
 | 字段 | 含义 |
 | --- | --- |
@@ -91,7 +91,7 @@ rotation 先写 native store，再替换 Core session value；已 dispatch reque
 
 桌面“设置 → 聊天模型”在配置仍为空且 Core 报告 `unconfigured` 时，允许明确选择四种已支持的 adapter 之一、填写 exact model ID、必要的兼容服务地址、API key，以及由用户核对的单次输入计费与输出 Token 上界。必填 Token 参数直接显示；点击保存会定位并解释不合格字段，缺少可信上界时不会执行保存。这个入口只建立一条可用聊天模型配置，不进行模型发现、凭据试用或有费用的调用；浏览器开发入口只读。已有配置不由该入口覆盖。
 
-Rust 将 key 写入 native credential store，将不含 key 的 v1 配置原子写入 app-data `config/llm.json`，随后重启 Core 并以 authenticated health 确认 `ready`。如果重启或加载失败，恢复原配置并重启原 Core；恢复失败则报告固定错误码。页面成功后重新连接 Core。用户填写的 usage limits 是显式配置，不是应用推测的 provider 事实；选择与核实相应模型的可信上界仍是配置者责任。该流程未配置价格，因此需要可信价格的 HARD 金额预算仍会拒绝无可验证定价的调用。
+Rust 将 key 写入 native credential store，将不含key的配置原子写入app-data `config/llm.json`（默认v1或默认／世界v2容器），随后重启 Core 并以 authenticated health 确认 `ready`。如果重启或加载失败，恢复原配置并重启原 Core；恢复失败则报告固定错误码。页面成功后重新连接 Core。用户填写的 usage limits 是显式配置，不是应用推测的 provider 事实；选择与核实相应模型的可信上界仍是配置者责任。该流程未配置价格，因此需要可信价格的 HARD 金额预算仍会拒绝无可验证定价的调用。
 
 ## 8. 桌面单模型更新
 
@@ -102,3 +102,8 @@ Rust 将 key 写入 native credential store，将不含 key 的 v1 配置原子�
 ## 9. 范围与迁移
 
 自定义多模型路由的可视化编辑、online discovery/pricing、tool/vision/audio 不在此入口范围内。LLM operational configuration/credentials 不进入 canonical world/content state。C-005E5 本身未新增表；其 Alembic head 为 `0010_llm_budget_guard`。
+
+
+## 0.1.43世界范围接线
+
+`load_world_configurations`加载默认与独立世界，`ProductionLLMSession`持有各运行时及共享的会话凭据提供者，`world_model_config.py`按请求／任务世界解析。凭据同步取所有配置引用并集，健康状态按范围计算；只清理不被任何范围使用的旧引用。私聊／群聊、摘要／资料生成与后台均接线；health可选world_id，协议仍1。保存依旧重启共享Core，可能中断在途调用，不自动重放。无新增DB迁移、生成调用或秘密外发。实现／检查／待验收见[本轮记录](../maintenance/2026-10-08-world-model-config.md)。

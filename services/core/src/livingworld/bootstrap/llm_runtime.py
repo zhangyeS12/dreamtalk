@@ -23,6 +23,7 @@ from livingworld.application.llm_routing import (
     RoutedModelGateway,
     RoutingProfile,
 )
+from livingworld.application.world_model_config import WorldModelValue
 from livingworld.infrastructure.llm.anthropic_messages import AnthropicMessagesGateway
 from livingworld.infrastructure.llm.credentials import SessionCredentialProvider
 from livingworld.infrastructure.llm.gemini_interactions import GeminiInteractionsGateway
@@ -31,7 +32,7 @@ from livingworld.infrastructure.llm.openai_responses import OpenAIResponsesGatew
 from livingworld.infrastructure.llm.production_config import (
     LLMProductionConfigurationError,
     ProductionLLMConfiguration,
-    load_configuration,
+    load_world_configurations,
 )
 from livingworld.infrastructure.llm.request_bounds import ProviderRequestUsageBounder
 from livingworld.infrastructure.logging import StructuredLogger
@@ -62,7 +63,23 @@ class ProductionLLMRuntime:
     def health(self) -> LLMRuntimeHealth:
         if not self.configuration.registry.models:
             return LLMRuntimeHealth.UNCONFIGURED
-        return self.credentials.health
+        if self.credentials.health is LLMRuntimeHealth.DEGRADED:
+            return LLMRuntimeHealth.DEGRADED
+        expected = tuple(
+            dict.fromkeys(
+                self.configuration.providers[entry.model.provider_id].config.secret_ref
+                for entry in self.registry.models
+                if entry.enabled
+            )
+        )
+        configured = sum(self.credentials.contains(reference) for reference in expected)
+        if not expected or not configured:
+            return LLMRuntimeHealth.UNCONFIGURED
+        return (
+            LLMRuntimeHealth.READY
+            if configured == len(expected)
+            else LLMRuntimeHealth.PARTIALLY_CONFIGURED
+        )
 
     async def aclose(self) -> None:
         for gateway in reversed(self._owned_gateways):
@@ -75,17 +92,27 @@ class ProductionLLMSession:
 
     credentials: SessionCredentialProvider
     runtime: ProductionLLMRuntime | None = None
+    world_runtimes: dict = field(default_factory=dict)
 
-    def health(self) -> str:
-        return (
-            self.runtime.health.value
-            if self.runtime is not None
-            else LLMRuntimeHealth.DEGRADED.value
-        )
+    def health(self, world=None) -> str:
+        runtime = self.world_runtimes.get(world, self.runtime)
+        return runtime.health.value if runtime is not None else LLMRuntimeHealth.DEGRADED.value
+
+    def for_world(self, world):
+        return ProductionLLMSession(self.credentials, self.world_runtimes.get(world, self.runtime))
 
     async def aclose(self) -> None:
         if self.runtime is not None:
             await self.runtime.aclose()
+        for runtime in self.world_runtimes.values():
+            await runtime.aclose()
+
+
+def _scoped_value(session, factory):
+    return WorldModelValue(
+        factory(session.for_world(None)),
+        {world: factory(session.for_world(world)) for world in session.world_runtimes},
+    )
 
 
 def configure_direct_chat_reply(
@@ -95,6 +122,10 @@ def configure_direct_chat_reply(
     journal=None,
 ) -> DirectChatReplyService | None:
     """Use the explicit BALANCED route, or the sole eligible configured model."""
+    if session.world_runtimes:
+        return _scoped_value(
+            session, lambda scoped: configure_direct_chat_reply(scoped, messages, context, journal)
+        )
     configured = _chat_reply_configuration(session)
     if configured is None:
         return None
@@ -109,6 +140,10 @@ def configure_group_chat_reply(
     context: GroupChatContextBuilder,
     journal=None,
 ) -> GroupChatReplyService | None:
+    if session.world_runtimes:
+        return _scoped_value(
+            session, lambda scoped: configure_group_chat_reply(scoped, messages, context, journal)
+        )
     configured = _chat_reply_configuration(session)
     if configured is None:
         return None
@@ -155,20 +190,34 @@ def _json_output_available(session, purpose="character_dialogue"):
 
 
 def configure_offline_dialogue(session: ProductionLLMSession):
+    if session.world_runtimes:
+        return _scoped_value(session, configure_offline_dialogue)
     configured = _chat_reply_configuration(session)
     return configured[:6] if configured is not None else None
 
 
 def configure_proactive_dialogue(session: ProductionLLMSession):
+    if session.world_runtimes:
+        return (
+            configure_offline_dialogue(session),
+            _scoped_value(session, _json_output_available),
+        )
     return configure_offline_dialogue(session), _json_output_available(session)
 
 
 def configure_director(session: ProductionLLMSession):
+    if session.world_runtimes:
+        return _scoped_value(session, configure_director)
     configured = _chat_reply_configuration(session, "director_plan")
     return configured[:6] if configured is not None else None
 
 
 def configure_world_news(session):
+    if session.world_runtimes:
+        return (
+            _scoped_value(session, lambda scoped: configure_world_news(scoped)[0]),
+            _scoped_value(session, lambda scoped: _json_output_available(scoped, "director_plan")),
+        )
     configured = _chat_reply_configuration(session, "director_plan")
     return (
         configured[:6] if configured else None,
@@ -177,6 +226,8 @@ def configure_world_news(session):
 
 
 def configure_content_builder(session: ProductionLLMSession):
+    if session.world_runtimes:
+        return _scoped_value(session, configure_content_builder)
     configured = _chat_reply_configuration(session, "content_builder")
     return configured[:6] if configured is not None else None
 
@@ -340,19 +391,32 @@ async def start_production_llm_session(
 ) -> ProductionLLMSession:
     """Load the immutable snapshot while allowing optional LLM failure isolation."""
     try:
-        configuration = load_configuration(config_path)
-        enabled = tuple(entry for entry in configuration.registry.models if entry.enabled)
+        configuration, worlds = load_world_configurations(config_path)
+        configurations = (configuration, *worlds.values())
         expected = tuple(
             dict.fromkeys(
-                configuration.providers[entry.model.provider_id].config.secret_ref
-                for entry in enabled
+                item.providers[entry.model.provider_id].config.secret_ref
+                for item in configurations
+                for entry in item.registry.models
+                if entry.enabled
             )
         )
         credentials = SessionCredentialProvider(expected)
         runtime = await build_production_llm_runtime(
             configuration, database, logger, credentials=credentials
         )
-        return ProductionLLMSession(credentials, runtime)
+        world_runtimes = {}
+        try:
+            for world, item in worlds.items():
+                world_runtimes[world] = await build_production_llm_runtime(
+                    item, database, logger, credentials=credentials
+                )
+        except BaseException:
+            await runtime.aclose()
+            for owned in world_runtimes.values():
+                await owned.aclose()
+            raise
+        return ProductionLLMSession(credentials, runtime, world_runtimes)
     except LLMProductionConfigurationError:
         credentials = SessionCredentialProvider()
         credentials.mark_degraded()

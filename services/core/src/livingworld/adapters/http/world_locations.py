@@ -28,10 +28,16 @@ class CreateLocationRequest(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     parent_id: UUID | None = None
     hidden: bool = False
+    is_region: bool = False
     allowed_character_ids: list[UUID] = Field(default_factory=list, max_length=16)
 
 
 class EditLocationRequest(CreateLocationRequest):
+    expected_revision: int = Field(ge=0)
+
+
+class RemoveLocationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     expected_revision: int = Field(ge=0)
 
 
@@ -42,6 +48,7 @@ def _response(location: LocalLocation) -> dict:
         "is_home": location.is_home,
         "parent_id": str(location.parent_id.value) if location.parent_id else None,
         "hidden": location.hidden,
+        "is_region": location.is_region,
         "allowed_character_ids": [str(item.value) for item in location.allowed_characters],
         "revision": location.revision,
     }
@@ -80,6 +87,7 @@ def world_locations_router(
                     request_id,
                     parent_id=LocationId(world, body.parent_id) if body.parent_id else None,
                     hidden=body.hidden,
+                    is_region=body.is_region,
                     allowed_characters=tuple(
                         CharacterId(world, item) for item in body.allowed_character_ids
                     ),
@@ -121,6 +129,7 @@ def world_locations_router(
                     request_id,
                     parent_id=LocationId(world, body.parent_id) if body.parent_id else None,
                     hidden=body.hidden,
+                    is_region=body.is_region,
                     allowed_characters=tuple(
                         CharacterId(world, item) for item in body.allowed_character_ids
                     ),
@@ -138,5 +147,15 @@ def world_locations_router(
             raise HTTPException(503, "world_runtime_unavailable") from None
         except DomainInvariantError:
             raise HTTPException(422, "invalid_location_name") from None
+
+    @router.delete("/worlds/{world_id}/activity-locations/{location_id}")
+    async def remove_location(world_id: UUID, location_id: UUID, body: RemoveLocationRequest):
+        try:
+            await service.remove(LocationId(WorldId(world_id), location_id), body.expected_revision)
+            return {"removed": True}
+        except LocationCatalogError as error:
+            raise HTTPException(409, str(error)) from None
+        except EntityNotFoundError:
+            raise HTTPException(404, "location_not_found") from None
 
     return router

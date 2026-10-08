@@ -185,6 +185,13 @@ class ChatReplyRecoveryMixin:
                     raise IdempotencyConflictError("chat_request_conflict")
                 # Repeating a receipt never creates or dispatches another attempt.
                 return {"turn_id": str(existing.turn_id), "token_ceiling": existing.token_ceiling}
+            from livingworld.infrastructure.persistence.authored_lifecycle import (
+                require_active_conversation,
+            )
+
+            await require_active_conversation(
+                session, conversation.world_id.value, conversation.value
+            )
             view = await self._recovery_view(session, conversation, source, player)
             if view["attempt_turn_id"] != str(expected):
                 raise ChatTurnUnavailableError("chat_recovery_changed")

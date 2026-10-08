@@ -386,3 +386,6 @@
 @media (prefers-reduced-motion: reduce) {
   .world-workspace *, .world-workspace *::before, .world-workspace *::after { transition-duration: 0ms !important; animation-duration: 0ms !important; }
 }
+
+.world-workspace .destructive-action { color: var(--danger); }
+.world-workspace .destructive-action:disabled { opacity: .45; }

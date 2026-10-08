@@ -5,7 +5,7 @@ import { useWorldCovers } from "./useWorldCovers";
 import "./settings-handbook.css";
 
 export const settingsPages = [
-  { id: "model", label: "模型与聊天", scope: "应用设置", hint: "模型服务、回复方式与聊天额度" },
+  { id: "model", label: "模型与聊天", scope: "当前世界", hint: "当前世界模型与本机共用聊天额度" },
   { id: "background", label: "后台运行", scope: "应用设置", hint: "登录启动与系统托盘" },
   { id: "time", label: "世界时间", scope: "当前世界", hint: "时间状态与推进速度" },
   { id: "activities", label: "角色活动", scope: "当前世界", hint: "日常活动、相遇与共同休闲" },
