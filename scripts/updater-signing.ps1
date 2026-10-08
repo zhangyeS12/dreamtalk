@@ -1,7 +1,8 @@
 param(
     [ValidateSet('Initialize','Build','Export','Import')][string]$Mode = 'Build',
     [string]$RecoveryFile,
-    [string]$OutputName = 'deletions-0147'
+    [string]$OutputName = 'updater-fix-0148',
+    [string]$ArchiveReader
 )
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
@@ -55,7 +56,9 @@ try {
             $keyBytes = Read-Key
             $env:TAURI_SIGNING_PRIVATE_KEY = [System.Text.Encoding]::UTF8.GetString($keyBytes).Trim()
             $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = ''
-            & .venv\Scripts\python.exe scripts/build-installer.py --build-only --output-name $OutputName
+            $buildArguments = @('scripts/build-installer.py', '--build-only', '--output-name', $OutputName)
+            if ($ArchiveReader) { $buildArguments += @('--archive-reader', $ArchiveReader) }
+            & .venv\Scripts\python.exe @buildArguments
             if ($LASTEXITCODE -ne 0) { throw 'installer_build_failed' }
         } finally {
             Remove-Item Env:TAURI_SIGNING_PRIVATE_KEY -ErrorAction SilentlyContinue

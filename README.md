@@ -4,15 +4,15 @@ All engineering agents must read AGENTS.md before modifying the repository.
 
 ## 下载体验（Windows）
 
-**[下载 dreamtalk 0.1.47 删除与更新体验版](https://github.com/zhangyeS12/dreamtalk/releases/tag/v0.1.47)** · [Windows x64 安装包](https://github.com/zhangyeS12/dreamtalk/releases/download/v0.1.47/dreamtalk_0.1.47_x64-setup.exe) · [完整便携包](https://github.com/zhangyeS12/dreamtalk/releases/download/v0.1.47/dreamtalk-0.1.47-windows-x64.zip)
+**[下载 dreamtalk 0.1.48 更新校验修复体验版](https://github.com/zhangyeS12/dreamtalk/releases/tag/v0.1.48)** · [Windows x64 安装包](https://github.com/zhangyeS12/dreamtalk/releases/download/v0.1.48/dreamtalk_0.1.48_x64-setup.exe) · [完整便携包](https://github.com/zhangyeS12/dreamtalk/releases/download/v0.1.48/dreamtalk-0.1.48-windows-x64.zip)
 
 源码、完整签名安装包／便携包和更新频道已公开，文件摘要及未登录完整下载已核对；[发布记录](docs/maintenance/2026-10-08-authored-deletion.md)。仍为预发布，实际升级由用户验收。
 
-1. 优先下载并运行完整安装器 `dreamtalk_0.1.47_x64-setup.exe`；便携版则完整解压 `dreamtalk-0.1.47-windows-x64.zip` 后运行 `dreamtalk/dreamtalk-desktop.exe`。GitHub 自动生成的 **Source code** 是源码，不是可运行程序。
+1. 优先下载并运行完整安装器 `dreamtalk_0.1.48_x64-setup.exe`；便携版则完整解压 `dreamtalk-0.1.48-windows-x64.zip` 后运行 `dreamtalk/dreamtalk-desktop.exe`。GitHub 自动生成的 **Source code** 是源码，不是可运行程序。
 2. 支持 Windows 10/11 x64，需要 [Microsoft WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/)。无需安装 Python、Node 或 Rust；请保留同目录的 `core/`。
-3. 创建世界，配置自己的模型服务和API Key（书架设置是默认，各世界可独立覆盖；0.1.47包含删除入口和签名更新），在通讯录创建或导入角色卡，然后打开聊天。模型使用可能产生服务商费用；后台功能默认关闭。
+3. 创建世界，配置自己的模型服务和API Key（书架设置是默认，各世界可独立覆盖；0.1.48包含更新校验修复及前序删除入口），在通讯录创建或导入角色卡，然后打开聊天。模型使用可能产生服务商费用；后台功能默认关闭。
 
-当前v0.1.47是 **预发布体验版**，包含更新签名安装包、完整便携包和已上线更新频道。更新签名不是Windows发布者证书；真实升级及最新版整体验收仍待用户确认。详见[应用更新](docs/WINDOWS_UPDATES.md)和[Windows说明](docs/PORTABLE_WINDOWS.md)。
+当前v0.1.48是 **预发布体验版**，包含更新签名安装包、完整便携包和已上线更新频道。更新签名不是Windows发布者证书；真实升级及最新版整体验收仍待用户确认。详见[应用更新](docs/WINDOWS_UPDATES.md)和[Windows说明](docs/PORTABLE_WINDOWS.md)。
 
 当前逐项完成度、待验收、明确限制与接续顺序见 [当前状态清单](docs/PROJECT_STATUS.md)；工作规则见 [AGENTS.md](AGENTS.md)，模块入口、0.1.46应用更新、0.1.45封面修复、0.1.44移动优化／0.1.43世界独立模型、0.1.42模型适配、0.1.41地点优化及公开产物状态见 [HANDOFF.md](HANDOFF.md)。以下架构介绍不替代当前进度清单。
 
@@ -22,7 +22,7 @@ dreamtalk 是持久化、事件驱动的多角色 AI 世界，不是普通聊天
 
 ## 开发状态
 
-截至2026-10-08，Desktop **0.1.47** 源码、签名安装器／便携包和固定更新频道已公开；新增角色卡／地点删除及阵营提示，包含0.1.43～0.1.46授权改动。[本轮发布记录](docs/maintenance/2026-10-08-authored-deletion.md)。项目处于体验和验收阶段；卡／书当轮外部JSON导入已有具体用户验收，不能扩大为最新版整体验收。工程端没有运行应用、安装器、测试、模型或真实迁移，也未修改当前系统入口。
+截至2026-10-08，Desktop **0.1.48** 为当前修复版本；修正原安装包清单、增加静态交付核对及严格旧清单修复工具，包含前序删除及其他功能。[本轮记录](docs/maintenance/2026-10-08-update-manifest-fix.md)。项目处于体验和验收阶段；卡／书当轮外部JSON导入已有具体用户验收，不能扩大为最新版整体验收。工程端没有运行应用、安装器、测试、模型或真实迁移，也未修改当前系统入口。
 
 Q-001B 提供仅开发环境启用的 [开发者运行时检查器](docs/architecture/RUNTIME_INSPECTOR.md)，用于通过真实 API/application 路径观察时钟、位置、Scene、trigger、activation、WorldEvent、Observation 与 owner-scoped EpisodicMemory。它不是最终产品 UI，也没有加入 Activation consumer 或自动 Observation→Memory。
 

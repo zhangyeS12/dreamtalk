@@ -1,6 +1,6 @@
 # Windows 应用更新
 
-0.1.46起提供更新入口与完整安装包；当前[v0.1.47](https://github.com/zhangyeS12/dreamtalk/releases/tag/v0.1.47)完整签名安装器及便携版、[update-preview频道](https://github.com/zhangyeS12/dreamtalk/releases/tag/update-preview)已公开。0.1.46可从启动提示或手动入口发现0.1.47，真实跨版更新仍由用户验收。
+0.1.46起提供更新入口与完整安装包；0.1.48修复0.1.46／0.1.47安装包清单摘要问题，交付现场见[修复记录](maintenance/2026-10-08-update-manifest-fix.md)。固定[update-preview频道](https://github.com/zhangyeS12/dreamtalk/releases/tag/update-preview)保留，真实跨版更新仍由用户验收。
 
 ## 使用
 
@@ -13,6 +13,14 @@
 **旧版首次迁入：** 0.1.42～0.1.45需要先从托盘彻底退出，再手动运行完整新版安装器，使用新桌面入口。旧便携包没有可信文件清单，首次安装不会擅自删除其目录；确认新版体验后可清理旧包。0.1.46便携版附带清单，可在以后应用内升级时迁入安装目录并清理本次源包。
 
 ## 恢复与限制
+
+**0.1.46／0.1.47安装版清单修复：** 如果更新显示“程序文件与交付清单不符”，使用Release附带的`repair-update-manifest.ps1`。先只读核对安装目录，全部原交付文件符合后才应用；只修复这两版已确认的打包差异，保存原清单，不修改程序或存档。修复后可重新点击应用内更新。其他文件发生变化时工具会拒绝，请退出旧程序并手动安装完整新版。
+
+```powershell
+# 将目录换成实际安装位置；不需要Python，不启动应用或安装器
+powershell -NoProfile -File .\repair-update-manifest.ps1 -InstallDirectory D:\dreamtalk
+powershell -NoProfile -File .\repair-update-manifest.ps1 -InstallDirectory D:\dreamtalk -Apply
+```
 
 更新准备只持续本次Core世代，五分钟租约超时恢复准入。关闭普通前台不等于终止正在安装的系统安装器。Windows NSIS不是原子事务，磁盘／权限／安全软件造成的安装失败可能需要手动重跑安装器。
 
@@ -28,7 +36,7 @@
 
 ```powershell
 # 已初始化后构建；不启动产物、不运行测试、不发布
-pwsh -File scripts/updater-signing.ps1 -Mode Build -OutputName deletions-0147
+pwsh -File scripts/updater-signing.ps1 -Mode Build -OutputName updater-fix-0148 -ArchiveReader C:\Tools\7-Zip\7z.exe
 
 # 用户自行选择仓库外的备份位置，交互输入至少12字符密码
 pwsh -File scripts/updater-signing.ps1 -Mode Export -RecoveryFile E:\Backup\dreamtalk-updater-recovery.json
@@ -39,7 +47,7 @@ pwsh -File scripts/updater-signing.ps1 -Mode Import -RecoveryFile E:\Backup\drea
 
 导出采用PBKDF2-SHA256／600000轮及AES-256-GCM；恢复时校验公钥一致。未执行导出／导入验收。不要重新生成公钥替换已经交付客户端的信任根；遗失私钥和恢复备份后旧客户端无法信任新签名，须重新手动安装。
 
-构建产物在`artifacts/installers/<名称>/`：完整`dreamtalk_<version>_x64-setup.exe`、`.exe.sig`、`windows.json`、更新说明与SHA256SUMS。构建使用已有Core／Web／Desktop链路，所有检查为build-only。
+构建产物在`artifacts/installers/<名称>/`：完整`dreamtalk_<version>_x64-setup.exe`、`.exe.sig`、`windows.json`、更新说明与SHA256SUMS。构建使用已有Core／Web／Desktop链路，所有检查为build-only。0.1.48起必须提供7-Zip归档读取工具，直接解压NSIS并逐文件核对，结果存ARCHIVE_VERIFICATION.json；不执行安装器，摘要不一致立即阻止交付。
 
 ## 发布流程
 
