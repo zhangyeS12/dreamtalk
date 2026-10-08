@@ -1,6 +1,6 @@
 # dreamtalk 0.1.42 · Windows 地点与模型适配体验版
 
-这是一款以聊天为中心的本地AI持久世界应用。0.1.42完善其他模型服务的同次事件／记忆、原生schema副本兼容、超时与能力设置，并按用户选择保留严格Token硬上限；[检查记录](maintenance/2026-10-08-provider-compatibility.md)。继承0.1.41地点层级／范围／隐藏／锁定及二维图，以及前序维护；[地点手册](ACTIVITY_LOCATIONS.md)。用户已授权本版源码与完整便携预发布，发布状态见[发布记录](maintenance/2026-10-08-github-release.md)与Release页面；具体模型效果、体验／升级仍待用户验收。
+这是一款以聊天为中心的本地AI持久世界应用。0.1.42完善其他模型服务的同次事件／记忆、原生schema副本兼容、超时与能力设置，并按用户选择保留严格Token硬上限；[检查记录](maintenance/2026-10-08-provider-compatibility.md)。继承0.1.41地点层级／范围／隐藏／锁定及二维图，以及前序维护；[地点手册](ACTIVITY_LOCATIONS.md)。本版源码与完整Windows便携预发布已按用户授权公开，发布证据见[发布记录](maintenance/2026-10-08-github-release.md)与Release页面；具体模型效果、体验／升级仍待用户验收。
 
 ## 下载与启动
 

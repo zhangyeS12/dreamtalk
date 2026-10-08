@@ -20,7 +20,7 @@ dreamtalk 是持久化、事件驱动的多角色 AI 世界，不是普通聊天
 
 ## 开发状态
 
-截至2026-10-08，当前Desktop工作区为 **0.1.42**，完善四类服务同次事件／记忆、原生schema兼容、超时／能力设置和严格额度提示；继承0.1.41地点优化。2026-10-08用户已授权发布当前源码与完整Windows便携包，执行状态见[发布记录](docs/maintenance/2026-10-08-github-release.md)；具体检查与待验收见[适配记录](docs/maintenance/2026-10-08-provider-compatibility.md)和[地点维护](docs/maintenance/2026-10-07-location-scopes.md)。此前已推送的0.1.40源码同步包含0.1.38代码去重／文档维护、0.1.39持久全文索引／历史向量分页／200条聊天窗口，以及0.1.40通讯录空间、条件邀约与5条世界动态窗口修复。同步范围见[记录](docs/maintenance/2026-10-07-github-source-sync.md)，前轮检查与本地build-only证据见[长历史维护](docs/maintenance/2026-10-07-long-history-recall.md)和[反馈修复](docs/maintenance/2026-10-07-experience-feedback.md)。用户在2026-10-07确认本轮CCv2角色卡／World Info JSON世界书外部导入通过，并授权当时0.1.40源码推送；0.1.41～0.1.42纳入本次0.1.42预发布，其他具体待验收项保持。**新版按预发布提供完整Windows便携包，发布状态以Release页面和发布记录为准；旧0.1.37保留。** 项目处于产品体验与验收阶段，仍未完成最终发行；长期记忆／本地RAG、日常／相遇／共同休闲、在线与同目的双人主动联系、阵营／头像／三维关系网已有实现，具体已完成、待验收和未实现见状态清单，不从以下历史Stage介绍推断未完成。C-007A的情景记忆基础已完成：Character可从自身已授权Observation显式形成不可变、带证据的EpisodicMemory，并由owner-scoped查询读取。Observation不自动创建Memory；Memory不授予Truth、Knowledge或Belief，也不进入authored content package或projection replay。详见[Episodic Memory](docs/architecture/EPISODIC_MEMORY.md)与[Memory Model](docs/architecture/MEMORY_MODEL.md)。
+截至2026-10-08，当前Desktop工作区为 **0.1.42**，完善四类服务同次事件／记忆、原生schema兼容、超时／能力设置和严格额度提示；继承0.1.41地点优化。2026-10-08已按用户授权推送当前源码并公开Windows完整便携预发布，发布源码提交为`bdf153d`／标签`v0.1.42`，执行证据见[发布记录](docs/maintenance/2026-10-08-github-release.md)；具体检查与待验收见[适配记录](docs/maintenance/2026-10-08-provider-compatibility.md)和[地点维护](docs/maintenance/2026-10-07-location-scopes.md)。此前已推送的0.1.40源码同步包含0.1.38代码去重／文档维护、0.1.39持久全文索引／历史向量分页／200条聊天窗口，以及0.1.40通讯录空间、条件邀约与5条世界动态窗口修复。同步范围见[记录](docs/maintenance/2026-10-07-github-source-sync.md)，前轮检查与本地build-only证据见[长历史维护](docs/maintenance/2026-10-07-long-history-recall.md)和[反馈修复](docs/maintenance/2026-10-07-experience-feedback.md)。用户在2026-10-07确认本轮CCv2角色卡／World Info JSON世界书外部导入通过，并授权当时0.1.40源码推送；0.1.41～0.1.42纳入本次0.1.42预发布，其他具体待验收项保持。**新版按预发布提供完整Windows便携包，已在上方Release入口公开下载；旧0.1.37保留。** 项目处于产品体验与验收阶段，仍未完成最终发行；长期记忆／本地RAG、日常／相遇／共同休闲、在线与同目的双人主动联系、阵营／头像／三维关系网已有实现，具体已完成、待验收和未实现见状态清单，不从以下历史Stage介绍推断未完成。C-007A的情景记忆基础已完成：Character可从自身已授权Observation显式形成不可变、带证据的EpisodicMemory，并由owner-scoped查询读取。Observation不自动创建Memory；Memory不授予Truth、Knowledge或Belief，也不进入authored content package或projection replay。详见[Episodic Memory](docs/architecture/EPISODIC_MEMORY.md)与[Memory Model](docs/architecture/MEMORY_MODEL.md)。
 
 Q-001B 提供仅开发环境启用的 [开发者运行时检查器](docs/architecture/RUNTIME_INSPECTOR.md)，用于通过真实 API/application 路径观察时钟、位置、Scene、trigger、activation、WorldEvent、Observation 与 owner-scoped EpisodicMemory。它不是最终产品 UI，也没有加入 Activation consumer 或自动 Observation→Memory。
 
@@ -88,7 +88,7 @@ npm run test:desktop-smoke
 npm run test:llm-live -- --config <path> --data-dir <path> --provider <id> --model <id> --credential-env <ENV_NAME>
 ```
 
-`build:core` 生成 `artifacts/core/*.whl`；`build:desktop` 生成未签名的 Windows debug executable，依赖当前 checkout 的 `.venv`。`build:portable` 先冻结 Python Core 并验证独立启动和迁移，再构建 release 桌面程序，生成 `artifacts/portable/dreamtalk/` 与 zip。构建产物本身不自动发布；本次0.1.42由用户明确授权另行发布到GitHub Release，仍不是签名安装包；使用说明见 [Windows 便携版](docs/PORTABLE_WINDOWS.md)。
+`build:core` 生成 `artifacts/core/*.whl`；`build:desktop` 生成未签名的 Windows debug executable，依赖当前 checkout 的 `.venv`。`build:portable` 先冻结 Python Core 并验证独立启动和迁移，再构建 release 桌面程序，生成 `artifacts/portable/dreamtalk/` 与 zip。构建产物本身不自动发布；本次0.1.42已按用户明确授权发布到GitHub Release，仍不是签名安装包；使用说明见 [Windows 便携版](docs/PORTABLE_WINDOWS.md)。
 
 只生成便携产物、由验收者另行执行生命周期检查时，可使用 `npm run build:portable -- --build-only`；默认命令仍包含自检。
 

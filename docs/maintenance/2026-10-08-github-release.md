@@ -7,7 +7,20 @@
 - 正式仓库为`D:\LivingWorld`，本轮起始HEAD为`0e6f2ee306450f98f188cd112ce6bcc4dcf17641`。发布前fetch核对`origin/main`和`origin/codex/world-archive`均为该提交，远程仓库为公开。
 - Desktop版本为0.1.42，API协议为1，迁移源码head为0038_location_policies；根npm/Web/Core独立版本保持0.1.0。本轮未执行真实存档迁移。
 - 源码同步采用普通快进，不强推或改写历史；发布提交使用`[skip ci]`，保留既有测试与工作流，不宣称CI通过。
-- 发布入口为[v0.1.42](https://github.com/zhangyeS12/dreamtalk/releases/tag/v0.1.42)，附件为`dreamtalk-0.1.42-windows-x64.zip`和`SHA256SUMS.txt`。具体上传、公开下载与提交标识在发布完成后补记；本提交只记录已获授权的准备状态。
+- 发布源码提交为`bdf153d4d1040e45ce39c8977dd07d2e0316ac6e`，已快进推送至`main`和`codex/world-archive`。标签`v0.1.42`固定指向该提交；后续文档记录提交不移动标签、不改程序。
+- 发布入口为[v0.1.42](https://github.com/zhangyeS12/dreamtalk/releases/tag/v0.1.42)，Release ID为406387779，已公开且`prerelease=true`，发布时间为2026-10-08 03:43:21 UTC。附件为`dreamtalk-0.1.42-windows-x64.zip`和`SHA256SUMS.txt`；旧v0.1.37保持。
+
+## 发布结果
+
+| 核对 | 实际证据 |
+| --- | --- |
+| 源码／Git | 71个已授权源码及文档文件纳入发布提交；Git差异空白检查通过。没有改工作流或新增测试。 |
+| 文档 | 发布准备时源码913个本地目标／0断链；发布包557个本地目标／0断链。外部URL只计数，不宣称逐条联网检查。 |
+| 包内源码与程序 | 252个Core Python源码与发布提交逐文件一致（规范CRLF后比较）；两个EXE哈希与原build-only一致。包共1203个文件，无匹配的个人数据库／凭据文件名。 |
+| GitHub附件 | 两个附件均为uploaded；服务器大小与SHA-256均与本地相同。 |
+| 未登录下载 | 使用不含登录凭据的请求读取Release与标签，并完整下载ZIP和校验附件。ZIP为144360361字节，SHA-256为`ff53e1daea0a77f57e53bc3763aec91e67efa45afbcdb252056ae850eb90c9e7`；校验文件为100字节，内容和哈希一致。核对完成于2026-10-08 03:44:13 UTC。 |
+
+本地准备与公开下载证据分别保存在`artifacts/release-0142/package-audit.json`和`release-audit.json`（ignored）。这些是源码、文档和发布文件检查，没有启动应用、运行自动化测试、迁移真实存档或调用模型，不作为用户体验验收。
 
 ## 程序与包的证据
 

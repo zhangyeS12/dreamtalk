@@ -1,6 +1,6 @@
 # dreamtalk 工作交接
 
-更新日期：**2026-10-08**。正式仓库`D:\LivingWorld`，分支`codex/world-archive`，本轮发布前HEAD为`0e6f2ee`；当前Desktop工作区 **0.1.42**。0.1.40源码已推送；2026-10-08用户授权将当前0.1.42源码及完整Windows便携包发布到GitHub，正在准备[v0.1.42预发布](https://github.com/zhangyeS12/dreamtalk/releases/tag/v0.1.42)，执行证据见[发布记录](docs/maintenance/2026-10-08-github-release.md)。既有v0.1.37和本地旧包保留。用户确认CCv2卡／World Info JSON导入通过；共同联系继续先等待用户验收。
+更新日期：**2026-10-08**。正式仓库`D:\LivingWorld`，分支`codex/world-archive`，本轮起始HEAD为`0e6f2ee`，发布源码提交为`bdf153d`（标签`v0.1.42`），发布后的文档更新以当前Git HEAD为准；Desktop版本 **0.1.42**。0.1.40源码已推送；2026-10-08按用户授权已公开发布当前0.1.42源码及完整Windows便携包，下载见[v0.1.42预发布](https://github.com/zhangyeS12/dreamtalk/releases/tag/v0.1.42)，执行证据见[发布记录](docs/maintenance/2026-10-08-github-release.md)。既有v0.1.37和本地旧包保留。用户确认CCv2卡／World Info JSON导入通过；共同联系继续先等待用户验收。
 
 本轮发布沿用已经完成的build-only程序，更新包内说明、源码链接和校验文件，不运行应用或模型。此前完善四类模型服务同次事件／记忆接线、原生schema的wire副本兼容，以及设置中的超时／能力声明和严格额度提示。用户明确继续保留可信容量硬上限，不用Claude估算或其他Gemini协议计数冒充严格上界；[实现与检查](docs/maintenance/2026-10-08-provider-compatibility.md)。前一步0.1.41完成地点层级、初始范围／锁定、隐藏分支、二维图和严格同地点相遇；[地点维护记录](docs/maintenance/2026-10-07-location-scopes.md)。不执行本轮真实存档迁移、应用／测试／模型验收。0.1.40反馈及0.1.39长历史仍保留具体待验收范围。规则读[AGENTS.md](AGENTS.md)，完成度读[PROJECT_STATUS.md](docs/PROJECT_STATUS.md)。
 
@@ -14,7 +14,7 @@
 | 有明确使用反馈 | 用户报告卡/书生成、单聊、群聊@及无@正常，认可循环书架；0.1.23连接卡顿和0.1.30已读红点问题获确认解决。2026-10-07本轮CCv2角色卡与World Info JSON世界书外部导入获用户确认通过。 | 反馈只覆盖当次功能／资料，不代表最新版全量通过。 |
 | 已实现、待最新版验收 | 0.1.42其他厂商同次提取、超时／原生能力保存和严格额度提示；0.1.41地点层级、范围／隐藏／锁定及实际相遇；视觉／三维网／启动；长期记忆自然表现与权限；日常／相遇／共同休闲生命周期；双人共同联系、未回复门禁、离线联动及动态池。 | 先收集具体现象，按原契约修复；不因未验收就重做系统。 |
 | 尚未实现的愿景 | 完整离线演化、更广剧情/关系/知识演化、一键构建完整运行世界/持续资料更新、Checkpoint/Timeline Branch及runtime世界备份。 | 详见第4节。未冻结的产品行为须先讨论，不是默认下一步授权。 |
-| 发行未完成 | 最新版整体验收、签名安装/自动更新/正式发布；目前交付Windows便携包。 | 0.1.42源码与完整便携预发布已获本轮明确授权；构建成功或公开下载不等于产品完工。 |
+| 发行未完成 | 最新版整体验收、签名安装/自动更新/正式发布；目前交付Windows便携包。 | 0.1.42源码与完整便携预发布已按本轮授权公开交付；构建成功或公开下载不等于产品完工。 |
 | 已拒绝/未批准 | 共同委托、巡查、任务奖励、战斗、资产玩法，以及未经决定的云同步/市场。 | 不从历史建议、领域类名或“继续推进”推导新授权。 |
 
 **最近进展：** 0.1.42完善其他厂商同次提取、原生wire schema和设置接线，保留用户确认的严格硬上限；[适配记录](docs/maintenance/2026-10-08-provider-compatibility.md)。前序0.1.41地点包保留待验收。以下为之前维护脉络：0.1.37观星室已公开预发布。审查后，本轮更正文档旧状态/迁移head/产品决定表，补主动联系手册与后续打包链接，收拢聊天流程、资料投影、适配器通用处理、幂等回执恢复及迁移版本集合，清理旧CSS与未使用依赖。用户尚未收到共同联系消息，明确先等待；没有主动联系运行或验收结论。随后批准并实现长历史索引/分页召回及200条聊天窗口；详见[长历史维护](docs/maintenance/2026-10-07-long-history-recall.md)，前一步去重/文档记录见[维护记录](docs/maintenance/2026-10-07-code-and-docs.md)。
@@ -24,11 +24,11 @@
 | 项 | 2026-10-08维护现场 / 已发布历史 |
 | --- | --- |
 | 正式仓库 | `D:\LivingWorld`。`C:\Users\zhang\Documents\ChatGPT\LivingWorld`是本次受限工具的可写工作目录，不是正式仓库搬迁。 |
-| 分支/基线 | `codex/world-archive`；0.1.40源码同步前基线`4d280cc`，2026-10-07同步提交包含0.1.38～0.1.40维护，本轮发布前HEAD为0e6f2ee，新版源码以v0.1.42标签与发布记录定位。既有Release源码标识`v0.1.37`，设计基线`b2bc430`，应用前序`e56c7f8`。实际HEAD每轮重查。 |
+| 分支/基线 | `codex/world-archive`；0.1.40源码同步前基线`4d280cc`，2026-10-07同步提交包含0.1.38～0.1.40维护，本轮起始HEAD为0e6f2ee，发布源码提交bdf153d；最新版应用源码以v0.1.42标签与发布记录定位，后续说明提交不重建程序或移动标签。既有Release源码标识`v0.1.37`，设计基线`b2bc430`，应用前序`e56c7f8`。实际HEAD每轮重查。 |
 | 关键前序提交 | `8d56c99`：主动联系保存/启动最低展示；`42e675c`：Logo/三维启动；`167d5e8`：真三维人物网；`bd90ab3`：阵营/头像；`844259a`：离线门禁提示；`0a1539c`：已读红点修复；`ed5f844`：主动联系/通用未读。 |
-| 版本 | 当前Desktop package/Tauri/Cargo与对应锁文件为`0.1.42`，用于本次地点与模型适配预发布；0.1.37历史包保留。根npm/Web/Core的`0.1.0`为独立包版本，不能一并误改。 |
+| 版本 | 当前Desktop package/Tauri/Cargo与对应锁文件为`0.1.42`，已公开发布地点与模型适配体验版；0.1.37历史包保留。根npm/Web/Core的`0.1.0`为独立包版本，不能一并误改。 |
 | 协议/迁移 | [API契约](services/core/src/livingworld/domain/api_contract.json)为`api_protocol=1`，loopback`127.0.0.1`、随机Core端口；迁移源码head`0038_location_policies`，前序0037。0.1.42不新增迁移，本轮不读取或迁移真实存档。 |
-| GitHub | `origin=https://github.com/zhangyeS12/dreamtalk.git`。0.1.40同步前fetch核对：main与codex/world-archive均为`4d280cc`；2026-10-07按用户授权快进同步0.1.40源码；本轮已获0.1.42发布授权，新版下载见[v0.1.42体验版](https://github.com/zhangyeS12/dreamtalk/releases/tag/v0.1.42)，准备与完成证据见发布记录；不强推。 |
+| GitHub | `origin=https://github.com/zhangyeS12/dreamtalk.git`。0.1.40同步前fetch核对：main与codex/world-archive均为`4d280cc`；2026-10-07按用户授权快进同步0.1.40源码；本轮已按授权快进推送0.1.42源码至main与codex/world-archive，并公开发布新版便携包，下载见[v0.1.42体验版](https://github.com/zhangyeS12/dreamtalk/releases/tag/v0.1.42)，提交、附件和公开下载证据见发布记录；不强推。 |
 | 最新便携入口 | `D:\LivingWorld\artifacts\portable\providers-0142\dreamtalk\dreamtalk-desktop.exe`；build-only结果见模型适配维护记录。Core与完整ZIP在同一便携目录；旧locations-0141包保留，产物ignored，不随Git自动同步。 |
 | 存档/启动 | app identifier仍为`app.livingworld.desktop`；开发数据兼容位置为`%LOCALAPPDATA%/LivingWorld/development`。本轮未检查运行进程、用户存档或自启动注册。换包须用户在新版显式“保存并更新启动位置”；启动本身不擅自改注册。 |
 
