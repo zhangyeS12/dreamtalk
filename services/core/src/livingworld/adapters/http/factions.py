@@ -3,7 +3,7 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StrictBool
 
 from livingworld.domain.contracts import API_PROTOCOL
 from livingworld.infrastructure.persistence.factions import FactionError
@@ -18,6 +18,11 @@ class FactionWrite(BaseModel):
 class AvatarWrite(BaseModel):
     model_config = ConfigDict(extra="forbid")
     digest: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
+
+
+class FactionLeave(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    cut_contacts: StrictBool = False
 
 
 def faction_router(store, authorize):
@@ -65,8 +70,18 @@ def faction_router(store, authorize):
         return {"saved": True}
 
     @router.delete("/factions/{faction_id}/members/{root_import_id}")
-    async def remove_member(world_id: UUID, faction_id: UUID, root_import_id: UUID):
-        await call(store.membership(world_id, faction_id, root_import_id, False))
+    async def remove_member(
+        world_id: UUID, faction_id: UUID, root_import_id: UUID, body: FactionLeave | None = None
+    ):
+        await call(
+            store.membership(
+                world_id,
+                faction_id,
+                root_import_id,
+                False,
+                cut_contacts=body.cut_contacts if body else False,
+            )
+        )
         return {"saved": True}
 
     @router.put("/avatars/{root_import_id}")

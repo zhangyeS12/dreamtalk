@@ -56,7 +56,7 @@ class CharacterAvatarRecord(Base):
 
 
 class AcquaintanceRecord(Base):
-    """Joining a faction establishes acquaintance; leaving cannot erase a real past."""
+    """Projection of retained faction acquaintance; canonical encounters are separate."""
 
     __tablename__ = "character_acquaintances"
     world_id: Mapped[UUID] = mapped_column(UUIDStorage(), primary_key=True)
@@ -70,4 +70,24 @@ class AcquaintanceRecord(Base):
         CheckConstraint(
             "first_root_import_id < second_root_import_id", name="ck_acquaintance_order"
         ),
+    )
+
+
+class AcquaintanceFactionSourceRecord(Base):
+    """Independent faction bases, including ones explicitly retained after leaving."""
+
+    __tablename__ = "character_acquaintance_sources"
+    world_id: Mapped[UUID] = mapped_column(UUIDStorage(), primary_key=True)
+    first_root_import_id: Mapped[UUID] = mapped_column(UUIDStorage(), primary_key=True)
+    second_root_import_id: Mapped[UUID] = mapped_column(UUIDStorage(), primary_key=True)
+    source_faction_id: Mapped[UUID] = mapped_column(UUIDStorage(), primary_key=True)
+    __table_args__ = (
+        ForeignKeyConstraint(["world_id"], ["worlds.world_id"]),
+        ForeignKeyConstraint(["first_root_import_id"], ["world_content_imports.import_id"]),
+        ForeignKeyConstraint(["second_root_import_id"], ["world_content_imports.import_id"]),
+        CheckConstraint(
+            "first_root_import_id < second_root_import_id", name="ck_acquaintance_source_order"
+        ),
+        # No faction FK: deleting an empty faction must preserve retained acquaintance.
+        Index("ix_acquaintance_source_faction", "world_id", "source_faction_id"),
     )

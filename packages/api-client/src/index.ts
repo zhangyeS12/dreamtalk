@@ -697,8 +697,10 @@ export class CoreClient {
   removeFaction(worldId: string, factionId: string): Promise<{ saved: boolean }> {
     return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/social/factions/${encodeURIComponent(factionId)}`, { method: "DELETE" });
   }
-  setFactionMember(worldId: string, factionId: string, rootId: string, enabled: boolean): Promise<{ saved: boolean }> {
-    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/social/factions/${encodeURIComponent(factionId)}/members/${encodeURIComponent(rootId)}`, { method: enabled ? "PUT" : "DELETE" });
+  setFactionMember(worldId: string, factionId: string, rootId: string, enabled: boolean, cutContacts = false): Promise<{ saved: boolean }> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/social/factions/${encodeURIComponent(factionId)}/members/${encodeURIComponent(rootId)}`, enabled ? { method: "PUT" } : {
+      method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cut_contacts: cutContacts }),
+    });
   }
   setCharacterAvatar(worldId: string, rootId: string, digest: string | null): Promise<{ saved: boolean }> {
     return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/social/avatars/${encodeURIComponent(rootId)}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ digest }) });

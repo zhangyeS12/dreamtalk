@@ -7,6 +7,12 @@ from uuid import UUID, uuid4, uuid5
 from sqlalchemy import delete, or_, select
 
 from livingworld.domain.content.models import CharacterDefinition
+from livingworld.infrastructure.persistence.encounter_models import (
+    EncounterCandidateRecord as Meeting,
+)
+from livingworld.infrastructure.persistence.faction_models import (
+    AcquaintanceFactionSourceRecord as Source,
+)
 from livingworld.infrastructure.persistence.faction_models import AcquaintanceRecord as Known
 from livingworld.infrastructure.persistence.faction_models import (
     CharacterAvatarRecord as Avatar,
@@ -81,18 +87,49 @@ async def _roots(session, world, allowed):
 
 
 async def known_pair(session, world: UUID, first: UUID, second: UUID) -> bool:
-    """An authored acquaintance survives leaving; parent membership never implies it."""
+    """Retained faction bases or a completed encounter; never mere co-location."""
     if first == second:
         return False
     roots = await _roots(session, world, {first, second})
     if len(roots) != 2:
         return False
     left, right = sorted(roots.values())
-    return await session.get(Known, (world, left, right)) is not None
+    if await session.get(Known, (world, left, right)) is not None:
+        return True
+    first, second = sorted((first, second))
+    return (
+        await session.scalar(
+            _meeting_query(world, {first, second})
+            .where(Meeting.first_character_id == first, Meeting.second_character_id == second)
+            .limit(1)
+        )
+        is not None
+    )
+
+
+def _meeting_query(world, allowed, owner=None):
+    # "finished" is committed in the Kernel UoW together with CharactersMet v1.
+    # Read only participant IDs, never proposals, observations or private history text.
+    query = (
+        select(Meeting.first_character_id, Meeting.second_character_id)
+        .where(
+            Meeting.world_id == world,
+            Meeting.state == "finished",
+            Meeting.first_character_id.in_(allowed),
+            Meeting.second_character_id.in_(allowed),
+        )
+        .distinct()
+        .order_by(Meeting.first_character_id, Meeting.second_character_id)
+    )
+    if owner is not None:
+        query = query.where(
+            or_(Meeting.first_character_id == owner, Meeting.second_character_id == owner)
+        )
+    return query
 
 
 async def known_pairs(session, world: UUID, allowed: set[UUID], limit: int = 64):
-    """Bounded authored acquaintance IDs for an already authorized Director batch."""
+    """Bounded acquaintance IDs for an already authorized Director batch."""
     roots = await _roots(session, world, allowed)
     if not roots:
         return []
@@ -108,15 +145,19 @@ async def known_pairs(session, world: UUID, allowed: set[UUID], limit: int = 64)
             .limit(limit)
         )
     ).all()
-    pairs = [
-        sorted(
-            (
-                uuid5(row.first_root_import_id, "livingworld:chat-character:v1"),
-                uuid5(row.second_root_import_id, "livingworld:chat-character:v1"),
+    meetings = (await session.execute(_meeting_query(world, roots).limit(limit))).all()
+    pairs = dict.fromkeys(tuple(pair) for pair in meetings)
+    for row in rows:
+        pair = tuple(
+            sorted(
+                (
+                    uuid5(row.first_root_import_id, "livingworld:chat-character:v1"),
+                    uuid5(row.second_root_import_id, "livingworld:chat-character:v1"),
+                )
             )
         )
-        for row in rows
-    ]
+        if len(pairs) < limit:
+            pairs.setdefault(pair, None)
     return [
         {"first_character_id": str(first), "second_character_id": str(second)}
         for first, second in pairs
@@ -128,7 +169,7 @@ class SqlAlchemyFactionStore:
         self.sessions = sessions
 
     async def context_for_character(self, owner):
-        """Only this speaker's authored affiliations and acquaintances, bounded to 4 KiB."""
+        """Only this speaker's affiliations and acquaintances, bounded to 4 KiB."""
         world = owner.world_id.value
         async with self.sessions() as session:
             characters = await _characters(session, world)
@@ -188,6 +229,14 @@ class SqlAlchemyFactionStore:
                 else pair.first_root_import_id
                 for pair in pairs
             }
+            runtime_roots = {
+                UUID(person["character_id"]): key for key, person in characters.items()
+            }
+            meetings = await session.execute(_meeting_query(world, runtime_roots, owner.value))
+            peer_ids.update(
+                runtime_roots[second if first == owner.value else first]
+                for first, second in meetings
+            )
             for peer in sorted(peer_ids):
                 if peer not in characters:
                     continue
@@ -247,6 +296,22 @@ class SqlAlchemyFactionStore:
                     for faction, roots in grouped.items()
                     if first in roots and second in roots
                 ]
+            runtime_roots = {
+                UUID(person["character_id"]): key for key, person in characters.items()
+            }
+            meetings = await session.execute(_meeting_query(world, runtime_roots))
+            for first_id, second_id in meetings:
+                first, second = sorted(
+                    (str(runtime_roots[first_id]), str(runtime_roots[second_id]))
+                )
+                edges.setdefault(
+                    (first, second),
+                    [
+                        faction
+                        for faction, roots in grouped.items()
+                        if first in roots and second in roots
+                    ],
+                )
             return {
                 "factions": [
                     {
@@ -349,7 +414,7 @@ class SqlAlchemyFactionStore:
             )
             await session.commit()
 
-    async def membership(self, world, identity, root, enabled):
+    async def membership(self, world, identity, root, enabled, *, cut_contacts=False):
         async with self.sessions() as session:
             await self._write(session)
             if await session.get(Faction, (world, identity)) is None:
@@ -377,11 +442,59 @@ class SqlAlchemyFactionStore:
                                 source_faction_id=identity,
                             )
                         )
+                    if await session.get(Source, (world, first, second, identity)) is None:
+                        session.add(
+                            Source(
+                                world_id=world,
+                                first_root_import_id=first,
+                                second_root_import_id=second,
+                                source_faction_id=identity,
+                            )
+                        )
                 if row is None:
                     session.add(Member(world_id=world, faction_id=identity, root_import_id=root))
             elif row is not None:
                 await session.delete(row)
+                if cut_contacts:
+                    await self._cut_faction_contacts(session, world, identity, root)
             await session.commit()
+
+    async def _cut_faction_contacts(self, session, world, identity, root):
+        """Revoke just this faction's bases, atomically with leaving its membership."""
+        actor_pairs = or_(Source.first_root_import_id == root, Source.second_root_import_id == root)
+        revoked = (
+            await session.execute(
+                select(Source.first_root_import_id, Source.second_root_import_id).where(
+                    Source.world_id == world, Source.source_faction_id == identity, actor_pairs
+                )
+            )
+        ).all()
+        await session.execute(
+            delete(Source).where(
+                Source.world_id == world, Source.source_faction_id == identity, actor_pairs
+            )
+        )
+        remaining = (
+            await session.scalars(
+                select(Source)
+                .where(Source.world_id == world, actor_pairs)
+                .order_by(Source.source_faction_id)
+            )
+        ).all()
+        origins = {
+            (source.first_root_import_id, source.second_root_import_id): source.source_faction_id
+            for source in remaining
+        }
+        for first, second in revoked:
+            pair = await session.get(Known, (world, first, second))
+            if pair is None:
+                continue
+            origin = origins.get((first, second))
+            if origin is None:
+                await session.delete(pair)
+            else:
+                pair.source_faction_id = origin
+        # Canonical encounters are read independently and never revoked here.
 
     async def avatar(self, world, root, digest):
         async with self.sessions() as session:

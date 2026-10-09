@@ -1,5 +1,7 @@
-import { Component, lazy, Suspense, useState, type ReactNode } from "react";
+import { Component, lazy, Suspense, useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import type { SocialSnapshot } from "@dreamtalk/api-client";
+import { useDesktopUpdateBlock } from "./DesktopUpdates";
 import "./contact-social.css";
 
 const RelationshipUniverse = lazy(() => import("./RelationshipUniverse"));
@@ -49,13 +51,14 @@ export function SocialGraph({ social, urls, selected, onSelect, onChat, canChat,
 export function FactionManager({ social, selectedRoot, busy, onSelect, onCreate, onEdit, onRemove, onMembership }: {
   social: SocialSnapshot; selectedRoot: string | null; busy: boolean; onSelect: (root: string) => void;
   onCreate: (name: string, parent: string | null) => Promise<boolean>; onEdit: (id: string, name: string, parent: string | null) => Promise<boolean>;
-  onRemove: (id: string) => void; onMembership: (id: string, root: string, enabled: boolean) => void;
+  onRemove: (id: string) => void; onMembership: (id: string, root: string, enabled: boolean, cutContacts?: boolean) => Promise<boolean>;
 }) {
   const [newName, setNewName] = useState("");
   const [newParent, setNewParent] = useState("");
   const [editing, setEditing] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editParent, setEditParent] = useState("");
+  const [leaving, setLeaving] = useState<{ factionId: string; root: string; factionName: string; characterName: string } | null>(null);
   const paths = factionPaths(social);
   const memberships = new Set(social.memberships.filter(item => item.root_import_id === selectedRoot).map(item => item.faction_id));
   const hierarchy: { item: SocialSnapshot["factions"][number]; depth: number }[] = [];
@@ -65,7 +68,7 @@ export function FactionManager({ social, selectedRoot, busy, onSelect, onCreate,
     stack.push(...social.factions.filter(item => item.parent_id === branch.item.faction_id).reverse().map(item => ({ item, depth: branch.depth + 1 })));
   }
   const options = social.factions.map(item => <option key={item.faction_id} value={item.faction_id}>{paths.get(item.faction_id)}</option>);
-  return <section className="faction-manager"><h3>阵营与成员</h3><p>同一阵营的直接成员相互认识；父子阵营不共享成员。退出阵营保留已经建立的相识。</p>
+  return <section className="faction-manager"><h3>阵营与成员</h3><p>同一阵营的直接成员相互认识；父子阵营不共享成员。退出时可选择切断该阵营的联系；偶遇和其他阵营提供的相识会保留。</p>
     <label className="field faction-character-picker">编辑哪位角色的归属<select value={selectedRoot ?? ""} disabled={busy} onChange={event => onSelect(event.target.value)}><option value="">请选择角色</option>{social.characters.map(person => <option key={person.root_import_id} value={person.root_import_id}>{person.name}</option>)}</select></label>
     <form className="faction-create" onSubmit={event => { event.preventDefault(); void onCreate(newName, newParent || null).then(saved => { if (saved) setNewName(""); }); }}><label className="field faction-name-field">新阵营名称<input type="text" value={newName} maxLength={120} onChange={event => setNewName(event.target.value)} placeholder="例如：维多利亚家政" disabled={busy} /></label>
       <label className="field faction-parent-field">所属父阵营<select value={newParent} onChange={event => setNewParent(event.target.value)} disabled={busy}><option value="">无 · 顶层阵营</option>{options}</select></label>
@@ -85,8 +88,47 @@ export function FactionManager({ social, selectedRoot, busy, onSelect, onCreate,
           <button type="button" className="text-action destructive-action" disabled={busy || hasMembers || hasChildren || editing === item.faction_id} title={deletionHint} onClick={() => onRemove(item.faction_id)}>删除阵营</button>
         </div><p className="faction-members-copy">直接成员：{members.length ? members.join("、") : "尚无"}</p>
         <p className="inline-hint">{deletionHint}</p>
-        {selectedRoot && <label className="faction-member"><input type="checkbox" checked={memberships.has(item.faction_id)} disabled={busy} onChange={event => onMembership(item.faction_id, selectedRoot, event.target.checked)} />{social.characters.find(person => person.root_import_id === selectedRoot)?.name}属于该阵营</label>}
+        {selectedRoot && <label className="faction-member"><input type="checkbox" checked={memberships.has(item.faction_id)} disabled={busy} onChange={event => {
+          if (event.target.checked) void onMembership(item.faction_id, selectedRoot, true);
+          else setLeaving({ factionId: item.faction_id, root: selectedRoot, factionName: item.name, characterName: social.characters.find(person => person.root_import_id === selectedRoot)?.name ?? "该角色" });
+        }} />{social.characters.find(person => person.root_import_id === selectedRoot)?.name}属于该阵营</label>}
       </div>;
     }) : <p>尚无阵营。创建后，选择角色并勾选所属阵营。</p>}</div>
+    {leaving && <FactionLeaveDialog characterName={leaving.characterName} factionName={leaving.factionName} onCancel={() => setLeaving(null)} onConfirm={async cut => {
+      const saved = await onMembership(leaving.factionId, leaving.root, false, cut);
+      if (saved) setLeaving(null);
+      return saved;
+    }} />}
   </section>;
+}
+
+function FactionLeaveDialog({ characterName, factionName, onCancel, onConfirm }: {
+  characterName: string; factionName: string; onCancel: () => void; onConfirm: (cut: boolean) => Promise<boolean>;
+}) {
+  const dialog = useRef<HTMLDialogElement>(null), headingId = useId(), lock = useRef(false);
+  const [saving, setSaving] = useState(false), [failed, setFailed] = useState(false);
+  useDesktopUpdateBlock("正在确认退出阵营。");
+  useEffect(() => {
+    const element = dialog.current; element?.showModal();
+    return () => element?.close();
+  }, []);
+  const confirm = async (cut: boolean) => {
+    if (lock.current) return;
+    lock.current = true; setSaving(true); setFailed(false);
+    try { if (!await onConfirm(cut)) setFailed(true); }
+    catch { setFailed(true); }
+    finally { lock.current = false; setSaving(false); }
+  };
+  return createPortal(<dialog ref={dialog} className="faction-leave-dialog" aria-labelledby={headingId} onCancel={event => { event.preventDefault(); if (!lock.current) onCancel(); }}>
+    <h2 id={headingId}>退出阵营</h2>
+    <p>将「{characterName}」移出「{factionName}」，是否切断由该阵营建立的联系？</p>
+    <p className="inline-hint">选择切断后，仅凭这个阵营相识的连线会消失。已通过偶遇认识的角色，以及其他阵营提供的相识会保留。聊天记录与过去经历不会删除。</p>
+    {failed && <p className="app-alert" role="alert">退出未能完整确认，请查看通讯录提示。可重试同一选择，或取消并刷新核对。</p>}
+    {saving && <p role="status">正在保存选择并刷新关系网…</p>}
+    <div className="profile-actions">
+      <button type="button" className="secondary-button" disabled={saving} onClick={onCancel}>取消</button>
+      <button type="button" className="secondary-button" autoFocus disabled={saving} onClick={() => void confirm(false)}>否，保留相识</button>
+      <button type="button" className="secondary-button destructive-action" disabled={saving} onClick={() => void confirm(true)}>是，切断联系</button>
+    </div>
+  </dialog>, document.body);
 }

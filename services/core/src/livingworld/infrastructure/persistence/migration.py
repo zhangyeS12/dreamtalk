@@ -32,6 +32,7 @@ from livingworld.infrastructure.persistence.encounter_models import (
 )
 from livingworld.infrastructure.persistence.errors import MigrationCompatibilityError
 from livingworld.infrastructure.persistence.faction_models import (
+    AcquaintanceFactionSourceRecord,  # noqa: F401
     AcquaintanceRecord,  # noqa: F401
     CharacterAvatarRecord,  # noqa: F401
     FactionMemberRecord,  # noqa: F401
@@ -101,7 +102,8 @@ LOCATION_REVISION = "0038_location_policies"
 MOBILITY_REVISION = "0039_character_mobility"
 REMOVAL_REVISION = "0040_authored_removal"
 ROTATION_REVISION = "0041_director_rotation"
-HEAD_REVISION = "0042_world_deletion"
+DELETION_REVISION = "0042_world_deletion"
+HEAD_REVISION = "0043_acquaintance_sources"
 
 # One reviewed linear chain replaces repeated hand-maintained suffix sets.
 _SUPPORTED_REVISIONS = (
@@ -146,6 +148,7 @@ _SUPPORTED_REVISIONS = (
     MOBILITY_REVISION,
     REMOVAL_REVISION,
     ROTATION_REVISION,
+    DELETION_REVISION,
     HEAD_REVISION,
 )
 _REVISION_RANGES = {
@@ -159,6 +162,7 @@ LOCATION_POLICY_TABLES = {
 }
 ROTATION_TABLES = {"director_rotation", "director_rotation_members", "character_card_bindings"}
 DELETION_TABLES = {"group_dissolutions", "world_deletions"}
+ACQUAINTANCE_SOURCE_TABLES = {"character_acquaintance_sources"}
 FACTION_TABLES = {
     "character_factions",
     "character_faction_members",
@@ -354,7 +358,8 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
     pre_mobility_revision = revision not in _REVISION_RANGES[MOBILITY_REVISION]
     pre_removal_revision = revision not in _REVISION_RANGES[REMOVAL_REVISION]
     pre_rotation_revision = revision not in _REVISION_RANGES[ROTATION_REVISION]
-    pre_deletion_revision = revision != HEAD_REVISION
+    pre_deletion_revision = revision not in _REVISION_RANGES[DELETION_REVISION]
+    pre_acquaintance_source_revision = revision != HEAD_REVISION
     pre_faction_revision = revision not in _REVISION_RANGES[FACTION_REVISION]
     pre_proactive_revision = revision not in _REVISION_RANGES[PROACTIVE_REVISION]
     pre_shared_revision = revision not in _REVISION_RANGES[SHARED_REVISION]
@@ -530,6 +535,8 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         expected -= ROTATION_TABLES
     if pre_deletion_revision:
         expected -= DELETION_TABLES
+    if pre_acquaintance_source_revision:
+        expected -= ACQUAINTANCE_SOURCE_TABLES
     if pre_faction_revision:
         expected -= FACTION_TABLES
     if pre_location_policy_revision:
@@ -600,6 +607,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
             pre_removal_revision=pre_removal_revision,
             pre_rotation_revision=pre_rotation_revision,
             pre_deletion_revision=pre_deletion_revision,
+            pre_acquaintance_source_revision=pre_acquaintance_source_revision,
         )
     if revision in {
         CONTENT_REVISION,
@@ -696,6 +704,7 @@ def _validate_domain_shape(
     pre_removal_revision: bool = True,
     pre_rotation_revision: bool = True,
     pre_deletion_revision: bool = True,
+    pre_acquaintance_source_revision: bool = True,
 ) -> None:
     """Detect partial/mismatched schemas; never infer a revision from them."""
 
@@ -721,6 +730,8 @@ def _validate_domain_shape(
         "ck_command_receipt_command_result",
     }
     for table in metadata.sorted_tables:
+        if pre_acquaintance_source_revision and table.name in ACQUAINTANCE_SOURCE_TABLES:
+            continue
         if pre_deletion_revision and table.name in DELETION_TABLES:
             continue
         if pre_rotation_revision and table.name in ROTATION_TABLES:

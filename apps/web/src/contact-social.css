@@ -78,3 +78,12 @@
   .social-scene-controls button, .social-scene-controls select { padding: .4rem .55rem; }
 }
 @media (prefers-reduced-motion: reduce) { .social-focus-panel { animation: none; } }
+.faction-leave-dialog { width: min(620px, calc(100vw - 32px)); max-height: calc(100dvh - 48px); overflow-y: auto; padding: 28px; border: 1px solid #525b72; border-radius: 14px; background: #161c2b; color: #ecedf4; box-shadow: 0 24px 80px #05091370; }
+.faction-leave-dialog::backdrop { background: #050913b3; }
+.faction-leave-dialog h2 { margin: 0 0 18px; }
+.faction-leave-dialog p { line-height: 1.7; }
+.faction-leave-dialog .inline-hint { color: #b8c2d5; }
+.faction-leave-dialog .profile-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 12px; margin-top: 24px; }
+.faction-leave-dialog .secondary-button { color: #ecedf4; background: #252e42; border-color: #68728a; }
+.faction-leave-dialog .destructive-action { color: #ffbbb3; border-color: #a26766; }
+@media (max-width: 640px) { .faction-leave-dialog { padding: 18px; } }
