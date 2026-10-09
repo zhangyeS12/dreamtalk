@@ -8,13 +8,12 @@ const messages: Record<string, string> = {
   invalid_location_name: "请输入 1 至 120 字的地点名称。",
   location_home_reserved: "“家”是系统初始地点，请使用其他名称。",
   location_not_editable: "系统初始“家”不能编辑。",
-  location_name_exists: "当前世界已有同名地点。",
+  location_name_exists: "同一父地点下已有同名地点。请选择其他父地点或修改名称。",
   location_parent_invalid: "父地点已不可用，或会造成循环包含。",
   location_occupied_access: "有角色当前或初始位置在这个分支。请先对该角色开放，或修改其初始地点后再隐藏。",
   location_scope_conflict: "这个调整会把角色当前位置移出活动范围。请先调整角色初始地点。",
   location_revision_changed: "地点已被更新，请刷新并重新选择这个地点后再编辑。草稿仍保留。",
   location_access_invalid: "开放对象已变化，请刷新角色列表。",
-  location_catalog_capacity: "当前世界最多支持 32 个地点（含“家”）。",
   location_has_children: "此地点还有子地点。请先删除子地点，或修改子地点的父地点后再删除。",
   location_character_present: "有角色的初始地点或当前位置在这里。请先在角色资料中修改初始地点，将角色移到其他地点。",
   location_player_present: "玩家当前在这里，不能删除。请先调整玩家位置。",
@@ -150,27 +149,34 @@ export function LocationMap({ locations, directory, social, urls, selected, onSe
     const focused = directory?.items.find(person => person.root_import_id === selected && person.initialized);
     return focused && !items.some(person => person.root_import_id === selected) ? [...items, focused] : items;
   }, [matchedPeople, mapShown, directory, selected]);
+  const paths = useMemo(() => locationPaths(locations), [locations]);
   const shownAvatarDigests = [...new Set(visiblePeople.map(person => social.characters.find(item => item.root_import_id === person.root_import_id)?.avatar_digest).filter((digest): digest is string => !!digest))].sort().join(",");
   useEffect(() => { onAvatarDigests?.(shownAvatarDigests); return () => onAvatarDigests?.(""); }, [shownAvatarDigests, onAvatarDigests]);
   const layout = useMemo(() => {
+    const locationIds = new Set(locations.map(place => place.location_id));
+    const childrenByParent = new Map<string, ActivityLocation[]>();
+    const peopleByPlace = new Map<string, MapNode[]>();
+    const peopleByRoot = new Map(social.characters.map(person => [person.root_import_id, person]));
+    for (const place of locations) { if (place.parent_id) { const children = childrenByParent.get(place.parent_id) ?? []; children.push(place); childrenByParent.set(place.parent_id, children); } }
+    for (const activity of visiblePeople) { const person = peopleByRoot.get(activity.root_import_id); if (person && activity.current_location_id) { const people = peopleByPlace.get(activity.current_location_id) ?? []; people.push({ id: person.root_import_id, kind: "person", name: person.name, person }); peopleByPlace.set(activity.current_location_id, people); } }
     const build = (place: ActivityLocation, ancestors: Set<string>): MapNode => {
       const children: MapNode[] = [{ id: `label:${place.location_id}`, kind: "label", name: place.name, hidden: place.hidden }];
-      for (const child of locations.filter(value => value.parent_id === place.location_id && !ancestors.has(value.location_id))) children.push(build(child, new Set([...ancestors, child.location_id])));
-      for (const activity of visiblePeople.filter(value => value.current_location_id === place.location_id)) { const person = social.characters.find(value => value.root_import_id === activity.root_import_id); if (person) children.push({ id: person.root_import_id, kind: "person", name: person.name, person }); }
+      for (const child of childrenByParent.get(place.location_id) ?? []) { if (!ancestors.has(child.location_id)) children.push(build(child, new Set([...ancestors, child.location_id]))); }
+      children.push(...peopleByPlace.get(place.location_id) ?? []);
       return { id: place.location_id, kind: "place", name: place.name, hidden: place.hidden, children };
     };
-    const tree: MapNode = { id: "world", kind: "root", name: "", children: locations.filter(place => !place.parent_id || !locations.some(value => value.location_id === place.parent_id)).map(place => build(place, new Set([place.location_id]))) };
+    const tree: MapNode = { id: "world", kind: "root", name: "", children: locations.filter(place => !place.parent_id || !locationIds.has(place.parent_id)).map(place => build(place, new Set([place.location_id]))) };
     return pack<MapNode>().size([1000, 1000]).padding(22)(hierarchy(tree).sum(node => node.kind === "label" ? 3 : node.kind === "person" ? 1 : 0).sort((a, b) => (b.value ?? 0) - (a.value ?? 0) || a.data.id.localeCompare(b.data.id))).descendants();
   }, [locations, visiblePeople, social]);
   const person = social.characters.find(value => value.root_import_id === selected), activity = directory?.items.find(value => value.root_import_id === selected);
-  const placeName = (id: string | null | undefined) => locations.find(place => place.location_id === id)?.name ?? "尚未设置";
+  const placeName = (id: string | null | undefined) => id ? paths.get(id) ?? "尚未设置" : "尚未设置";
   const zoom = useCallback((factor: number) => { setView(current => { const size = Math.min(2000, Math.max(160, current.size * factor)); return { x: current.x + (current.size - size) / 2, y: current.y + (current.size - size) / 2, size }; }); }, []);
   useEffect(() => { const svg = svgRef.current; if (!svg) return; const wheel = (event: WheelEvent) => { event.preventDefault(); zoom(event.deltaY > 0 ? 1.12 : .89); }; svg.addEventListener("wheel", wheel, { passive: false }); return () => svg.removeEventListener("wheel", wheel); }, [zoom]);
   const focus = (id: string) => { if (moved.current) return; onSelect(id); const node = layout.find(value => value.data.id === id); if (node?.parent) { const size = Math.max(220, node.parent.r * 2.5); setView({ x: node.parent.x - size / 2, y: node.parent.y - size / 2, size }); } };
   const placed = new Set(directory?.items.filter(value => value.initialized).map(value => value.root_import_id));
   return <div className="location-map-stage"><div className="location-map-caption"><strong>地点</strong><span>大圆包含小圆 · 虚线为隐藏地点</span><span>拖动平移 · 滚轮缩放 · 点击头像查看</span></div><svg ref={svgRef} className="location-map" viewBox={`${view.x} ${view.y} ${view.size} ${view.size}`} aria-label="地点包含关系与角色位置" onPointerDown={event => { if (event.button !== 0) return; drag.current = { x: event.clientX, y: event.clientY, view, moved: false }; moved.current = false; }} onPointerMove={event => { const start = drag.current; if (!start) return; const rect = event.currentTarget.getBoundingClientRect(); const dx = event.clientX - start.x, dy = event.clientY - start.y; if (Math.hypot(dx, dy) > 5) { start.moved = true; moved.current = true; if (!event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.setPointerCapture(event.pointerId); const scale = start.view.size / Math.min(rect.width, rect.height); setView({ x: start.view.x - dx * scale, y: start.view.y - dy * scale, size: start.view.size }); } }} onPointerUp={event => { drag.current = null; if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId); }} onPointerCancel={() => { drag.current = null; }}>
     <defs>{layout.filter(node => node.data.kind === "person").map(node => <clipPath key={node.data.id} id={`${prefix}-${node.data.id}`}><circle cx={node.x} cy={node.y} r={node.r} /></clipPath>)}</defs>
-    {layout.filter(node => node.data.kind === "place").map(node => <circle key={node.data.id} cx={node.x} cy={node.y} r={node.r} className={`location-region depth-${Math.min(node.depth, 3)} ${node.data.hidden ? "hidden-place" : ""}`}><title>{locationPaths(locations).get(node.data.id)}</title></circle>)}
+    {layout.filter(node => node.data.kind === "place").map(node => <circle key={node.data.id} cx={node.x} cy={node.y} r={node.r} className={`location-region depth-${Math.min(node.depth, 3)} ${node.data.hidden ? "hidden-place" : ""}`}><title>{paths.get(node.data.id)}</title></circle>)}
     {layout.filter(node => node.data.kind === "label").map(node => <text key={node.data.id} x={node.x} y={node.y} className="location-map-label" textAnchor="middle" dominantBaseline="middle" fontSize={Math.min(22, node.r * 1.5 / Math.max(2, Math.min(11, Array.from(node.data.name).length) + (node.data.hidden ? 2 : 0)))}><title>{node.data.name}</title>{node.data.hidden ? "◇ " : ""}{Array.from(node.data.name).length > 10 ? Array.from(node.data.name).slice(0, 10).join("") + "…" : node.data.name}</text>)}
     {layout.filter(node => node.data.kind === "person").map(node => <g key={node.data.id} role="button" tabIndex={0} aria-label={`${node.data.name}，${node.parent?.data.name ?? ""}`} className={`location-map-person ${selected === node.data.id ? "selected" : ""}`} onClick={() => focus(node.data.id)} onKeyDown={event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); moved.current = false; focus(node.data.id); } }}><circle cx={node.x} cy={node.y} r={node.r} />{urls[node.data.person?.avatar_digest ?? ""] ? <image href={urls[node.data.person?.avatar_digest ?? ""]} x={node.x - node.r} y={node.y - node.r} width={node.r * 2} height={node.r * 2} preserveAspectRatio="xMidYMid slice" clipPath={`url(#${prefix}-${node.data.id})`} /> : <text x={node.x} y={node.y} textAnchor="middle" dominantBaseline="central" fontSize={node.r}>{Array.from(node.data.name)[0]}</text>}<title>{node.data.name}</title></g>)}
   </svg>{!locations.length && <div className="location-map-empty"><p>先为这个世界添加地点。</p><button type="button" className="secondary-button" onClick={onEdit}>添加地点</button></div>}

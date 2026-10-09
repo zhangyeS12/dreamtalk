@@ -2,11 +2,14 @@
 
 import json
 from collections import defaultdict
+from unicodedata import normalize
 from uuid import UUID, uuid4, uuid5
 
-from sqlalchemy import delete, or_, select
+from sqlalchemy import LargeBinary, case, cast, delete, func, or_, select, true
 
-from livingworld.domain.content.models import CharacterDefinition
+from livingworld.infrastructure.persistence.character_card_bindings import (
+    CharacterCardBindingRecord,
+)
 from livingworld.infrastructure.persistence.encounter_models import (
     EncounterCandidateRecord as Meeting,
 )
@@ -24,12 +27,14 @@ from livingworld.infrastructure.persistence.faction_models import (
     FactionRecord as Faction,
 )
 from livingworld.infrastructure.persistence.models import (
+    ChatParticipantRecord,
+)
+from livingworld.infrastructure.persistence.models import (
     WorldContentImportRecord as Import,
 )
 from livingworld.infrastructure.persistence.models import (
     WorldRecord as World,
 )
-from livingworld.infrastructure.persistence.world_content import _load
 from livingworld.infrastructure.persistence.world_cover_models import WorldCoverImageRecord as Image
 
 
@@ -37,15 +42,58 @@ class FactionError(ValueError):
     pass
 
 
-async def _characters(session, world):
-    imports = (
-        await session.scalars(
-            select(Import).where(Import.world_id == world, Import.kind == "character")
+def _character_metadata_statement(world, roots=None):
+    columns = (Import.import_id, Import.replaces_import_id, Import.removed_at)
+    statement = select(*columns).where(Import.world_id == world, Import.kind == "character")
+    if roots is None:
+        return statement
+    lineage = statement.where(Import.import_id.in_(roots), Import.replaces_import_id.is_(None)).cte(
+        "social_character_lineage", recursive=True
+    )
+    lineage = lineage.union_all(
+        select(*columns)
+        .join(lineage, Import.replaces_import_id == lineage.c.import_id)
+        .where(Import.world_id == world, Import.kind == "character")
+    )
+    return select(lineage)
+
+
+def _character_names_statement(world, identities):
+    safe_snapshot = case((func.json_valid(Import.snapshot_json), Import.snapshot_json), else_="[]")
+    parts = func.json_each(safe_snapshot).table_valued("key", "value")
+    safe_part = case((func.json_valid(parts.c.value), parts.c.value), else_="{}")
+    name = func.json_extract(safe_part, "$.data.display_name")
+    bounded_name = case((func.length(cast(name, LargeBinary)) <= 4096, name), else_=None)
+    return (
+        select(Import.import_id, func.count(), func.max(bounded_name))
+        .select_from(Import)
+        .join(parts, true())
+        .where(
+            Import.world_id == world,
+            Import.kind == "character",
+            Import.import_id.in_(identities),
+            Import.removed_at.is_(None),
+            func.json_extract(safe_part, "$.kind") == "character_definition",
         )
-    ).all()
+        .group_by(Import.import_id)
+    )
+
+
+async def _characters(session, world, roots=None):
+    """Project current names, never deserialize card bodies or historic snapshots."""
+    if roots is None:
+        imports = (await session.execute(_character_metadata_statement(world))).all()
+    else:
+        imports = []
+        root_ids = sorted(roots)
+        # Follow only the requested stable roots through their replacement chains.
+        # Bound SQL bind counts as the acquaintance graph grows.
+        for offset in range(0, len(root_ids), 256):
+            statement = _character_metadata_statement(world, root_ids[offset : offset + 256])
+            imports.extend((await session.execute(statement)).all())
     by_id = {row.import_id: row for row in imports}
     current = {row.replaces_import_id for row in imports if row.replaces_import_id}
-    result = {}
+    selected = {}
     for row in imports:
         if row.import_id in current or row.removed_at is not None:
             continue
@@ -55,14 +103,66 @@ async def _characters(session, world):
                 raise FactionError("faction_character_lineage_invalid")
             seen.add(origin.import_id)
             origin = by_id[origin.replaces_import_id]
-        cards = [item for item in _load(row).contents if isinstance(item, CharacterDefinition)]
-        if len(cards) == 1:
-            result[origin.import_id] = {
-                "root_import_id": str(origin.import_id),
-                "current_import_id": str(row.import_id),
-                "character_id": str(uuid5(origin.import_id, "livingworld:chat-character:v1")),
-                "name": cards[0].display_name,
+        if origin.removed_at is None:
+            selected[row.import_id] = origin.import_id
+    result = {}
+    identities = list(selected)
+    for offset in range(0, len(identities), 256):
+        names = await session.execute(
+            _character_names_statement(world, identities[offset : offset + 256])
+        )
+        for identity, count, display_name in names:
+            if count != 1 or not isinstance(display_name, str) or not display_name.strip():
+                continue
+            root = selected[identity]
+            result[root] = {
+                "root_import_id": str(root),
+                "current_import_id": str(identity),
+                "character_id": str(uuid5(root, "livingworld:chat-character:v1")),
+                "name": display_name,
             }
+    return result
+
+
+async def _runtime_roots(session, world, identities):
+    """Resolve existing stable mappings without loading character definitions."""
+    identities = set(identities)
+    result, mapped = {}, defaultdict(set)
+    ordered = sorted(identities)
+    for offset in range(0, len(ordered), 256):
+        batch = ordered[offset : offset + 256]
+        bindings = select(
+            CharacterCardBindingRecord.character_id, CharacterCardBindingRecord.root_import_id
+        ).where(
+            CharacterCardBindingRecord.world_id == world,
+            CharacterCardBindingRecord.character_id.in_(batch),
+        )
+        participants = select(
+            ChatParticipantRecord.character_id, ChatParticipantRecord.root_import_id
+        ).where(
+            ChatParticipantRecord.world_id == world, ChatParticipantRecord.character_id.in_(batch)
+        )
+        for identity, root in await session.execute(bindings.union(participants)):
+            mapped[identity].add(root)
+    for identity, roots in mapped.items():
+        if len(roots) == 1:
+            root = next(iter(roots))
+            if uuid5(root, "livingworld:chat-character:v1") == identity:
+                result[identity] = root
+    missing = identities - mapped.keys()
+    if missing:
+        # Compatibility for authored identities predating the binding table.
+        roots = await session.scalars(
+            select(Import.import_id).where(
+                Import.world_id == world,
+                Import.kind == "character",
+                Import.replaces_import_id.is_(None),
+            )
+        )
+        for root in roots:
+            identity = uuid5(root, "livingworld:chat-character:v1")
+            if identity in missing:
+                result[identity] = root
     return result
 
 
@@ -168,88 +268,150 @@ class SqlAlchemyFactionStore:
     def __init__(self, sessions):
         self.sessions = sessions
 
-    async def context_for_character(self, owner):
-        """Only this speaker's affiliations and acquaintances, bounded to 4 KiB."""
+    async def context_for_character(
+        self, owner, *, preferred_character_ids=(), recent_character_ids=(), query_texts=()
+    ):
+        """Permission-first identity projection, ranked for this authorized dialogue."""
         world = owner.world_id.value
+        result = {"factions": [], "known_people": []}
         async with self.sessions() as session:
-            characters = await _characters(session, world)
-            root = next(
-                (
-                    key
-                    for key in characters
-                    if uuid5(key, "livingworld:chat-character:v1") == owner.value
-                ),
-                None,
-            )
+            owner_roots = await _runtime_roots(session, world, {owner.value})
+            root = owner_roots.get(owner.value)
             if root is None:
-                return {"factions": [], "known_people": []}
-            rows = (
-                await session.execute(
-                    select(Member.faction_id, Member.root_import_id).where(Member.world_id == world)
-                )
-            ).all()
-            owned = {faction for faction, member in rows if member == root}
-            result = {"factions": [], "known_people": []}
-
-            def fits():
-                return len(json.dumps(result, ensure_ascii=False).encode("utf-8")) <= 4096
-
-            for faction_id in sorted(owned):
-                faction = await session.get(Faction, (world, faction_id))
-                if faction is None:
-                    continue
-                peers = sorted(
-                    {
-                        characters[member]["name"]
-                        for candidate, member in rows
-                        if candidate == faction_id and member in characters and member != root
-                    }
-                )[:16]
-                result["factions"].append({"faction": faction.name, "known_members": peers})
-                if not fits():
-                    result["factions"].pop()
-                    break
-                if len(result["factions"]) == 8:
-                    break
+                return result
             pairs = (
-                await session.scalars(
-                    select(Known)
-                    .where(
+                await session.execute(
+                    select(Known.first_root_import_id, Known.second_root_import_id).where(
                         Known.world_id == world,
                         or_(
                             Known.first_root_import_id == root, Known.second_root_import_id == root
                         ),
                     )
-                    .order_by(Known.first_root_import_id, Known.second_root_import_id)
                 )
             ).all()
-            peer_ids = {
-                pair.second_root_import_id
-                if pair.first_root_import_id == root
-                else pair.first_root_import_id
-                for pair in pairs
-            }
-            runtime_roots = {
-                UUID(person["character_id"]): key for key, person in characters.items()
-            }
-            meetings = await session.execute(_meeting_query(world, runtime_roots, owner.value))
-            peer_ids.update(
-                runtime_roots[second if first == owner.value else first]
-                for first, second in meetings
+            peer_ids = {second if first == root else first for first, second in pairs}
+            # Finished encounters are a canonical independent acquaintance basis.
+            # The owner predicate precedes reading IDs; no private event text is read.
+            meetings = await session.execute(
+                select(Meeting.first_character_id, Meeting.second_character_id)
+                .where(
+                    Meeting.world_id == world,
+                    Meeting.state == "finished",
+                    or_(
+                        Meeting.first_character_id == owner.value,
+                        Meeting.second_character_id == owner.value,
+                    ),
+                )
+                .distinct()
             )
-            for peer in sorted(peer_ids):
-                if peer not in characters:
-                    continue
+            met_ids = {second if first == owner.value else first for first, second in meetings}
+            peer_ids.update((await _runtime_roots(session, world, met_ids)).values())
+            characters = await _characters(session, world, peer_ids | {root})
+            if root not in characters:
+                return result
+            peer_ids.intersection_update(characters)
+            peer_ids.discard(root)
+
+            def positions(identities):
+                return {
+                    item.value: index
+                    for index, item in reversed(list(enumerate(identities)))
+                    if item.world_id == owner.world_id
+                }
+
+            preferred = positions(preferred_character_ids)
+            recent = positions(recent_character_ids)
+            # Builders supply only their already authorized, byte-bounded
+            # transcript; preserve complete recent messages when matching names.
+            queries = [normalize("NFKC", text).casefold() for text in query_texts[:8]]
+            priorities = {}
+
+            def rank(peer):
+                if peer in priorities:
+                    return priorities[peer]
+                person = characters[peer]
+                identity = UUID(person["character_id"])
+                name = normalize("NFKC", person["name"]).casefold()
+                mention = next((index for index, text in enumerate(queries) if name in text), None)
+                if identity in preferred:
+                    priority = (
+                        0,
+                        mention if mention is not None else len(queries),
+                        recent.get(identity, len(recent)),
+                        preferred[identity],
+                    )
+                elif mention is not None:
+                    priority = (1, mention, 0, 0)
+                elif identity in recent:
+                    priority = (2, recent[identity], 0, 0)
+                else:
+                    priority = (3, 0, 0, 0)
+                priorities[peer] = (*priority, name, str(peer))
+                return priorities[peer]
+
+            def fits():
+                return len(json.dumps(result, ensure_ascii=False).encode("utf-8")) <= 4096
+
+            for peer in sorted(peer_ids, key=rank):
+                person = characters[peer]
                 result["known_people"].append(
-                    {
-                        "character_id": characters[peer]["character_id"],
-                        "name": characters[peer]["name"],
-                    }
+                    {"character_id": person["character_id"], "name": person["name"]}
                 )
                 if not fits():
                     result["known_people"].pop()
-                    break
+                    continue
                 if len(result["known_people"]) == 24:
+                    break
+
+            owned = select(Member.faction_id).where(
+                Member.world_id == world, Member.root_import_id == root
+            )
+            factions = (
+                await session.execute(
+                    select(Faction.faction_id, Faction.name).where(
+                        Faction.world_id == world, Faction.faction_id.in_(owned)
+                    )
+                )
+            ).all()
+            members = (
+                await session.execute(
+                    select(Member.faction_id, Member.root_import_id).where(
+                        Member.world_id == world,
+                        Member.faction_id.in_(owned),
+                        Member.root_import_id != root,
+                    )
+                )
+            ).all()
+            grouped = defaultdict(set)
+            for faction, member in members:
+                if member in peer_ids:
+                    grouped[faction].add(member)
+
+            def faction_rank(faction):
+                priorities = [rank(peer)[:2] for peer in grouped[faction.faction_id]]
+                return (
+                    min(priorities, default=(3, 0)),
+                    faction.name.casefold(),
+                    str(faction.faction_id),
+                )
+
+            for faction in sorted(factions, key=faction_rank):
+                entry = {"faction": faction.name, "known_members": []}
+                result["factions"].append(entry)
+                if not fits():
+                    result["factions"].pop()
+                    continue
+                for peer in sorted(grouped[faction.faction_id], key=rank):
+                    name = characters[peer]["name"]
+                    if name in entry["known_members"]:
+                        continue
+                    entry["known_members"].append(name)
+                    if not fits():
+                        entry["known_members"].pop()
+                        continue
+                    if len(entry["known_members"]) == 16:
+                        break
+                if len(result["factions"]) == 8:
                     break
             return result
 

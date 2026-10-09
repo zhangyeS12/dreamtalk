@@ -1,99 +1,268 @@
+<p align="center"><img src="apps/web/public/brand/dreamtalk-logo.png" alt="dreamtalk" width="100"></p>
+
 # dreamtalk
 
-All engineering agents must read AGENTS.md before modifying the repository.
+**把喜欢的世界放进书架，和生活在其中的角色慢慢熟悉。**
 
-## 下载体验（Windows）
+dreamtalk 是一款开源桌面应用。你可以创建自己的世界，导入角色和背景资料，与角色私聊或群聊，记录共同经历，也可以让他们在你使用应用期间活动、相遇，主动来找你。
 
-**[下载 dreamtalk 0.1.48 更新校验修复体验版](https://github.com/zhangyeS12/dreamtalk/releases/tag/v0.1.48)** · [Windows x64 安装包](https://github.com/zhangyeS12/dreamtalk/releases/download/v0.1.48/dreamtalk_0.1.48_x64-setup.exe) · [完整便携包](https://github.com/zhangyeS12/dreamtalk/releases/download/v0.1.48/dreamtalk-0.1.48-windows-x64.zip)
+每个世界有自己的角色、地点、聊天和记忆。你可以在一个世界是璃月的旅人，在另一个世界是新艾利都的居民，随时回到书架换一本书。
 
-源码、完整签名安装包／便携包和更新频道已公开，文件摘要及未登录完整下载已核对；[发布记录](docs/maintenance/2026-10-08-authored-deletion.md)。仍为预发布，实际升级由用户验收。
+[下载 Windows 体验版](https://github.com/zhangyeS12/dreamtalk/releases/tag/v0.1.53) · [本次更新内容](docs/releases/v0.1.53.md) · [完整设置说明](docs/SETTINGS_HANDBOOK.md) · [反馈问题](https://github.com/zhangyeS12/dreamtalk/issues)
 
-1. 优先下载并运行完整安装器 `dreamtalk_0.1.48_x64-setup.exe`；便携版则完整解压 `dreamtalk-0.1.48-windows-x64.zip` 后运行 `dreamtalk/dreamtalk-desktop.exe`。GitHub 自动生成的 **Source code** 是源码，不是可运行程序。
-2. 支持 Windows 10/11 x64，需要 [Microsoft WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/)。无需安装 Python、Node 或 Rust；请保留同目录的 `core/`。
-3. 创建世界，配置自己的模型服务和API Key（书架设置是默认，各世界可独立覆盖；0.1.48包含更新校验修复及前序删除入口），在通讯录创建或导入角色卡，然后打开聊天。模型使用可能产生服务商费用；后台功能默认关闭。
+目前提供 **Windows 10 / 11 的 64 位体验版**。应用免费开源；聊天所用的模型服务需要你自己提供 API 密钥，服务商可能按使用量收费。当前版本仍在持续完善，欢迎反馈实际体验。
 
-当前v0.1.48是 **预发布体验版**，包含更新签名安装包、完整便携包和已上线更新频道。更新签名不是Windows发布者证书；真实升级及最新版整体验收仍待用户确认。详见[应用更新](docs/WINDOWS_UPDATES.md)和[Windows说明](docs/PORTABLE_WINDOWS.md)。
+## 下载并开始使用
 
-当前逐项完成度、待验收、明确限制与接续顺序见 [当前状态清单](docs/PROJECT_STATUS.md)；工作规则见 [AGENTS.md](AGENTS.md)，模块入口、0.1.46应用更新、0.1.45封面修复、0.1.44移动优化／0.1.43世界独立模型、0.1.42模型适配、0.1.41地点优化及公开产物状态见 [HANDOFF.md](HANDOFF.md)。以下架构介绍不替代当前进度清单。
+### 1. 安装
 
-## 项目定位
+推荐下载 [Windows 安装包](https://github.com/zhangyeS12/dreamtalk/releases/download/v0.1.53/dreamtalk_0.1.53_x64-setup.exe)，按提示安装。
 
-dreamtalk 是持久化、事件驱动的多角色 AI 世界，不是普通聊天机器人。Director 负责世界与宏观剧情调度，Character Agent 主要负责自己拥有的记忆、人格表达和与玩家对话；世界真实事实、角色知识和玩家知识相互分离。项目在 GitHub 公开开发，源码采用 [Apache-2.0 许可证](LICENSE)。旧工程名及仍需兼容的内部标识见 [项目命名与兼容性](docs/architecture/PROJECT_IDENTITY.md)。
+也可以使用 [便携版压缩包](https://github.com/zhangyeS12/dreamtalk/releases/download/v0.1.53/dreamtalk-0.1.53-windows-x64.zip)：完整解压到一个固定目录，打开 dreamtalk 文件夹里的 dreamtalk-desktop.exe。不要直接在压缩包中运行，也不要只复制其中的程序文件。
 
-## 开发状态
+下载页中的 **Source code** 是给开发者看的源码，请选择上面的安装包或便携包。若系统缺少网页显示组件，可安装 [Microsoft WebView2](https://developer.microsoft.com/microsoft-edge/webview2/)。首次安装可能提示未知发布者：目前已有应用更新签名，但尚无 Windows 发布者证书。
 
-截至2026-10-08，Desktop **0.1.48** 修复版已公开，签名安装器／便携包和固定频道均可下载；修正原安装包清单、增加静态交付核对及严格旧清单修复工具，包含前序删除及其他功能。[本轮记录](docs/maintenance/2026-10-08-update-manifest-fix.md)。项目处于体验和验收阶段；卡／书当轮外部JSON导入已有具体用户验收，不能扩大为最新版整体验收。工程端只修复了已核对的旧程序清单，没有运行应用、安装器、测试、模型或真实迁移，也未修改当前系统入口。
+### 2. 准备模型
 
-Q-001B 提供仅开发环境启用的 [开发者运行时检查器](docs/architecture/RUNTIME_INSPECTOR.md)，用于通过真实 API/application 路径观察时钟、位置、Scene、trigger、activation、WorldEvent、Observation 与 owner-scoped EpisodicMemory。它不是最终产品 UI，也没有加入 Activation consumer 或自动 Observation→Memory。
+在书架右上角打开“模型设置”，填写服务商、模型名称、服务地址和 API 密钥，保存为默认配置。密钥从你使用的模型服务商获取，dreamtalk 不提供共享密钥。
 
-普通用户首页为[世界档案书架](docs/WORLD_ARCHIVE.md)，初始横排书脊不显示详情，悬停轻抽、点击抽出后才展示右侧信息；空白书提供创建／导入入口。书排支持直接鼠标拖动及双向循环，每圈至少12本并始终保留空白入口，正面和书脊默认显示世界名；[编辑封面](docs/WORLD_COVERS.md)支持独立标题与三面本地图片裁剪，保留左上角dreamtalk。选择档案并明确进入后显示“聊天 / 通讯录 / 设置 / 我”四标签，支持创建与切换世界、暂停/恢复及时间倍率设置、在每个世界绑定 Player；未绑定的新世界可通过 canonical 命令从“家”创建本地玩家并进入。支持通用与世界专属个人资料保存，以及置顶的玩家已知“世界事件”时间线。事件查询先按绑定 Player 的 Observation 授权，再读取安全展示信息；已知事件可由玩家选择带入已有会话的待编辑消息，不会自动发送。[设置手册](docs/SETTINGS_HANDBOOK.md)按应用与当前世界分类，通讯录支持角色卡新建、联网生成、导入、预览确认和独立更新；世界书的新建、联网生成、导入与编辑已移到书架管理；通讯录只显示当前世界已确认的角色资料。首次打开角色会建立世界隔离的持久私聊会话；聊天页可读取该 Player 有权查看的消息记录，安全展示角色扮演 Markdown，并支持回车发送及 Shift+回车换行。角色卡开场白可作为该角色回复的语气示例，但不会自动成为已发送的消息。当前世界可创建多角色群聊，群聊消息和角色回复使用独立的一次性回合认领与共享 Token 上限；@角色名 指定下一位发言者，其他情况由独立调度器按已确认人格和群聊记录选人。内部服务和受认证 API 可幂等保存玩家消息与待处理回合；模型执行层已有逐次调用的保守 Token 预留，角色回复已具备内部一次性领取、受控模型生成与幂等提交边界，并已接入正式运行时与页面私聊发送入口；仅当配置了单一可用模型或明确的聊天路由、可信 Token 上限及会话凭证时才能发送。详见 [产品界面与知情边界](docs/architecture/PRODUCT_SURFACE.md) 与 [聊天模型](docs/architecture/CHAT_MODEL.md)。开发者检查器通过 URL 查询参数 `?developer=1` 进入。
+支持 OpenAI、Claude、Gemini，以及 DeepSeek、Kimi、GLM 等提供兼容接口的服务。请使用服务商给出的完整模型名称和地址；不同型号和第三方代理的功能可能不同，不能只凭品牌名称判断是否兼容。
 
-Stage 5 — World Kernel & Simulation Runtime 已完成并冻结。C-006D 的 clock reconciliation、C-006C sparse activation/coalescing 与 C-006B deterministic Action/Scene/event-time perception 继续作为 Stage 6 substrate。详见 [Stage 5 验收](docs/architecture/STAGE5_ACCEPTANCE.md)、[Clock Reconciliation](docs/architecture/CLOCK_RECONCILIATION.md)、[Sparse Activation](docs/architecture/SPARSE_ACTIVATION.md)、[Action Resolution](docs/architecture/ACTION_RESOLUTION.md) 和 [Scenes and Perception](docs/architecture/SCENES_AND_PERCEPTION.md)。
+### 3. 创建世界和自己的身份
 
-Stage 4 — LLM Infrastructure 已完成并冻结。C-005E5 将四种 provider adapter、ModelRegistry、purpose routing、retry、accounting/pricing、Budget Guard 和 session credentials 接入单一生产 composition root。桌面 API key 由 OS credential facilities 持久化；Python Core 只接收内存 session credential。非秘密配置的内层使用严格version 1 JSON，0.1.43支持默认／世界覆盖的version 2容器，旧v1作为默认兼容；桌面设置提供单模型首次配置入口，常见型号使用经核对的容量预设，未知型号在高级设置确认可信Token上界。启动和配置都不会发现模型、验证 key 或发起生成。全部验收保持离线，没有真实付费 API；可选 live smoke 必须显式 opt-in。详见 [生产组装](docs/architecture/LLM_PRODUCTION_COMPOSITION.md)、[Stage 4 验收](docs/architecture/STAGE4_ACCEPTANCE.md)、[OpenAI Responses adapter](docs/architecture/OPENAI_RESPONSES_ADAPTER.md)、[Gemini Interactions adapter](docs/architecture/GEMINI_INTERACTIONS_ADAPTER.md)、[Anthropic Messages adapter](docs/architecture/ANTHROPIC_MESSAGES_ADAPTER.md)、[LLM routing](docs/architecture/LLM_ROUTING.md)、[Budget Guard](docs/architecture/LLM_BUDGET_GUARD.md)、[LLM accounting](docs/architecture/LLM_ACCOUNTING.md)、[执行策略](docs/architecture/LLM_EXECUTION_POLICY.md)、[基础契约](docs/architecture/LLM_INFRASTRUCTURE.md)、[结构化生成](docs/architecture/STRUCTURED_GENERATION.md) 和 [真实文本流](docs/architecture/LLM_STREAMING.md)。
+点击书架中的空白书，创建并命名一个世界。可以先创建空世界，也可以准备世界书，补充人物所生活的背景。点击“进入世界”，在底部“我”页面填写你的称呼和身份，确认进入。
 
-Stage 3 已完成 canonical authored-content、Character Card/Lorebook 离线导入、Draft/Preview/confirmed Commit、外部 JSON 导出和 `.lwcontent` 原生内容包。原生包支持显式 roots 的依赖闭包、shared references、完整来源、本地 SHA-256 资产、六种三方冲突与事务化 accepted baseline。详见 [Stage 3 验收](docs/architecture/STAGE_3_ACCEPTANCE.md)、[原生内容包](docs/architecture/NATIVE_CONTENT_PACKAGE.md)、[内容模型](docs/architecture/CONTENT_MODEL.md)、[导入](docs/architecture/IMPORT_MODEL.md)、[导出](docs/architecture/EXPORT_MODEL.md) 和 [持久化](docs/architecture/PERSISTENCE_MODEL.md)。
+### 4. 添加角色和地点
 
-`.lwcontent` = authored content package；`.lworld` 保留给未来 runtime-world/state package。旧格式后缀为兼容标识，不随项目改名而变。content package != backup != running world；hash integrity != publisher authentication；filesystem blobs + SQLite 不被宣称为一个 ACID transaction。导入/导出不创建 Runtime World/Character，不断言 Truth 或授予 Belief/PlayerKnowledge。作者文本/regex/activation metadata 保持不可信数据，不执行。
+打开“通讯录 → 添加与编辑角色卡”，手动创建角色，或导入已有 PNG / JSON 角色卡。每位角色都需要选择一个初始地点；先用已有地点，或在“添加 / 编辑地点”里创建新地点。资料会先预览，由你确认保存。
 
-当前角色聊天上下文已接入本角色授权记忆、玩家描述、当前世界确认的角色卡，以及逐条开放的公共世界背景。世界书条目默认隐藏；暗线不因导入自动进入角色上下文。群聊记录按固定成员授权，沉默成员同样可在之后读取该群已发送的消息；聊天文本不会自动成为 WorldTruth、KnowledgeAssertion 或 Observation。长期聊天记忆与历史原文召回、Director 受约束的日常批量规划、手动处理的世界动态池、角色卡／世界书联网 Builder 已完成相应切片，边界见 HANDOFF 与各使用说明；相遇、共同休闲、阵营相识与世界内UI首轮优化已完成相应切片；更完整的自主剧情/关系成长、自动知识传播、checkpoint/branch与runtime`.lworld`仍未实现，完整离线重建和最终产品验收尚未完成。cloud sync、marketplace不是已批准排期。Stage 5 catch-up 只 materialize 到期 work，不编造离线叙事或角色决定。外部 PNG/APNG writer、CHARX、任意图复制、签名与 orphan blob GC 仍 deferred。Stage 2 的资源级 CAS、幂等、ledger/rebuild 和知识隔离继续沿用，见 [Stage 2 验收](docs/architecture/STAGE_2_ACCEPTANCE.md)。provider tools和完整多模型管理UI尚未完成；四类adapter和同次事件／记忆路径已有实现；用户历史聊天／生成反馈不代表全部provider／模型／代理已验收。
+角色卡也可以在绑定身份前准备；如果初始位置尚待登记，进入世界并完成身份后按页面提示确认即可，不需要重复导入角色。
 
-C-002 运行时基础继续沿用：共享 React UI、Tauri v2 Windows 开发壳、Python Core 启停协议、系统 API、SQLite 迁移元数据、结构化日志和 CI。普通前台启动由[三维流星动画](docs/CELESTIAL_STARTUP.md)承接真实加载，至少展示1.5秒后进入就绪书架；正常等待不显示核心连接技术文字，失败保留可理解的重试。开发Inspector的技术状态独立；进入选定世界后显示普通用户四标签页面。
+### 5. 开始聊天
 
-当前已有受约束的角色回复与独立群聊发言调度器；Director已接线日常/移动、有限相遇及共同休闲，角色相识/阵营、本地有界语义+词法RAG和0.1.37观星室界面均已实现。尚未形成完整自主剧情、关系成长或自动知识传播；有界召回不是无限历史覆盖，最新版运行与视觉仍需用户验收。生产 action registry 与 Director 已批准的内核日常命令保持各自边界；Scene lifecycle 是内部应用操作。生产 snapshot store 只读，正式世界变更通过 Kernel/UoW 管线执行；投影恢复另用内部 ProjectionRebuilder。P-01 的时间推进/离线/暂停部分已由 C-006D 解决；其余待确认问题见 [PRODUCT_SPEC.md](docs/product/PRODUCT_SPEC.md)。Stage 0 审查见 [ARCHITECTURE_REVIEW_001.md](docs/architecture/ARCHITECTURE_REVIEW_001.md)，运行时边界见 [RUNTIME_FOUNDATION.md](docs/architecture/RUNTIME_FOUNDATION.md)。
+在通讯录选择角色，点击“打开会话”。Enter 发送，Shift + Enter 换行。你也可以在聊天目录创建群聊，邀请多个角色一起交流。
 
-## 开发环境与运行
+第一次使用可以先只开聊天。自动活动、主动联系和世界动态都需要另行开启，不必一次把所有开关打开。
 
-在仓库根目录执行。需要 Python 3.12+、uv、Node 24、Rust 1.88+（本机使用 stable 1.95）；Windows Tauri 还需要 MSVC C++ Build Tools 和 WebView2。
+## 页面里有什么
 
-```powershell
-uv sync --frozen
-npm ci
+| 页面 | 你可以做什么 |
+| --- | --- |
+| 世界书架 | 创建、选择和删除世界；创建、导入、编辑、导出世界书；编辑封面；设置默认模型；查看新版本 |
+| 聊天 | 私聊、群聊、查看历史和未读消息、管理记忆、导出聊天、查看世界事件 |
+| 通讯录 | 创建、导入、编辑、导出和删除角色卡；上传头像；管理阵营和地点；查看人物关系和当前位置 |
+| 设置 | 配置当前世界模型、聊天额度、时间、自动活动、主动联系、世界动态，以及应用后台运行 |
+| 我 | 设置通用称呼和自我介绍、当前世界专属身份，选择或绑定自己在世界中的玩家身份 |
 
-# Windows desktop：Rust 启动 Core，复用 React UI
-npm run dev:desktop
+书架可以左右拖动，点击书本展开详情；选书只是预览，点击“进入世界”才会切换到那个世界。空白书位会随着世界数量增加。封面支持正面、书脊和背面图片，也可以使用文字封面。
 
-# Browser：开发 launcher 启动 Core + loopback Vite，按 Ctrl+C 关闭
-npm run dev:web
+## 角色、聊天与记忆
 
-# Core alone：开发 launcher 生成 bootstrap；输出 endpoint，不输出 bearer
-npm run dev:core
-```
+### 角色卡和世界书
 
-直接使用 bootstrap 启动 Core：`uv run dreamtalk-core --desktop --bootstrap-path <absolute-path> --parent-pid <pid>`。旧命令 `livingworld-core` 仍作为兼容别名保留。bootstrap 必须由调用方创建，详见 [运行时协议](docs/architecture/RUNTIME_FOUNDATION.md)。
+**角色卡**决定一个人的姓名、性格、背景和说话方式；**世界书**提供世界设定、地点背景和其他资料。角色卡在通讯录管理，世界书在书架选中对应世界后管理。
 
-## 检查与开发产物
+两种资料都支持手动填写、文件导入和联网辅助生成。联网生成会给出草稿和来源，先检查、编辑，再确认保存。文件替换与新建角色身份不同，修改已有角色时请使用“编辑”或“从文件更新”。
 
-```powershell
-uv run --frozen ruff check .
-uv run --frozen ruff format --check .
-uv run --frozen pytest
-npm run lint
-npm test
-npm run build:web
-# Real browser lifecycle (Windows uses installed Edge; Linux needs playwright install chromium)
-npm run test:web-smoke
-npm run build:core
-uv run python scripts/check-wheel.py
-uv run python scripts/check-doc-links.py
+世界书条目默认隐藏。希望作为公共背景使用的条目，需要逐条确认公开；条目是否参与本次聊天或活动，还取决于是否启用、关键词和使用条件。隐藏不等于删除，公开也不等于每次都必定被引用。修改正文、触发条件或从文件替换后，需要重新确认相关条目的公开范围。
 
-# Windows：构建随附 Python Core 的本地便携目录/zip（不需要使用者安装开发依赖）
-npm run build:portable
+支持酒馆生态的 V2 / V3 角色卡与 World Info 世界书格式，但不同应用对扩展字段的解释可能不同，导入预览和导出提示会说明限制。
 
-# Windows integration
-npm run test:desktop
-npm run build:desktop
-npm run test:desktop-smoke
+角色编辑中的姓名、描述、性格、背景、说话方式和对话场景用于帮助角色理解自己；对话示例用于参考语气。开场白目前只作为参考，不会保存后自动发出消息。标签便于整理，创作者备注用于补充资料。
 
-# Optional real provider smoke: disabled unless --enable-live-provider is added.
-# External API usage may incur cost; this is never run by CI/pytest.
-npm run test:llm-live -- --config <path> --data-dir <path> --provider <id> --model <id> --credential-env <ENV_NAME>
-```
+世界书可以添加多条背景，每条单独设置：
 
-`build:core` 生成 `artifacts/core/*.whl`；`build:desktop` 生成未签名的 Windows debug executable，依赖当前 checkout 的 `.venv`。`build:portable` 先冻结 Python Core 并验证独立启动和迁移，再构建 release 桌面程序，生成 `artifacts/portable/dreamtalk/` 与 zip。构建产物本身不自动发布；本次0.1.42已按用户明确授权发布到GitHub Release，仍不是签名安装包；使用说明见 [Windows 便携版](docs/PORTABLE_WINDOWS.md)。
+| 条目选项 | 作用 |
+| --- | --- |
+| 标题 / 正文 | 标题便于辨认，正文是具体背景内容 |
+| 启用条目 | 关闭后不参与背景选择，内容仍保留 |
+| 提供条件 | “常驻背景”无需关键词；“命中关键词”在相关内容出现时才考虑提供 |
+| 主关键词 | 触发这条背景的词语，多个词用逗号分隔 |
+| 次级关键词与条件 | 进一步要求任一命中、全部命中、全部不命中或不能全部命中，配合主关键词使用 |
+| 优先级 / 顺序 | 帮助系统在空间有限时选择并排列背景，不代表角色必定照搬内容 |
+| 公开范围 | 保存后逐条确认是否可作为公共背景；与“启用条目”是两个独立开关 |
 
-只生成便携产物、由验收者另行执行生命周期检查时，可使用 `npm run build:portable -- --build-only`；默认命令仍包含自检。
+### 私聊和群聊
 
-开发数据库与日志保存在 app data。桌面使用 Tauri 的 `app_data_dir`；独立 Core / browser 开发 launcher 暂时沿用历史兼容路径 `%LOCALAPPDATA%/LivingWorld/development`。安装和源码目录不保存运行数据库或 bootstrap credentials。
+私聊只与选中的角色交流。群聊成员固定，成员可以看到这个群的已保存消息，即使当轮没有发言。使用一个明确的“@角色名”可以指定下一位发言者；没有 @ 时，系统选择合适的角色回应。
 
-GitHub Actions 配置包含 Python lint/test/wheel、TypeScript lint/test/Web build、真实 browser smoke 和 Windows supervisor/WebView smoke。远程 CI 结果以实际运行记录为准。
+聊天可以远程进行，不会把角色自动搬到同一个地点。群聊里的成员也不会因为同群就自动成为现实中相识的人。
+
+历史记录持续保存；上翻可以继续查看更早的消息。遇到回复失败时，先看错误原因。符合条件的最后一条未回复消息会提供人工恢复入口，恢复属于一次新的生成，可能再次产生费用；启动、刷新不会自动重发失败请求。
+
+### 长期记忆
+
+正常聊天会尝试保存重要信息，后续回复可参考相关记忆和角色有权看到的旧聊天。你可以查看来源、搜索、置顶、停用或恢复记忆，也可以在聊天中明确纠正旧信息。
+
+关闭“自动记录”会停止新增自动记忆，已有记忆仍可参与回复。停用某条记忆不会删除原聊天，也不能让刚刚说过的话从当前对话里消失。
+
+会话摘要由你主动生成、编辑、预览并确认，不会偷偷替你重写全部历史。生成摘要可能调用模型。记忆有选择和容量限制，模型也可能漏记或表达错误，不能保证永远记住每句话。
+
+## 阵营、关系和地点
+
+### 阵营与人物关系网
+
+阵营可以有父子层级，一个角色可以属于多个阵营。**同一阵营的直接成员默认互相认识**；父阵营和子阵营不会自动共享成员或相识关系。
+
+把角色移出阵营时，会询问是否切断该阵营提供的联系。选择保留，相识连线继续存在；选择切断，会移除这一来源的联系。两人曾真实相遇认识，或仍同属其他阵营时，这些独立关系会保留。
+
+人物关系网以头像和连线展示已确认的相识，可以拖动、旋转、缩放，点击头像查看名字、阵营并打开聊天。没有头像时显示名字首字，不展示亲密度数值。
+
+### 地点、常驻与移动
+
+地点可以嵌套，例如“璃月 → 璃月城 → 往生堂”。角色既可以停在往生堂，也可以停在璃月城或璃月本身。不同分支可以有同名地点，同一父地点下不能重复命名。
+
+每位角色都要有初始地点，它是角色的**常驻中心**。未锁定时，角色可以到父地点、子地点或兄弟地点；越远越不容易去，离开后更倾向返回。地点的“地区”标记可区分璃月、蒙德等区域，跨地区远行概率很低。
+
+| 配置 | 作用 |
+| --- | --- |
+| 初始地点 | 角色常驻的中心，创建角色时必选；以后可在角色资料中修改 |
+| 常驻倾向 | 一般 / 强 / 很强，控制角色留在常驻地点附近的倾向，默认“强” |
+| 锁定初始地点 | 让角色回到初始地点，并只在那里活动；解除后才可继续移动 |
+| 地区标记 | 将该地点及相关子地点作为一个地区考虑，子地点可另设地区 |
+| 隐藏地点 | 默认不向角色开放整个分支；逐个指定获准角色后，他们才可以进入 |
+
+“地点”页用二维嵌套圆展示包含关系，头像显示角色实际所在地点。点击头像，右侧显示“初始地点－当前位置”；例如“璃月－往生堂”。管理者可以看到隐藏地点，这不代表角色或玩家已经在剧情中知道它。
+
+角色和地点都没有固定的 16 / 32 个总量限制。为了控制单次规划的耗时和费用，自动活动每批只从已配置角色中轮换选择一部分，其他角色保留已有状态。数量增加后，轮到每位角色需要更久。
+
+## 设置说明
+
+完整操作见[设置手册](docs/SETTINGS_HANDBOOK.md)。下面按应用里的分类说明每个选项。
+
+### 模型与聊天
+
+**书架上的模型设置是默认配置。** 未单独设置的世界继承它；世界内保存模型配置后，只对那个世界生效。独立配置不随默认变化，可以点击“恢复使用书架默认配置”。该世界的聊天、资料生成和后台模型功能都使用它自己的配置。
+
+| 选项 | 如何使用 |
+| --- | --- |
+| 服务商 | 选择实际使用的服务；DeepSeek、Kimi、GLM 等兼容服务使用兼容接口入口 |
+| 模型名称 | 填服务商提供的完整名称，不要只填“GPT”或“Kimi” |
+| 服务地址 | 填服务商要求的地址；第三方代理使用其自己的地址 |
+| API 密钥 | 填自己的密钥；请勿放进截图、聊天或问题反馈中 |
+| 回复长度 | 简短、标准、较长或自定义，限制一次角色回复的最大输出量，并非保证写满 |
+| 逐步显示回复 | 支持时边生成边显示；遇到不兼容服务可关闭 |
+| 输入容量来源 | 高级设置；自动匹配已知模型，未知型号可按官方说明手动填写 |
+| 模型输入容量 | 模型真实能接收的上下文大小；不能为绕过报错随意填小 |
+| 原生 JSON Schema 支持 | 高级兼容选项，只在具体型号明确支持时开启，不确定就保持关闭 |
+| 请求超时 | 默认 30 秒，慢速或思考模型可适当增加；超时不会自动重发 |
+| 每轮聊天额度 | 一次聊天尝试的总量上限，包括输入、选人、多个角色回复和内部重试；这是本机所有世界共用的设置 |
+
+界面中的 Token 可以理解为模型计算文字量的单位，它不等于字数。“回复长度”和“整轮额度”是两件事。某些服务需要较大的保守预留，额度不足时会显示所需数值；请核对后调整，不会悄悄放宽上限。聊天额度不是月度账单上限，也不包括另外开启的资料生成与后台任务。
+
+保存模型配置会重新连接本地服务，但不会为了测试密钥而调用模型；保存成功不代表该服务商已经验证可用。
+
+### 后台运行
+
+| 选项 | 作用 |
+| --- | --- |
+| 登录时启动 | Windows 登录后启动 dreamtalk，并在后台打开 |
+| 关闭窗口到托盘 | 点窗口关闭后继续在后台运行；从托盘可以重新打开 |
+| 保存并更新启动位置 | 保存后台设置，并把启动入口登记为当前程序的位置；便携版换目录后需重新保存 |
+| 刷新 | 重新读取已保存的后台设置，不会调用模型 |
+
+要彻底退出，请从托盘选择“退出并停止后台运行”。关机、睡眠或彻底退出后，应用不会继续调用模型。
+
+### 世界时间
+
+“暂停 / 恢复”控制当前世界的时间和调度。“时间倍率”控制世界时间流逝速度，倍率越高，世界中的一天过去得越快。暂停不等于撤销已经发出的模型请求，这些请求仍可能计费。
+
+“忙碌”只控制角色能否主动联系你，不会暂停世界。聊天和群聊也不会自动移动你的位置。
+
+### 角色活动
+
+| 选项 | 作用和前提 |
+| --- | --- |
+| 自动活动 | 让已设置初始地点的角色按批次安排休息、工作、自由活动和移动；默认关闭，开启前确认后台费用 |
+| 每批规划人数 | 1～16，默认 8；从全部角色中轮换抽取，控制单次工作量，不限制角色卡总数；修改后点击“保存规划人数” |
+| 角色相遇 | 只有实际处于同一地点、活动合适的角色才可碰面；需先开启自动活动 |
+| 共同休闲 | 相识角色在同一地点一起休息或活动；需先开启自动活动和角色相遇 |
+| 刷新状态 | 读取现有设置和规划结果，不生成新内容 |
+| 请求新规划 | 在需要人工处理的状态下明确发起一批新规划，会调用模型 |
+
+常规规划覆盖 6 个世界小时，不会每走一步都调用模型。问候和共同休闲有数量、间隔与持续同场限制，不会让所有角色一开开关就同时碰面。活动记录开始、结束或中断，不会把“去工作”自动写成“任务成功”。地点和初始位置在通讯录编辑。
+
+### 主动联系
+
+| 选项 | 作用 |
+| --- | --- |
+| 可联系 / 忙碌 | 可联系时允许有理由的问候或邀请；忙碌时跳过普通主动联系 |
+| 在线主动联系 | 使用应用期间，角色根据真实活动找你；需开启自动活动，并确认后台费用 |
+| 最小联系间隔 | 控制两次在线联系的最短世界时间间隔，默认 360 分钟；满足间隔也不保证立刻收到消息 |
+| 离线联系 | 恢复使用后，根据离线时长最多补一条问候或邀请；只能指定一个世界，换世界开启会替换原目标 |
+| 离线时长阈值 | 默认 6 个真实小时，可调整为 1～168 小时；首次开启不会立即生成 |
+
+多人主动联系必须围绕同一件真实共同活动。收到任何主动联系后，**需要在收到消息的原会话回复**，才允许下一次；只读消息、开关或重启都不会解除等待。线上和离线共用这个规则。
+
+完全退出期间不会在后台生成台词；离线消息是在恢复时处理的，不代表关机期间模拟了完整生活。
+
+### 世界动态
+
+默认关闭，开启前确认后台费用。它使用你已确认公开、且符合条件的世界书背景生成动态。
+
+每批生成 10 条，按时间先后最多展示 **5 条进行中**，其余暂存。你把一条标为绿色“已经历”或灰色“跳过”，就腾出位置补入下一条；红色“未经历”继续占位。已处理的消息进入可回看的历史，最近一批处理达到 8 条时可以自动续批。
+
+“刷新状态”只读取；“生成新一批”会调用模型。暂停期间不会发布新动态，过期内容不会补造成历史。
+
+### 关于与诊断
+
+查看应用版本、程序位置、本地连接和模型配置状态。“刷新连接状态”只检查本地应用状态，不会测试服务商密钥、余额或调用模型。
+
+## 世界事件怎么看
+
+聊天页上方的世界事件分为不同来源：
+
+- **聊天获知**：角色在交流中提到的具体活动、计划、邀请或变化，保留原句、说话者和获知时间。角色自述或传闻不保证是真实发生的事实。
+- **亲历记录**：你或角色实际有权见证的活动经历，不会公开其他人的秘密。
+- **世界动态**：来自公开背景的消息池，可以标记是否经历；手动标绿不等于系统证明你完成了某个行动。
+
+可以从记录回到原会话，继续聊这件事。普通闲聊不会全部变成世界事件，也不能保证模型提到的每件事都被准确记入。
+
+## 导出、解散与删除
+
+导出只读取本地已保存内容，不调用模型，不会删除原资料。
+
+| 操作 | 入口与结果 |
+| --- | --- |
+| 导出角色卡 | 通讯录 → 添加与编辑角色卡 → 当前世界已保存 → 导出角色卡；可选 V2 / V3 JSON，不打包头像图片 |
+| 导出世界书 | 书架 → 对应世界的世界书管理 → 导出世界书；保存为 World Info JSON，包括这份世界书的隐藏条目 |
+| 导出聊天 | 会话顶部菜单 → 导出聊天记录；可选易读 TXT 或保留身份、原文和时间的 JSON，包含本次读取时已经保存的完整历史 |
+| 解散群聊 | 群聊顶部菜单 → 解散群聊 → 确认；群聊从列表消失，不能继续发言，但记忆和原消息来源保留。生成中或等待你回复主动联系时须先处理 |
+| 删除角色卡 | 角色资料底部或角色卡管理中删除；退出通讯录和后续活动，历史与记忆保留，相关旧会话变为只读；重新导入属于新角色身份 |
+| 删除阵营 | 编辑阵营中删除；先移除直接成员和子阵营 |
+| 删除地点 | 地点编辑中删除；不能删除家、有子地点、玩家当前位置或现有角色初始 / 当前位置，需先调整 |
+| 删除整个世界 | 书架选中书，在编辑封面下方点击“删除世界”，再次确认；世界书、角色、阵营、地点、所有聊天和记忆全部清除，书位恢复空白，无法撤销 |
+
+**资料和聊天导出不是完整世界备份。** 当前没有聊天文件导入或整个运行世界的一键备份恢复。导出 JSON 的补充字段在其他应用中可能不完整，请阅读转换提示。分享世界书前也请检查隐藏条目是否适合公开。
+
+## 更新应用
+
+有新版本时，前台启动会显示更新内容，可选“稍后”或“更新”。勾选“不再自动弹窗”后，后续启动不弹提醒，但书架“世界档案库”旁仍会显示“新更新”，你可以随时打开更新入口。
+
+确认更新后才下载。更新会保留世界和聊天，并尝试替换程序、更新已启用的 dreamtalk 自启动与对应快捷方式，清理本次更新管理的旧程序。失败时会提示并保留恢复材料。其他目录里手动复制的程序或下载的 ZIP 不会被扫描删除。
+
+老版本没有更新入口时，先从托盘彻底退出，再安装完整新版。0.1.46 / 0.1.47 若提示“程序文件与交付清单不符”，请参照[旧版更新修复说明](docs/WINDOWS_UPDATES.md)。不要用旧程序打开已升级的同一份存档。
+
+## 隐私、费用与常见问题
+
+世界和聊天存放在本机。使用外部模型时，回复所需的角色资料、获准背景、相关聊天和记忆会发给你配置的服务商；它们并非始终只在本机处理。保存、导出、刷新本地状态不调用模型；聊天、联网生成资料、生成摘要、开启后的后台规划和联系可能计费。
+
+**角色遇到不懂的知识会自动联网搜索吗？** 当前普通聊天没有自动搜索能力。联网辅助生成角色卡 / 世界书是另外的明确操作，生成结果仍需你审核。
+
+**为什么开了主动联系却一直没消息？** 需要有合适活动和联系理由，还要满足间隔、可联系状态、未暂停、没有上一条待回复等条件。双人联系还依赖真实共同休闲，不是定时随机发消息。
+
+**为什么角色很多，但不是每个人都在活动？** 配置角色没有固定总数上限，规划按有限批次轮换；人数越多，每个人等到下一批的时间可能越长。
+
+**为什么回复被额度拦下？** 系统会在请求前预留输入和回复所需的总量。有些服务的严格预留较大，尤其群聊还包含选人和多人发言。按提示检查模型容量与每轮额度，不能把回复长度当成整轮额度。
+
+**没有开启后台功能，可以只聊天吗？** 可以。自动活动、相遇、共同休闲、世界动态和主动联系均可保持关闭。
+
+目前还没有完整的关机期间生活重建、自动持续剧情与关系成长、一键生成完整可运行世界、完整存档备份 / 分支或云同步。已有记忆和活动也不能保证模型永不出错。
+
+## 帮助与参与
+
+[安装说明](docs/PORTABLE_WINDOWS.md) · [设置手册](docs/SETTINGS_HANDBOOK.md) · [地点说明](docs/ACTIVITY_LOCATIONS.md) · [更新说明](docs/WINDOWS_UPDATES.md)
+
+通过 [GitHub Issues](https://github.com/zhangyeS12/dreamtalk/issues) 反馈时，请提供版本、操作步骤、预期与实际表现。请先遮住 API 密钥和私人聊天。新版本的实际使用和升级仍需要用户验收，构建成功不等于所有场景都已通过。
+
+dreamtalk 使用 [Apache-2.0 开源许可证](LICENSE)。想参与开发可查看[开发说明](docs/DEVELOPMENT.md)；项目实现和验收范围另见[状态清单](docs/PROJECT_STATUS.md)。

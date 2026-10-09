@@ -103,7 +103,8 @@ MOBILITY_REVISION = "0039_character_mobility"
 REMOVAL_REVISION = "0040_authored_removal"
 ROTATION_REVISION = "0041_director_rotation"
 DELETION_REVISION = "0042_world_deletion"
-HEAD_REVISION = "0043_acquaintance_sources"
+ACQUAINTANCE_SOURCE_REVISION = "0043_acquaintance_sources"
+HEAD_REVISION = "0044_location_name_scopes"
 
 # One reviewed linear chain replaces repeated hand-maintained suffix sets.
 _SUPPORTED_REVISIONS = (
@@ -149,6 +150,7 @@ _SUPPORTED_REVISIONS = (
     REMOVAL_REVISION,
     ROTATION_REVISION,
     DELETION_REVISION,
+    ACQUAINTANCE_SOURCE_REVISION,
     HEAD_REVISION,
 )
 _REVISION_RANGES = {
@@ -359,7 +361,10 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
     pre_removal_revision = revision not in _REVISION_RANGES[REMOVAL_REVISION]
     pre_rotation_revision = revision not in _REVISION_RANGES[ROTATION_REVISION]
     pre_deletion_revision = revision not in _REVISION_RANGES[DELETION_REVISION]
-    pre_acquaintance_source_revision = revision != HEAD_REVISION
+    pre_acquaintance_source_revision = (
+        revision not in _REVISION_RANGES[ACQUAINTANCE_SOURCE_REVISION]
+    )
+    pre_location_name_scope_revision = revision != HEAD_REVISION
     pre_faction_revision = revision not in _REVISION_RANGES[FACTION_REVISION]
     pre_proactive_revision = revision not in _REVISION_RANGES[PROACTIVE_REVISION]
     pre_shared_revision = revision not in _REVISION_RANGES[SHARED_REVISION]
@@ -608,6 +613,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
             pre_rotation_revision=pre_rotation_revision,
             pre_deletion_revision=pre_deletion_revision,
             pre_acquaintance_source_revision=pre_acquaintance_source_revision,
+            pre_location_name_scope_revision=pre_location_name_scope_revision,
         )
     if revision in {
         CONTENT_REVISION,
@@ -705,6 +711,7 @@ def _validate_domain_shape(
     pre_rotation_revision: bool = True,
     pre_deletion_revision: bool = True,
     pre_acquaintance_source_revision: bool = True,
+    pre_location_name_scope_revision: bool = True,
 ) -> None:
     """Detect partial/mismatched schemas; never infer a revision from them."""
 
@@ -899,6 +906,11 @@ def _validate_domain_shape(
             )
             for column in table.columns
             if not (
+                pre_location_name_scope_revision
+                and column.name == "name_scope"
+                and table.name == "local_location_catalog"
+            )
+            if not (
                 pre_removal_revision
                 and column.name == "removed_at"
                 and table.name in {"world_content_imports", "local_location_catalog"}
@@ -1069,6 +1081,10 @@ def _validate_domain_shape(
             (constraint.name, _normalized_sql(str(constraint.sqltext)))
             for constraint in table.constraints
             if isinstance(constraint, CheckConstraint)
+            and not (
+                pre_location_name_scope_revision
+                and constraint.name == "ck_local_location_name_scope"
+            )
             and not (baseline and constraint.name in added_checks)
             and not (
                 revision
@@ -1172,6 +1188,9 @@ def _validate_domain_shape(
             tuple(constraint["column_names"])
             for constraint in inspector.get_unique_constraints(table.name)
         }
+        if pre_location_name_scope_revision and table.name == "local_location_catalog":
+            expected_uniques.discard(("world_id", "name_scope", "name_key"))
+            expected_uniques.add(("world_id", "name_key"))
         if actual_uniques != expected_uniques:
             _fail("alembic_schema_shape_mismatch")
         expected_indexes = {

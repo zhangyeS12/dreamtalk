@@ -3,10 +3,9 @@
 from datetime import UTC, datetime
 from uuid import uuid5
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 
-from livingworld.application.director import MAX_LOCATIONS
 from livingworld.application.errors import CharacterActivitySetupError, EntityNotFoundError
 from livingworld.application.world_locations import (
     LocalLocation,
@@ -175,12 +174,12 @@ class SqlAlchemyLocalLocationDirectory:
                     LocalLocationCatalogRecord.removed_at.is_(None),
                 )
                 .order_by(LocationRecord.name, LocationRecord.location_id)
-                .limit(MAX_LOCATIONS + 1)
             )
             rows = (await session.execute(statement)).all()
-            if len(rows) > MAX_LOCATIONS:
-                raise LocationCatalogError("location_catalog_capacity")
             rules = await LocationRules.load(session, world_id.value)
+            grants = {}
+            for loc, char in sorted(rules.grants, key=lambda pair: str(pair[1])):
+                grants.setdefault(loc, []).append(CharacterId(world_id, char))
             locations = [
                 LocalLocation(
                     LocationId(world_id, row.location_id),
@@ -189,11 +188,7 @@ class SqlAlchemyLocalLocationDirectory:
                     if rules.parents.get(row.location_id)
                     else None,
                     hidden=row.location_id in rules.hidden,
-                    allowed_characters=tuple(
-                        CharacterId(world_id, char)
-                        for loc, char in sorted(rules.grants, key=lambda pair: str(pair[1]))
-                        if loc == row.location_id
-                    ),
+                    allowed_characters=tuple(grants.get(row.location_id, ())),
                     revision=row.revision,
                     is_region=row.location_id in rules.regions,
                 )
@@ -289,13 +284,14 @@ class SqlAlchemyLocalLocationCatalog:
             )
         ) is not None and catalog.removed_at is None
 
-    async def check_edit(self, identity, name):
+    async def check_edit(self, identity, name, parent_id=None):
         if identity.value == _home_id(identity.world_id) or not await self._catalogued(identity):
             raise LocationCatalogError("location_not_editable")
         duplicate = await self._session.scalar(
             select(LocalLocationCatalogRecord.location_id).where(
                 LocalLocationCatalogRecord.world_id == identity.world_id.value,
                 LocalLocationCatalogRecord.name_key == location_name_key(name),
+                LocalLocationCatalogRecord.name_scope == (parent_id.value.hex if parent_id else ""),
                 LocalLocationCatalogRecord.location_id != identity.value,
                 LocalLocationCatalogRecord.removed_at.is_(None),
             )
@@ -375,6 +371,7 @@ class SqlAlchemyLocalLocationCatalog:
         catalog = await self._session.get(LocalLocationCatalogRecord, (world, location_id.value))
         if catalog:
             catalog.name_key = location_name_key(name)
+            catalog.name_scope = parent_id.value.hex if parent_id else ""
         await self._session.execute(
             delete(LocationAccessRecord).where(
                 LocationAccessRecord.world_id == world,
@@ -460,48 +457,26 @@ class SqlAlchemyLocalLocationCatalog:
             return before.location_id
         return root
 
-    async def check_new(self, world_id: WorldId, name: str) -> None:
+    async def check_new(self, world_id: WorldId, name: str, parent_id=None) -> None:
         key = location_name_key(name)
         duplicate = await self._session.scalar(
             select(LocalLocationCatalogRecord.location_id).where(
                 LocalLocationCatalogRecord.world_id == world_id.value,
                 LocalLocationCatalogRecord.name_key == key,
+                LocalLocationCatalogRecord.name_scope == (parent_id.value.hex if parent_id else ""),
                 LocalLocationCatalogRecord.removed_at.is_(None),
             )
         )
         if duplicate is not None:
             raise LocationCatalogError("location_name_exists")
-        # The Kernel has already reserved SQLite's writer. Count + create + receipt
-        # therefore share one transaction, including a slot for future onboarding.
-        count = await self._session.scalar(
-            select(func.count())
-            .select_from(LocationRecord)
-            .outerjoin(
-                LocalLocationCatalogRecord,
-                (LocalLocationCatalogRecord.world_id == LocationRecord.world_id)
-                & (LocalLocationCatalogRecord.location_id == LocationRecord.location_id),
-            )
-            .where(
-                LocationRecord.world_id == world_id.value,
-                LocalLocationCatalogRecord.removed_at.is_(None),
-            )
-        )
-        home = await self._session.scalar(
-            select(LocationRecord.location_id).where(
-                LocationRecord.world_id == world_id.value,
-                LocationRecord.location_id == _home_id(world_id),
-            )
-        )
-        capacity = MAX_LOCATIONS if home is not None else MAX_LOCATIONS - 1
-        if count is None or count >= capacity:
-            raise LocationCatalogError("location_catalog_capacity")
 
-    async def add(self, location_id: LocationId, name: str) -> None:
+    async def add(self, location_id: LocationId, name: str, parent_id=None) -> None:
         self._session.add(
             LocalLocationCatalogRecord(
                 world_id=location_id.world_id.value,
                 location_id=location_id.value,
                 name_key=location_name_key(name),
+                name_scope=parent_id.value.hex if parent_id else "",
             )
         )
         try:

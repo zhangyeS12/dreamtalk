@@ -83,11 +83,15 @@ class LocalLocationCatalogRecord(Base):
     location_id: Mapped[UUID] = mapped_column(UUIDStorage(), primary_key=True)
     name_key: Mapped[str] = mapped_column(Text, nullable=False)
     removed_at: Mapped[datetime | None] = mapped_column(UTCTimestampStorage(), nullable=True)
+    name_scope: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="", server_default=""
+    )
     __table_args__ = (
         ForeignKeyConstraint(
             ["world_id", "location_id"], ["locations.world_id", "locations.location_id"]
         ),
-        UniqueConstraint("world_id", "name_key", name="uq_local_location_name"),
+        UniqueConstraint("world_id", "name_scope", "name_key", name="uq_local_location_name"),
+        CheckConstraint("length(name_scope) IN (0, 32)", name="ck_local_location_name_scope"),
         CheckConstraint(
             "length(CAST(name_key AS BLOB)) BETWEEN 1 AND 4096",
             name="ck_local_location_name",

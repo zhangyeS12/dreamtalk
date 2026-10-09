@@ -296,7 +296,9 @@ class CommandHandler:
                 if await uow.locations.get(location.location_id) is not None:
                     raise EntityAlreadyExistsError("Location already exists")
                 if command.list_locally:
-                    await uow.local_locations.check_new(command.world_id, command.name)
+                    await uow.local_locations.check_new(
+                        command.world_id, command.name, command.parent_id
+                    )
                     await uow.local_locations.check_options(
                         command.location_id,
                         command.parent_id,
@@ -318,7 +320,9 @@ class CommandHandler:
                 async def apply() -> None:
                     await uow.locations.add(location)
                     if command.list_locally:
-                        await uow.local_locations.add(location.location_id, command.name)
+                        await uow.local_locations.add(
+                            location.location_id, command.name, command.parent_id
+                        )
                         await uow.local_locations.configure(
                             location.location_id,
                             command.name,
@@ -333,7 +337,9 @@ class CommandHandler:
                 expect_revision(
                     "Location", command.location_id, before.revision, command.expected_revision
                 )
-                await uow.local_locations.check_edit(command.location_id, command.name)
+                await uow.local_locations.check_edit(
+                    command.location_id, command.name, command.parent_id
+                )
                 await uow.local_locations.check_options(
                     command.location_id,
                     command.parent_id,

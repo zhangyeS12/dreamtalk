@@ -35,7 +35,9 @@ from livingworld.domain.world import ClockState
 
 WINDOW_US = 6 * 60 * 60 * 1_000_000
 MAX_CHARACTERS = 16  # Per planning cohort, never a world population limit.
-MAX_LOCATIONS = 32
+# Destination budget for a cohort (at most two route stops per character),
+# independent of the world's authored location count.
+MAX_LOCATIONS = MAX_CHARACTERS * 2
 MAX_CANDIDATES = 64
 
 
@@ -433,7 +435,7 @@ class DirectorService:
                                 "仅world.shared_activities_enabled=true可填写joint_activities；与encounters合计至多2条，0条有效。"
                                 "共同活动只能shared_rest/shared_leisure，双方同地点同种rest/leisure日常重叠15到30分钟。"
                                 "在既有已认识的合理设定中谨慎提案，不把问候和共同活动安排在同一对同批中。"
-                                "已列入known_faction_pairs的角色有用户确认的阵营相识依据，不必先安排碰面；"
+                                "已列入known_faction_pairs的角色有当前有效的阵营或真实相遇相识依据，不必先安排碰面；"
                                 "未列入的双方仍须此前实际碰面。本地会核验认识依据、每角色24小时最多一次及同对6小时冷却。"
                                 "只提案时段，不创作对话、物品、付款、任务成果或关系；取消不补选、不额外重规划。"
                             ),

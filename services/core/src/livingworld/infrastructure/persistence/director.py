@@ -48,7 +48,6 @@ from livingworld.infrastructure.persistence.models import (
     CharacterRecord,
     CharacterStateRecord,
     ChatParticipantRecord,
-    LocalLocationCatalogRecord,
     LocalPlayerBindingRecord,
     LocationRecord,
     WorldClockRecord,
@@ -383,39 +382,23 @@ class SqlAlchemyDirectorStore(SharedDirectorMixin):
                 .limit(MAX_CHARACTERS + 1)
             )
         ).all()
-        locations = (
-            await session.scalars(
-                select(LocationRecord)
-                .outerjoin(
-                    LocalLocationCatalogRecord,
-                    (LocalLocationCatalogRecord.world_id == LocationRecord.world_id)
-                    & (LocalLocationCatalogRecord.location_id == LocationRecord.location_id),
-                )
-                .where(
-                    LocationRecord.world_id == world.value,
-                    LocalLocationCatalogRecord.removed_at.is_(None),
-                )
-                .order_by(LocationRecord.location_id)
-                .limit(MAX_LOCATIONS + 1)
-            )
-        ).all()
         if not rows:
             raise DirectorError("director_characters_required")
-        if len(rows) > MAX_CHARACTERS or len(locations) > MAX_LOCATIONS:
+        if len(rows) > MAX_CHARACTERS:
             raise DirectorError("director_world_capacity")
         characters = []
         rules = await LocationRules.load(session, world.value)
         permitted_locations = set()
+        context_locations = set()
         for state, name in rows:
             allowed = [
-                loc.location_id
-                for loc in locations
-                if await rules.allowed(session, world.value, state.character_id, loc.location_id)
+                identity
+                for identity in sorted(rules.locations)
+                if await rules.allowed(session, world.value, state.character_id, identity)
             ]
             initial, locked, _ = await rules.scope(session, world.value, state.character_id)
             if not allowed or initial not in allowed:
                 raise DirectorError("director_location_scope_unavailable")
-            permitted_locations.update(allowed)
             active_end = await session.scalar(
                 select(func.max(Candidate.end_at)).where(
                     Candidate.world_id == world.value,
@@ -430,7 +413,6 @@ class SqlAlchemyDirectorStore(SharedDirectorMixin):
                 "revision": state.revision,
                 "initial_location_id": str(initial),
                 "location_locked": locked,
-                "allowed_location_ids": [str(identity) for identity in allowed],
                 "available_from": max(now, active_end or now),
                 "available_from_minute": max(
                     0, ((active_end or now) - now + 59_999_999) // 60_000_000
@@ -448,8 +430,42 @@ class SqlAlchemyDirectorStore(SharedDirectorMixin):
                     now,
                 )
             )
+            # Mobility draws from every legal place, retaining home/near/far
+            # probabilities and the full policy signature. Only its chosen route
+            # is sent to the model; a larger catalog cannot inflate prompt input.
+            route = {UUID(identity) for identity in character["mobility_route_ids"]}
+            if not route or not route.issubset(allowed):
+                raise DirectorError("director_location_scope_unavailable")
+            character["allowed_location_ids"] = sorted(str(identity) for identity in route)
+            permitted_locations.update(route)
+            for identity in route:
+                context_locations.update(rules.ancestors(identity))
+            if state.location_id in allowed:
+                context_locations.update(rules.ancestors(state.location_id))
             character.update(await self.approved_persona(session, world, state.character_id))
             characters.append(character)
+        if len(permitted_locations) > MAX_LOCATIONS:
+            raise DirectorError("director_world_capacity")
+        # Project names only after destination / branch permission checks.
+        locations = (
+            await session.execute(
+                select(LocationRecord.location_id, LocationRecord.name)
+                .where(
+                    LocationRecord.world_id == world.value,
+                    LocationRecord.location_id.in_(context_locations),
+                )
+                .order_by(LocationRecord.location_id)
+            )
+        ).all()
+        names = {loc.location_id: loc.name for loc in locations}
+
+        def path(identity):
+            return " / ".join(
+                names[item] for item in reversed(rules.ancestors(identity)) if item in names
+            )
+
+        for character in characters:
+            character["current_location_path"] = path(UUID(character["location_id"]))
         snapshot = {
             "window_start": now,
             "window_end": now + WINDOW_US,
@@ -458,6 +474,7 @@ class SqlAlchemyDirectorStore(SharedDirectorMixin):
                 {
                     "location_id": str(loc.location_id),
                     "name": loc.name,
+                    "path": path(loc.location_id),
                     "is_region": loc.location_id in rules.regions,
                     "parent_id": str(rules.parents[loc.location_id])
                     if rules.parents.get(loc.location_id) in permitted_locations
@@ -467,11 +484,7 @@ class SqlAlchemyDirectorStore(SharedDirectorMixin):
                 if loc.location_id in permitted_locations
             ],
         }
-        location_names = {
-            str(loc.location_id): loc.name
-            for loc in locations
-            if loc.location_id in permitted_locations
-        }
+        location_names = {str(loc.location_id): path(loc.location_id) for loc in locations}
         # One synthetic planning context, not private chat or an omniscient history.
         # Include every character's name and own current place, not all destinations.
         planning_text = "\n".join(
