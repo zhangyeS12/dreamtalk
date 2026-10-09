@@ -94,3 +94,6 @@
 @media (max-width: 919px) { .shelf-viewport { --selection-position: .5; } .archive-main { padding: 24px; } .archive-header, .archive-footer { padding-inline: 24px; } .archive-preview { position: relative; top: auto; right: auto; width: 100%; max-height: none; margin-top: 20px; padding: 24px; } .archive-preview-actions { flex-direction: row; flex-wrap: wrap; } }
 @media (max-width: 600px) { .archive-main { padding: 22px 16px; } .archive-header, .archive-footer { padding-inline: 16px; } .archive-header { gap: 12px; } .archive-header-label { padding-left: 12px; } .archive-preview-actions { flex-direction: column; } }
 @media (prefers-reduced-motion: reduce) { .world-workspace, .archive-preview { animation: none; } .shelf-viewport { scroll-behavior: auto; } .book-shadow, .book-repeat .book-volume { transition: none; } }
+.archive-delete-action { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding-top: 16px; margin-top: 12px; border-top: 1px solid var(--border, #d2d8d6); }
+.archive-delete-action .destructive-action { color: #963c34; }
+.archive-delete-action small { color: #61716c; }

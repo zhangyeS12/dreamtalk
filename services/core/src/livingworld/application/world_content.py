@@ -118,6 +118,11 @@ class PendingWorldContent:
 class WorldContentService:
     """Pending previews are bounded and transient; accepted receipts are durable."""
 
+    def forget_world(self, world_id: WorldId) -> None:
+        self._pending = {
+            key: item for key, item in self._pending.items() if item.item.world_id != world_id
+        }
+
     def __init__(
         self,
         store: WorldContentStore,

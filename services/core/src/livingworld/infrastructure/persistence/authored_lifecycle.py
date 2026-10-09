@@ -5,6 +5,7 @@ from uuid import uuid5
 from sqlalchemy import select
 
 from livingworld.application.errors import ChatTurnUnavailableError
+from livingworld.infrastructure.persistence.deletion_models import GroupDissolutionRecord
 from livingworld.infrastructure.persistence.models import (
     ChatParticipantRecord,
     WorldContentImportRecord,
@@ -48,6 +49,8 @@ async def removed_character_ids(session, world):
 
 
 async def require_active_conversation(session, world, conversation):
+    if await session.get(GroupDissolutionRecord, (world, conversation)) is not None:
+        raise ChatTurnUnavailableError("chat_group_dissolved")
     roots = set(
         await session.scalars(
             select(ChatParticipantRecord.root_import_id).where(

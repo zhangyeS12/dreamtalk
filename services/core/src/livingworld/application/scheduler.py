@@ -276,6 +276,7 @@ class SimulationSchedulerRuntime:
         self._diagnostics = diagnostics or NullSchedulerDiagnosticSink()
         self._tasks: dict[WorldId, asyncio.Task[None]] = {}
         self._closing = False
+        self._stopping_worlds: set[WorldId] = set()
         self._world_work = None
         wake_signal.bind_activator(self.activate_world)
 
@@ -287,9 +288,21 @@ class SimulationSchedulerRuntime:
         return len(self._tasks)
 
     def activate_world(self, world_id: WorldId) -> None:
-        if self._closing or world_id in self._tasks:
+        if self._closing or world_id in self._stopping_worlds or world_id in self._tasks:
             return
         self._tasks[world_id] = asyncio.create_task(self._run_world(world_id))
+
+    async def stop_world(self, world_id: WorldId) -> None:
+        self._stopping_worlds.add(world_id)
+        self._wake_signal.event(world_id).set()
+        task = self._tasks.get(world_id)
+        if task is not None:
+            await asyncio.shield(task)
+        self._time_source.invalidate(world_id)
+
+    def restore_world(self, world_id: WorldId) -> None:
+        self._stopping_worlds.discard(world_id)
+        self.activate_world(world_id)
 
     def clock_changed(self, world_id: WorldId) -> None:
         self._time_source.invalidate(world_id)
@@ -312,7 +325,7 @@ class SimulationSchedulerRuntime:
     async def _run_world(self, world_id: WorldId) -> None:
         wake = self._wake_signal.event(world_id)
         try:
-            while not self._closing:
+            while not self._closing and world_id not in self._stopping_worlds:
                 wake.clear()
                 world = await self._scheduler.world(world_id)
                 if world is None:
@@ -338,6 +351,8 @@ class SimulationSchedulerRuntime:
                     if result.more_due:
                         await asyncio.sleep(0)
                         continue
+                if world_id in self._stopping_worlds:
+                    return
                 work_due = await self._world_work(world, now) if self._world_work else None
                 next_trigger = await self._scheduler.peek_next(world_id)
                 next_due = min(

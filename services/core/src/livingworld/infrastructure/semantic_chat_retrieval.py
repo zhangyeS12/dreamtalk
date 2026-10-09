@@ -55,6 +55,17 @@ def model_directory():
 
 
 class HybridChatRecallRanker(Fts5ChatRecallRanker):
+    @property
+    def working(self):
+        return self._semantic_job is not None and not self._semantic_job.done()
+
+    async def clear_derived_cache(self):
+        if self.working:
+            raise RuntimeError("world_delete_busy")
+        self._vectors.clear()
+        self._query_vectors.clear()
+        await asyncio.to_thread(self._cache.clear)
+
     def __init__(self, cache_directory=None):
         super().__init__()
         self._semantic_job = None

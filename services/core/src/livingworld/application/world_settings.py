@@ -9,6 +9,7 @@ from uuid import uuid5
 
 from livingworld.application.command_handler import CommandHandler
 from livingworld.application.commands import CreateWorld
+from livingworld.application.errors import IdempotencyConflictError
 from livingworld.application.simulation_runtime import WorldClockService, WorldSimulationRuntime
 from livingworld.domain.contracts import RequestId
 from livingworld.domain.identifiers import WorldId
@@ -33,6 +34,7 @@ class WorldSettings:
 
 class WorldDirectory(Protocol):
     async def list_worlds(self) -> tuple[WorldListing, ...]: ...
+    async def deleted(self, world_id: WorldId) -> bool: ...
 
 
 class WorldSettingsService:
@@ -73,6 +75,8 @@ class WorldSettingsService:
         # Stable at the HTTP command boundary, so a repeated request keeps the
         # same command identity and receives the committed receipt.
         world_id = WorldId(uuid5(request_id.value, "livingworld:create-world:v1"))
+        if await self._directory.deleted(world_id):
+            raise IdempotencyConflictError("world_deleted")
         await self._execute_command(
             CreateWorld(request_id=request_id, world_id=world_id, name=name)
         )

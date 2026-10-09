@@ -10,6 +10,32 @@ import { createParser } from "eventsource-parser";
 import contract from "../../../services/core/src/livingworld/domain/api_contract.json";
 
 export const API_PROTOCOL = contract.api_protocol;
+export type ContentExportFormat = "character_card_v2" | "character_card_v3" | "sillytavern_world_info";
+export type FileExportRequest = {
+  kind: "content"; world_id: string; item_id: string; format: ContentExportFormat;
+  content_id: string; reviewed_hash: string; expected_digest: string; use_regex: boolean;
+} | {
+  kind: "chat"; world_id: string; item_id: string; format: "txt" | "json";
+  player_id: string; expected_digest: string; through_position: number;
+};
+export interface ContentExportInfo { filename: string; digest: string; size: number; warnings: { code: string; path: string }[] }
+export interface ChatExportInfo {
+  world_id: string; world_name: string; conversation_id: string; kind: "direct" | "group";
+  player: { id: string; name: string }; characters: { id: string; name: string }[];
+  through_position: number; message_count: number; title: string; digest: string;
+  filenames: { txt: string; json: string };
+}
+export function fileExportPath(request: FileExportRequest): string {
+  const segment = request.kind === "content" ? "content" : "conversations";
+  const params = new URLSearchParams({ format: request.format, expected_digest: request.expected_digest });
+  if (request.kind === "content") {
+    params.set("reviewed_hash", request.reviewed_hash); params.set("content_id", request.content_id);
+    params.set("use_regex", String(request.use_regex));
+  } else {
+    params.set("player_id", request.player_id); params.set("through_position", String(request.through_position));
+  }
+  return `/worlds/${encodeURIComponent(request.world_id)}/${segment}/${encodeURIComponent(request.item_id)}/export?${params}`;
+}
 export interface CoreConnection { endpoint: string; token: string; generation: string }
 export type LLMRuntimeStatus = "ready" | "partially_configured" | "unconfigured" | "degraded";
 export interface CoreHealth {
@@ -303,12 +329,12 @@ export class CoreClient {
     return await response.json() as T;
   }
 
-  private async productRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  private async productRequest<T>(path: string, init?: RequestInit, download = false): Promise<T> {
     // Bound read-only requests, including body reads. Mutations and paid reply
     // requests retain their existing outcome/claim handling and are not replayed.
     const read = !init?.method || init.method.toUpperCase() === "GET";
     const controller = read ? new AbortController() : null;
-    const timer = controller ? setTimeout(() => controller.abort(), 15_000) : undefined;
+    const timer = controller ? setTimeout(() => controller.abort(), download ? 120_000 : 15_000) : undefined;
     // AbortController also works on older installed WebView2 runtimes.
     const externalSignal = init?.signal;
     const abortRead = () => controller?.abort();
@@ -330,6 +356,20 @@ export class CoreClient {
           && typeof body.detail === "string" && /^[a-z][a-z0-9_]{0,95}$/.test(body.detail)
           ? body.detail : null;
         throw new CoreRequestError(response.status, code);
+      }
+      if (download) {
+        if (!response.body) throw new CoreRequestError(502, "export_download_failed");
+        const reader = response.body.getReader(), chunks: Uint8Array<ArrayBuffer>[] = [];
+        let size = 0;
+        try {
+          while (true) {
+            const { done, value } = await reader.read(); if (done) break;
+            size += value.byteLength;
+            if (size > 128 * 1024 * 1024) throw new CoreRequestError(413, "export_browser_size_limit");
+            chunks.push(new Uint8Array(value));
+          }
+          return new Blob(chunks, { type: response.headers.get("Content-Type") ?? "application/octet-stream" }) as T;
+        } finally { await reader.cancel().catch(() => undefined); reader.releaseLock(); }
       }
       return await response.json() as T;
     } catch (failure) {
@@ -664,6 +704,25 @@ export class CoreClient {
     return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/social/avatars/${encodeURIComponent(rootId)}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ digest }) });
   }
   listProductWorlds(signal?: AbortSignal): Promise<WorldSettings[]> { return this.productRequest("/worlds", { signal }); }
+  deleteWorld(worldId: string, expectedName: string): Promise<{ deleted: boolean; asset_cleanup_pending: boolean }> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}`, {
+      method: "DELETE", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ confirmed: true, expected_name: expectedName }),
+    });
+  }
+  contentExportInfo(worldId: string, item: WorldContentItem, format: ContentExportFormat, contentId: string, useRegex: boolean, signal?: AbortSignal): Promise<ContentExportInfo> {
+    const params = new URLSearchParams({ format, reviewed_hash: item.reviewed_hash, content_id: contentId, use_regex: String(useRegex) });
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/content/${encodeURIComponent(item.import_id)}/export/info?${params}`, { signal });
+  }
+  chatExportInfo(worldId: string, conversationId: string, signal?: AbortSignal): Promise<ChatExportInfo> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/${encodeURIComponent(conversationId)}/export/info`, { signal });
+  }
+  fileExport(request: FileExportRequest, signal?: AbortSignal): Promise<Blob> {
+    return this.productRequest(fileExportPath(request), { signal }, true);
+  }
+  dissolveGroup(worldId: string, conversationId: string): Promise<{ dissolved: boolean }> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/groups/${encodeURIComponent(conversationId)}`, { method: "DELETE" });
+  }
   createWorld(name: string, requestId: string): Promise<{ world_id: string }> {
     return this.productRequest("/worlds", {
       method: "POST", headers: { "Content-Type": "application/json", "X-Request-Id": requestId },

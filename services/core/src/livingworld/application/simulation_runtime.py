@@ -233,11 +233,29 @@ class WorldSimulationRuntime:
         self._diagnostics = diagnostics or NullCatchUpDiagnosticSink()
         self._states: dict[WorldId, WorldRuntimeState] = {}
         self._reports: dict[WorldId, CatchUpReport] = {}
+        self._deletion_previous: dict[WorldId, WorldRuntimeState | None] = {}
         self._closing = False
         self._registration_lock = asyncio.Lock()
 
     def state(self, world_id: WorldId) -> WorldRuntimeState | None:
         return self._states.get(world_id)
+
+    async def suspend_for_deletion(self, world_id: WorldId) -> None:
+        async with self._registration_lock:
+            self._deletion_previous[world_id] = self._states.get(world_id)
+            self._states[world_id] = WorldRuntimeState.STOPPING
+            await self._scheduler_runtime.stop_world(world_id)
+
+    def deletion_finished(self, world_id: WorldId, *, deleted: bool) -> None:
+        previous = self._deletion_previous.pop(world_id, None)
+        if deleted or previous is None:
+            self._states.pop(world_id, None)
+            self._reports.pop(world_id, None)
+        else:
+            self._states[world_id] = previous
+        self._time_source.invalidate(world_id)
+        if not deleted:
+            self._scheduler_runtime.restore_world(world_id)
 
     def report(self, world_id: WorldId) -> CatchUpReport | None:
         return self._reports.get(world_id)

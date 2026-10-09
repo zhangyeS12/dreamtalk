@@ -11,7 +11,11 @@ from livingworld.application.chat_conversations import (
     ChatConversationService,
     GroupChatConversation,
 )
-from livingworld.application.errors import EntityNotFoundError, IdempotencyConflictError
+from livingworld.application.errors import (
+    ChatTurnUnavailableError,
+    EntityNotFoundError,
+    IdempotencyConflictError,
+)
 from livingworld.domain.contracts import API_PROTOCOL, RequestId
 from livingworld.domain.identifiers import WorldId
 
@@ -88,6 +92,16 @@ def chat_conversation_router(service: ChatConversationService, authorize) -> API
             raise HTTPException(409, "group_request_conflict") from None
         except ValueError:
             raise HTTPException(422, "group_members_invalid") from None
+
+    @router.delete("/groups/{conversation_id}")
+    async def dissolve_group(world_id: UUID, conversation_id: UUID) -> dict:
+        try:
+            await service.dissolve_group(WorldId(world_id), conversation_id)
+            return {"dissolved": True}
+        except EntityNotFoundError as error:
+            raise HTTPException(404, str(error)) from None
+        except ChatTurnUnavailableError as error:
+            raise HTTPException(409, str(error)) from None
 
     @router.post("/direct/{import_id}")
     async def open_direct(world_id: UUID, import_id: UUID) -> dict:

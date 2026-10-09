@@ -382,7 +382,11 @@ async def run(
             )
             control_listener.start()
         from livingworld.application.character_activity_setup import CharacterActivitySetupService
+        from livingworld.application.chat_export import ChatExportService
+        from livingworld.application.world_content_export import WorldContentExportService
         from livingworld.application.world_covers import WorldCoverService
+        from livingworld.application.world_deletion import WorldDeletionService
+        from livingworld.infrastructure.exports.json_content import JsonContentExporter
         from livingworld.infrastructure.world_cover_images import PillowCoverImageProcessor
 
         app = create_app(
@@ -405,6 +409,14 @@ async def run(
             content_builder,
             database.content_repository(),
             maintenance=maintenance,
+            world_deletion=WorldDeletionService(
+                database.world_deletion_store(),
+                simulation_runtime,
+                maintenance,
+                world_content,
+                database.content_asset_store(),
+                long_memory.store.ranker,
+            ),
             chat_recall=earlier_chat_recall,
             conversation_memory=conversation_memory,
             long_chat_memory=long_memory,
@@ -418,6 +430,10 @@ async def run(
                 player_event_feed,
                 command_handler,
             ),
+            content_exports=WorldContentExportService(
+                world_content.store, database.content_repository(), JsonContentExporter()
+            ),
+            chat_exports=ChatExportService(database.chat_export_store(), player_event_feed),
             world_covers=WorldCoverService(
                 database.world_cover_repository(),
                 database.content_asset_store(),

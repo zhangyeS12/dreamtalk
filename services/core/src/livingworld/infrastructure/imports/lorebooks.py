@@ -397,19 +397,48 @@ def _entry(
             f"{path}.group",
             "Blank group omitted only from canonical group; original value retained in metadata.",
         )
+    native_fields = {}
+    extension = entry.get("extensions", {}).get("dreamtalk.export", {})
+    if (
+        native
+        and isinstance(extension, dict)
+        and type(extension.get("version")) is int
+        and extension["version"] == 1
+    ):
+        for field in ("title", "comment"):
+            if field in extension:
+                if type(extension[field]) is not str:
+                    raise ContentImportError(
+                        "invalid_lorebook_entry", f"{path}.extensions.dreamtalk.export.{field}"
+                    )
+                native_fields[field] = extension[field]
+        if "priority" in extension:
+            if type(extension["priority"]) is not int:
+                raise ContentImportError(
+                    "invalid_lorebook_entry", f"{path}.extensions.dreamtalk.export.priority"
+                )
+            native_fields["priority"] = extension["priority"]
+        # Standard fields edited by another app take precedence over stale extras.
+        if entry.get("comment", "") != (extension.get("comment") or extension.get("title", "")):
+            native_fields.pop("title", None)
+            native_fields.pop("comment", None)
     return LoreEntry(
         content_id=LoreEntryId(uuid4()),
         collection_id=collection_id,
         content=entry["content"],
-        title=entry.get("comment", "") if native else entry.get("name", ""),
-        comment=entry.get("comment", ""),
+        title=native_fields.get(
+            "title", entry.get("comment", "") if native else entry.get("name", "")
+        ),
+        comment=native_fields.get("comment", entry.get("comment", "")),
         keywords=primary,
         secondary_keywords=secondary,
         enabled=not entry.get("disable", False) if native else entry["enabled"],
         order=_integer(
             entry.get(order_name, 100 if native else 0), f"{path}.{order_name}", warnings
         ),
-        priority=0 if native else _integer(entry.get("priority", 0), f"{path}.priority", warnings),
+        priority=native_fields.get("priority", 0)
+        if native
+        else _integer(entry.get("priority", 0), f"{path}.priority", warnings),
         group=group if group is not None and group.strip() else None,
         activation_metadata=activation,
         insertion_metadata=insertion,
@@ -430,6 +459,18 @@ def _normalize(
     book: dict, provenance: ContentProvenance, limits: LorebookLimits, *, native: bool, v3: bool
 ) -> tuple[LoreCollection, tuple[LoreEntry, ...]]:
     external = _book(book, native=native, limits=limits)
+    extension = book.get("extensions", {}).get("dreamtalk.export", {})
+    if (
+        native
+        and isinstance(extension, dict)
+        and type(extension.get("version")) is int
+        and extension["version"] == 1
+    ):
+        order = extension.get("member_order")
+        if isinstance(order, list) and all(type(key) is str for key in order):
+            by_key = dict(external)
+            if len(order) == len(by_key) and set(order) == set(by_key):
+                external = [(key, by_key[key]) for key in order]
     collection_id = LoreCollectionId(uuid4())
     warnings = []
     entries = tuple(

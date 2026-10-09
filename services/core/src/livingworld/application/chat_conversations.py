@@ -42,6 +42,9 @@ class GroupChatConversation:
 
 
 class ChatConversationStore(Protocol):
+    async def dissolve_group(
+        self, conversation_id: ConversationId, player_id: PlayerId
+    ) -> None: ...
     async def bind_contact(self, character_id: CharacterId, root_import_id: UUID) -> None: ...
     async def activity_contacts(self, world_id: WorldId) -> tuple[GroupChatParticipant, ...]: ...
     async def open_direct(
@@ -89,6 +92,12 @@ class ChatConversationService:
         self._imports = imports.store
         self._players = players
         self._execute_command = commands.execute
+
+    async def dissolve_group(self, world_id: WorldId, conversation_id: UUID) -> None:
+        player = await self._players.selected_player(world_id)
+        if player is None:
+            raise EntityNotFoundError("selected_player_required")
+        await self._store.dissolve_group(ConversationId(world_id, conversation_id), player)
 
     async def _ensure_character(self, world_id: WorldId, root: AcceptedWorldContent) -> CharacterId:
         character_id = CharacterId(world_id, uuid5(root.import_id, "livingworld:chat-character:v1"))

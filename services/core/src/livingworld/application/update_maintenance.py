@@ -9,26 +9,42 @@ class UpdateMaintenance:
     def __init__(self):
         self._until = 0.0
         self.active = 0
+        self.deleting = False
         self.on_resume = lambda: None
 
     @property
     def preparing(self):
+        if self.deleting:
+            return True
         if self._until and monotonic() >= self._until:
             self._until = 0.0
             self.on_resume()
         return bool(self._until)
 
     def prepare(self):
+        if self.deleting:
+            return self.snapshot()
         # A lost host must not leave a surviving Core permanently fenced.
         self._until = monotonic() + 300
         return self.snapshot()
 
     def cancel(self):
+        if self.deleting:
+            return self.snapshot()
         was_preparing = bool(self._until)
         self._until = 0.0
         if was_preparing:
             self.on_resume()
         return self.snapshot()
+
+    def begin_deletion(self):
+        if self.preparing or self.active != 1:
+            raise ValueError("world_delete_busy")
+        self.deleting = True
+
+    def end_deletion(self):
+        self.deleting = False
+        self.on_resume()
 
     def snapshot(self):
         return {"preparing": self.preparing, "active": self.active}

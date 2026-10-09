@@ -12,17 +12,26 @@ from livingworld.application.chat_conversations import (
     GroupChatConversation,
     GroupChatParticipant,
 )
-from livingworld.application.errors import EntityNotFoundError, IdempotencyConflictError
+from livingworld.application.errors import (
+    ChatTurnUnavailableError,
+    EntityNotFoundError,
+    IdempotencyConflictError,
+)
 from livingworld.domain.identifiers import CharacterId, ConversationId, PlayerId, WorldId
 from livingworld.infrastructure.persistence.character_card_bindings import (
     CharacterCardBindingRecord,
 )
+from livingworld.infrastructure.persistence.contact_gate import waiting_conversation
+from livingworld.infrastructure.persistence.deletion_models import GroupDissolutionRecord
 from livingworld.infrastructure.persistence.models import (
     CharacterRecord,
     ChatConversationRecord,
     ChatParticipantRecord,
+    ChatReplyExecutionRecord,
+    ChatTurnRecord,
     WorldContentImportRecord,
 )
+from livingworld.infrastructure.persistence.proactive_models import ProactiveEpisodeRecord
 
 
 def _conversation(
@@ -45,6 +54,50 @@ def _conversation(
 class SqlAlchemyChatConversationStore:
     def __init__(self, sessions) -> None:
         self._sessions = sessions
+
+    async def dissolve_group(self, conversation_id, player_id):
+        world = conversation_id.world_id.value
+        async with self._sessions() as session, session.begin():
+            await session.connection(execution_options={"livingworld_write_intent": True})
+            row = await session.get(ChatConversationRecord, (world, conversation_id.value))
+            if row is None or row.kind != "group" or row.player_id != player_id.value:
+                raise EntityNotFoundError("conversation_not_found")
+            key = (world, conversation_id.value)
+            if await session.get(GroupDissolutionRecord, key) is not None:
+                return
+            if await waiting_conversation(session, world, player_id.value) == conversation_id.value:
+                raise ChatTurnUnavailableError("chat_group_waiting_reply")
+            running = await session.scalar(
+                select(ChatReplyExecutionRecord.turn_id)
+                .join(
+                    ChatTurnRecord,
+                    (ChatTurnRecord.world_id == ChatReplyExecutionRecord.world_id)
+                    & (ChatTurnRecord.turn_id == ChatReplyExecutionRecord.turn_id),
+                )
+                .where(
+                    ChatTurnRecord.world_id == world,
+                    ChatTurnRecord.conversation_id == conversation_id.value,
+                    ChatReplyExecutionRecord.state == "running",
+                )
+                .limit(1)
+            )
+            outreach = await session.scalar(
+                select(ProactiveEpisodeRecord.episode_id)
+                .where(
+                    ProactiveEpisodeRecord.world_id == world,
+                    ProactiveEpisodeRecord.state == "writing",
+                )
+                .limit(1)
+            )
+            if running is not None or outreach is not None:
+                raise ChatTurnUnavailableError("chat_group_reply_running")
+            session.add(
+                GroupDissolutionRecord(
+                    world_id=world,
+                    conversation_id=conversation_id.value,
+                    dissolved_at=datetime.now(UTC),
+                )
+            )
 
     async def bind_contact(self, character_id, root_import_id):
         async with self._sessions() as session, session.begin():
@@ -175,6 +228,13 @@ class SqlAlchemyChatConversationStore:
             )
             if row is None:
                 return None
+            if (
+                await session.get(
+                    GroupDissolutionRecord, (conversation_id.world_id.value, conversation_id.value)
+                )
+                is not None
+            ):
+                raise IdempotencyConflictError("chat_group_dissolved")
             if row.player_id != player_id.value or row.kind != "group":
                 raise IdempotencyConflictError("group_request_conflict")
             return await self._read_group(session, conversation_id.world_id, row)
@@ -197,6 +257,11 @@ class SqlAlchemyChatConversationStore:
         async with self._sessions() as session, session.begin():
             await session.connection(execution_options={"livingworld_write_intent": True})
             row = await session.get(ChatConversationRecord, (world_id.value, conversation_id.value))
+            if (
+                await session.get(GroupDissolutionRecord, (world_id.value, conversation_id.value))
+                is not None
+            ):
+                raise IdempotencyConflictError("chat_group_dissolved")
             if row is None:
                 row = ChatConversationRecord(
                     world_id=world_id.value,
@@ -237,6 +302,11 @@ class SqlAlchemyChatConversationStore:
                         ChatConversationRecord.world_id == player_id.world_id.value,
                         ChatConversationRecord.player_id == player_id.value,
                         ChatConversationRecord.kind == "group",
+                        ChatConversationRecord.conversation_id.not_in(
+                            select(GroupDissolutionRecord.conversation_id).where(
+                                GroupDissolutionRecord.world_id == player_id.world_id.value
+                            )
+                        ),
                     )
                     .order_by(
                         ChatConversationRecord.created_at_utc,

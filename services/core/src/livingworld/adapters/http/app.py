@@ -67,6 +67,9 @@ def create_app(
     world_covers=None,
     factions=None,
     maintenance=None,
+    world_deletion=None,
+    content_exports=None,
+    chat_exports=None,
 ) -> FastAPI:
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
@@ -106,6 +109,11 @@ def create_app(
         ):
             raise HTTPException(401, "unauthorized", headers={"WWW-Authenticate": "Bearer"})
 
+    if content_exports is not None and chat_exports is not None:
+        from livingworld.adapters.http.file_exports import file_export_router
+
+        app.include_router(file_export_router(content_exports, chat_exports, authorize))
+
     if developer_inspector is not None:
         from livingworld.adapters.http.developer import developer_router
 
@@ -126,7 +134,7 @@ def create_app(
     if world_settings is not None:
         from livingworld.adapters.http.worlds import world_router
 
-        app.include_router(world_router(world_settings, authorize))
+        app.include_router(world_router(world_settings, authorize, world_deletion))
 
     if player_event_feed is not None:
         from livingworld.adapters.http.player_events import player_events_router

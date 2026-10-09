@@ -1,6 +1,6 @@
 [package]
 name = "dreamtalk-desktop"
-version = "0.1.49"
+version = "0.1.51"
 edition = "2021"
 rust-version = "1.90"
 description = "dreamtalk desktop runtime supervisor"
@@ -21,6 +21,7 @@ tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-autostart = "=2.6.0"
 tauri-plugin-single-instance = "=2.5.0"
 tauri-plugin-updater = "=2.13.1"
+tauri-plugin-dialog = "=2.8.1"
 tokio = { version = "1", features = ["process", "fs", "time", "sync", "io-util", "macros"] }
 reqwest = { version = "0.12", default-features = false, features = ["json"] }
 serde = { version = "1", features = ["derive"] }

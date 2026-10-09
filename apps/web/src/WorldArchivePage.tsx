@@ -25,12 +25,24 @@ export function WorldArchivePage({ client, initialWorldId, onEnter, displayTime,
   const [worlds, setWorlds] = useState<WorldSettings[]>([]);
   const [selectedId, setSelectedId] = useState("");
   const [blankIndex, setBlankIndex] = useState<number | null>(null);
+  const [vacatedIndex, setVacatedIndex] = useState<number | null>(null);
   const [readyKey, setReadyKey] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [startupFailed, setStartupFailed] = useState(false);
   const startupReported = useRef(false);
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
+  const [notice, setNotice] = useState(() => {
+    try { const message = window.sessionStorage.getItem("livingworld.worldDeletionNotice") || ""; window.sessionStorage.removeItem("livingworld.worldDeletionNotice"); return message; } catch { return ""; }
+  });
+  const [deletionCleanup, setDeletionCleanup] = useState<{ world_id: string; name: string; erased?: boolean } | null>(() => {
+    try {
+      const value = JSON.parse(window.localStorage.getItem("livingworld.pendingWorldDeletion") || "null");
+      return value && typeof value.world_id === "string" && /^[0-9a-f-]{36}$/i.test(value.world_id) && typeof value.name === "string" && value.name.length <= 120 ? value : null;
+    } catch { return null; }
+  });
+  useEffect(() => {
+    try { if (deletionCleanup) window.localStorage.setItem("livingworld.pendingWorldDeletion", JSON.stringify(deletionCleanup)); else window.localStorage.removeItem("livingworld.pendingWorldDeletion"); } catch { /* Optional retry hint; server receipts remain authoritative. */ }
+  }, [deletionCleanup]);
   const [creating, setCreating] = useState(false);
   const [createIntent, setCreateIntent] = useState<"create" | "import">("create");
   const [name, setName] = useState("");
@@ -175,6 +187,52 @@ export function WorldArchivePage({ client, initialWorldId, onEnter, displayTime,
   };
   useDesktopUpdateBlock(coverDirty || contentDirty || modelDirty || (creating && Boolean(name.trim())) ? "书架有未保存的编辑。" : busy || entering || coverBusy || pendingCreation ? "书架请求正在处理。" : null);
   const contentChanged = useCallback(() => setContentRevision(value => value + 1), []);
+  const deleteWorld = async (target: { world_id: string; name: string; erased?: boolean }, retry = false) => {
+    if (lock.current || coverBusyRef.current || entering) return;
+    if (!retry) {
+      if (!leaveEditor()) return;
+      if (!window.confirm(`永久删除世界“${target.name}”？\n\n该世界的世界书、角色卡、阵营、地点、全部聊天及记忆都会删除，书位恢复为空白。\n此操作无法撤销。确定删除吗？`)) return;
+    }
+    lock.current = true; setBusy(true); setError(""); setNotice("");
+    setDeletionCleanup(target);
+    let erased = target.erased === true;
+    try {
+      const outcome = await client.deleteWorld(target.world_id, target.name);
+      erased = true;
+      const oldIndex = worlds.findIndex(item => item.world_id === target.world_id);
+      if (oldIndex >= 0) setVacatedIndex(oldIndex);
+      setWorlds(current => current.filter(item => item.world_id !== target.world_id));
+      covers.removed(target.world_id); setContent(null); clearSelection();
+      setBlankIndex(0);
+      setContentDirty(false); setCoverDirty(false); setModelDirty(false);
+      try {
+        window.localStorage.removeItem(`dreamtalk.content-builder.${target.world_id}.character`);
+        window.localStorage.removeItem(`dreamtalk.content-builder.${target.world_id}.lorebook`);
+        window.sessionStorage.removeItem(`dreamtalk-model-cleanup-warning:${target.world_id}`);
+        if (window.localStorage.getItem("livingworld.lastWorldId") === target.world_id) window.localStorage.removeItem("livingworld.lastWorldId"); } catch { /* Optional last selection only. */ }
+      setDeletionCleanup({ ...target, erased: true });
+      if (outcome.asset_cleanup_pending) throw new Error("asset_cleanup_pending");
+      let reconnected = false;
+      if (isTauri()) {
+        const result = await invoke<{ old_credential_cleanup_incomplete: boolean; core_restarted: boolean }>("forget_deleted_world_model", { worldId: target.world_id });
+        reconnected = result.core_restarted;
+        if (result.old_credential_cleanup_incomplete) {
+          const message = "世界已删除，书位恢复为空白。独立模型配置已移除，但未引用的旧凭据清理失败，请检查本机凭据存储。";
+          setDeletionCleanup(null); setNotice(message);
+          try { window.localStorage.removeItem("livingworld.pendingWorldDeletion"); if (reconnected) window.sessionStorage.setItem("livingworld.worldDeletionNotice", message); } catch { /* Optional notice only. */ }
+          if (reconnected) window.location.reload();
+          return;
+        }
+      }
+      setDeletionCleanup(null); setNotice("世界已删除，书位恢复为空白。");
+      // Removing an independent model scope may replace the Core generation.
+      try { window.localStorage.removeItem("livingworld.pendingWorldDeletion"); if (reconnected) window.sessionStorage.setItem("livingworld.worldDeletionNotice", "世界已删除，书位恢复为空白。"); } catch { /* Optional notice only. */ }
+      if (reconnected) window.location.reload();
+    } catch (failure) {
+      if (erased) setError("世界内容已删除，但附属图片或独立模型配置的清理尚未完成。请点击重试清理。");
+      else setError(failure instanceof CoreRequestError && failure.status === 409 ? "当前仍有请求或生成任务正在处理，暂未删除。请稍后重试。" : "删除结果未能确认，请重试删除或刷新书架核对；不会重复执行已完成的删除。");
+    } finally { lock.current = false; if (active.current) setBusy(false); }
+  };
   return <div className="product-shell archive-shell">
     <header className="archive-header"><Brand /><span className="archive-header-label">世界档案库</span><DesktopUpdateEntry />
       <button type="button" className="text-action" disabled={busy || entering || coverBusy} onClick={() => {
@@ -187,11 +245,12 @@ export function WorldArchivePage({ client, initialWorldId, onEnter, displayTime,
         <button type="button" className="text-action" disabled={loading || busy || entering || coverBusy} onClick={refreshArchive}>{loading ? "正在读取…" : "刷新书架"}</button>
       </div>
       {error && <p className="app-alert" role="alert">{error} <button type="button" className="text-action" disabled={busy || entering || coverBusy || loading} onClick={refreshArchive}>刷新书架</button></p>}
+      {deletionCleanup && <p className="app-alert" role="status">「{deletionCleanup.name}」的删除结果或收尾待确认。<button type="button" className="text-action" disabled={busy || entering || coverBusy} onClick={() => void deleteWorld(deletionCleanup, true)}>重试清理</button></p>}
       {covers.error && <p className="app-alert" role="alert">{covers.error}</p>}
       {notice && <p className="app-notice" role="status">{notice}</p>}
       {modelOpen && <div className="archive-editor"><div className="archive-editor-heading"><h2>默认模型配置</h2><button type="button" className="text-action" onClick={() => { leaveEditor(); }}>收起</button></div><ModelSetup client={client} onDirtyChange={setModelDirty} /><p className="inline-hint">保存会重新连接核心；尚未单独设置的世界使用这里的默认配置。</p></div>}
       <div ref={layout} className={`archive-layout ${selectionKey ? "has-selection" : ""}`}>
-        <WorldShelf worlds={worlds} appearances={covers.appearances} selectedKey={selectionKey} initialWorldId={initialWorldId} loading={loading} disabled={busy || entering || coverBusy}
+        <WorldShelf worlds={worlds} appearances={covers.appearances} selectedKey={selectionKey} initialWorldId={initialWorldId} loading={loading} disabled={busy || entering || coverBusy} vacatedIndex={vacatedIndex}
           onSelect={select} onCreate={selectBlank} onClose={closeSelection} onSettled={settled} />
         {previewReady && <section key={selectionKey} id="archive-preview" className="archive-preview" aria-label={blankIndex !== null ? "创建世界档案" : "所选世界预览"} aria-busy={entering}
           onKeyDown={event => { if (event.key === "Escape") { event.preventDefault(); closeSelection(); } }}>
@@ -211,6 +270,7 @@ export function WorldArchivePage({ client, initialWorldId, onEnter, displayTime,
             <div className="archive-preview-actions"><button type="button" className="primary-button" disabled={busy || entering || coverBusy || loading} onClick={() => void enter()}>{entering ? "正在读取世界…" : "进入世界 →"}</button>
               <button type="button" className="secondary-button" disabled={busy || entering || coverBusy} onClick={() => { const shouldOpen = !managing; if (!leaveEditor()) return; setManaging(shouldOpen); }}>管理 / 导入世界书</button>
               <button type="button" className="text-action" disabled={busy || entering || coverBusy} onClick={() => { const opening = !coverOpen; if (leaveEditor()) setCoverOpen(opening); }}>编辑封面</button></div>
+            <div className="archive-delete-action"><button type="button" className="text-action destructive-action" disabled={busy || entering || coverBusy || loading || !!deletionCleanup} onClick={() => void deleteWorld(world)}>删除世界</button><small>永久清除本书内的世界和全部存档</small></div>
           </> : <p className="archive-description">这个世界暂时无法读取，请刷新书架。</p>}
         </section>}
       </div>

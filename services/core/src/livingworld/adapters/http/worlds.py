@@ -34,6 +34,11 @@ class ClockScaleRequest(StrictModel):
     scale: Decimal = Field(gt=0, le=1000)
 
 
+class DeleteWorldRequest(StrictModel):
+    confirmed: bool
+    expected_name: str = Field(min_length=1, max_length=120)
+
+
 def _response(item: WorldSettings) -> dict[str, str]:
     return {
         "world_id": str(item.world_id.value),
@@ -45,12 +50,33 @@ def _response(item: WorldSettings) -> dict[str, str]:
     }
 
 
-def world_router(service: WorldSettingsService, authorize: Callable[..., None]) -> APIRouter:
+def world_router(
+    service: WorldSettingsService, authorize: Callable[..., None], deletion=None
+) -> APIRouter:
     router = APIRouter(prefix=f"/api/v{API_PROTOCOL}", dependencies=[Depends(authorize)])
 
     @router.get("/worlds")
     async def list_worlds() -> list[dict[str, str]]:
         return [_response(item) for item in await service.list_worlds()]
+
+    @router.delete("/worlds/{world_id}")
+    async def delete_world(world_id: UUID, body: DeleteWorldRequest) -> dict:
+        if not body.confirmed:
+            raise HTTPException(422, "world_delete_confirmation_required")
+        if deletion is None:
+            raise HTTPException(503, "world_deletion_unavailable")
+        try:
+            return await deletion.delete(WorldId(world_id), body.expected_name)
+        except EntityNotFoundError:
+            raise HTTPException(404, "world_not_found") from None
+        except ValueError as error:
+            raise HTTPException(409, str(error)) from None
+
+    @router.get("/worlds/{world_id}/deletion")
+    async def deletion_status(world_id: UUID) -> dict:
+        if deletion is None:
+            raise HTTPException(503, "world_deletion_unavailable")
+        return {"deleted": await deletion.store.deleted(WorldId(world_id))}
 
     @router.post("/worlds", status_code=201)
     async def create_world(

@@ -427,7 +427,12 @@ class JsonContentExporter:
         ):
             raise ContentExportError("export_lore_ownership_mismatch")
         uids = _uids(entries, native=native, same=same, warnings=warnings)
-        if native and uids != sorted(uids, key=str):
+        if native and request.preserve_native_fields:
+            document["extensions"]["dreamtalk.export"] = {
+                "version": 1,
+                "member_order": [str(uid) for uid in uids],
+            }
+        if native and uids != sorted(uids, key=str) and not request.preserve_native_fields:
             _warning(warnings, "lore_member_order_not_preserved_by_st_object_map", "book.entries")
         exported = [
             self._entry(
@@ -507,13 +512,22 @@ class JsonContentExporter:
                 uid=uid,
                 key=list(entry.keywords),
                 keysecondary=list(entry.secondary_keywords),
-                comment=entry.comment,
+                comment=(entry.comment or entry.title)
+                if request.preserve_native_fields
+                else entry.comment,
                 disable=not entry.enabled,
                 order=entry.order,
             )
-            if entry.title != entry.comment:
+            if request.preserve_native_fields:
+                result["extensions"]["dreamtalk.export"] = {
+                    "version": 1,
+                    "title": entry.title,
+                    "comment": entry.comment,
+                    "priority": entry.priority,
+                }
+            if entry.title != entry.comment and not request.preserve_native_fields:
                 _warning(warnings, "lore_title_not_representable_in_st_world_info", path + ".title")
-            if entry.priority:
+            if entry.priority and not request.preserve_native_fields:
                 _warning(warnings, "target_format_does_not_represent_semantic", path + ".priority")
             if entry.group is not None:
                 result["group"] = entry.group

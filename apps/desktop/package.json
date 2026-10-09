@@ -1,8 +1,13 @@
 {
   "name": "@dreamtalk/desktop",
-  "version": "0.1.49",
+  "version": "0.1.51",
   "private": true,
   "license": "Apache-2.0",
-  "scripts": { "dev": "tauri dev", "build": "tauri build" },
-  "devDependencies": { "@tauri-apps/cli": "^2.0.0" }
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "tauri build"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.0.0"
+  }
 }

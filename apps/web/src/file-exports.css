@@ -1,0 +1,21 @@
+.file-export-dialog { width: min(640px, calc(100vw - 32px)); max-height: calc(100dvh - 48px); overflow-y: auto; padding: 28px; border: 1px solid #525b72; border-radius: 14px; background: #161c2b; color: #ecedf4; box-shadow: 0 24px 80px #05091370; }
+.file-export-dialog::backdrop { background: #050913b3; }
+.file-export-dialog .export-heading { display: flex; align-items: start; justify-content: space-between; gap: 20px; margin-bottom: 24px; }
+.file-export-dialog .export-heading h2 { margin: 0 0 8px; font-size: 1.5rem; }
+.file-export-dialog .export-heading p, .file-export-dialog .inline-hint { color: #b8c2d5; }
+.file-export-dialog .field { display: grid; gap: 8px; margin: 18px 0; }
+.file-export-dialog select { width: 100%; padding: 12px; color: #ecedf4; background: #222a3b; border: 1px solid #525b72; border-radius: 6px; }
+.file-export-dialog .profile-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px; }
+.file-export-dialog .primary-button { background: #e2d4a0; color: #141925; border-color: #e2d4a0; }
+.file-export-dialog .secondary-button { color: #ecedf4; background: #252e42; border-color: #68728a; }
+.file-export-dialog .text-action { color: #c6d3ee; }
+.export-details { line-height: 1.7; overflow-wrap: anywhere; }
+.export-warnings { border-block: 1px solid #414b62; margin-top: 22px; padding-block: 12px; }
+.export-warnings h3 { font-size: 1rem; color: #e2d4a0; }
+.export-warnings ul { padding-left: 22px; max-height: 230px; overflow: auto; }
+.export-warnings li { margin-block: 12px; line-height: 1.55; }
+.export-warnings small, .export-check small { display: block; color: #aebbd2; overflow-wrap: anywhere; }
+.export-check { display: flex; gap: 12px; align-items: start; margin-block: 16px; }
+.export-check input { margin-top: 5px; }
+.export-notice { overflow-wrap: anywhere; }
+@media (max-width: 640px) { .file-export-dialog { padding: 18px; } }

@@ -90,5 +90,10 @@ export function useWorldCovers(client: CoreClient, worldId?: string, enabled = t
     setMetadataReady(true); setError(""); setCovers(current => [...current.filter(item => item.world_id !== cover.world_id), cover]);
   }, []);
   const ready = !enabled || metadataReady && covers.every(cover => appearances[cover.world_id]?.cover === cover);
-  return { appearances, error, ready, refresh, saved };
+  const removed = useCallback((id: string) => {
+    sequence.current += 1;
+    setCovers(current => current.filter(item => item.world_id !== id));
+    setAppearances(current => Object.fromEntries(Object.entries(current).filter(([key]) => key !== id)));
+  }, []);
+  return { appearances, error, ready, refresh, saved, removed };
 }

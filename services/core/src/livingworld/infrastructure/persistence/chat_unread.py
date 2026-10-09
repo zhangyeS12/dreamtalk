@@ -6,6 +6,7 @@ from sqlalchemy import Integer, func, select
 
 from livingworld.application.errors import EntityNotFoundError
 from livingworld.infrastructure.persistence.contact_gate import waiting_conversation
+from livingworld.infrastructure.persistence.deletion_models import GroupDissolutionRecord
 from livingworld.infrastructure.persistence.models import ChatConversationRecord as Conversation
 from livingworld.infrastructure.persistence.models import ChatMessageRecord as Message
 from livingworld.infrastructure.persistence.models import LocalPlayerBindingRecord as Binding
@@ -53,7 +54,13 @@ class SqlAlchemyChatUnreadStore:
                         & (Read.player_id == Conversation.player_id),
                     )
                     .where(
-                        Conversation.world_id == world.value, Conversation.player_id == player.value
+                        Conversation.world_id == world.value,
+                        Conversation.player_id == player.value,
+                        Conversation.conversation_id.not_in(
+                            select(GroupDissolutionRecord.conversation_id).where(
+                                GroupDissolutionRecord.world_id == world.value
+                            )
+                        ),
                     )
                     .group_by(Conversation.conversation_id)
                     .order_by(Conversation.conversation_id)

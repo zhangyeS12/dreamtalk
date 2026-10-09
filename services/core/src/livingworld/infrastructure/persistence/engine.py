@@ -85,6 +85,11 @@ class Database:
         """Content library capability; grants no canonical runtime write access."""
         return SqlAlchemyContentRepository(self._sessions)
 
+    def chat_export_store(self):
+        from livingworld.infrastructure.persistence.chat_export import SqlAlchemyChatExportStore
+
+        return SqlAlchemyChatExportStore(self._sessions)
+
     def llm_usage_ledger(self, *, catalog=None):
         """Operational accounting capability, isolated from world/content writes."""
         from livingworld.infrastructure.persistence.llm_repository import SqlAlchemyUsageLedger
@@ -256,6 +261,13 @@ class Database:
         )
 
         return SqlAlchemyWorldDirectory(self._sessions)
+
+    def world_deletion_store(self):
+        from livingworld.infrastructure.persistence.world_deletion import (
+            SqlAlchemyWorldDeletionStore,
+        )
+
+        return SqlAlchemyWorldDeletionStore(self._sessions)
 
     def player_event_feed_store(self):
         from livingworld.infrastructure.persistence.player_event_feed import (

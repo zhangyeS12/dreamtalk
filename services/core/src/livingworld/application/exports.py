@@ -58,8 +58,11 @@ class ExportRequest:
     embedded_collection_id: LoreCollectionId | None = None
     character_book_version: CharacterBookVersion | None = None
     v3_book_options: V3CharacterBookOptions = V3CharacterBookOptions()
+    preserve_native_fields: bool = False
 
     def __post_init__(self) -> None:
+        if type(self.preserve_native_fields) is not bool:
+            raise ContentExportError("invalid_native_export_policy")
         if not isinstance(self.draft, ContentDraft) or not isinstance(
             self.target_format, ExportTarget
         ):

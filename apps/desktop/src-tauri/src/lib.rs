@@ -1,5 +1,6 @@
 pub mod background;
 pub mod credentials;
+pub mod file_exports;
 pub mod host_control;
 pub mod llm_config;
 pub mod supervisor;
@@ -454,6 +455,111 @@ async fn use_default_chat_model(
     })
 }
 
+#[derive(Serialize)]
+struct WorldModelCleanupOutcome {
+    old_credential_cleanup_incomplete: bool,
+    core_restarted: bool,
+}
+
+#[tauri::command]
+async fn forget_deleted_world_model(
+    world_id: String,
+    config: State<'_, LaunchConfig>,
+    credentials: State<'_, SharedCredentialStore>,
+    supervisor: State<'_, SharedSupervisor>,
+    updates: State<'_, updater::UpdateState>,
+) -> Result<WorldModelCleanupOutcome, String> {
+    let _guard = updates.operation.try_lock().map_err(|_| "update_busy")?;
+    llm_config::validate_world_scope(Some(&world_id)).map_err(str::to_owned)?;
+    let mut host = supervisor.lock().await;
+    let connection = host.connection().map_err(str::to_owned)?;
+    let http = reqwest::Client::builder()
+        .no_proxy()
+        .redirect(reqwest::redirect::Policy::none())
+        .timeout(Duration::from_secs(5))
+        .build()
+        .map_err(|_| "world_cleanup_core_unavailable")?;
+    let receipt: serde_json::Value = http
+        .get(format!(
+            "{}/api/v1/worlds/{}/deletion",
+            connection.endpoint, world_id
+        ))
+        .bearer_auth(connection.bearer_token())
+        .send()
+        .await
+        .map_err(|_| "world_cleanup_core_unavailable")?
+        .error_for_status()
+        .map_err(|_| "world_cleanup_core_unavailable")?
+        .json()
+        .await
+        .map_err(|_| "world_cleanup_receipt_invalid")?;
+    if receipt["deleted"] != true {
+        return Err("world_cleanup_not_deleted".to_owned());
+    }
+    let previous = match tokio::fs::read(&config.llm_config_path).await {
+        Ok(bytes) => bytes,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(WorldModelCleanupOutcome {
+                old_credential_cleanup_incomplete: false,
+                core_restarted: false,
+            })
+        }
+        Err(_) => return Err("llm_config_read_failed".to_owned()),
+    };
+    let document = llm_config::inherit_default(&previous, &world_id).map_err(str::to_owned)?;
+    if document == previous {
+        return Ok(WorldModelCleanupOutcome {
+            old_credential_cleanup_incomplete: false,
+            core_restarted: false,
+        });
+    }
+    if let Err(error) = updater::maintenance(&connection, "prepare").await {
+        let _ = updater::maintenance(&connection, "cancel").await;
+        return Err(error);
+    }
+    let drained = async {
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(180);
+        loop {
+            let status = updater::maintenance(&connection, "status").await?;
+            if !status.preparing {
+                return Err("world_cleanup_barrier_expired".to_owned());
+            }
+            if status.active == 0 {
+                return Ok(());
+            }
+            if tokio::time::Instant::now() >= deadline {
+                return Err("world_cleanup_tasks_running".to_owned());
+            }
+            tokio::time::sleep(Duration::from_millis(500)).await;
+        }
+    }
+    .await;
+    if let Err(error) = drained {
+        let _ = updater::maintenance(&connection, "cancel").await;
+        return Err(error);
+    }
+    if let Err(error) = llm_config::write_atomic(&config.llm_config_path, &document).await {
+        let _ = updater::maintenance(&connection, "cancel").await;
+        return Err(error.to_owned());
+    }
+    if host.restart(&config).await.is_err() {
+        let _ = llm_config::write_atomic(&config.llm_config_path, &previous).await;
+        let _ = host.restart(&config).await;
+        return Err("world_cleanup_restart_failed".to_owned());
+    }
+    let retained = llm_config::credential_references(&document).map_err(str::to_owned)?;
+    let mut incomplete = false;
+    for reference in llm_config::credential_references(&previous).map_err(str::to_owned)? {
+        if !retained.contains(&reference) && credentials.delete(&reference).is_err() {
+            incomplete = true;
+        }
+    }
+    Ok(WorldModelCleanupOutcome {
+        old_credential_cleanup_incomplete: incomplete,
+        core_restarted: true,
+    })
+}
+
 pub fn run() {
     let credentials: SharedCredentialStore = Arc::new(NativeCredentialStore);
     let supervisor = Arc::new(Mutex::new(CoreSupervisor::with_credential_store(
@@ -471,6 +577,7 @@ pub fn run() {
             Some(vec!["--background"]),
         ))
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_dialog::init())
         .on_window_event(|window, event| {
             if matches!(event, tauri::WindowEvent::Focused(false)) {
                 background::hide_presence(window.app_handle());
@@ -498,6 +605,8 @@ pub fn run() {
             managed_chat_model_setup,
             update_chat_model,
             use_default_chat_model,
+            forget_deleted_world_model,
+            file_exports::save_file_export,
             background::desktop_background_status,
             background::configure_desktop_background,
             background::report_desktop_presence,

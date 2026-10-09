@@ -15,6 +15,7 @@ from livingworld.infrastructure.persistence.contact_gate import (
     contact_blocked,
     waiting_conversation,
 )
+from livingworld.infrastructure.persistence.deletion_models import GroupDissolutionRecord
 from livingworld.infrastructure.persistence.director_background import read_director_background
 from livingworld.infrastructure.persistence.director_models import (
     DirectorCandidateRecord as Routine,
@@ -426,6 +427,11 @@ class SqlAlchemyProactiveContactStore:
                             Conversation.world_id == episode.world_id,
                             Conversation.player_id == episode.player_id,
                             Conversation.kind == "group",
+                            Conversation.conversation_id.not_in(
+                                select(GroupDissolutionRecord.conversation_id).where(
+                                    GroupDissolutionRecord.world_id == episode.world_id
+                                )
+                            ),
                         )
                         .order_by(Conversation.conversation_id)
                         .limit(513)
@@ -454,7 +460,9 @@ class SqlAlchemyProactiveContactStore:
                         "proactive-group:"
                         + str(episode.player_id)
                         + ":"
-                        + ":".join(sorted(str(i) for i in expected)),
+                        + ":".join(sorted(str(i) for i in expected))
+                        + ":"
+                        + str(episode.episode_id),
                     )
                     session.add(
                         Conversation(

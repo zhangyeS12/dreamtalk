@@ -43,6 +43,10 @@ class FileContentAssetStore:
     async def read(self, binding: AssetBlobBinding) -> bytes:
         return await asyncio.to_thread(self._read, binding)
 
+    async def remove_unreferenced(self, digest: str) -> None:
+        # The caller proves this immutable hash is no longer referenced in its DB transaction.
+        await asyncio.to_thread(self._path(digest).unlink, missing_ok=True)
+
     def _materialize(self, blob: PackagedBlob) -> None:
         target = self._path(blob.binding.digest)
         if target.exists():

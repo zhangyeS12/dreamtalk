@@ -396,6 +396,33 @@ class CharacterCardImporter:
                 if field in data
             },
         }
+        native = data["extensions"].get("dreamtalk.export", {})
+        extra = {}
+        if (
+            isinstance(native, dict)
+            and type(native.get("version")) is int
+            and native["version"] == 1
+        ):
+            for field in ("background", "speech_guidance"):
+                if field in native:
+                    if type(native[field]) is not str:
+                        raise ContentImportError(
+                            "invalid_character_card_structure",
+                            f"data.extensions.dreamtalk.export.{field}",
+                        )
+                    extra[field] = native[field]
+            if "aliases" in native:
+                extra["aliases"] = tuple(
+                    _strings(native["aliases"], "data.extensions.dreamtalk.export.aliases")
+                )
+            if "example_dialogue" in native:
+                examples = _strings(
+                    native["example_dialogue"], "data.extensions.dreamtalk.export.example_dialogue"
+                )
+                # Other apps may edit the standard field while keeping extensions.
+                # Never restore stale examples over an explicitly edited field.
+                if "\n\n".join(examples) == data["mes_example"]:
+                    extra["example_dialogue"] = tuple(examples)
         character = CharacterDefinition(
             content_id=CharacterDefinitionId(uuid4()),
             display_name=data["name"],
@@ -403,7 +430,10 @@ class CharacterCardImporter:
             personality=data["personality"],
             scenario=data["scenario"],
             creator_notes=data["creator_notes"],
-            example_dialogue=(data["mes_example"],) if data["mes_example"].strip() else (),
+            example_dialogue=extra.pop(
+                "example_dialogue", (data["mes_example"],) if data["mes_example"].strip() else ()
+            ),
+            **extra,
             tags=tags,
             provenance=provenance,
             authored_instructions={

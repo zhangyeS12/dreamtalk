@@ -12,6 +12,7 @@ from sqlalchemy import CheckConstraint, Connection, MetaData, UniqueConstraint, 
 
 from livingworld.infrastructure.persistence import (  # noqa: F401
     character_card_bindings,
+    deletion_models,
     director_rotation,
     location_policy_models,  # noqa: F401
 )
@@ -99,7 +100,8 @@ RECALL_REVISION = "0037_persistent_chat_recall"
 LOCATION_REVISION = "0038_location_policies"
 MOBILITY_REVISION = "0039_character_mobility"
 REMOVAL_REVISION = "0040_authored_removal"
-HEAD_REVISION = "0041_director_rotation"
+ROTATION_REVISION = "0041_director_rotation"
+HEAD_REVISION = "0042_world_deletion"
 
 # One reviewed linear chain replaces repeated hand-maintained suffix sets.
 _SUPPORTED_REVISIONS = (
@@ -143,6 +145,7 @@ _SUPPORTED_REVISIONS = (
     LOCATION_REVISION,
     MOBILITY_REVISION,
     REMOVAL_REVISION,
+    ROTATION_REVISION,
     HEAD_REVISION,
 )
 _REVISION_RANGES = {
@@ -155,6 +158,7 @@ LOCATION_POLICY_TABLES = {
     "character_location_policies",
 }
 ROTATION_TABLES = {"director_rotation", "director_rotation_members", "character_card_bindings"}
+DELETION_TABLES = {"group_dissolutions", "world_deletions"}
 FACTION_TABLES = {
     "character_factions",
     "character_faction_members",
@@ -349,7 +353,8 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
     pre_location_policy_revision = revision not in _REVISION_RANGES[LOCATION_REVISION]
     pre_mobility_revision = revision not in _REVISION_RANGES[MOBILITY_REVISION]
     pre_removal_revision = revision not in _REVISION_RANGES[REMOVAL_REVISION]
-    pre_rotation_revision = revision != HEAD_REVISION
+    pre_rotation_revision = revision not in _REVISION_RANGES[ROTATION_REVISION]
+    pre_deletion_revision = revision != HEAD_REVISION
     pre_faction_revision = revision not in _REVISION_RANGES[FACTION_REVISION]
     pre_proactive_revision = revision not in _REVISION_RANGES[PROACTIVE_REVISION]
     pre_shared_revision = revision not in _REVISION_RANGES[SHARED_REVISION]
@@ -523,6 +528,8 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         expected |= FTS_TABLES
     if pre_rotation_revision:
         expected -= ROTATION_TABLES
+    if pre_deletion_revision:
+        expected -= DELETION_TABLES
     if pre_faction_revision:
         expected -= FACTION_TABLES
     if pre_location_policy_revision:
@@ -562,6 +569,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         domain_present,
         recall_present=not pre_recall_revision,
         mobility_present=not pre_mobility_revision,
+        deletion_present=not pre_deletion_revision,
     )
     if domain_present:
         _validate_domain_shape(
@@ -591,6 +599,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
             pre_mobility_revision=pre_mobility_revision,
             pre_removal_revision=pre_removal_revision,
             pre_rotation_revision=pre_rotation_revision,
+            pre_deletion_revision=pre_deletion_revision,
         )
     if revision in {
         CONTENT_REVISION,
@@ -628,11 +637,15 @@ def _validate_auxiliary_objects(
     *,
     recall_present: bool = False,
     mobility_present: bool = False,
+    deletion_present: bool = False,
 ) -> None:
     objects = connection.execute(
         text("SELECT name, type, sql FROM sqlite_master WHERE type IN ('trigger', 'view')")
     ).all()
     expected = dict(_EVENT_TRIGGERS) if domain_present else {}
+    if deletion_present:
+        expected["world_events_no_delete"] = deletion_models.WORLD_DELETE_TRIGGER
+        expected["worlds_no_recreate"] = deletion_models.WORLD_RECREATE_TRIGGER
     if mobility_present:
         for operation in ("INSERT", "UPDATE"):
             expected[f"character_residency_{operation.lower()}"] = (
@@ -682,6 +695,7 @@ def _validate_domain_shape(
     pre_mobility_revision: bool = True,
     pre_removal_revision: bool = True,
     pre_rotation_revision: bool = True,
+    pre_deletion_revision: bool = True,
 ) -> None:
     """Detect partial/mismatched schemas; never infer a revision from them."""
 
@@ -707,6 +721,8 @@ def _validate_domain_shape(
         "ck_command_receipt_command_result",
     }
     for table in metadata.sorted_tables:
+        if pre_deletion_revision and table.name in DELETION_TABLES:
+            continue
         if pre_rotation_revision and table.name in ROTATION_TABLES:
             continue
         if pre_mobility_revision and table.name == "character_mobility":

@@ -91,3 +91,10 @@ class LocalVectorCache:
                 # Keep validated settings to avoid constructor writes every lookup.
                 if self.failed:
                     self.cache = None
+
+    def clear(self):
+        self.open()
+        if self.failed:
+            raise RuntimeError("world_delete_cache_unavailable")
+        if self.cache is not None:
+            self.cache.clear(retry=False)

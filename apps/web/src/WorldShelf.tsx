@@ -12,10 +12,11 @@ type Book = { key: string; name: string; number: string; worldId?: string; blank
 type Carousel = NonNullable<UseEmblaCarouselType[1]>;
 type Geometry = { width: number; positions: number[] };
 
-export function WorldShelf({ worlds, appearances, selectedKey, initialWorldId, disabled, loading, onSelect, onCreate, onClose, onSettled }: {
+export function WorldShelf({ worlds, appearances, selectedKey, initialWorldId, disabled, loading, onSelect, onCreate, onClose, onSettled, vacatedIndex }: {
   worlds: WorldSettings[]; appearances: Record<string, BookAppearance>; selectedKey: string | null; initialWorldId: string | null;
   disabled: boolean; loading: boolean; onSelect: (id: string) => void; onCreate: (index: number) => void;
   onClose: () => void; onSettled: (key: string | null) => void;
+  vacatedIndex?: number | null;
 }) {
   const viewport = useRef<HTMLDivElement>(null);
   const volumes = useRef(new Map<string, HTMLSpanElement>());
@@ -43,12 +44,20 @@ export function WorldShelf({ worlds, appearances, selectedKey, initialWorldId, d
     watchDrag: () => canDrag.current }), []);
   const [emblaRef, carousel] = useEmblaCarousel(options);
   const attach = useCallback((node: HTMLDivElement | null) => { viewport.current = node; emblaRef(node); }, [emblaRef]);
-  const books = useMemo<Book[]>(() => [
+  const books = useMemo<Book[]>(() => {
+    const result: Book[] = [
     ...worlds.map((world, index) => ({ key: `world:${world.world_id}`, name: world.name,
       number: String(index + 1).padStart(2, "0"), worldId: world.world_id })),
     ...Array.from({ length: worldShelfBlankCount(worlds.length) }, (_, index) =>
       ({ key: `blank:${index}`, name: "未命名世界", number: "＋", blankIndex: index })),
-  ], [worlds]);
+    ];
+    if (vacatedIndex !== null && vacatedIndex !== undefined) {
+      const index = result.findIndex(item => item.blankIndex === 0);
+      const [blank] = result.splice(index, 1);
+      result.splice(Math.min(vacatedIndex, result.length), 0, blank);
+    }
+    return result;
+  }, [worlds, vacatedIndex]);
   // Repeated presentation laps keep Embla looping even on a window wider than one lap.
   // They never create worlds or duplicate keyboard/accessibility entries.
   const laps = Math.max(2, Math.ceil((geometry.width + SLOT * 2) / (books.length * SLOT)) + 1);

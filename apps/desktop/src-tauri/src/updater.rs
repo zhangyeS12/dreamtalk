@@ -230,12 +230,12 @@ pub fn dismiss_desktop_update_popup(state: State<'_, UpdateState>) {
 }
 
 #[derive(Deserialize)]
-struct DrainStatus {
-    preparing: bool,
-    active: u64,
+pub(crate) struct DrainStatus {
+    pub preparing: bool,
+    pub active: u64,
 }
 
-async fn maintenance(
+pub(crate) async fn maintenance(
     connection: &crate::supervisor::CoreConnection,
     action: &str,
 ) -> Result<DrainStatus, String> {

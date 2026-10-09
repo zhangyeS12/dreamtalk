@@ -16,6 +16,7 @@ import { chatPhaseFeedback } from "./chatFeedback";
 
 import { ConversationHeading, transcriptDay } from "./ConversationHeading";
 import { ContactAvatar } from "./ContactSocial";
+import { FileExportDialog } from "./FileExportDialog";
 
 interface Props {
   client: CoreClient;
@@ -33,6 +34,7 @@ interface Props {
 export function ChatTranscript({ client, worldId, playerId, conversation, avatarUrl, tokenCeiling, suggestedDraft, onSuggestionUsed, onBack, onDirtyChange }: Props) {
   const draftInput = useRef<HTMLTextAreaElement>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [longMemoryOpen, setLongMemoryOpen] = useState(false);
   const [referenceTurn, setReferenceTurn] = useState<string | null>(null);
@@ -51,7 +53,8 @@ export function ChatTranscript({ client, worldId, playerId, conversation, avatar
   return <section ref={thread} className="chat-thread" aria-label={`${conversation.character_name}的会话`}>
     <ConversationHeading title={conversation.character_name} kind="私聊" portrait={<ContactAvatar name={conversation.character_name} url={avatarUrl} />}
       onBack={onBack} onRefresh={() => setRefresh(value => value + 1)} onLongMemory={() => setLongMemoryOpen(true)}
-      onMemory={() => setMemoryOpen(true)} onHistory={() => setHistoryOpen(true)} />
+      onMemory={() => setMemoryOpen(true)} onHistory={() => setHistoryOpen(true)} onExport={() => setExportOpen(true)} />
+    {exportOpen && <FileExportDialog client={client} worldId={worldId} conversationId={conversation.conversation_id} onClose={() => setExportOpen(false)} />}
     {referenceTurn ? <ContextReferencePanel key={`${worldId}:${conversation.conversation_id}:${referenceTurn}`} client={client} worldId={worldId} conversationId={conversation.conversation_id} turnId={referenceTurn} names={new Map([[conversation.character_id, conversation.character_name]])} onClose={() => setReferenceTurn(null)} /> : null}
     {longMemoryOpen ? <LongChatMemoryPanel client={client} worldId={worldId} conversationId={conversation.conversation_id} characters={[{ character_id: conversation.character_id, character_name: conversation.character_name }]} onClose={() => setLongMemoryOpen(false)} /> : null}
     {memoryOpen ? <ConversationMemoryPanel client={client} worldId={worldId} conversationId={conversation.conversation_id} senderName={message => message.sender_kind === "player" && message.sender_id === playerId ? "我" : conversation.character_name} canGenerate={!conversation.read_only && !sending && !pendingSend} onClose={() => setMemoryOpen(false)} /> : null}
