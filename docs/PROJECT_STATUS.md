@@ -1,12 +1,12 @@
 # dreamtalk 当前状态清单
 
-更新日期：**2026-10-14**。当前源码Desktop **0.1.77**、API1、迁移head0051_media_frequency_kind、配音revision8，准备审查修复发布；最近公开版v0.1.76。新修复范围及检查结果见[本轮记录](maintenance/2026-10-14-review-fixes-release.md)。用户仅确认前轮本地配音、角色发送和新增公共表情识别；免费云端最新版／付费API及其他媒体、运行、升级场景继续待验收。此前受限模型对照与元数据读取许可已结束，本轮不运行测试／模型或操作存档。
+更新日期：**2026-10-14**。当前源码Desktop **0.1.77**、API1、迁移head0051_media_frequency_kind、配音revision8，v0.1.77审查修复已公开，发行源码e192331。新修复范围及检查结果见[本轮记录](maintenance/2026-10-14-review-fixes-release.md)。用户仅确认前轮本地配音、角色发送和新增公共表情识别；免费云端最新版／付费API及其他媒体、运行、升级场景继续待验收。此前受限模型对照与元数据读取许可已结束，本轮不运行测试／模型或操作存档。
 
 ## 完成度速览
 
-最新公开下载为[v0.1.76](https://github.com/zhangyeS12/dreamtalk/releases/tag/v0.1.76)，安装／便携文件及原update-preview清单已核对，见[说明](releases/v0.1.76.md)。用户已确认新增公共表情识别问题解决；[原修复证据](maintenance/2026-10-14-sticker-context-position.md)保留，不扩大为所有模型／群聊场景通过。
+最新公开下载为[v0.1.77](https://github.com/zhangyeS12/dreamtalk/releases/tag/v0.1.77)，安装／便携文件及原update-preview清单已核对，见[说明](releases/v0.1.77.md)。用户已确认新增公共表情识别问题解决；[原修复证据](maintenance/2026-10-14-sticker-context-position.md)保留，不扩大为所有模型／群聊场景通过。
 
-用户已追加授权本机视觉模型下载与独立部署；现已完成官方文件校验、离线接入、本机启动及vision元数据核对，真实识图待用户验收；配置和证据见[记录](maintenance/2026-10-13-local-image-model-deployment.md)。当前应用源码0.1.76，本次明确获准为GitHub发布构建完整下载包；不覆盖旧包、不运行图片推理；此前七次表情合成测试许可已结束，本轮仅另获具体只读表情元数据授权。
+用户已追加授权本机视觉模型下载与独立部署；现已完成官方文件校验、离线接入、本机启动及vision元数据核对，真实识图待用户验收；配置和证据见[记录](maintenance/2026-10-13-local-image-model-deployment.md)。当前应用源码0.1.77及完整下载包已公开；不覆盖旧包、不运行图片推理。此前七次表情合成测试及限定元数据诊断许可已结束，本轮没有新的存档或模型诊断授权。
 
 | 层次 | 当前完成度 | 剩余工作 |
 | --- | --- | --- |

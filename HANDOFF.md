@@ -1,6 +1,6 @@
 # dreamtalk 工作交接
 
-更新日期：**2026-10-14**。当前源码Desktop **0.1.77**、API1、迁移head0051_media_frequency_kind、配音revision8，准备发布审查修复版；最近公开v0.1.76／fcd2a05。当前范围、检查和发布结果见[本轮记录](docs/maintenance/2026-10-14-review-fixes-release.md)。用户前轮已确认本地配音、角色发送和新增公共表情识别；免费云端最新版／付费API及其他升级、媒体场景继续待验收。
+更新日期：**2026-10-14**。当前源码Desktop **0.1.77**、API1、迁移head0051_media_frequency_kind、配音revision8，v0.1.77审查修复版已公开，发行源码e192331。当前范围、检查和发布结果见[本轮记录](docs/maintenance/2026-10-14-review-fixes-release.md)。用户前轮已确认本地配音、角色发送和新增公共表情识别；免费云端最新版／付费API及其他升级、媒体场景继续待验收。
 
 ## 1. 五分钟了解当前完成度
 
@@ -12,21 +12,21 @@
 | 有明确使用反馈 | 2026-10-14用户确认可以发表情；2026-10-13用户在0.1.68交付后反馈本地配音效果良好；用户报告卡/书生成、单聊、群聊@及无@正常，认可循环书架；0.1.23连接卡顿和0.1.30已读红点问题获确认解决。2026-10-07本轮CCv2角色卡与World Info JSON世界书外部导入获用户确认通过。 | 反馈只覆盖当次功能／资料，不代表最新版全量通过。 |
 | 已实现、待最新版验收 | 新增三库表情、媒体附件、可设频率与一次搜索、可选图片分析；配音三路线、六小时缓存、独立候选试听替换、一键服务修复；本地效果已有本次用户确认。 | 免费云端最新版和付费API未测试、待确认；缓存、替换、修复及其他场景不推定全通过。 |
 | 尚未实现的愿景 | 完整离线演化、更广剧情/关系/知识演化、一键构建完整运行世界/持续资料更新、Checkpoint/Timeline Branch及runtime世界备份。 | 详见第4节。未冻结的产品行为须先讨论，不是默认下一步授权。 |
-| 发行未完成 | 最近公开0.1.76；本轮准备0.1.77可靠性修复，正式稳定版和新版整体验收尚未完成。 | 全面更新仍按预发布交付，不推定稳定。 |
+| 发行未完成 | 0.1.77预发布交付完成；正式稳定版和新版整体验收尚未完成。 | 全面更新仍按预发布交付，不推定稳定。 |
 | 范围规则 | 只推进已批准需求和有证据的修复。 | 不从历史建议、领域类名或“继续推进”推导新授权。 |
 
 **最近进展：** 0.1.77修复配音累计任务上限、媒体间隔、原图多余读取、图片凭据积累和TXT媒体导出，合并重复凭据实现并收敛文档；详细范围和证据见[本轮记录](docs/maintenance/2026-10-14-review-fixes-release.md)。
 
 ## 2. 仓库、运行和版本现场
 
-本轮完整便携入口为artifacts/portable/review-0177/dreamtalk/dreamtalk-desktop.exe，安装器在artifacts/installers/review-0177；构建完成和发布核对结果在本轮记录补录。源码开发体验入口保持apps/desktop/src-tauri/target/debug/dreamtalk-desktop.exe，不能把旧debug输出当作新发行版。先从托盘退出旧程序再体验；工程端不启动新产物。
+本轮完整便携入口为artifacts/portable/review-0177/dreamtalk/dreamtalk-desktop.exe，安装器在artifacts/installers/review-0177；完整构建、静态载荷及匿名下载核对已完成，结果见本轮记录；包内文档保留发行源码准备快照，发布完成回执在main更新，不改标签或附件。源码开发体验入口保持apps/desktop/src-tauri/target/debug/dreamtalk-desktop.exe，不能把旧debug输出当作新发行版。先从托盘退出旧程序再体验；工程端不启动新产物。
 
 | 项 | 当前事实与边界 |
 | --- | --- |
 | 正式仓库 | D:\LivingWorld，开发分支codex/world-archive；当前HEAD／main以Git实际状态核对。源码发布快进同步，不改写旧历史。 |
 | 版本／协议 | Desktop0.1.77，Core／Web0.1.0，API1，配音revision8；既有标识app.livingworld.desktop保持。 |
 | 迁移 | 源码head0051_media_frequency_kind，只追加可空发送类型；旧0050和更早形状校验保留。不读取聊天正文回填，不执行真实迁移。 |
-| GitHub | 最近公开[v0.1.76](https://github.com/zhangyeS12/dreamtalk/releases/tag/v0.1.76)；本轮获准发布0.1.77完整安装／便携版及原update-preview频道，不改变旧附件或频道说明。 |
+| GitHub | 最新公开[v0.1.77](https://github.com/zhangyeS12/dreamtalk/releases/tag/v0.1.77)；完整安装／便携版及原update-preview频道已同版更新，不改变旧附件或频道说明。 |
 | 配音／图片模型 | 独立Git忽略环境和权重，不进入Core／安装包。登记路径并保存启用配置后随dreamtalk启动，模型按需加载；已有开机后台入口使登录后运行，不是关机期间运行。 |
 | 数据／系统入口 | 本轮不读取真实存档、聊天、原图或音频，不注册／修改自启动、快捷方式或进程。旧对照／元数据读取许可不复用。 |
 | 检查责任 | 用户负责测试和最终验收；日常不打包，本次GitHub发布为具体例外，仅--build-only和静态载荷核对。 |
