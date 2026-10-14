@@ -6,13 +6,13 @@
 
 ## 当前本地工作与交接
 
-此前公开Git基线为v0.1.53／a3f2183，本次按用户明确授权发布Desktop0.1.76、迁移0050_sticker_library_freshness的大更新；源码、完整Windows资产与更新频道结果见[记录](maintenance/2026-10-14-major-release.md)。模型环境、配音／视觉权重、录音、存档、个人配置和发布密钥不随源码或安装包提供。日常不打包规则继续适用，本次仅为具体GitHub发布例外。
+当前公开发行源码为v0.1.76／fcd2a05，Desktop0.1.76、迁移head0050_sticker_library_freshness；main及开发分支已同步，完整Windows资产和原更新频道已发布，证据见[记录](maintenance/2026-10-14-major-release.md)。最终发布回执的文档提交不改变发行代码或v0.1.76标签。模型环境、配音／视觉权重、录音、存档、个人配置和私钥不随源码或安装包提供；日常不打包规则继续适用。
 
 本机图片服务自动启动及两个本地模型不限次数的原实现见[记录](maintenance/2026-10-13-local-model-startup-and-limits.md)，本次按明确授权构建0.1.76公开安装／便携资产，旧0.1.70包保持。免费云端最新版与付费配音API未测试、待确认；独立表情与配音对照许可均已结束，不运行产品、模型或原存档迁移。可选配音环境仍独立，不向Core加入Torch或CUDA。
 
 ## 本地环境
 
-用户体验入口保持直接双击桌面程序：`apps/desktop/src-tauri/target/debug/dreamtalk-desktop.exe`，先从托盘退出旧dreamtalk。工程端复用已有build:desktop必要调试编译（--no-bundle）及未运行的默认target目录，不覆盖用户正在运行的sticker-library-0175入口，不创建安装器、便携包或ZIP。该0.1.76入口依赖当前仓库及.venv，编译和诊断范围见[记录](maintenance/2026-10-14-sticker-context-position.md)。原界面布局保持。
+公开体验入口为完整0.1.76安装包或artifacts/portable/major-0176/dreamtalk/dreamtalk-desktop.exe；源码开发入口仍为apps/desktop/src-tauri/target/debug/dreamtalk-desktop.exe。切换前从托盘退出旧程序；编译前核对运行位置，选择未占用的输出。本次发行编译在release目录，保留用户正在运行的debug程序，没有运行新产物。原界面布局保持，检查及发布范围见[记录](maintenance/2026-10-14-major-release.md)。
 
 需要 Node.js、Python / uv、Rust，以及 Windows 桌面构建工具。版本和依赖以根目录 package.json、pyproject.toml、锁文件、桌面 Cargo.toml 和构建脚本为准。源码下载不含个人密钥、存档或发布签名私钥。
 
