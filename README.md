@@ -270,3 +270,11 @@ dreamtalk 是一款开源桌面应用。你可以创建自己的世界，导入�
 通过 [GitHub Issues](https://github.com/zhangyeS12/dreamtalk/issues) 反馈时，请提供版本、操作步骤、预期与实际表现。请先遮住 API 密钥和私人聊天。新版本的实际使用和升级仍需要用户验收，构建成功不等于所有场景都已通过。
 
 dreamtalk 使用 [Apache-2.0 开源许可证](LICENSE)。想参与开发可查看[开发说明](docs/DEVELOPMENT.md)；项目实现和验收范围另见[状态清单](docs/PROJECT_STATUS.md)。
+
+## Code signing policy
+
+dreamtalk is preparing an application for free open-source signing with SignPath Foundation. The application has not been approved and the current downloads do not carry a Windows publisher certificate from the Foundation. Their existing Tauri updater signature verifies update integrity only.
+
+Planned attribution after approval: Free code signing provided by SignPath.io, certificate by SignPath Foundation.
+
+See [Code signing policy](https://github.com/zhangyeS12/dreamtalk/blob/main/docs/CODE_SIGNING.md) and [Privacy information](https://github.com/zhangyeS12/dreamtalk/blob/main/docs/PRIVACY.md).
