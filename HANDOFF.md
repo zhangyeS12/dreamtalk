@@ -1,8 +1,8 @@
 # dreamtalk 工作交接
 
-更新日期：**2026-10-09**。本次全面更新发布基线为 Desktop **0.1.53**，分支 codex/world-archive；前序公开源码／v0.1.52 为 `fd5d5cd`。协议仍为 1，迁移 head 为 **0044_location_name_scopes**。用户明确授权完整源码、签名安装器、便携包与固定频道发布，并要求主页及使用说明面向普通用户。交付入口：[v0.1.53](https://github.com/zhangyeS12/dreamtalk/releases/tag/v0.1.53)／[更新频道](https://github.com/zhangyeS12/dreamtalk/releases/tag/update-preview)，发布文件与源码以对应标签为准。
+更新日期：**2026-10-14**。本次批准发布Desktop **0.1.76** 配音、表情与聊天图片大更新；此前公开基线0.1.53／a3f2183／迁移0044，当前API1、迁移head0050_sticker_library_freshness、配音revision7。用户已确认新增表情识别问题解决，角色发送及本地配音效果已有具体体验确认；免费云端最新版与付费API仍待确认。发布准备和最终源码／安装包／便携包／频道证据见[记录](docs/maintenance/2026-10-14-major-release.md)，不把用户单项确认扩大为整体验收。
 
-本地源码、格式／lint／类型检查和 0.1.53 build-only 已完成；最终发布包会在文档提交后重新构建，文件核对与匿名下载证据保存在 Git 忽略的 artifacts/release-0153。未运行应用、安装器、自动测试、真实迁移或付费模型；未读取用户存档、改当前安装或系统入口。实际升级、0044 迁移、聊天关系、导出／删除、规划轮换及整体验收仍由用户完成。共同联系继续等待用户，不主动触发。
+前轮用户已明确授权四次最近失败案例的本机GPT对照，读取范围仅该台词／参考录音；未生成WAV、不试听／转写／外发或改存档。前轮诊断后原0.1.67服务已经恢复；该反馈更新轮仅整理文档；此前表情首版未启动应用、运行配音修复器或调用模型。详见[修复记录](docs/maintenance/2026-10-13-speech-candidate-sampling-fix.md)。 已有0.1.68包继续保留原交付快照，0.1.70另建产物，不覆盖旧包。
 
 ## 1. 五分钟了解当前完成度
 
@@ -11,26 +11,32 @@
 | 分类 | 当前事实 | 接手时的处理 |
 | --- | --- | --- |
 | 已实现并交付代码/包 | 世界书架与封面、资料创作／导入／联网生成、身份、私聊／群聊／流式、模型／额度／恢复、记忆／检索、事件、活动／相遇／共同休闲、主动联系、阵营／头像／人物网、层级地点与移动；新增角色轮换、群聊解散、世界删除、资料及聊天导出、阵营联系选择与社交上下文改进。 | 0.1.49～0.1.52 已公开；0.1.53 本次发布基线，按标签核对交付，不重新列为待开发。 |
-| 有明确使用反馈 | 用户报告卡/书生成、单聊、群聊@及无@正常，认可循环书架；0.1.23连接卡顿和0.1.30已读红点问题获确认解决。2026-10-07本轮CCv2角色卡与World Info JSON世界书外部导入获用户确认通过。 | 反馈只覆盖当次功能／资料，不代表最新版全量通过。 |
-| 已实现、待最新版验收 | 0.1.49 全角色初始位置与有限批次轮换；0.1.50 群解散／世界删除与身份未绑定导入；0.1.51 资料／完整聊天导出；0.1.52 阵营切断／保留及真实相遇保护；0.1.53 地点总量／同名分支、关系读取和聊天一致性。前序升级、模型隔离、记忆、活动、动态、视觉及共同联系待验收项保持。 | 已实现与用户验收分别记录；不以静态检查替代运行。 |
+| 有明确使用反馈 | 2026-10-14用户确认可以发表情；2026-10-13用户在0.1.68交付后反馈本地配音效果良好；用户报告卡/书生成、单聊、群聊@及无@正常，认可循环书架；0.1.23连接卡顿和0.1.30已读红点问题获确认解决。2026-10-07本轮CCv2角色卡与World Info JSON世界书外部导入获用户确认通过。 | 反馈只覆盖当次功能／资料，不代表最新版全量通过。 |
+| 已实现、待最新版验收 | 新增三库表情、媒体附件、可设频率与一次搜索、可选图片分析；配音三路线、六小时缓存、独立候选试听替换、一键服务修复；本地效果已有本次用户确认。 | 免费云端最新版和付费API未测试、待确认；缓存、替换、修复及其他场景不推定全通过。 |
 | 尚未实现的愿景 | 完整离线演化、更广剧情/关系/知识演化、一键构建完整运行世界/持续资料更新、Checkpoint/Timeline Branch及runtime世界备份。 | 详见第4节。未冻结的产品行为须先讨论，不是默认下一步授权。 |
 | 发行未完成 | 当前发布基线为 0.1.53，前序 0.1.52 已公开；正式稳定版和新版完整运行验收尚未完成。 | 全面更新仍按预发布交付，不推定稳定。 |
-| 已拒绝/未批准 | 共同委托、巡查、任务奖励、战斗、资产玩法，以及未经决定的云同步/市场。 | 不从历史建议、领域类名或“继续推进”推导新授权。 |
+| 范围规则 | 只推进已批准需求和有证据的修复。 | 不从历史建议、领域类名或“继续推进”推导新授权。 |
 
-**最近进展：** 0.1.53 改进地点容量／同名分支与社交读取，全面更新主页、安装和设置说明，继承 0.1.49～0.1.52 的轮换、删除、导出与阵营联系选择。[本次发布内容](docs/releases/v0.1.53.md)明确消费者行为与限制；不新增未批准玩法。
+**最近进展：** 用户确认0.1.76新增公共表情识别问题已解决，并授权作为一次大更新发布。三库、附件、联网／可选分析、不限表情频率、六小时配音缓存、重新配音试听替换及一键服务修复均纳入本次公开切片；云端配音与其他未确认场景保留待验收。沿既有签名／build-only和静态载荷核对，不运行测试／模型／安装器，见[发布记录](docs/maintenance/2026-10-14-major-release.md)。
 
 ## 2. 仓库、运行和版本现场
 
-| 项 | 2026-10-09 发布准备现场 / 历史证据 |
+**本机直接体验入口：** `apps/desktop/src-tauri/target/debug/dreamtalk-desktop.exe`。0.1.76必要调试编译17.24秒、退出0，依赖当前仓库及.venv；先从托盘退出旧版再双击。复用未运行的默认编译目录，保留用户正在运行的sticker-library-0175入口；不组装分发包，不启动新EXE或执行存档迁移。检查和效果边界见[记录](docs/maintenance/2026-10-14-sticker-context-position.md)。
+
+自2026-10-13起，用户要求除明确获准发布到GitHub外，不再在本机打包；便携包、安装器、ZIP及`--build-only`打包均适用。日常继续源码、差异、格式／lint／类型、文档链接及必要编译核对。本轮打包计划已取消，不再等待此前格式／打包合并请求的批准；没有新增发布、测试、模型或真实存档操作授权。长期规则见[AGENTS第20节](AGENTS.md#20-current-verification-responsibility)。
+
+用户追加授权本机视觉模型部署：独立环境与模型存放在Git忽略的artifacts/image-runtime，手动启动且只监听本机；完整模型已按官方SHA256核验并接入，服务0.40.3和模型vision能力元数据已核对；设置填写方式及部署证据见[部署记录](docs/maintenance/2026-10-13-local-image-model-deployment.md)。不重打应用包、不改版本或真实设置，0.1.70包内文档保留原快照；图片效果由用户验收。
+
+| 项 | 当前证据与范围 |
 | --- | --- |
-| 正式仓库 | `D:\LivingWorld`。`C:\Users\zhang\Documents\ChatGPT\LivingWorld`是本次受限工具的可写工作目录，不是正式仓库搬迁。 |
-| 分支/基线 | codex/world-archive；本轮起始 fd5d5cd（公开 v0.1.52），本轮应用与文档发布引用 v0.1.53 标签，不改旧标签。 |
-| 关键前序提交 | `8d56c99`：主动联系保存/启动最低展示；`42e675c`：Logo/三维启动；`167d5e8`：真三维人物网；`bd90ab3`：阵营/头像；`844259a`：离线门禁提示；`0a1539c`：已读红点修复；`ed5f844`：主动联系/通用未读。 |
-| 版本 | Desktop package／Tauri／Cargo及锁文件 0.1.53；根 npm／Web／Core 独立 0.1.0。当前实际运行版本本轮未核对；2026-10-08 的 D:\dreamtalk 0.1.46 仅为历史证据。 |
-| 协议/迁移 | API 协议 1；迁移 head 0044_location_name_scopes；0041 群解散／世界删除，0042 轮换，0043 相识来源，0044 同父地点名称唯一。未执行真实迁移；0044 只调整作者目录，不改稳定地点 ID／实际位置／历史。 |
-| GitHub | 公开 zhangyeS12/dreamtalk；用户授权 main、codex/world-archive、v0.1.53 与完整下载／频道发布。仅正常快进，不强推；最终同步与匿名下载核对见 artifacts/release-0153。 |
-| 最新便携入口 | 本轮最终包 artifacts/portable/comprehensive-0153/dreamtalk/dreamtalk-desktop.exe；安装包 artifacts/installers/comprehensive-0153/dreamtalk_0.1.53_x64-setup.exe。此前 refinement-0153 是优化轮本地构建，不作为本次 GitHub 下载。 |
-| 存档/启动 | app identifier仍为`app.livingworld.desktop`；开发数据兼容位置为`%LOCALAPPDATA%/LivingWorld/development`。开发／构建未读取用户存档；后续清理核对运行／启动入口，并按用户单独批准将dreamtalk自启动从0.1.41更新至0.1.43，保留--background；其他登记不改。 |
+| 正式仓库 | `D:\LivingWorld`；临时目录与正式源码分开，保留全部既有未提交改动。 |
+| 分支／提交 | codex/world-archive；原公开HEAD a3f2183，本次按授权提交0.1.76并快进同步main与开发分支，不改写旧历史。具体源提交／发布结果见本轮记录。 |
+| 应用／协议 | Desktop及锁文件0.1.76，Core／Web仍0.1.0，API1、推理revision7。新EXE已编译；本轮只读核对用户运行0.1.75，没有启动新程序或调用模型验收。 |
+| 迁移 | 源码head0050_sticker_library_freshness，公开0.1.53为0044；本轮获准只读当前存档版本亦为0050。0050仅追加可空导入UTC，0049回执来源列兼容保持，本轮无新增迁移／存档写入。 |
+| 最新本地包 | 既有0.1.70目录保持；本次获准在artifacts/portable/major-0176与artifacts/installers/major-0176新建0.1.76完整发布资产，构建／摘要／载荷证据见本轮记录。 |
+| GitHub | 已获用户明确授权发布v0.1.76、完整Windows安装／便携资产及既有update-preview清单；此前公开基线v0.1.53，上传／核对完成后补充最终结果，不替换旧版本附件。 |
+| 模型环境 | Git忽略的artifacts/voice-runtime/index-tts，独立Python3.11.9／torch2.8.0+cu128；不进入Core或安装包。服务自动启动的路径配置在本机，模型首次任务才加载。 |
+| 数据／系统入口 | identifier保持app.livingworld.desktop。最新授权仅最近回复对应世界的表情元数据只读诊断；未读取聊天／说明正文／原图、未修改存档或系统入口。已识别Codex MSIX旧副本重定向，固定读取器使用已核对桌面上下文；不移动／删除DB或WAL。历史配音对照许可不复用。 |
 
 不要覆盖用户/其他任务改动，不强推、不改写历史。不能用旧便携版打开已升级存档；不要移动或删除DB/WAL。代码head、包版本和实际运行EXE是三种证据，必须分别核对。
 
@@ -51,6 +57,7 @@
 
 | 模块 | 用户入口与前端 | 后端与实际实现方式 |
 | --- | --- | --- |
+| 角色配音 | 设置“角色配音”、通讯录“角色音色”、消息播放／停止／重新配音、下方试听和替换选择；SpeechSettings／CharacterVoice／SpeechPlayback | speech.py → speech_providers.py → 独立serve-indextts.py → Store／播放器；0045音色、0046缓存、0047候选。Tauri监督服务／保管凭据；任务沿UpdateMaintenance治理。见[手册](docs/CHARACTER_VOICES.md)与[本轮记录](docs/maintenance/2026-10-12-speech-regenerate-preview.md)。 |
 | 世界、身份、时钟 | `ProductApp.tsx`、`ProfileEditor.tsx`，设置时间/“我” | [world_settings.py](services/core/src/livingworld/application/world_settings.py)、`player_onboarding.py`、`local_profile.py`、`simulation_clock.py`：世界隔离、绑定Player、从家进入，通用/世界描述与暂停/倍率。 |
 | 书架/封面 | `WorldArchivePage.tsx`、`WorldShelf.tsx`、`WorldCoverEditor.tsx`、`BookFaces.tsx` | [world_covers.py](services/core/src/livingworld/application/world_covers.py)、`infrastructure/persistence/world_covers.py`：Embla循环至少12位/空白创建；本地三面图/文字标题、资产校验和裁剪；0030。 |
 | 卡/书创建、编辑、导入、联网生成 | 通讯录`WorldContent.tsx`/`ContentEditor.tsx`管理角色，书架管理世界书 | [content_builder.py](services/core/src/livingworld/application/content_builder.py)、`content_authoring.py`、`infrastructure/content_research.py`、`infrastructure/imports/`、`persistence/world_content.py`：检索摘要/证据/冲突→可编辑草稿→预览确认→世界内容；0023。 |
@@ -58,7 +65,7 @@
 | 私聊/群聊/流式/分页 | `ChatTranscript.tsx`、`GroupChat.tsx`、`useReplyStream.ts`、`useTranscriptPages.ts` | [chat_reply.py](services/core/src/livingworld/application/chat_reply.py)、[group_chat_reply.py](services/core/src/livingworld/application/group_chat_reply.py)、`chat_messages.py`、`chat_conversations.py`：持久回合、一次认领、校验后提交；唯一@选下一位，无@独立调度；0018～0021。 |
 | 模型、额度、费用、失败恢复 | `ModelSetup.tsx`、`ReplyRecoveryControls.tsx`、`ContextReferencePanel.tsx` | [chat_capacity.py](services/core/src/livingworld/application/chat_capacity.py)、`llm_execution.py`、`llm_preflight.py`、`llm_budget.py`、`persistence/chat_reply_recovery.py`/`chat_context_report.py`：可信容量裁剪、整尝试预算/账本、显式独立新attempt；0031/0032。四类adapter、wire转换在`infrastructure/llm/`，同次附带接线在`bootstrap/llm_runtime.py`，设置序列化在Tauri`llm_config.rs`；0.1.42不新增估算准入。0.1.43按请求／任务世界选快照，`world_model_config.py`＋`production_config.py`／`llm_runtime.py`接线默认及覆盖；Tauri命令增加可选世界与恢复默认。 |
 | 长短期记忆/本地RAG/来源 | `LongChatMemoryPanel.tsx`、`ChatHistoryPanel.tsx`、`ConversationMemoryPanel.tsx`、`SourceMessageDialog.tsx` | [long_chat_memory.py](services/core/src/livingworld/infrastructure/persistence/long_chat_memory.py)、[chat_context.py](services/core/src/livingworld/application/chat_context.py)/`group_chat_context.py`、`conversation_memory.py`、[semantic_chat_retrieval.py](services/core/src/livingworld/infrastructure/semantic_chat_retrieval.py)、`chat_retrieval.py`/`local_vector_cache.py`：同次提取、纠正/停用、权限过滤后jieba/FTS5/BM25+BGE融合及DiskCache；SQLite持久全文/向量派生索引；摘要单独预览确认；0024/0029/0037。 |
-| 日常/地点/活动生命周期 | 通讯录`LocationWorkspace.tsx`；设置`WorldActivities.tsx` | [director.py](services/core/src/livingworld/application/director.py)、`routine_lifecycle.py`、`character_activity_context.py`、`infrastructure/scheduler_runtime.py`：6小时批量提案，Kernel执行真实移动/休息/工作/自由活动及开始/结束/中断；0025/0026/0038/0039。共同准入见`location_rules.py`，全部角色有限批次随机轮换见 persistence/director.py（0042）；地点总量不限制、同父名称唯一见 world_locations.py（0044）。纯移动选择与持久门禁分别见application及persistence的`character_mobility.py`，Director claim保存路线、Kernel提交真实到达。 |
+| 日常/地点/活动生命周期 | 通讯录`LocationWorkspace.tsx`；设置`WorldActivities.tsx` | [director.py](services/core/src/livingworld/application/director.py)、`routine_lifecycle.py`、`character_activity_context.py`、`infrastructure/scheduler_runtime.py`：6小时批量提案，Kernel执行真实移动/休息/工作/自由活动及开始/结束/中断；0025/0026/0038/0039。共同准入见`location_rules.py`，全部角色有限批次随机轮换见 persistence/director.py（0041）；地点总量不限制、同父名称唯一见 world_locations.py（0044）。纯移动选择与持久门禁分别见application及persistence的`character_mobility.py`，Director claim保存路线、Kernel提交真实到达。本地维护改为单次分类，地点页串行轮询并复用未变化快照。 |
 | 聊天参考本人近况/亲历 | 聊天“本次参考内容”，自然回复 | [observed_events.py](services/core/src/livingworld/infrastructure/persistence/observed_events.py)、[experience_lifecycle.py](services/core/src/livingworld/application/experience_lifecycle.py)：只取发言者获准Observation/本人快照，当前状态优先，同次获准终态替代召回开始，不补造结果。 |
 | 相遇/共同休闲 | 设置角色活动，聊天自然提及 | [character_encounters.py](services/core/src/livingworld/application/character_encounters.py)、`encounter_policy.py`、[shared_activities.py](services/core/src/livingworld/application/shared_activities.py)、`persistence/shared_activity_authority.py`：同场/实际活动/授权核验、冷却/持续同场去重，原子事件/Observation/幂等回执；0033/0034。 |
 | 在线/双人主动联系、未回复门禁 | `ProactiveContactSettings.tsx`，私聊/固定双人群 | [proactive_contact.py](services/core/src/livingworld/application/proactive_contact.py)、`persistence/proactive_contact.py`、[contact_gate.py](services/core/src/livingworld/infrastructure/persistence/contact_gate.py)：真实休闲理由，双人同一次共同活动/同事由；线上线下共用持久等待回复，不逐机会选人API；0035。 |
@@ -95,24 +102,74 @@
 | Director风格管理 | 批量日常与社交子集 | 完整参数/风格管理的产品行为未冻结。 |
 | 正式发行 | Windows便携包 | 最新版整体验收、性能/兼容结论、签名更新的频道部署／跨版验收；体验版按用户明确授权发布，不自动推定稳定发行。 |
 
-共同委托/巡查、奖励/战斗不是以上愿景的默认实现方法；用户已明确否定自行添加。完整SillyTavern行为兼容也未实现，现有卡/书格式兼容不等于概率/递归/脚本等全兼容。
+完整SillyTavern行为兼容也未实现，现有卡/书格式兼容不等于概率/递归/脚本等全兼容。
 
 ## 5. 接下来从哪一步继续
+
+0. **配音按路线维护验收状态**：本地效果已有2026-10-13用户确认；免费云端最新版和付费API尚未测试、待确认。其他缓存／试听替换／服务修复场景仍由用户验收。前轮四次GPT对照许可已经用完，不自动新增模型或付费服务调用；见[当前手册](docs/CHARACTER_VOICES.md)。
 
 1. **先验收本次 0.1.53 全面更新**：应用内升级、0044 老存档迁移、不同父节点同名／同父拒绝／修改父节点校验；全部角色初始位置、1～16 批次轮换；退出阵营切断／保留／真实相遇保护／其他共享阵营，以及聊天用当前关系。导出全部已保存历史与资料提示；群解散保留记忆、世界删除完整清空、角色删除旧会话只读。继承原模型隔离、严格预算、封面、移动／隐藏／锁定、动态 5 条补位和视觉验收范围。工程端只做授权的静态／编译／打包与公开交付核对，不运行产品或真实模型。
 2. **验收尚未确认的关键链路**（共同联系目前由用户先等待，不主动触发或排查）：记忆纠正/停用和旧事召回、活动真实终态/权限、动态池公共背景→生成→逐条发布→标记、在线单人/双人同事由→等待回复→原会话回复→合法下次机会、离线联动。主动联系失败先查保存状态/前提/终端原因，不靠反复开关或自动重放API排查。
 3. **只按证据修复**：记录现象、版本、受影响模块和可观察完成条件；新功能先调查成熟实现并确认新增范围。用户仍负责测试；未获新许可不运行自动测试、GUI smoke、真实存档/模型诊断。
-4. **新方向先讨论**：将4.2中的愿景与当前功能验收分开；0.1.53已获本轮全面预发布授权，未来发行仍须相应批准。现在没有等待补写的共同委托，也没有需要重新搭建的记忆底座。
+4. **新方向先讨论**：将4.2中的愿景与当前功能验收分开；0.1.53已获本轮全面预发布授权，未来发行仍须相应批准。已有记忆底座不需要重新搭建。
 
 各功能操作/验收手册： [聊天恢复](docs/CHAT_FUNCTIONAL_EXPERIENCE.md)、[记忆与上下文](docs/CONTEXT_AND_RECALL.md)、[经历终态](docs/EXPERIENCE_STATE_RECALL.md)、[日常](docs/DIRECTOR_ACTIVITIES.md)、[相遇](docs/CHARACTER_ENCOUNTERS.md)、[共同休闲](docs/SHARED_LEISURE.md)、[主动联系](docs/PROACTIVE_CONTACT.md)、[离线消息](docs/OFFLINE_MESSAGES.md)、[事件](docs/WORLD_EVENT_JOURNAL.md)、[阵营](docs/CHARACTER_FACTIONS.md)、[启动](docs/CELESTIAL_STARTUP.md)。
 
 ## 6. 交付与证据
 
+### 当前媒体接口修复（Desktop 0.1.70）
+
+用户反馈设置读取失败；源码确认0.1.69媒体router漏了API前缀，已统一修正设置、表情库、图片和显式分析入口，并补充加载状态及具体错误提示。无新迁移、依赖或模型调用；检查与独立便携包见[本轮记录](docs/maintenance/2026-10-13-chat-media-settings-route-fix.md)。实际设置读取／保存、导入和图片显示仍待用户验收。
+
+### 当前本地配音（Desktop 0.1.68）
+
+原参考的3个独立采样候选在受限GPT对照中均正常结束；源码已改为三候选采样和完成候选评分，保持原参考、BF16、最大容量及整段规则。源码／格式核对通过，build-only退出0，285份Core源码与桥接／帮助程序逐字节一致；最终包摘要见artifacts/voices-0168-delivery.json。四次模型对照仅到GPT返回；用户随后确认本次本地效果良好，免费云端和付费API待确认，其他流程不推定全部通过；原0.1.67服务已恢复，临时台词／参考文件已删除。见[本轮修复](docs/maintenance/2026-10-13-speech-candidate-sampling-fix.md)。未提交或发布。
+
+### 前轮本地配音（Desktop 0.1.67）
+
+源码／Ruff／格式／AST、前端ESLint／TypeScript及Rust格式核对通过；build-only退出0。设置内一键修复与受控服务更新见[本轮记录](docs/maintenance/2026-10-13-local-speech-one-click-repair.md)；未运行修复器、服务、模型、测试或真实迁移。
+
+### 前轮本地配音（Desktop 0.1.66）
+
+源码／Ruff／格式／AST、前端ESLint／TypeScript及Rust格式核对通过；build-only退出0。参考编码复用、解码数值日志及失败提示见[本轮记录](docs/maintenance/2026-10-13-speech-reference-cache-fix.md)；未运行模型、声音、测试或真实迁移。
+
+### 前轮本地配音（Desktop 0.1.65）
+
+源码／Ruff／格式／AST、前端ESLint／TypeScript及Rust格式核对通过；build-only退出0。新增重新配音候选、下方试听与播放结束后替换／保留，六小时保存期限保持。本轮没有运行应用、模型、声音、测试或真实迁移，见[本轮记录](docs/maintenance/2026-10-12-speech-regenerate-preview.md)。
+
+### 前轮本地配音（Desktop 0.1.64）
+
+手动缓存数值诊断与实际播放时钟已build-only交付，实际音频仍未取得，见[原轮记录](docs/maintenance/2026-10-12-speech-signal-diagnostics.md)。
+
+### 前轮本地配音（Desktop 0.1.63）
+
+源码／Ruff／格式／AST、前端ESLint／TypeScript及Rust格式核对通过；build-only退出0。未运行模型、测试、声音或真实迁移，见[本轮记录](docs/maintenance/2026-10-12-speech-capacity-packing.md)。
+
+用户随后在官方免费云端遇到约4分钟等待及第一句话后无声、“正在播放”仍在。只读发现960秒整体期限、全局单任务门禁、前端停止不取消后台，以及HF默认输出1500上限警告仍可保存WAV的路径；这不证明本次原因。用户允许有限音频分析，但已定位默认库没有配音表，未取得音频或执行波形分析，见[诊断](docs/maintenance/2026-10-12-free-cloud-speech-diagnosis.md)。当前包仍为原build-only快照，本轮不重打包。
+
+### 前轮本地配音（Desktop 0.1.62）
+
+两份Python Ruff／格式／AST、ESLint／TypeScript及Rust格式通过，完整build-only退出0；无迁移变更，未运行模型或声音。最新结果见[本轮记录](docs/maintenance/2026-10-12-speech-sentence-segmentation.md)。
+
+### 前轮本地配音（Desktop 0.1.61）
+
+源码／Ruff／格式、ESLint／TypeScript、Rust格式，以及10份Python AST、6条SQL和0046离线DDL编译通过，没有打开数据库或执行SQL。完整build-only退出0，EXE版本0.1.61；包内283份Core源码及桥接脚本逐字节一致，最新结果见[本轮记录](docs/maintenance/2026-10-12-speech-cache-retry.md)。
+
+### 前轮本地配音（Desktop 0.1.60）
+
+本轮0.1.60完成Python Ruff／格式、前端ESLint／TypeScript、Rust格式和完整build-only；282份Core源码及桥接脚本逐字节一致，EXE版本0.1.60，1283项程序清单一致。用户已确认0.1.59能够出声，但较长台词不完整、偏慢；新分段／解码和失败治理仍待验收，见[完整性修复](docs/maintenance/2026-10-12-speech-completeness-fix.md)。
+
+前轮0.1.59完成ESLint／TypeScript、完整build-only与载荷隐私检查；EXE版本0.1.59，1282项清单逐文件一致，282份Core源码一致，新增媒体来源策略已核对存在于EXE。原消息缓存重播及声音质量由用户验收，见[播放修复记录](docs/maintenance/2026-10-12-speech-playback-fix.md)。
+
+前轮0.1.58完成ESLint／TypeScript、Rust格式／cargo check与完整build-only；282份旁置Core源码逐字节一致，EXE版本0.1.58，构建／载荷静态隐私检查通过。完整摘要及计数见artifacts/voices-0158-delivery.json；保留已有大chunk、STATIC_VCRUNTIME弃用、jieba转义与可选依赖警告。不能把这些检查当作实际启动、推理或声音验收。
+
+用户随后在0.1.58截图报告已生成但播放器未能启动，前端已进入播放失败阶段；本轮0.1.59修复媒体来源权限缺口，仍待用户确认真实声音与完整性。本轮只读诊断及范围清理见[记录](docs/maintenance/2026-10-12-speech-diagnosis.md)，不启动应用或模型、不生成新声音；0.1.59包内说明同步本轮交付，既有包保持原快照。原轮0.1.54～0.1.58的实现、环境、诊断与检查通过[配音接手说明](docs/maintenance/2026-10-12-speech-latency-handoff.md)索引，以下公开0.1.53及更早内容为历史证据。
+
 本地旧包、重复发布副本与构建缓存已于2026-10-08按用户授权清理；以下旧路径、旧哈希及“保留”描述记录当时交付事实，不是当前本地入口。清理轮仅保留0.1.43；后续增加0.1.44～0.1.46，0.1.43因自启动暂留。旧工作源码压缩保护，用户数据保持；清理范围与最终核对见[清理记录](docs/maintenance/2026-10-08-local-cleanup.md)。
 
 ### 当前全面更新（Desktop 0.1.53）
 
-本轮源码与用户说明同版；签名完整安装／便携构建在文档提交后进行，随包 SOURCE_REVISION.txt 指向本轮源码标签对应提交。具体检查、最终附件摘要和发布结果保存在 artifacts/release-0153；不以旧 refinement-0153 的文件摘要代表新包。源码／lint／类型、离线 DDL／SQL 编译、静态包核对不等于运行或真实数据验证。
+该公开版源码与用户说明同版；签名完整安装／便携构建和发布已完成，随包 SOURCE_REVISION.txt 指向标签对应提交。具体检查、最终附件摘要和发布结果保存在 artifacts/release-0153；当前审查后维护不在这些旧附件中。不以源码／lint／类型、离线 DDL／SQL 编译、静态包核对代替运行或真实数据验证。
 
 关键实现：social_context_text 与 owner 相关 SQL 投影按有效关系提供上下文；保留相遇／其他阵营依据；作者地点总量无固定上限，本地合法路线取全目录，模型仅取本批已确定地点；0044 只调整同父名称唯一，不支持毁损同名数据的降级。无新依赖或新模型调用。
 
@@ -151,7 +208,7 @@
 
 ### 前序体验反馈修复（2026-10-07，Desktop0.1.40）
 
-- 用户确认三次薇薇安主动联系之间均在原会话回复；没有未回复门禁失效证据。在线共同活动优先／批内稳定排序、离线模型按资料理由选人均无轮换保证，具体存档入选原因未读取确认；未修改选人或共同联系条件。
+- 用户确认某角色三次主动联系之间均在原会话回复；没有未回复门禁失效证据。在线共同活动优先／批内稳定排序、离线模型按资料理由选人均无轮换保证，具体存档入选原因未读取确认；未修改选人或共同联系条件。
 - 通讯录压缩重复标题与操作区，桌面名单220px，资料／阵营主区前移并减少头像留白。条件邀约提示明确保留条件；在线邀请与离线`invite_chat`同事务保存原话，无新增API。亲历记录独立；用户所贴四条同文休息开始时间不同，不能按文案删除不同事实。
 - 用户确认世界动态最多5条进行中／绿灰补位／红占位；Kernel按可用时间有界补位，旧已发布记录保留并依次展示，历史折叠，8/10续批／费用／知识权限不变。暂无新迁移。
 - 实际检查／交付证据与完成条件见[本轮维护记录](docs/maintenance/2026-10-07-experience-feedback.md)，用户仍负责运行验收。
@@ -214,6 +271,6 @@ git diff --check
 .\.venv\Scripts\python.exe scripts\check-doc-links.py
 ```
 
-需要源码检查时使用`npm run lint`；构建属于开发任务时用`npm run build:portable -- --build-only`。默认打包包含自检，不得遗漏`--build-only`。开发入口为`dev:desktop`/`dev:web`/`dev:core`，UI端口1420不是Core端口；文档任务不启动这些入口。保留现有tests/CI，历史测试或单次诊断许可不授权本轮自动运行。
+需要源码检查时使用`npm run lint`。自2026-10-13起，除明确获准GitHub发布外，不进行本机打包；必要编译可用既有`build:desktop`（调试、`--no-bundle`），不调用便携／安装器脚本。仅获准发布时使用`npm run build:portable -- --build-only`；默认打包包含自检，不得遗漏`--build-only`。用户直接体验入口为`apps/desktop/src-tauri/target/sticker-reply-0173/debug/dreamtalk-desktop.exe`，不改为启动脚本或让用户自行编译；开发入口仍为`dev:desktop`/`dev:web`/`dev:core`，UI端口1420不是Core端口。文档任务不启动这些入口，保留现有tests/CI，历史测试或单次诊断许可不授权本轮自动运行。
 
 每次改动同步：AGENTS只记录长期规则/新决定，PROJECT_STATUS更新对应能力与验收，HANDOFF保留当前基线/现场/接续。不要追加第二个“最新”、虚报完成率或把历史包写成当前入口。用户反馈按原话/问题/版本归档；没有具体反馈不能升级为全量验收。

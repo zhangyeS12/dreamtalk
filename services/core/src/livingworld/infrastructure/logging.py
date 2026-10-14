@@ -102,6 +102,56 @@ class StructuredLogger:
                 record[name] = value
         self._write(record)
 
+    def emit_chat_media_context_facts(
+        self,
+        *,
+        placement: str,
+        library_available: bool,
+        library_complete: bool,
+        library_sticker_count: int | None,
+        candidate_count: int,
+        timestamped_candidates: int,
+        media_allowed: bool,
+    ) -> None:
+        """Packed snapshot counts only, never descriptions, assets or private IDs."""
+        if placement not in {"current_question", "group_context"}:
+            raise ValueError("invalid_media_context_placement")
+        if any(
+            type(value) is not bool
+            for value in (library_available, library_complete, media_allowed)
+        ):
+            raise ValueError("invalid_media_context_flag")
+        if (
+            library_sticker_count is not None
+            and (
+                type(library_sticker_count) is not int
+                or not 0 <= library_sticker_count <= 2**63 - 1
+            )
+        ) or (not library_available and library_sticker_count is not None):
+            raise ValueError("invalid_media_library_count")
+        if (
+            type(candidate_count) is not int
+            or type(timestamped_candidates) is not int
+            or not 0 <= timestamped_candidates <= candidate_count <= 5
+            or (library_sticker_count is not None and candidate_count > library_sticker_count)
+        ):
+            raise ValueError("invalid_media_candidate_count")
+        self._write(
+            {
+                "timestamp": datetime.now(UTC).isoformat(),
+                "level": "INFO",
+                "component": "chat_media",
+                "event": "packed_context_facts",
+                "placement": placement,
+                "library_available": library_available,
+                "library_complete": library_complete,
+                "library_sticker_count": library_sticker_count,
+                "candidate_count": candidate_count,
+                "timestamped_candidates": timestamped_candidates,
+                "media_allowed": media_allowed,
+            }
+        )
+
     def emit_scheduler(
         self,
         event: str,
@@ -179,6 +229,53 @@ class StructuredLogger:
         if anomalies:
             record["anomalies"] = list(anomalies)
         self._write(record)
+
+    def emit_speech_signal_facts(
+        self,
+        *,
+        sample_rate: int,
+        channels: int,
+        duration_seconds: float,
+        declared_duration_seconds: float,
+        trailing_quiet_seconds: float,
+        missing_frames: int,
+        per_second_rms_dbfs: list[float],
+        per_second_peak_dbfs: list[float],
+    ) -> None:
+        """Only fixed numerical audio levels; waveform, text and identifiers are absent."""
+        import math
+
+        if (
+            not 8000 <= sample_rate <= 192000
+            or channels not in {1, 2}
+            or not 0 < duration_seconds <= 1800
+            or not 0 < declared_duration_seconds <= 1800
+            or not 0 <= trailing_quiet_seconds <= duration_seconds
+            or not 0 <= missing_frames <= sample_rate * 1800
+            or not 1 <= len(per_second_rms_dbfs) <= 1800
+            or len(per_second_rms_dbfs) != len(per_second_peak_dbfs)
+            or any(
+                not math.isfinite(value) or not -120 <= value <= 0
+                for value in (*per_second_rms_dbfs, *per_second_peak_dbfs)
+            )
+        ):
+            raise ValueError("speech_signal_facts_invalid")
+        self._write(
+            {
+                "timestamp": datetime.now(UTC).isoformat(),
+                "level": "INFO",
+                "component": "speech",
+                "event": "audio_signal_statistics",
+                "sample_rate": sample_rate,
+                "channels": channels,
+                "duration_seconds": duration_seconds,
+                "declared_duration_seconds": declared_duration_seconds,
+                "trailing_quiet_seconds": trailing_quiet_seconds,
+                "missing_frames": missing_frames,
+                "per_second_rms_dbfs": per_second_rms_dbfs,
+                "per_second_peak_dbfs": per_second_peak_dbfs,
+            }
+        )
 
     def _write(self, record: dict[str, object]) -> None:
         line = json.dumps(record) + "\n"

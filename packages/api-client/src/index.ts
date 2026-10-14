@@ -177,6 +177,8 @@ export interface SocialSnapshot {
   connections: Array<{ first_root_import_id: string; second_root_import_id: string; faction_ids: string[] }>;
 }
 
+export interface AvatarDigest { root_import_id: string; digest: string }
+
 export interface ContentEditorEntry {
   source_entry_id: string | null; title: string; content: string; keywords: string[];
   secondary_keywords: string[]; enabled: boolean; constant: boolean;
@@ -224,6 +226,15 @@ export interface ChatMessage {
   text: string;
   created_at_utc: string;
   story_sent_at_utc?: string | null;
+  media?: ChatMediaAttachment | null;
+}
+export type StickerLibrary = "personal" | "public" | "character";
+export interface StickerEntry { entry_id: string; asset_id: string; library: StickerLibrary; description: string; mime: string; source_url: string | null; caption_state: string }
+export interface ChatMediaAttachment { asset_id: string; kind: "sticker" | "image"; description: string; source_url: string | null; only_media: boolean }
+export interface ChatMediaSettings {
+  enabled: boolean; frequency: number; unlimited_stickers: boolean; online_enabled: boolean; auto_caption: boolean;
+  caption_route: "ollama" | "compatible"; caption_endpoint: string; caption_model: string;
+  secret_ref: string | null; remote_caption_consent: boolean; daily_caption_limit: number; caption_output_tokens: number;
 }
 export type ChatReplyProgress =
   | { kind: "preparing" | "selecting" }
@@ -279,6 +290,68 @@ export interface ChatReplyAvailability {
 }
 
 export class CoreClient {
+  mediaSettings(world: string, signal?: AbortSignal): Promise<ChatMediaSettings> { return this.productRequest(`/worlds/${world}/media/settings`, { signal }); }
+  saveMediaSettings(world: string, settings: ChatMediaSettings): Promise<ChatMediaSettings> { return this.productRequest(`/worlds/${world}/media/settings`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(settings) }); }
+  mediaUsage(world: string): Promise<{ utc_day: string; caption_calls: number }> { return this.productRequest(`/worlds/${world}/media/usage`); }
+  stickers(world: string, library: StickerLibrary, root?: string, offset = 0, query = "", signal?: AbortSignal): Promise<{ items: StickerEntry[]; has_more: boolean }> {
+    const params = new URLSearchParams({ library, offset: String(offset), query }); if (root) params.set("root", root);
+    return this.productRequest(`/worlds/${world}/media/stickers?${params}`, { signal });
+  }
+  importSticker(world: string, library: StickerLibrary, file: File, description: string, root?: string): Promise<StickerEntry> {
+    const params = new URLSearchParams({ library }); if (root) params.set("root", root);
+    return this.productRequest(`/worlds/${world}/media/stickers?${params}`, { method: "POST", headers: { "Content-Type": file.type || "application/octet-stream", "X-Media-Description": encodeURIComponent(description) }, body: file });
+  }
+  editSticker(world: string, entry: string, description: string): Promise<{ saved: boolean }> { return this.productRequest(`/worlds/${world}/media/stickers/${entry}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ description }) }); }
+  removeSticker(world: string, entry: string): Promise<{ removed: boolean }> { return this.productRequest(`/worlds/${world}/media/stickers/${entry}`, { method: "DELETE" }); }
+  mediaImage(world: string, asset: string, signal?: AbortSignal): Promise<Blob> { return this.productRequest(`/worlds/${world}/media/assets/${asset}`, { signal }, true); }
+  captionMedia(world: string, asset: string): Promise<{ description: string }> { return this.productRequest(`/worlds/${world}/media/assets/${asset}/caption`, { method: "POST" }); }
+  speechSettings(worldId: string, signal?: AbortSignal): Promise<SpeechStatus> {
+    return this.productRequest(`/worlds/${worldId}/speech`, { signal });
+  }
+  saveSpeechSettings(worldId: string, settings: SpeechSettings, revision: number): Promise<SpeechStatus> {
+    return this.productRequest(`/worlds/${worldId}/speech`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ settings, expected_revision: revision }) });
+  }
+  speechPricing(worldId: string): Promise<SpeechPricing> { return this.productRequest(`/worlds/${worldId}/speech/pricing`); }
+  voiceCards(worldId: string, offset = 0): Promise<VoiceCardPage> { return this.productRequest(`/worlds/${worldId}/voices?offset=${offset}`); }
+  voiceBinding(worldId: string, root: string): Promise<{ card_id: string | null }> { return this.productRequest(`/worlds/${worldId}/character-voices/${root}`); }
+  bindVoice(worldId: string, root: string, card: string | null): Promise<{ card_id: string | null }> {
+    return this.productRequest(`/worlds/${worldId}/character-voices/${root}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ card_id: card }) });
+  }
+  previewVoiceCard(worldId: string, file: File, name: string): Promise<VoiceCardPreview> {
+    return this.productRequest(`/worlds/${worldId}/voices/preview?audio_format=${voiceFileFormat(file)}&name=${encodeURIComponent(name)}`, { method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: file });
+  }
+  importVoiceCard(worldId: string, file: File, name: string): Promise<VoiceCard> {
+    return this.productRequest(`/worlds/${worldId}/voices?audio_format=${voiceFileFormat(file)}&name=${encodeURIComponent(name)}`, { method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: file });
+  }
+  voiceReference(worldId: string, card: string, signal?: AbortSignal): Promise<Blob> { return this.productRequest(`/worlds/${worldId}/voices/${card}/reference`, { signal }, true); }
+  exportVoiceCard(worldId: string, card: string): Promise<Blob> { return this.productRequest(`/worlds/${worldId}/voices/${card}/export`, undefined, true); }
+  removeVoiceCard(worldId: string, card: string): Promise<{ deleted: boolean }> { return this.productRequest(`/worlds/${worldId}/voices/${card}`, { method: "DELETE" }); }
+  generateSpeech(worldId: string, conversation: string, message: string, signal?: AbortSignal, requestId?: string): Promise<SpeechJob> {
+    return this.productRequest(`/worlds/${worldId}/conversations/${conversation}/messages/${message}/speech`, {
+      method: "POST", signal,
+      ...(requestId ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify({ request_id: requestId }) } : {}),
+    });
+  }
+  speechAudio(worldId: string, job: string, signal?: AbortSignal, inspectSignal = false): Promise<Blob> { return this.productRequest(`/worlds/${worldId}/speech/audio/${job}${inspectSignal ? "?inspect_signal=true" : ""}`, { signal }, true); }
+  speechJob(worldId: string, job: string, signal?: AbortSignal): Promise<SpeechJob> { return this.productRequest(`/worlds/${worldId}/speech/jobs/${job}`, { signal }); }
+  regenerateSpeech(worldId: string, conversation: string, message: string, requestId: string, signal?: AbortSignal): Promise<SpeechJob> {
+    return this.productRequest(`/worlds/${worldId}/conversations/${conversation}/messages/${message}/speech/regenerate`, {
+      method: "POST", signal, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ request_id: requestId }),
+    });
+  }
+  speechPreviews(worldId: string, conversation: string, messages: string[], signal?: AbortSignal): Promise<{ items: SpeechPreviewJob[] }> {
+    return this.productRequest(`/worlds/${worldId}/conversations/${conversation}/speech/previews/query`, {
+      method: "POST", signal, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message_ids: messages }),
+    });
+  }
+  speechPreviewCompleted(worldId: string, job: string): Promise<SpeechJob> {
+    return this.productRequest(`/worlds/${worldId}/speech/previews/${job}/completed`, { method: "POST" });
+  }
+  decideSpeechPreview(worldId: string, job: string, decision: "replace" | "keep"): Promise<SpeechJob> {
+    return this.productRequest(`/worlds/${worldId}/speech/previews/${job}/decision`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ decision }),
+    });
+  }
   private readonly endpoint: URL;
   constructor(private readonly connection: CoreConnection, private readonly fetcher = globalThis.fetch.bind(globalThis)) {
     this.endpoint = new URL(connection.endpoint);
@@ -553,10 +626,10 @@ export class CoreClient {
   conversationMemoryDraftSources(worldId: string, conversationId: string, draftId: string, signal?: AbortSignal): Promise<{ items: ChatMessage[] }> {
     return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/${encodeURIComponent(conversationId)}/memory/drafts/${encodeURIComponent(draftId)}/sources`, { signal });
   }
-  sendPlayerMessage(worldId: string, conversationId: string, text: string, tokenCeiling: number, requestId: string): Promise<PendingPlayerSend> {
+  sendPlayerMessage(worldId: string, conversationId: string, text: string, tokenCeiling: number, requestId: string, stickerEntryId?: string): Promise<PendingPlayerSend> {
     return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/${encodeURIComponent(conversationId)}/messages`, {
       method: "POST", headers: { "Content-Type": "application/json", "X-Request-Id": requestId },
-      body: JSON.stringify({ text, token_ceiling: tokenCeiling }),
+      body: JSON.stringify({ text, token_ceiling: tokenCeiling, ...(stickerEntryId ? { sticker_entry_id: stickerEntryId } : {}) }),
     });
   }
   directReplyAvailability(worldId: string, signal?: AbortSignal): Promise<ChatReplyAvailability> {
@@ -583,10 +656,10 @@ export class CoreClient {
   groupReplyAvailability(worldId: string, signal?: AbortSignal): Promise<ChatReplyAvailability> {
     return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/group-reply-availability`, { signal });
   }
-  sendGroupMessage(worldId: string, conversationId: string, text: string, tokenCeiling: number, requestId: string): Promise<PendingPlayerSend> {
+  sendGroupMessage(worldId: string, conversationId: string, text: string, tokenCeiling: number, requestId: string, stickerEntryId?: string): Promise<PendingPlayerSend> {
     return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/${encodeURIComponent(conversationId)}/group-messages`, {
       method: "POST", headers: { "Content-Type": "application/json", "X-Request-Id": requestId },
-      body: JSON.stringify({ text, token_ceiling: tokenCeiling }),
+      body: JSON.stringify({ text, token_ceiling: tokenCeiling, ...(stickerEntryId ? { sticker_entry_id: stickerEntryId } : {}) }),
     });
   }
   groupTurn(worldId: string, conversationId: string, turnId: string): Promise<GroupTurnView> {
@@ -635,8 +708,8 @@ export class CoreClient {
     return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/content/${encodeURIComponent(importId)}`, { method: "DELETE" });
   }
 
-  listActivityCharacters(worldId: string): Promise<ActivityCharacterDirectory> {
-    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/activity-characters`);
+  listActivityCharacters(worldId: string, signal?: AbortSignal): Promise<ActivityCharacterDirectory> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/activity-characters`, { signal });
   }
   initializeCharacterActivity(worldId: string, playerId: string, characterId: string, locationId: string, requestId: string): Promise<{ character_id: string; initialized: boolean }> {
     return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/activity-characters/${encodeURIComponent(characterId)}/initial-location`, {
@@ -644,8 +717,8 @@ export class CoreClient {
       body: JSON.stringify({ player_id: playerId, location_id: locationId }),
     });
   }
-  listActivityLocations(worldId: string): Promise<ActivityLocation[]> {
-    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/activity-locations`);
+  listActivityLocations(worldId: string, signal?: AbortSignal): Promise<ActivityLocation[]> {
+    return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/activity-locations`, { signal });
   }
   createActivityLocation(worldId: string, name: string, requestId: string, options?: Omit<LocationDraft, "name">): Promise<ActivityLocation> {
     return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/activity-locations`, {
@@ -687,6 +760,17 @@ export class CoreClient {
   }
   socialSnapshot(worldId: string, signal?: AbortSignal): Promise<SocialSnapshot> {
     return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/social`, { signal });
+  }
+  async avatarDigests(worldId: string, roots: string[], signal?: AbortSignal): Promise<AvatarDigest[]> {
+    const identities = [...new Set(roots)].sort(), result: AvatarDigest[] = [];
+    // Bound query size and read one batch at a time, independent of graph size.
+    for (let offset = 0; offset < identities.length; offset += 128) {
+      if (signal?.aborted) throw new DOMException("Avatar read cancelled", "AbortError");
+      const query = new URLSearchParams();
+      identities.slice(offset, offset + 128).forEach(root => query.append("root_import_id", root));
+      result.push(...await this.productRequest<AvatarDigest[]>(`/worlds/${encodeURIComponent(worldId)}/social/avatars?${query}`, { signal }));
+    }
+    return result;
   }
   createFaction(worldId: string, name: string, parentId: string | null): Promise<{ faction_id: string }> {
     return this.productRequest(`/worlds/${encodeURIComponent(worldId)}/social/factions`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, parent_id: parentId }) });
@@ -878,6 +962,29 @@ export class CoreClient {
     return this.developerRequest(`/developer/worlds/${worldId}/memories`, { method: "POST", body: JSON.stringify({ owner_character_id: ownerCharacterId, observation_id: observationId, content }) });
   }
 }
+
+function voiceFileFormat(file: File): string {
+  const suffix = file.name.split(".").at(-1)?.toLowerCase();
+  return suffix === "wav" || suffix === "mp3" ? suffix : "card";
+}
+
+export interface VoiceManifest {
+  format: "dreamtalk.voicecard"; version: 1; engine: "indextts-2.5"; name: string;
+  language: "ZH" | "EN" | "JA" | "ES" | "AR"; reference: "reference.wav" | "reference.mp3";
+  reference_text: string; description: string; author: string; license: string; speed: number;
+}
+export interface VoiceCardPreview { manifest: VoiceManifest; duration_ms: number }
+export interface VoiceCard extends VoiceCardPreview { card_id: string; digest: string }
+export interface VoiceCardPage { items: VoiceCard[]; next_offset: number | null }
+export interface SpeechSettings {
+  enabled: boolean; provider: "local" | "huggingface" | "compshare"; local_url: string;
+  secret_ref: string | null; max_characters: number; daily_calls: number; skip_actions: boolean;
+  consent_remote: boolean; consent_paid: boolean;
+}
+export interface SpeechStatus { settings: SpeechSettings; revision: number }
+export interface SpeechJob { job_id: string; state: "running" | "ready" | "failed" | "unknown" | "expired" | "replaced" | "discarded"; error: string | null; phase: string; elapsed_seconds: number; phase_seconds: number; segment: number | null; segments: number | null; reused?: boolean; review_state?: "pending" | "accepted" | "discarded" | null; preview_completed?: boolean; cache_expires_at?: string | null }
+export interface SpeechPreviewJob extends SpeechJob { message_id: string }
+export interface SpeechPricing { enabled: boolean; pricing_version: number; unit_characters: number; costs: { text_to_speech: number }; balance: { available_points: number } }
 
 export type ChatContextReports = { turn_id: string; reports: {
   speaker_id: string; version: number; input_upper_bound: number; output_upper_bound: number;

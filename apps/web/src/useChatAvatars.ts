@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { CoreClient } from "@dreamtalk/api-client";
 
-// One world-local read for the directory and transcript; never one request per bubble.
+// Read only requested avatar bindings; never build the world relationship graph.
 export function useChatAvatars(client: CoreClient, worldId: string, roots: string[], visible: boolean) {
   const key = [...new Set(roots)].sort().join(",");
   const token = useMemo(() => Symbol("avatar read"), [client, worldId, key, visible]);
@@ -11,22 +11,25 @@ export function useChatAvatars(client: CoreClient, worldId: string, roots: strin
     const abort = new AbortController();
     const created: string[] = [];
     let active = true;
-    void client.socialSnapshot(worldId, abort.signal).then(async social => {
-      const wanted = new Set(key.split(","));
-      const people = social.characters.filter(person => wanted.has(person.root_import_id) && person.avatar_digest);
-      const digests = [...new Set(people.map(person => person.avatar_digest!))];
-      const images = await Promise.all(digests.map(async digest => {
-        try {
-          const blob = await client.coverImage(worldId, digest, abort.signal);
-          if (!active) return null;
-          const url = URL.createObjectURL(blob); created.push(url);
-          return [digest, url] as const;
-        } catch { return null; }
-      }));
+    void client.avatarDigests(worldId, key.split(","), abort.signal).then(async people => {
       if (!active) return;
-      const byDigest = new Map(images.filter((image): image is readonly [string, string] => !!image));
+      const digests = [...new Set(people.map(person => person.digest))];
+      const byDigest = new Map<string, string>();
+      // Keep optional artwork downloads bounded even with many conversations.
+      for (let offset = 0; offset < digests.length && active; offset += 8) {
+        const images = await Promise.all(digests.slice(offset, offset + 8).map(async digest => {
+          try {
+            const blob = await client.coverImage(worldId, digest, abort.signal);
+            if (!active) return null;
+            const url = URL.createObjectURL(blob); created.push(url);
+            return [digest, url] as const;
+          } catch { return null; }
+        }));
+        for (const pair of images) if (pair) byDigest.set(pair[0], pair[1]);
+      }
+      if (!active) return;
       setResult({ token, urls: Object.fromEntries(people.flatMap(person => {
-        const url = byDigest.get(person.avatar_digest!);
+        const url = byDigest.get(person.digest);
         return url ? [[person.root_import_id, url]] : [];
       })) });
     }).catch(() => { /* Avatars are optional; the actual character name remains available. */ });

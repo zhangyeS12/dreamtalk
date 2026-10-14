@@ -1,8 +1,9 @@
 """Current-world faction editing and avatar bindings for the contact book."""
 
+from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field, StrictBool
 
 from livingworld.domain.contracts import API_PROTOCOL
@@ -48,6 +49,13 @@ def faction_router(store, authorize):
     @router.get("")
     async def snapshot(world_id: UUID):
         return await call(store.snapshot(world_id))
+
+    @router.get("/avatars")
+    async def avatar_digests(
+        world_id: UUID,
+        roots: Annotated[list[UUID], Query(min_length=1, max_length=128, alias="root_import_id")],
+    ):
+        return await call(store.avatar_digests(world_id, roots))
 
     @router.post("/factions")
     async def create(world_id: UUID, body: FactionWrite):

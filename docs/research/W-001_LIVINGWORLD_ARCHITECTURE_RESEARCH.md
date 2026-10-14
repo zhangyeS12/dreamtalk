@@ -56,7 +56,7 @@ flowchart TB
 | Self-hosted Web | 用户部署的一个 Core | PostgreSQL 或 MySQL | 多设备、家庭/小圈私服 | 服务端是权威写入者；浏览器没有直接数据库权限 |
 | Managed cloud | 租户化 Core worker | PostgreSQL + pgvector（首选） | 多设备、备份、共享、异步研究 | `world_id`/`tenant_id` 是每个查询与索引的强制条件 |
 
-**【建议】**为每个世界定义一个 `World Package`：`world_id`、版本化 schema、SQLite 数据库、资产清单、导入卡原件和导出包。桌面是该包的本地权威副本。登录云同步后，应采用 **single-writer lease**：同一世界同一时刻只允许一个 Core 推进模拟；另一设备只能只读、请求接管，或停留在待合并 Draft。不要对“真实世界时间线”使用 CRDT 自动合并——两台离线设备都让同一角色在同一时段做不同事，不存在无损自动合并。
+**【建议】**为每个世界定义一个 `World Package`：`world_id`、版本化 schema、SQLite 数据库、资产清单、导入卡原件和导出包。桌面是该包的本地权威副本；同一世界同一时刻只允许一个 Core 推进模拟。
 
 **【假设】**用户会接受“本地优先但云模型可选”的边界：无网络时仍可查看、编辑、读取已有记忆和执行确定性世界操作；需要生成新对话/新计划时，可选择本地模型、已配置云模型或等待连接。所谓 local-first 不等于每一种模型能力都必须离线。
 

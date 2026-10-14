@@ -214,6 +214,8 @@ export function WorldArchivePage({ client, initialWorldId, onEnter, displayTime,
       if (outcome.asset_cleanup_pending) throw new Error("asset_cleanup_pending");
       let reconnected = false;
       if (isTauri()) {
+        await invoke("forget_speech_credentials", { worldId: target.world_id, secretRef: null });
+        await invoke("forget_media_credentials", { worldId: target.world_id, secretRef: null });
         const result = await invoke<{ old_credential_cleanup_incomplete: boolean; core_restarted: boolean }>("forget_deleted_world_model", { worldId: target.world_id });
         reconnected = result.core_restarted;
         if (result.old_credential_cleanup_incomplete) {

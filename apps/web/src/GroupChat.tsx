@@ -2,12 +2,14 @@ import { useConversationRead } from "./useChatUnread";
 import { useDesktopUpdateBlock } from "./DesktopUpdates";
 import { ContextReferencePanel } from "./ContextReferencePanel";
 import { MessageTime } from "./MessageTime";
+import { SpeechControls, SpeechFeedback, useSpeechPreviews } from "./SpeechPlayback";
 import { Fragment, useEffect, useRef, useState, type FormEvent } from "react";
 import { CoreClient, CoreRequestError, type GroupChatConversation, type WorldContentItem } from "@dreamtalk/api-client";
 import { useChatReplyWorkflow } from "./useChatReplyWorkflow";
 import { ReplyRecoveryControls } from "./ReplyRecoveryControls";
 import { StreamingReplyBubble } from "./StreamingReplyBubble";
 import { useChatScroll } from "./useChatScroll";
+import { MessageMedia, StickerPicker } from "./ChatMedia";
 import { ChatMessageBody } from "./ChatMessageBody";
 import { ChatHistoryPanel } from "./ChatHistoryPanel";
 import { LongChatMemoryPanel } from "./LongChatMemoryPanel";
@@ -94,7 +96,7 @@ export function GroupChatDetails({ client, worldId, playerId, group, avatarUrls 
   useDesktopUpdateBlock(dissolving ? "群聊正在解散。" : null);
   const {
     refresh, setRefresh, available, availabilityReading, availabilityFailed, budgetFeedback,
-    draft, setDraft, pending, phase, sending, setRecoveryBusy, feedback, stream,
+    draft, setDraft, sticker, setSticker, pending, phase, sending, setRecoveryBusy, feedback, stream,
     messages, failed, hasOlder, loadingOlder, loadOlder, followingLatest, showLatest, visibleStreamDraft,
     latestPlayerMessage, checkReply, generateSavedReply, send,
   } = useChatReplyWorkflow({
@@ -102,6 +104,7 @@ export function GroupChatDetails({ client, worldId, playerId, group, avatarUrls 
     speakers: group.participants.map(item => item.character_id), tokenCeiling, suggestedDraft, onSuggestionUsed, onDirtyChange,
   });
   const readReceipt = useConversationRead(client, worldId, group.conversation_id, messages);
+  useSpeechPreviews(group.conversation_id, messages);
   const { thread, beforePrepend, followBottom } = useChatScroll(messages, visibleStreamDraft?.text);
 
   const dissolve = async () => {
@@ -157,8 +160,9 @@ export function GroupChatDetails({ client, worldId, playerId, group, avatarUrls 
       const day = transcriptDay(message.story_sent_at_utc ?? message.created_at_utc);
       const previous = messages[index - 1];
       const person = group.participants.find(item => item.character_id === message.sender_id);
-      return <Fragment key={message.message_id}>{!previous || transcriptDay(previous.story_sent_at_utc ?? previous.created_at_utc) !== day ? <li className="message-day">{day}</li> : null}<li data-message-id={message.message_id} className={`message-row ${own ? "own" : ""}`}>{!own && <ContactAvatar name={names.get(message.sender_id) ?? "角色"} url={person ? avatarUrls[person.root_import_id] : undefined} className="message-portrait" />}<div className="message-bubble"><span className="message-sender">{own ? "我" : names.get(message.sender_id) ?? "角色"}</span><ChatMessageBody text={message.text} /><MessageTime message={message} />{!own ? <button type="button" className="text-action message-reference" onClick={() => setReferenceTurn(message.turn_id)}>本次参考内容</button> : null}</div></li></Fragment>;
+      return <Fragment key={message.message_id}>{!previous || transcriptDay(previous.story_sent_at_utc ?? previous.created_at_utc) !== day ? <li className="message-day">{day}</li> : null}<li data-message-id={message.message_id} className={`message-row ${own ? "own" : ""}`}>{!own && <ContactAvatar name={names.get(message.sender_id) ?? "角色"} url={person ? avatarUrls[person.root_import_id] : undefined} className="message-portrait" />}<div className="message-bubble"><span className="message-sender">{own ? "我" : names.get(message.sender_id) ?? "角色"}</span><>{!message.media?.only_media && <ChatMessageBody text={message.text} />}<MessageMedia client={client} worldId={worldId} media={message.media} /></><MessageTime message={message} />{!own ? <><button type="button" className="text-action message-reference" onClick={() => setReferenceTurn(message.turn_id)}>本次参考内容</button>{!message.media?.only_media && <SpeechControls conversation={group.conversation_id} message={message.message_id} />}</> : null}</div></li></Fragment>;
     })}{visibleStreamDraft ? <StreamingReplyBubble name={names.get(visibleStreamDraft.speakerId) ?? "角色"} avatarUrl={avatarUrls[group.participants.find(person => person.character_id === visibleStreamDraft.speakerId)?.root_import_id ?? ""]} text={visibleStreamDraft.text} /> : null}</ol></>}
+    <SpeechFeedback />
     {group.read_only ? <p className="thread-hint" role="status">此群包含已删除的角色卡，消息保留为只读历史。可用其余角色建立新群。</p> : <form className="chat-composer" onSubmit={event => { if (dissolving) event.preventDefault(); else void send(event); }}>
       {phase || feedback ? <p role="status" aria-live="polite" className="chat-feedback">{(phase === "replying" && stream.stage === "selecting" ? "正在选择下一位发言者…" : chatPhaseFeedback(phase, "group")) || feedback}</p> : null}
       <ReplyRecoveryControls client={client} worldId={worldId} conversationId={group.conversation_id} sourceTurnId={latestPlayerMessage?.turn_id} refresh={refresh} tokenCeiling={tokenCeiling} blocked={!available || phase !== null || !!pending} onGenerate={generateSavedReply} onBusyChange={setRecoveryBusy} />
@@ -170,7 +174,7 @@ export function GroupChatDetails({ client, worldId, playerId, group, avatarUrls 
       <label htmlFor="group-chat-draft" className="sr-only">发送群聊消息</label>
       <textarea ref={draftInput} id="group-chat-draft" value={draft} onChange={event => setDraft(event.target.value)} onKeyDown={submitChatOnEnter} disabled={!available || sending || !!pending || dissolving} maxLength={65536} placeholder="输入消息，或用 @角色名 指定下一位发言者…" rows={3} />
       {mentionable.length > 0 ? <div className="chat-mention-actions"><span>指定下一位</span>{mentionable.map(item => <button key={item.character_id} type="button" disabled={!available || sending || !!pending || dissolving} onClick={() => insertMention(item.character_name)}>@{item.character_name}</button>)}</div> : null}
-      <div className="chat-composer-actions"><small>回车发送 · Shift+回车换行 · 本轮所有发言共用 {tokenCeiling.toLocaleString("zh-CN")} Token 上限</small>{latestPlayerMessage ? <button type="button" className="text-action" disabled={sending || !!pending} onClick={() => void checkReply()}>检查回复状态</button> : null}{phase === "replying" ? <button type="button" className="text-action" disabled={stream.stopping} onClick={stream.stop}>{stream.stopping ? "正在停止…" : "停止生成"}</button> : null}<button type="submit" className="primary-button" disabled={dissolving || !available || sending || (!!budgetFeedback && !pending) || (!draft.trim() && !pending)}>{phase === "saving" ? "正在保存…" : phase === "replying" ? "等待回复…" : phase === "checking" ? "检查中…" : pending ? "重试保存" : "发送"}</button></div>
+      <StickerPicker client={client} worldId={worldId} selected={sticker} onSelect={setSticker} disabled={!available || sending || !!pending} /><div className="chat-composer-actions"><small>回车发送 · Shift+回车换行 · 本轮所有发言共用 {tokenCeiling.toLocaleString("zh-CN")} Token 上限</small>{latestPlayerMessage ? <button type="button" className="text-action" disabled={sending || !!pending} onClick={() => void checkReply()}>检查回复状态</button> : null}{phase === "replying" ? <button type="button" className="text-action" disabled={stream.stopping} onClick={stream.stop}>{stream.stopping ? "正在停止…" : "停止生成"}</button> : null}<button type="submit" className="primary-button" disabled={dissolving || !available || sending || (!!budgetFeedback && !pending) || (!draft.trim() && !sticker && !pending)}>{phase === "saving" ? "正在保存…" : phase === "replying" ? "等待回复…" : phase === "checking" ? "检查中…" : pending ? "重试保存" : "发送"}</button></div>
     </form>}
   </section>;
 }

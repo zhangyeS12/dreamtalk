@@ -15,6 +15,8 @@ from livingworld.infrastructure.persistence import (  # noqa: F401
     deletion_models,
     director_rotation,
     location_policy_models,  # noqa: F401
+    media_models,
+    speech_models,
 )
 from livingworld.infrastructure.persistence.content_builder import (
     ContentBuilderJobRecord,  # noqa: F401
@@ -104,7 +106,14 @@ REMOVAL_REVISION = "0040_authored_removal"
 ROTATION_REVISION = "0041_director_rotation"
 DELETION_REVISION = "0042_world_deletion"
 ACQUAINTANCE_SOURCE_REVISION = "0043_acquaintance_sources"
-HEAD_REVISION = "0044_location_name_scopes"
+LOCATION_NAME_SCOPE_REVISION = "0044_location_name_scopes"
+SPEECH_REVISION = "0045_character_speech"
+SPEECH_CACHE_REVISION = "0046_speech_cache_attempts"
+SPEECH_PREVIEW_REVISION = "0047_speech_preview"
+MEDIA_REVISION = "0048_chat_media"
+LOCAL_MODEL_LIMITS_REVISION = "0049_local_model_limits"
+STICKER_LIBRARY_FRESHNESS_REVISION = "0050_sticker_library_freshness"
+HEAD_REVISION = STICKER_LIBRARY_FRESHNESS_REVISION
 
 # One reviewed linear chain replaces repeated hand-maintained suffix sets.
 _SUPPORTED_REVISIONS = (
@@ -151,6 +160,12 @@ _SUPPORTED_REVISIONS = (
     ROTATION_REVISION,
     DELETION_REVISION,
     ACQUAINTANCE_SOURCE_REVISION,
+    LOCATION_NAME_SCOPE_REVISION,
+    SPEECH_REVISION,
+    SPEECH_CACHE_REVISION,
+    SPEECH_PREVIEW_REVISION,
+    MEDIA_REVISION,
+    LOCAL_MODEL_LIMITS_REVISION,
     HEAD_REVISION,
 )
 _REVISION_RANGES = {
@@ -165,6 +180,21 @@ LOCATION_POLICY_TABLES = {
 ROTATION_TABLES = {"director_rotation", "director_rotation_members", "character_card_bindings"}
 DELETION_TABLES = {"group_dissolutions", "world_deletions"}
 ACQUAINTANCE_SOURCE_TABLES = {"character_acquaintance_sources"}
+MEDIA_TABLES = {
+    "chat_media_assets",
+    "chat_sticker_entries",
+    "chat_media_settings",
+    "chat_media_attempts",
+    "chat_media_caption_calls",
+}
+SPEECH_TABLES = {
+    "voice_cards",
+    "character_voices",
+    "speech_settings",
+    "speech_jobs",
+    "speech_call_receipts",
+    "remote_voices",
+}
 FACTION_TABLES = {
     "character_factions",
     "character_faction_members",
@@ -364,7 +394,17 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
     pre_acquaintance_source_revision = (
         revision not in _REVISION_RANGES[ACQUAINTANCE_SOURCE_REVISION]
     )
-    pre_location_name_scope_revision = revision != HEAD_REVISION
+    pre_location_name_scope_revision = (
+        revision not in _REVISION_RANGES[LOCATION_NAME_SCOPE_REVISION]
+    )
+    pre_speech_revision = revision not in _REVISION_RANGES[SPEECH_REVISION]
+    pre_speech_cache_revision = revision not in _REVISION_RANGES[SPEECH_CACHE_REVISION]
+    pre_speech_preview_revision = revision not in _REVISION_RANGES[SPEECH_PREVIEW_REVISION]
+    pre_media_revision = revision not in _REVISION_RANGES[MEDIA_REVISION]
+    pre_local_model_limits_revision = revision not in _REVISION_RANGES[LOCAL_MODEL_LIMITS_REVISION]
+    pre_sticker_library_freshness_revision = (
+        revision not in _REVISION_RANGES[STICKER_LIBRARY_FRESHNESS_REVISION]
+    )
     pre_faction_revision = revision not in _REVISION_RANGES[FACTION_REVISION]
     pre_proactive_revision = revision not in _REVISION_RANGES[PROACTIVE_REVISION]
     pre_shared_revision = revision not in _REVISION_RANGES[SHARED_REVISION]
@@ -542,6 +582,10 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         expected -= DELETION_TABLES
     if pre_acquaintance_source_revision:
         expected -= ACQUAINTANCE_SOURCE_TABLES
+    if pre_speech_revision:
+        expected -= SPEECH_TABLES
+    if pre_media_revision:
+        expected -= MEDIA_TABLES
     if pre_faction_revision:
         expected -= FACTION_TABLES
     if pre_location_policy_revision:
@@ -613,6 +657,12 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
             pre_rotation_revision=pre_rotation_revision,
             pre_deletion_revision=pre_deletion_revision,
             pre_acquaintance_source_revision=pre_acquaintance_source_revision,
+            pre_speech_revision=pre_speech_revision,
+            pre_speech_cache_revision=pre_speech_cache_revision,
+            pre_speech_preview_revision=pre_speech_preview_revision,
+            pre_media_revision=pre_media_revision,
+            pre_local_model_limits_revision=pre_local_model_limits_revision,
+            pre_sticker_library_freshness_revision=pre_sticker_library_freshness_revision,
             pre_location_name_scope_revision=pre_location_name_scope_revision,
         )
     if revision in {
@@ -712,6 +762,12 @@ def _validate_domain_shape(
     pre_deletion_revision: bool = True,
     pre_acquaintance_source_revision: bool = True,
     pre_location_name_scope_revision: bool = True,
+    pre_speech_revision: bool = True,
+    pre_speech_cache_revision: bool = True,
+    pre_speech_preview_revision: bool = True,
+    pre_media_revision: bool = True,
+    pre_local_model_limits_revision: bool = True,
+    pre_sticker_library_freshness_revision: bool = True,
 ) -> None:
     """Detect partial/mismatched schemas; never infer a revision from them."""
 
@@ -737,6 +793,10 @@ def _validate_domain_shape(
         "ck_command_receipt_command_result",
     }
     for table in metadata.sorted_tables:
+        if pre_media_revision and table.name in MEDIA_TABLES:
+            continue
+        if pre_speech_revision and table.name in SPEECH_TABLES:
+            continue
         if pre_acquaintance_source_revision and table.name in ACQUAINTANCE_SOURCE_TABLES:
             continue
         if pre_deletion_revision and table.name in DELETION_TABLES:
@@ -905,6 +965,29 @@ def _validate_domain_shape(
                 else column.nullable,
             )
             for column in table.columns
+            if not (
+                pre_sticker_library_freshness_revision
+                and table.name == "chat_sticker_entries"
+                and column.name == "added_at_utc"
+            )
+            if not (
+                pre_local_model_limits_revision
+                and table.name in {"speech_call_receipts", "chat_media_caption_calls"}
+                and column.name == "is_local"
+            )
+            if not (
+                pre_media_revision and table.name == "chat_messages" and column.name == "media_json"
+            )
+            if not (
+                pre_speech_cache_revision
+                and table.name == "speech_jobs"
+                and column.name in {"cache_key", "audio_saved_at"}
+            )
+            if not (
+                pre_speech_preview_revision
+                and table.name == "speech_jobs"
+                and column.name in {"review_state", "base_job_id", "previewed_at"}
+            )
             if not (
                 pre_location_name_scope_revision
                 and column.name == "name_scope"
@@ -1201,6 +1284,11 @@ def _validate_domain_shape(
                 _index_predicate(index.dialect_options["sqlite"].get("where")),
             )
             for index in table.indexes
+            if not (
+                pre_speech_cache_revision
+                and index.name in {"ix_speech_cache_key", "ix_speech_audio_saved"}
+            )
+            if not (pre_speech_preview_revision and index.name == "ix_speech_review")
             if not (baseline and index.name == "uq_command_request_identity")
             and not (
                 revision

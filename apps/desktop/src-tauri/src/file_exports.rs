@@ -9,6 +9,10 @@ use uuid::Uuid;
 #[derive(Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ExportRequest {
+    Voice {
+        world_id: Uuid,
+        item_id: Uuid,
+    },
     Content {
         world_id: Uuid,
         item_id: Uuid,
@@ -37,6 +41,11 @@ impl ExportRequest {
                     .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
         }
         match self {
+            Self::Voice { world_id, item_id } => Ok((
+                format!("/worlds/{world_id}/voices/{item_id}/export"),
+                Vec::new(),
+                "voicecard",
+            )),
             Self::Content {
                 world_id,
                 item_id,

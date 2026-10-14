@@ -41,6 +41,17 @@ def verify_installer(reader: str, installer: Path, stage: Path, output: Path) ->
     if file_hash(marker_path) != file_hash(stage / marker_path.name):
         raise SystemExit("installer_embedded_manifest_mismatch")
     marker = json.loads(marker_path.read_text(encoding="utf-8"))
+    root = Path(__file__).resolve().parents[1]
+    subprocess.run(
+        [
+            sys.executable,
+            str(root / "scripts" / "check-release-privacy.py"),
+            "--package",
+            str(extracted),
+        ],
+        check=True,
+        cwd=root,
+    )
     for relative, expected in marker["files"].items():
         path = extracted / relative
         if path.is_symlink() or not path.resolve().is_relative_to(extracted.resolve()):
@@ -81,6 +92,9 @@ def main():
     if os.name != "nt" or not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,63}", args.output_name):
         raise SystemExit("installer_build_parameters_invalid")
     root = Path(__file__).resolve().parents[1]
+    subprocess.run(
+        [sys.executable, str(root / "scripts" / "check-release-privacy.py")], check=True, cwd=root
+    )
     artifacts = root / "artifacts"
     output = artifacts / "installers" / args.output_name
     if artifacts.is_symlink() or not artifacts.resolve().is_relative_to(root) or output.exists():

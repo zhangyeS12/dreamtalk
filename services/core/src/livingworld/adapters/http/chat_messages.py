@@ -43,8 +43,9 @@ from livingworld.domain.identifiers import ChatTurnId, ConversationId, MessageId
 class PlayerMessageRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    text: str = Field(min_length=1, max_length=65536)
+    text: str = Field(default="", max_length=65536)
     token_ceiling: int = Field(strict=True, ge=1, le=9223372036854775807)
+    sticker_entry_id: UUID | None = None
 
 
 class ReplyRecoveryRequest(BaseModel):
@@ -69,6 +70,7 @@ def _view(message: ChatMessage) -> dict:
         "sender_kind": "player" if isinstance(message.sender_id, PlayerId) else "character",
         "sender_id": str(message.sender_id.value),
         "text": message.text,
+        "media": message.media,
         "created_at_utc": message.created_at_utc.astimezone(UTC).isoformat(),
         "story_sent_at_utc": message.story_sent_at_utc.astimezone(UTC).isoformat()
         if message.story_sent_at_utc is not None
@@ -334,6 +336,7 @@ def chat_message_router(
                 ConversationId(WorldId(world_id), conversation_id),
                 body.text,
                 body.token_ceiling,
+                sticker_entry_id=body.sticker_entry_id,
             )
         except EntityNotFoundError as error:
             if str(error) == "selected_player_required":
@@ -374,6 +377,7 @@ def chat_message_router(
                 ConversationId(WorldId(world_id), conversation_id),
                 body.text,
                 body.token_ceiling,
+                sticker_entry_id=body.sticker_entry_id,
             )
         except EntityNotFoundError as error:
             if str(error) == "selected_player_required":

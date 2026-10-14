@@ -3,6 +3,10 @@ pub mod credentials;
 pub mod file_exports;
 pub mod host_control;
 pub mod llm_config;
+pub mod local_images;
+pub mod local_speech;
+pub mod media_credentials;
+pub mod speech_credentials;
 pub mod supervisor;
 pub mod updater;
 
@@ -25,6 +29,137 @@ use credentials::{
 
 type SharedSupervisor = Arc<Mutex<CoreSupervisor>>;
 type SharedCredentialStore = Arc<dyn CredentialStore>;
+
+#[tauri::command]
+async fn speech_credential_put(
+    world_id: String,
+    secret_ref: String,
+    mut secret: String,
+    config: State<'_, LaunchConfig>,
+    credentials: State<'_, SharedCredentialStore>,
+    supervisor: State<'_, SharedSupervisor>,
+    updates: State<'_, updater::UpdateState>,
+) -> Result<(), String> {
+    let _guard = updates
+        .operation
+        .try_lock()
+        .map_err(|_| "update_busy".to_owned())?;
+    let mut supervisor = supervisor.lock().await;
+    let exists = credentials.exists(&secret_ref).map_err(credential_error)?;
+    speech_credentials::authorize_reference(&config, &world_id, &secret_ref, exists)
+        .await
+        .map_err(str::to_owned)?;
+    credentials
+        .put(&secret_ref, &secret)
+        .map_err(credential_error)?;
+    if let Err(error) = speech_credentials::register(&config, &world_id, &secret_ref).await {
+        let _ = credentials.delete(&secret_ref);
+        secret.clear();
+        return Err(error.to_owned());
+    }
+    let result = supervisor
+        .provision_credential(&secret_ref, &secret)
+        .await
+        .map_err(str::to_owned);
+    secret.clear();
+    result
+}
+
+#[tauri::command]
+async fn forget_speech_credentials(
+    world_id: String,
+    secret_ref: Option<String>,
+    config: State<'_, LaunchConfig>,
+    credentials: State<'_, SharedCredentialStore>,
+    supervisor: State<'_, SharedSupervisor>,
+    updates: State<'_, updater::UpdateState>,
+) -> Result<(), String> {
+    let _guard = updates
+        .operation
+        .try_lock()
+        .map_err(|_| "update_busy".to_owned())?;
+    let mut supervisor = supervisor.lock().await;
+    let references =
+        speech_credentials::world_references(&config, &world_id, secret_ref.as_deref())
+            .await
+            .map_err(str::to_owned)?;
+    for reference in references {
+        credentials.delete(&reference).map_err(credential_error)?;
+        if let Err(error) = supervisor.remove_session_credential(&reference).await {
+            let _ = supervisor.stop(Duration::from_secs(3)).await;
+            return Err(error.to_owned());
+        }
+        speech_credentials::forget(&config, &world_id, Some(&reference))
+            .await
+            .map_err(str::to_owned)?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn media_credential_put(
+    world_id: String,
+    secret_ref: String,
+    mut secret: String,
+    config: State<'_, LaunchConfig>,
+    credentials: State<'_, SharedCredentialStore>,
+    supervisor: State<'_, SharedSupervisor>,
+    updates: State<'_, updater::UpdateState>,
+) -> Result<(), String> {
+    let _guard = updates
+        .operation
+        .try_lock()
+        .map_err(|_| "update_busy".to_owned())?;
+    let mut supervisor = supervisor.lock().await;
+    let exists = credentials.exists(&secret_ref).map_err(credential_error)?;
+    media_credentials::authorize_reference(&config, &world_id, &secret_ref, exists)
+        .await
+        .map_err(str::to_owned)?;
+    credentials
+        .put(&secret_ref, &secret)
+        .map_err(credential_error)?;
+    if let Err(error) = media_credentials::register(&config, &world_id, &secret_ref).await {
+        let _ = credentials.delete(&secret_ref);
+        secret.clear();
+        return Err(error.to_owned());
+    }
+    let result = supervisor
+        .provision_credential(&secret_ref, &secret)
+        .await
+        .map_err(str::to_owned);
+    secret.clear();
+    result
+}
+
+#[tauri::command]
+async fn forget_media_credentials(
+    world_id: String,
+    secret_ref: Option<String>,
+    config: State<'_, LaunchConfig>,
+    credentials: State<'_, SharedCredentialStore>,
+    supervisor: State<'_, SharedSupervisor>,
+    updates: State<'_, updater::UpdateState>,
+) -> Result<(), String> {
+    let _guard = updates
+        .operation
+        .try_lock()
+        .map_err(|_| "update_busy".to_owned())?;
+    let mut supervisor = supervisor.lock().await;
+    let references = media_credentials::world_references(&config, &world_id, secret_ref.as_deref())
+        .await
+        .map_err(str::to_owned)?;
+    for reference in references {
+        credentials.delete(&reference).map_err(credential_error)?;
+        if let Err(error) = supervisor.remove_session_credential(&reference).await {
+            let _ = supervisor.stop(Duration::from_secs(3)).await;
+            return Err(error.to_owned());
+        }
+        media_credentials::forget(&config, &world_id, Some(&reference))
+            .await
+            .map_err(str::to_owned)?;
+    }
+    Ok(())
+}
 
 #[tauri::command]
 async fn core_connection(
@@ -601,6 +736,17 @@ pub fn run() {
             credential_put,
             credential_delete,
             credential_status,
+            speech_credential_put,
+            media_credential_put,
+            forget_media_credentials,
+            forget_speech_credentials,
+            local_speech::local_speech_status,
+            local_speech::choose_local_speech_folder,
+            local_speech::prepare_local_speech,
+            local_speech::repair_local_speech,
+            local_images::local_image_status,
+            local_images::choose_local_image_folder,
+            local_images::prepare_local_image,
             configure_chat_model,
             managed_chat_model_setup,
             update_chat_model,
@@ -653,8 +799,21 @@ pub fn run() {
             };
             let supervisor = app.state::<SharedSupervisor>().inner().clone();
             app.manage(config.clone());
+            app.manage(local_speech::LocalSpeechState::default());
+            app.manage(local_images::LocalImageState::default());
+            let speech_app = app.handle().clone();
             tauri::async_runtime::spawn(async move {
-                let _ = supervisor.lock().await.start(&config).await;
+                let result = supervisor.lock().await.start(&config).await;
+                if result.is_ok() {
+                    tokio::join!(
+                        local_speech::on_start(
+                            speech_app.clone(),
+                            config.clone(),
+                            supervisor.clone()
+                        ),
+                        local_images::on_start(speech_app, config, supervisor),
+                    );
+                }
             });
             if !std::env::args().any(|arg| arg == "--background") {
                 if let Some(window) = app.get_webview_window("main") {
@@ -674,6 +833,20 @@ pub fn run() {
                     let handle = handle.clone();
                     tauri::async_runtime::spawn(async move {
                         let _ = supervisor.lock().await.stop(Duration::from_secs(8)).await;
+                        handle
+                            .state::<local_speech::LocalSpeechState>()
+                            .0
+                            .lock()
+                            .await
+                            .stop()
+                            .await;
+                        handle
+                            .state::<local_images::LocalImageState>()
+                            .0
+                            .lock()
+                            .await
+                            .stop()
+                            .await;
                         handle.exit(0);
                     });
                 }

@@ -8,6 +8,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic_core import from_json
 
+from livingworld.application.chat_media import MediaIntent
 from livingworld.application.llm import (
     LLMMessage,
     MessageRole,
@@ -20,7 +21,7 @@ _JSON_FENCE_START = re.compile(r"\A```(?:json)?[ \t]*\r?\n", re.IGNORECASE)
 _JSON_FENCE = re.compile(
     r"\A```(?:json)?[ \t]*\r?\n(.*?)\r?\n```[ \t]*\Z", re.IGNORECASE | re.DOTALL
 )
-_METADATA_MEMBER = re.compile(r'"(?:reply|events|memories)"\s*:')
+_METADATA_MEMBER = re.compile(r'"(?:reply|events|memories|media)"\s*:')
 
 ANNOTATION_SCHEMA = {
     "type": "object",
@@ -67,6 +68,15 @@ class AnnotatedDialogue:
     text: str
     events: tuple[ChatEventAnnotation, ...] = ()
     memories: tuple[MemoryAnnotation, ...] = ()
+    media: MediaIntent | None = None
+
+
+class DialogueFormatError(ValueError):
+    """A fixed category only; never retain the rejected dialogue or JSON values."""
+
+    def __init__(self, reason):
+        super().__init__("chat_reply_invalid")
+        self.reason = reason
 
 
 def annotate_request(request):
@@ -152,11 +162,19 @@ def decode_optional_dialogue(raw):
 def decode_dialogue(raw):
     try:
         value = json.loads(raw, object_pairs_hook=_unique_json, parse_constant=_reject_non_finite)
-        reply = value["reply"]
-        if not isinstance(reply, str) or not reply.strip() or len(reply.encode("utf-8")) > 65536:
-            raise ValueError()
-    except (ValueError, TypeError, KeyError):
-        raise ValueError("chat_reply_invalid") from None
+    except (ValueError, TypeError):
+        raise DialogueFormatError("invalid_json") from None
+    if not isinstance(value, dict):
+        raise DialogueFormatError("invalid_envelope")
+    if "reply" not in value:
+        raise DialogueFormatError("missing_reply")
+    reply = value["reply"]
+    if not isinstance(reply, str):
+        raise DialogueFormatError("invalid_reply_type")
+    if not reply.strip():
+        raise DialogueFormatError("empty_reply")
+    if len(reply.encode("utf-8")) > 65536:
+        raise DialogueFormatError("oversized_reply")
     candidates = value.get("events", [])
     if not isinstance(candidates, list) or len(candidates) > 3:
         candidates = []
@@ -188,4 +206,10 @@ def decode_dialogue(raw):
                 memories.append(item)
             except (ValueError, TypeError):
                 continue
-    return AnnotatedDialogue(reply, tuple(result), tuple(memories))
+    media = None
+    if isinstance(value.get("media"), dict):
+        try:
+            media = MediaIntent.model_validate_json(json.dumps(value["media"]))
+        except (ValueError, TypeError):
+            pass
+    return AnnotatedDialogue(reply, tuple(result), tuple(memories), media)

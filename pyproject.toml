@@ -16,6 +16,7 @@ dependencies = [
     "fastapi>=0.115,<1",
     "fastembed==0.8.1",
     "httpx>=0.28,<1",
+    "tinytag==2.2.1",
     "jieba==0.42.1",
     "jsonschema>=4.26,<5",
     "pillow==12.3.0",

@@ -3,23 +3,22 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
 from dataclasses import replace
 from uuid import UUID, uuid4
 
 from livingworld.application.chat_capacity import ContextCapacityError, fit_chat_context
 from livingworld.application.chat_event_annotations import AnnotatedDialogue, annotate_request
+from livingworld.application.chat_media import media_request
 from livingworld.application.chat_messages import (
-    ChatMessageService,
     ClaimedGroupTurn,
     GroupTurnView,
     PlayerSend,
 )
 from livingworld.application.chat_reply import (
-    ChatGateway,
     ChatProgress,
     ChatProgressSink,
     ChatReplyBudgetError,
+    ChatReplyConfiguration,
     ChatReplyGenerationError,
     ChatReplyIntegrityError,
     ChatReplyUnavailableError,
@@ -36,17 +35,15 @@ from livingworld.application.llm import (
     LLMPurpose,
     LLMRequest,
     LLMResponse,
-    ModelRef,
 )
 from livingworld.application.llm_accounting import AccountingInfrastructureError
 from livingworld.application.llm_budget import (
     BudgetAdmissionError,
     BudgetIntegrityError,
-    PreflightUsageBounder,
 )
 from livingworld.application.llm_chat_turn_budget import ChatTurnTokenBudget, TurnTokenBudgetError
 from livingworld.application.llm_execution import ExecutionDeadlineError
-from livingworld.application.llm_routing import ModelSelection, RoutingError
+from livingworld.application.llm_routing import RoutingError
 from livingworld.domain.identifiers import CharacterId
 
 _MAX_GROUP_REPLIES = 32
@@ -56,55 +53,8 @@ _SELECT_OUTPUT_TOKENS = 8192
 _PURPOSE = LLMPurpose("character_dialogue")
 
 
-class GroupChatReplyService:
+class GroupChatReplyService(ChatReplyConfiguration[GroupChatContextBuilder]):
     """Speaker scheduling stays separate from Director and WorldEvent commits."""
-
-    def __init__(
-        self,
-        messages: ChatMessageService,
-        context: GroupChatContextBuilder,
-        gateway: ChatGateway,
-        token_bounder: PreflightUsageBounder,
-        model: ModelRef,
-        max_output_tokens: int,
-        available: Callable[[], bool] | None = None,
-        selection: ModelSelection | None = None,
-        input_token_reservation: int | None = None,
-        event_capture: bool = False,
-        journal=None,
-    ) -> None:
-        if (
-            not isinstance(model, ModelRef)
-            or type(max_output_tokens) is not int
-            or max_output_tokens < 1
-            or not callable(getattr(token_bounder, "bound", None))
-            or input_token_reservation is not None
-            and (type(input_token_reservation) is not int or input_token_reservation < 1)
-        ):
-            raise ValueError("chat_generation_configuration_invalid")
-        self._messages = messages
-        self._context = context
-        self._gateway = gateway
-        self._token_bounder = token_bounder
-        self._model = model
-        self._max_output_tokens = max_output_tokens
-        self._available = available or (lambda: True)
-        self._selection = selection
-        self._input_token_reservation = input_token_reservation
-        self._event_capture, self._journal = event_capture, journal
-
-    @property
-    def input_token_reservation(self) -> int | None:
-        """Configured route-wide reservation for UI guidance, never admission authority."""
-        return self._input_token_reservation
-
-    @property
-    def max_output_tokens(self) -> int:
-        return self._max_output_tokens
-
-    @property
-    def available(self) -> bool:
-        return self._available()
 
     def _request(self, messages, output_tokens: int) -> LLMRequest:
         return LLMRequest(
@@ -122,13 +72,24 @@ class GroupChatReplyService:
                 request,
                 messages=request.messages + await self._journal.prompt_context(source, speaker),
             )
-        return annotate_request(request) if self._event_capture else request
+        if self._event_capture:
+            request = annotate_request(request)
+        if self._media is not None:
+            media_context = await self._media.context(source, speaker)
+            if media_context["media_allowed"]:
+                if not self._event_capture:
+                    request = annotate_request(request)
+            request = media_request(request, media_context, context.layout)
+        return request
 
     async def _preflight(self, request, remaining, layout=None):
         try:
-            return await fit_chat_context(
+            result = await fit_chat_context(
                 request, layout, self._gateway, self._token_bounder, self._selection, remaining
             )
+            if self._media is not None:
+                self._media.packed_context_facts(result[0])
+            return result
         except RoutingError:
             raise ChatReplyUnavailableError("chat_model_unavailable") from None
         except ContextCapacityError as error:
@@ -246,7 +207,15 @@ class GroupChatReplyService:
         if progress is not None:
             await progress(ChatProgress("replying", speaker))
         return await dialogue_text(
-            self._gateway, prepared, budget, self._selection, progress, speaker
+            self._gateway,
+            prepared,
+            budget,
+            self._selection,
+            progress,
+            speaker,
+            format_failure=self._media.reply_format_failure
+            if self._media is not None and prepared.metadata.get("chat_media_requested")
+            else None,
         )
 
     async def reply(
@@ -311,14 +280,21 @@ class GroupChatReplyService:
                     if ordinal:
                         return await self._messages.finish_group(claim)
                     raise
+                media = (
+                    await self._media.resolve(claim, speaker, text.media)
+                    if self._media is not None and isinstance(text, AnnotatedDialogue)
+                    else None
+                )
+                only_media = media is not None and media.only_media
                 message = (
                     await self._messages.complete_group_reply(
                         claim,
                         speaker,
                         ordinal,
                         text.text,
-                        events=text.events,
-                        memories=text.memories,
+                        events=() if only_media else text.events,
+                        memories=() if only_media else text.memories,
+                        media=media,
                     )
                     if isinstance(text, AnnotatedDialogue)
                     else await self._messages.complete_group_reply(claim, speaker, ordinal, text)

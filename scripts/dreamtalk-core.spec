@@ -36,6 +36,7 @@ analysis = Analysis(
     + copy_metadata("diskcache")
     + copy_metadata("onnxruntime")
     + copy_metadata("tokenizers")
+    + copy_metadata("tinytag")
     + collect_data_files("fastembed", include_py_files=True)
     + [(str(ROOT / "artifacts/semantic-model"), "semantic-model")]
     + collect_data_files("ddgs", include_py_files=True),

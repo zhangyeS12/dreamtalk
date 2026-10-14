@@ -13,6 +13,7 @@ from livingworld.application.character_activity_context import (
 )
 from livingworld.application.chat_capacity import ContextLayout
 from livingworld.application.chat_conversations import ChatConversationService
+from livingworld.application.chat_media import prompt_text
 from livingworld.application.chat_messages import (
     MAX_PROMPT_TRANSCRIPT_MESSAGES,
     ChatMessage,
@@ -366,7 +367,7 @@ class DirectChatContextBuilder(ChatContextSources):
             else:
                 raise EntityNotFoundError("chat_sender_invalid")
             prompt_turns.setdefault(item.turn_id, []).append(len(result))
-            result.append(LLMMessage(role, (TextContent(item.text),)))
+            result.append(LLMMessage(role, (TextContent(prompt_text(item)),)))
         return DirectChatContext(
             tuple(result),
             conversation.character_id,

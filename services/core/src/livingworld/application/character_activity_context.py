@@ -32,7 +32,7 @@ ACTIVITY_GROUNDING_INSTRUCTIONS = (
     "可以自然提及碰面，不能把未参与或未获准的相遇当自身经历。"
     "SharedActivityStarted/Ended/Interrupted是实际共同休闲的开始/正常结束/中断，participant_character_ids为双方；"
     "participant才是本人共同经历，witness只证明目击。started不保证正常结束，interrupted不能说一起完成。"
-    "ended仅证明共同休息/自由活动时段正常结束，不证明谈话内容、购物付款、物品、委托胜利或关系进展。"
+    "ended仅证明共同休息/自由活动时段正常结束，不证明谈话内容、购物付款、物品或关系进展。"
     "只有开始记录而没有结束记录时，不得声称共同完成；不把旧共同活动当作目前仍在同行。"
     "recall_basis=topic_match 是按本次话题找到的较早亲历，不代表现在或完整经历列表；"
     "检索不到不证明从未发生，只能说目前没有可用记录。"

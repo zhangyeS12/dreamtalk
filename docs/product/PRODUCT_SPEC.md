@@ -137,7 +137,6 @@ Developer Mode 能查看 Director、Agent、Memory、LLM 使用等决策 Trace�
 | P-11 | Character Card V2/V3、PNG/JSON 和 Lorebook 的兼容范围是什么？导入如何处理冲突、不支持内容与来源缺失，是否统一进入 Draft → Preview → Commit？ | FR-19、FR-20 |
 | P-12 | Checkpoint 包含什么，恢复与分支复制哪些状态？知识、记忆、候选事件、未完成 Episode 和已发送联系记录如何随 Timeline 处理？ | FR-04、FR-11、FR-22 |
 | P-13 | **部分已确认：** 群聊轮次 Token 上限同时计输入与输出并覆盖所有角色、选人、重试和回退；统计精度、预算耗尽后的提示和模型不可用/路由失败行为仍待确认。 | FR-24 |
-| P-14 | Mission 的玩家体验与生命周期是什么？哪些目标对玩家可见，如何与世界调度和角色互动衔接？ | FR-02、FR-04、FR-05；任务要求中的领域对象 |
 | P-15 | Developer Mode 的访问方式、Trace 详细程度、保留范围及其与普通玩家视图的隔离如何定义？ | FR-05、FR-21、FR-23 |
 | P-16 | **部分已确认：** Character Agent 的运行时聊天台词经系统校验后直接发送给玩家；自动生成的持久创作内容仍需 Draft → Preview → Commit。Director 不编写最终台词；群聊独立调度器负责按角色卡性格选人，`@` 指定下一位。已确认会话摘要需预览确认，限本会话；2026-09-29 runtime WorldPlan 已批准每世界首次开启授权后台费用后自动接受合规日常计划；角色卡/世界书/会话摘要仍逐次预览确认。其他事件类型和自动私有记忆另定。 | FR-13、FR-17、FR-18、FR-19 |
 | P-17 | 所有 WorldEvent 是否必须先成为 CandidateEvent；玩家即时行为如何形成事实？候选激活冲突、部分失败、延期、取消与事实更正如何处理？ | FR-01、FR-02、FR-13、FR-14 |

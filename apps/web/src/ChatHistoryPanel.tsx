@@ -2,6 +2,7 @@ import { MessageTime } from "./MessageTime";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { CoreClient, CoreRequestError, type ChatMessage } from "@dreamtalk/api-client";
 import { ChatMessageBody } from "./ChatMessageBody";
+import { MessageMedia } from "./ChatMedia";
 
 export function ChatHistoryPanel({ client, worldId, conversationId, senderName, canQuote, onQuote, onClose }: {
   client: CoreClient; worldId: string; conversationId: string;
@@ -92,13 +93,13 @@ export function ChatHistoryPanel({ client, worldId, conversationId, senderName, 
     {quoteError ? <p role="alert" className="history-error">{quoteError}</p> : null}
     {selected ? <section className="history-context" aria-label="原文前后文">
       <div className="history-heading"><h3>原文前后文</h3><button type="button" className="text-action" onClick={() => { contextRequest.current?.abort(); setSelected(null); }}>返回检索结果</button></div>
-      {contextError ? <p role="alert">{contextError} <button type="button" className="text-action" onClick={() => void viewContext(selected)}>重试读取</button></p> : context === null ? <p role="status">正在读取原文…</p> : <ol className="history-results">{context.map(message => <li key={message.message_id} className={message.message_id === selected.message_id ? "history-target" : ""} aria-current={message.message_id === selected.message_id ? "true" : undefined}><div className="history-source">{source(message)}{message.message_id === selected.message_id ? <span>命中消息</span> : null}</div><ChatMessageBody text={message.text} /></li>)}</ol>}
+      {contextError ? <p role="alert">{contextError} <button type="button" className="text-action" onClick={() => void viewContext(selected)}>重试读取</button></p> : context === null ? <p role="status">正在读取原文…</p> : <ol className="history-results">{context.map(message => <li key={message.message_id} className={message.message_id === selected.message_id ? "history-target" : ""} aria-current={message.message_id === selected.message_id ? "true" : undefined}><div className="history-source">{source(message)}{message.message_id === selected.message_id ? <span>命中消息</span> : null}</div><>{!message.media?.only_media && <ChatMessageBody text={message.text} />}<MessageMedia client={client} worldId={worldId} media={message.media} /></></li>)}</ol>}
       {context !== null ? <button type="button" className="text-action" disabled={!canQuote} onClick={() => quote(selected)}>引用这段，继续聊</button> : null}
     </section> : <>
       {searchedQuery ? <p className="inline-hint" role="status">{searching ? "正在查找相关原文…" : `“${searchedQuery}”：已检索 ${scanned} 条，显示 ${matches.length} 条相关原文。`}</p> : null}
       {!searching && searchedQuery && scanned > 0 && matches.length === 0 ? <p>这些记录里没有相关原文。可以换关键词{cursor !== null ? "，或继续检索更早记录" : ""}。</p> : null}
       {!searching && searchedQuery && scanned === 0 && !error ? <p>这段对话还没有已保存的消息。</p> : null}
-      <ol className="history-results">{matches.map(message => <li key={message.message_id}><div className="history-source">{source(message)}</div><ChatMessageBody text={message.text} /><div className="history-actions"><button type="button" className="text-action" onClick={() => void viewContext(message)}>查看前后文</button><button type="button" className="text-action" disabled={!canQuote} onClick={() => quote(message)}>引用这段，继续聊</button></div></li>)}</ol>
+      <ol className="history-results">{matches.map(message => <li key={message.message_id}><div className="history-source">{source(message)}</div><>{!message.media?.only_media && <ChatMessageBody text={message.text} />}<MessageMedia client={client} worldId={worldId} media={message.media} /></><div className="history-actions"><button type="button" className="text-action" onClick={() => void viewContext(message)}>查看前后文</button><button type="button" className="text-action" disabled={!canQuote} onClick={() => quote(message)}>引用这段，继续聊</button></div></li>)}</ol>
       {cursor !== null ? <button type="button" className="text-action" disabled={searching || matches.length >= 64} onClick={() => void search(true)}>继续检索更早记录</button> : scanned > 0 && !searching ? <p className="inline-hint">已检索到这段对话的开头。</p> : null}
       {matches.length >= 64 ? <p className="inline-hint">最多显示 64 条结果，请缩小关键词后重新检索。</p> : null}
       {skipped > 0 ? <p className="inline-hint">有 {skipped} 条较长消息未参与检索，可在聊天记录中查看。</p> : null}

@@ -47,14 +47,53 @@ export function useLocationDirectory(client: CoreClient, worldId: string, visibl
   const [locations, setLocations] = useState<ActivityLocation[]>([]);
   const [directory, setDirectory] = useState<ActivityCharacterDirectory | null>(null);
   const [error, setError] = useState("");
-  const alive = useRef(true), serial = useRef(0);
-  useEffect(() => { alive.current = true; return () => { alive.current = false; ++serial.current; }; }, []);
+  const scope = useRef<{ client: CoreClient; worldId: string } | null>(null);
+  const request = useRef<{ controller: AbortController; again: boolean; done: Promise<void> } | null>(null);
   const refresh = useCallback(async () => {
-    const turn = ++serial.current;
-    try { const [places, people] = await Promise.all([client.listActivityLocations(worldId), client.listActivityCharacters(worldId)]); if (alive.current && serial.current === turn) { setLocations(places); setDirectory(people); setError(""); } }
-    catch { if (alive.current && serial.current === turn) setError("地点或角色位置读取未完成，保留上次读取的信息。请刷新重试。"); }
-  }, [client, worldId]);
-  useEffect(() => { if (!visible) return; void refresh(); const timer = window.setInterval(() => void refresh(), 5000); return () => { window.clearInterval(timer); ++serial.current; }; }, [refresh, visible]);
+    if (!visible || scope.current?.client !== client || scope.current.worldId !== worldId) return;
+    if (request.current) {
+      // A save needs a fresh read after any older in-flight snapshot finishes.
+      request.current.again = true;
+      return request.current.done;
+    }
+    const read = { controller: new AbortController(), again: false, done: Promise.resolve() };
+    request.current = read;
+    read.done = (async () => {
+      do {
+        read.again = false;
+        const [places, people] = await Promise.allSettled([
+          client.listActivityLocations(worldId, read.controller.signal),
+          client.listActivityCharacters(worldId, read.controller.signal),
+        ]);
+        if (request.current !== read || read.controller.signal.aborted || read.again) continue;
+        if (places.status === "fulfilled" && people.status === "fulfilled") {
+          // Stable references keep unchanged catalogues out of the map layout.
+          setLocations(current => JSON.stringify(current) === JSON.stringify(places.value) ? current : places.value);
+          setDirectory(current => JSON.stringify(current) === JSON.stringify(people.value) ? current : people.value);
+          setError("");
+        } else setError("地点或角色位置读取未完成，保留上次读取的信息。请刷新重试。");
+      } while (read.again && !read.controller.signal.aborted);
+    })().finally(() => { if (request.current === read) request.current = null; });
+    return read.done;
+  }, [client, worldId, visible]);
+  useEffect(() => {
+    if (!visible) return;
+    const activeScope = { client, worldId }; scope.current = activeScope;
+    let active = true;
+    let timer: number | undefined;
+    const poll = async () => {
+      await refresh();
+      if (active) timer = window.setTimeout(() => void poll(), 5000);
+    };
+    void poll();
+    return () => {
+      active = false; window.clearTimeout(timer);
+      if (scope.current === activeScope) {
+        scope.current = null;
+        const read = request.current; request.current = null; read?.controller.abort();
+      }
+    };
+  }, [client, worldId, refresh, visible]);
   return { locations, directory, error, refresh };
 }
 
@@ -150,13 +189,13 @@ export function LocationMap({ locations, directory, social, urls, selected, onSe
     return focused && !items.some(person => person.root_import_id === selected) ? [...items, focused] : items;
   }, [matchedPeople, mapShown, directory, selected]);
   const paths = useMemo(() => locationPaths(locations), [locations]);
-  const shownAvatarDigests = [...new Set(visiblePeople.map(person => social.characters.find(item => item.root_import_id === person.root_import_id)?.avatar_digest).filter((digest): digest is string => !!digest))].sort().join(",");
+  const peopleByRoot = useMemo(() => new Map(social.characters.map(person => [person.root_import_id, person])), [social.characters]);
+  const shownAvatarDigests = [...new Set(visiblePeople.map(person => peopleByRoot.get(person.root_import_id)?.avatar_digest).filter((digest): digest is string => !!digest))].sort().join(",");
   useEffect(() => { onAvatarDigests?.(shownAvatarDigests); return () => onAvatarDigests?.(""); }, [shownAvatarDigests, onAvatarDigests]);
   const layout = useMemo(() => {
     const locationIds = new Set(locations.map(place => place.location_id));
     const childrenByParent = new Map<string, ActivityLocation[]>();
     const peopleByPlace = new Map<string, MapNode[]>();
-    const peopleByRoot = new Map(social.characters.map(person => [person.root_import_id, person]));
     for (const place of locations) { if (place.parent_id) { const children = childrenByParent.get(place.parent_id) ?? []; children.push(place); childrenByParent.set(place.parent_id, children); } }
     for (const activity of visiblePeople) { const person = peopleByRoot.get(activity.root_import_id); if (person && activity.current_location_id) { const people = peopleByPlace.get(activity.current_location_id) ?? []; people.push({ id: person.root_import_id, kind: "person", name: person.name, person }); peopleByPlace.set(activity.current_location_id, people); } }
     const build = (place: ActivityLocation, ancestors: Set<string>): MapNode => {
@@ -167,8 +206,8 @@ export function LocationMap({ locations, directory, social, urls, selected, onSe
     };
     const tree: MapNode = { id: "world", kind: "root", name: "", children: locations.filter(place => !place.parent_id || !locationIds.has(place.parent_id)).map(place => build(place, new Set([place.location_id]))) };
     return pack<MapNode>().size([1000, 1000]).padding(22)(hierarchy(tree).sum(node => node.kind === "label" ? 3 : node.kind === "person" ? 1 : 0).sort((a, b) => (b.value ?? 0) - (a.value ?? 0) || a.data.id.localeCompare(b.data.id))).descendants();
-  }, [locations, visiblePeople, social]);
-  const person = social.characters.find(value => value.root_import_id === selected), activity = directory?.items.find(value => value.root_import_id === selected);
+  }, [locations, visiblePeople, peopleByRoot]);
+  const person = selected ? peopleByRoot.get(selected) : undefined, activity = directory?.items.find(value => value.root_import_id === selected);
   const placeName = (id: string | null | undefined) => id ? paths.get(id) ?? "尚未设置" : "尚未设置";
   const zoom = useCallback((factor: number) => { setView(current => { const size = Math.min(2000, Math.max(160, current.size * factor)); return { x: current.x + (current.size - size) / 2, y: current.y + (current.size - size) / 2, size }; }); }, []);
   useEffect(() => { const svg = svgRef.current; if (!svg) return; const wheel = (event: WheelEvent) => { event.preventDefault(); zoom(event.deltaY > 0 ? 1.12 : .89); }; svg.addEventListener("wheel", wheel, { passive: false }); return () => svg.removeEventListener("wheel", wheel); }, [zoom]);

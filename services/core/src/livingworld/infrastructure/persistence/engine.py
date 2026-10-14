@@ -90,6 +90,11 @@ class Database:
 
         return SqlAlchemyChatExportStore(self._sessions)
 
+    def speech_store(self):
+        from livingworld.infrastructure.persistence.speech import SqlAlchemySpeechStore
+
+        return SqlAlchemySpeechStore(self._sessions)
+
     def llm_usage_ledger(self, *, catalog=None):
         """Operational accounting capability, isolated from world/content writes."""
         from livingworld.infrastructure.persistence.llm_repository import SqlAlchemyUsageLedger
@@ -124,6 +129,11 @@ class Database:
         )
 
         return SqlAlchemyWorldCoverRepository(self._sessions)
+
+    def chat_media_store(self):
+        from livingworld.infrastructure.persistence.chat_media import SqlAlchemyChatMediaStore
+
+        return SqlAlchemyChatMediaStore(self._sessions)
 
     def faction_store(self):
         from livingworld.infrastructure.persistence.factions import SqlAlchemyFactionStore

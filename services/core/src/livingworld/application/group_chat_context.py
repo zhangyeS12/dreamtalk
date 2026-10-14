@@ -22,6 +22,7 @@ from livingworld.application.chat_context import (
     recent_chat_transcript,
     recent_seen_group_messages,
 )
+from livingworld.application.chat_media import prompt_text
 from livingworld.application.chat_messages import (
     ChatMessage,
     ClaimedGroupTurn,
@@ -164,7 +165,8 @@ class GroupChatContextBuilder(ChatContextSources):
                 for character_id, persona in participants
             ],
             "transcript": [
-                {"sender_id": str(item.sender_id.value), "text": item.text} for item in transcript
+                {"sender_id": str(item.sender_id.value), "text": prompt_text(item)}
+                for item in transcript
             ],
             "reply_count": sum(
                 item.turn_id == turn_id and isinstance(item.sender_id, CharacterId)
@@ -248,7 +250,8 @@ class GroupChatContextBuilder(ChatContextSources):
                 transcript_texts=tuple(item.text for item in transcript),
             ),
             "transcript": [
-                {"sender_id": str(item.sender_id.value), "text": item.text} for item in transcript
+                {"sender_id": str(item.sender_id.value), "text": prompt_text(item)}
+                for item in transcript
             ],
         }
         if self._long_memory is not None:

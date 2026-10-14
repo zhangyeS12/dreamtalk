@@ -70,6 +70,8 @@ def create_app(
     world_deletion=None,
     content_exports=None,
     chat_exports=None,
+    speech=None,
+    chat_media=None,
 ) -> FastAPI:
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
@@ -92,8 +94,8 @@ def create_app(
     app.add_middleware(
         CORSMiddleware,
         allow_origins=allowed_origins or [],
-        allow_methods=["GET", "POST", "PUT", "DELETE"],
-        allow_headers=["Authorization", "X-Request-Id"],
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
+        allow_headers=["Authorization", "X-Request-Id", "X-Media-Description"],
     )
     if maintenance is not None:
         from livingworld.adapters.http.update_maintenance import UpdateMaintenanceMiddleware
@@ -249,4 +251,37 @@ def create_app(
         from livingworld.adapters.http.factions import faction_router
 
         app.include_router(faction_router(factions, authorize))
+    if chat_media is not None:
+        from livingworld.adapters.http.chat_media import chat_media_router, media_error_handler
+        from livingworld.application.chat_media import MediaError
+
+        app.add_exception_handler(MediaError, media_error_handler)
+        app.include_router(chat_media_router(chat_media, authorize))
+
+        @app.get("/system/media/local-demand", dependencies=[Depends(authorize)])
+        async def local_media_demand():
+            return {"enabled": await chat_media.store.local_requested()}
+
+    if speech is not None:
+        from livingworld.adapters.http.speech import speech_router
+
+        app.include_router(speech_router(speech, authorize))
+
+        @app.get("/system/speech/local-demand", dependencies=[Depends(authorize)])
+        async def local_speech_demand():
+            return {"enabled": await speech.store.local_requested()}
+
+        @app.post("/system/speech/local-repair", dependencies=[Depends(authorize)])
+        async def begin_local_speech_repair():
+            from livingworld.application.speech_contracts import SpeechError
+
+            try:
+                return await speech.begin_local_repair()
+            except SpeechError:
+                raise HTTPException(409, detail="speech_local_repair_busy") from None
+
+        @app.delete("/system/speech/local-repair/{lease}", dependencies=[Depends(authorize)])
+        async def end_local_speech_repair(lease: UUID):
+            return await speech.end_local_repair(str(lease))
+
     return app

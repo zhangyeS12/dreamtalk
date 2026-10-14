@@ -104,6 +104,8 @@ class ChatExportService:
                         "story_sent_at_utc": story,
                         "text": message.text,
                     }
+                    if message.media:
+                        value["media"] = message.media
                     yield (("," if count else "") + _json(value)).encode("utf-8")
                 else:
                     extra = f" · 剧情发送：{story}" if story else ""

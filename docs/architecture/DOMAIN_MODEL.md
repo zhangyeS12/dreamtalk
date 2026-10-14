@@ -227,7 +227,7 @@ RequestId 是命令幂等身份，ObservationId 是观察发生身份；运行�
 
 ### Relationships
 
-参与 World、Scene、Conversation、Mission 和 OutreachEpisode；通过 KnowledgeOwnership 关联 Knowledge，并与 Character 形成 Relationship。
+参与 World、Scene、Conversation 和 OutreachEpisode；通过 KnowledgeOwnership 关联 Knowledge，并与 Character 形成 Relationship。
 
 ### Important invariants
 
@@ -562,29 +562,6 @@ Knowledge 与其知情主体之间的归属边界，以及判断某内容是否�
 - 同一个主动联系理由最多主动发送一次；玩家未回复不能持续催促（FR-11）。
 - 多角色协同如何对应“一次主动发送”、同一理由的判定范围、Episode 结束条件与必要联系例外，待确认；这些细节不能取消上述冻结约束。
 
-## 20. Mission
-
-### Purpose
-
-暂作为组织某项目标或持续活动的领域概念占位；具体产品含义尚未冻结。
-
-### Owns
-
-待确认的目标语境及参与活动之间的概念关联；本阶段不规定任务类型、状态、奖励或完成规则。
-
-### Does not own
-
-不默认等同于游戏任务系统，不替代 Director 的宏观剧情调度，也不与 OutreachEpisode 的联系目的自动画等号。
-
-### Relationships
-
-可能关联 Player、Character、Scene、WorldEvent、WorldPlan、Conversation 和 OutreachEpisode；必要关系与对应方式待确认。
-
-### Important invariants
-
-- Mission 不能绕过世界事实与知识分离、玩家单一物理地点或主动联系规则（FR-04 至 FR-12）。
-- Mission 是否由玩家主动接受、是否对玩家可见、如何创建及结束，均待确认。
-
 ## 21. Conversation
 
 ### Purpose
@@ -891,7 +868,7 @@ typed cause kind、对应 TriggerId/EventId/SceneId/RequestId reference、activa
 以下内容只记录缺口，不增加或变更冻结规则。跨文档统一问题列表见 [PRODUCT_SPEC.md](../product/PRODUCT_SPEC.md)。
 
 1. World 的玩家数量与多人参与范围；WorldClock 的 realtime/offline/暂停语义已由 C-006D 解决，Timeline 分支之间的时间切换/比较仍待确认。
-2. Location 的移动与在途语义；Scene、Mission、Conversation 的边界及相互关系。
+2. Location 的移动与在途语义；Scene、Conversation 的边界及相互关系。
 3. Busy / Available 的控制方式；“必要主动联系”的范围；同一理由、一次发送与多角色 Episode 的对应关系。
 4. Planning Window 的尺度、耗尽判定和“大量失效”阈值；候选激活冲突与失败的处理边界。
 5. Draft → Preview → Commit 的适用对象边界已部分确定：Character Agent 的运行时聊天台词经系统校验后直接发送，无需逐条人工预览；自动生成的持久创作内容仍须预览确认。WorldPlan、事件生成及记忆摘要的具体适用边界、流程衔接和审核粒度仍待确认。

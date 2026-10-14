@@ -7,7 +7,10 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { CoreClient, type ChatConversation, type GroupChatConversation, type KnownWorldEvent, type PlayerAvailability, type SelectablePlayer, type SelectedPlayerState, type WorldSettings } from "@dreamtalk/api-client";
 import { useChatUnread } from "./useChatUnread";
 import { ProactiveContactSettings } from "./ProactiveContactSettings";
+import { ChatMediaSettingsPanel } from "./ChatMedia";
 import { ChatTranscript } from "./ChatTranscript";
+import { SpeechProvider } from "./SpeechPlayback";
+import { SpeechSettings } from "./SpeechSettings";
 import { GroupChatDetails, GroupChatSetup } from "./GroupChat";
 import { ModelSetup, type ModelSetupSummary } from "./ModelSetup";
 import { WorldImports, WorldContacts } from "./WorldContent";
@@ -92,6 +95,12 @@ export function ProductApp({ client, onStartupStatus, startupReady = false }: { 
 function WorldWorkspace({ client, initialWorldId, initialTab, onArchive }: {
   client: CoreClient; initialWorldId: string; initialTab: Tab; onArchive: () => void;
 }) {
+  return <SpeechProvider client={client} worldId={initialWorldId}><WorldWorkspaceContent client={client} initialWorldId={initialWorldId} initialTab={initialTab} onArchive={onArchive} /></SpeechProvider>;
+}
+
+function WorldWorkspaceContent({ client, initialWorldId, initialTab, onArchive }: {
+  client: CoreClient; initialWorldId: string; initialTab: Tab; onArchive: () => void;
+}) {
   const [tab, setTab] = useState<Tab>(initialTab);
   const entryHeading = useRef<HTMLHeadingElement>(null);
   useEffect(() => { entryHeading.current?.focus(); }, []);
@@ -103,6 +112,8 @@ function WorldWorkspace({ client, initialWorldId, initialTab, onArchive }: {
   const [settingsPage, setSettingsPage] = useState<SettingsPage>("model");
   const [desktopStatus, setDesktopStatus] = useState<DesktopStatus | null>(null);
   const [backgroundDirty, setBackgroundDirty] = useState(false);
+  const [mediaDirty, setMediaDirty] = useState(false);
+  const [speechDirty, setSpeechDirty] = useState(false);
   const [modelSummary, setModelSummary] = useState<ModelSetupSummary | null>(null);
   const [worldContentDirty, setWorldContentDirty] = useState(false);
   const [worldLocationsDirty, setWorldLocationsDirty] = useState(false);
@@ -298,10 +309,10 @@ function WorldWorkspace({ client, initialWorldId, initialTab, onArchive }: {
     setEventsOpen(false);
   };
   const suggestedFor = (conversationId: string) => draftSuggestion?.worldId === worldId && draftSuggestion.playerId === selectedPlayer && draftSuggestion.conversationId === conversationId ? draftSuggestion.text : null;
-  useDesktopUpdateBlock(worldProfileDirty || generalProfileDirty || worldContentDirty || worldLocationsDirty || characterActivityDirty || chatDirty || modelDirty || backgroundDirty || Number(tokenCeilingInput) !== tokenCeiling
+  useDesktopUpdateBlock(worldProfileDirty || generalProfileDirty || worldContentDirty || worldLocationsDirty || characterActivityDirty || chatDirty || modelDirty || speechDirty || mediaDirty || backgroundDirty || Number(tokenCeilingInput) !== tokenCeiling
     ? "当前世界有未保存的编辑或聊天草稿。" : busy || offlineContact.busy ? "当前请求正在处理。" : null);
   const returnArchive = () => {
-    if ((worldProfileDirty || generalProfileDirty || worldContentDirty || worldLocationsDirty || characterActivityDirty || chatDirty || modelDirty || backgroundDirty || offlineContact.busy || Number(tokenCeilingInput) !== tokenCeiling || busy)
+    if ((worldProfileDirty || generalProfileDirty || worldContentDirty || worldLocationsDirty || characterActivityDirty || chatDirty || modelDirty || speechDirty || mediaDirty || backgroundDirty || offlineContact.busy || Number(tokenCeilingInput) !== tokenCeiling || busy)
       && !window.confirm("有尚未保存的编辑或正在处理的请求，是否返回书架？已发起的生成可能继续并产生用量。")) return;
     onArchive();
   };
@@ -363,8 +374,10 @@ function WorldWorkspace({ client, initialWorldId, initialTab, onArchive }: {
       </div>}
 
       <SettingsHandbook client={client} world={world} visible={tab === "settings"} page={settingsPage} onPage={setSettingsPage} onArchive={returnArchive}
-        dirtyPages={{ model: modelDirty || Number(tokenCeilingInput) !== tokenCeiling, background: backgroundDirty, activities: false }}
+        dirtyPages={{ model: modelDirty || Number(tokenCeilingInput) !== tokenCeiling, speech: speechDirty, media: mediaDirty, background: backgroundDirty, activities: false }}
         panels={{
+          media: <ChatMediaSettingsPanel key={`media:${worldId}`} client={client} worldId={worldId} onDirtyChange={setMediaDirty} />,
+          speech: <SpeechSettings client={client} worldId={worldId} onDirtyChange={setSpeechDirty} />,
           model: <>
             <SettingsFold title="模型服务与回复" summary={modelSummary?.model ? `${modelSummary.model} · 单次回复上限 ${modelSummary.replyTokens?.toLocaleString("zh-CN") ?? "待核对"} Token` : modelSummary?.status === "unconfigured" ? "尚未配置，展开完成首次设置" : modelSummary?.status ? "已读取配置状态，展开查看模型设置" : "正在读取模型配置…"} open>
               <ModelSetup key={worldId} client={client} worldId={worldId} turnTokenCeiling={tokenCeiling} onDirtyChange={setModelDirty} onSummaryChange={setModelSummary} />

@@ -415,6 +415,22 @@ class SqlAlchemyFactionStore:
                     break
             return result
 
+    async def avatar_digests(self, world, roots):
+        """Read requested, current-world avatar bindings without relationship data."""
+        roots = set(roots)
+        if not roots or len(roots) > 128:
+            raise FactionError("avatar_request_invalid")
+        async with self.sessions() as session:
+            if await session.get(World, world) is None:
+                raise FactionError("world_not_found")
+            characters = await _characters(session, world, roots)
+            rows = await session.execute(
+                select(Avatar.root_import_id, Avatar.digest)
+                .where(Avatar.world_id == world, Avatar.root_import_id.in_(characters))
+                .order_by(Avatar.root_import_id)
+            )
+            return [{"root_import_id": str(root), "digest": digest} for root, digest in rows]
+
     async def snapshot(self, world):
         async with self.sessions() as session:
             if await session.get(World, world) is None:
@@ -500,7 +516,7 @@ class SqlAlchemyFactionStore:
         await session.connection(execution_options={"livingworld_write_intent": True})
 
     async def _require_root(self, session, world, root):
-        if root not in await _characters(session, world):
+        if root not in await _characters(session, world, {root}):
             raise FactionError("faction_character_not_found")
 
     async def create(self, world, name, parent):

@@ -6,7 +6,7 @@
 - [SimPy4.1.1 process interaction](https://simpy.readthedocs.io/en/4.1.1/topical_guides/process_interaction.html)：等待多个过程和显式中断。[项目维护者PyPI信息确认MIT](https://pypi.org/project/simpy/4.1.1/)。已有WorldTime、scheduler和持久候选可覆盖等待/终止，不引入另一时间引擎。
 - [transitions](https://github.com/pytransitions/transitions)：master查询2026-10-04，[version.py](https://github.com/pytransitions/transitions/blob/master/transitions/version.py)声明0.9.4，仓库为MIT；条件状态转移、回调及并行状态适合长生命周期。这里只需有限pending/active/terminal，已有Kernel单写事务、同意revision、回执更适合真实持久准入，不安装通用状态机，不以回调绕过事务。
 
-具体首版写入[用户本轮已批准的方案](../proposals/2026-10-04-shared-activities.md)：已经真实碰面两人共同休息/自由活动，明确开始/结束/中断，社交机会合计每批2次、每角色每日一次共同活动、不自动关系推进，正常模型批次外无额外调用。购物/委托的资源和成果契约尚缺，不假装同地等于一起完成任务。
+具体首版写入[用户本轮已批准的方案](../proposals/2026-10-04-shared-activities.md)：已经真实碰面两人共同休息/自由活动，明确开始/结束/中断，社交机会合计每批2次、每角色每日一次共同活动、不自动关系推进，正常模型批次外无额外调用。不假装同地等于一起产生了行动成果。
 
 ## 已有记忆和聊天获知的原文溯源
 

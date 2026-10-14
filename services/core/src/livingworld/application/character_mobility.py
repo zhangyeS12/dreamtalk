@@ -46,15 +46,18 @@ def movement_route(
 ):
     """Choose a category before destinations so location count cannot dilute home."""
     home_region = region(initial)
-    foreign = [node for node in allowed if region(node) != home_region]
     if region(current) != home_region:
         return (initial,), "return"
-    if far_opportunity and foreign:
+    foreign, local = [], []
+    for node in allowed:
+        if region(node) != home_region:
+            if far_opportunity:
+                foreign.append(node)
+        elif node != initial:
+            local.append(node)
+    if foreign:
         target = _destination(foreign, initial, current, distance, seed)
         return (target, initial), "far_trip"
-    local = [node for node in allowed if node != initial and region(node) == home_region]
-    near = [node for node in local if distance(initial, node) <= 2]
-    farther = [node for node in local if node not in near]
     home_weight, near_weight, _ = RESIDENCY_WEIGHTS[residency]
     # A confirmed absence increasingly favors home; this never redraws the rare gate.
     boost = (
@@ -65,6 +68,9 @@ def movement_route(
     draw = unit_draw(seed, "category")
     if draw < home_weight + boost:
         return (initial,), "home"
+    near, farther = [], []
+    for node in local:
+        (near if distance(initial, node) <= 2 else farther).append(node)
     choices = (
         near
         if draw < home_weight + boost + near_weight * (1 - boost / (1 - home_weight))

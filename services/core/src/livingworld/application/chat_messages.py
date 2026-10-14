@@ -32,6 +32,7 @@ class ChatMessage:
     text: str = field(repr=False)
     created_at_utc: datetime
     story_sent_at_utc: datetime | None = None
+    media: dict | None = field(default=None, repr=False)
 
 
 @dataclass(frozen=True, slots=True)
@@ -200,6 +201,7 @@ class ChatMessageService:
     def __init__(self, store: ChatMessageStore, players: PlayerEventFeedService) -> None:
         self._store = store
         self._players = players
+        self.media = None
 
     async def _player(self, conversation_id: ConversationId) -> PlayerId:
         player = await self._players.selected_player(conversation_id.world_id)
@@ -213,9 +215,16 @@ class ChatMessageService:
         conversation_id: ConversationId,
         text: str,
         token_ceiling: int,
+        *,
+        sticker_entry_id=None,
     ) -> PlayerSend:
         return await self._send_player(
-            request_id, conversation_id, text, token_ceiling, group=False
+            request_id,
+            conversation_id,
+            text,
+            token_ceiling,
+            group=False,
+            sticker_entry_id=sticker_entry_id,
         )
 
     async def send_group_player(
@@ -224,9 +233,18 @@ class ChatMessageService:
         conversation_id: ConversationId,
         text: str,
         token_ceiling: int,
+        *,
+        sticker_entry_id=None,
     ) -> PlayerSend:
         """Internal group runner entry; the public send path remains direct-only."""
-        return await self._send_player(request_id, conversation_id, text, token_ceiling, group=True)
+        return await self._send_player(
+            request_id,
+            conversation_id,
+            text,
+            token_ceiling,
+            group=True,
+            sticker_entry_id=sticker_entry_id,
+        )
 
     async def _send_player(
         self,
@@ -236,8 +254,13 @@ class ChatMessageService:
         token_ceiling: int,
         *,
         group: bool,
+        sticker_entry_id=None,
     ) -> PlayerSend:
-        if not isinstance(text, str) or not text.strip() or len(text.encode("utf-8")) > 65536:
+        if (
+            not isinstance(text, str)
+            or (not text.strip() and sticker_entry_id is None)
+            or len(text.encode("utf-8")) > 65536
+        ):
             raise ValueError("chat_message_invalid")
         if (
             isinstance(token_ceiling, bool)
@@ -253,13 +276,23 @@ class ChatMessageService:
             "text": text,
             "token_ceiling": token_ceiling,
         }
+        if sticker_entry_id is not None:
+            semantics["sticker_entry_id"] = str(sticker_entry_id)
         fingerprint = hashlib.sha256(
             json.dumps(semantics, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode(
                 "utf-8"
             )
         ).hexdigest()
         send = self._store.send_group_player if group else self._store.send_player
-        return await send(request_id, conversation_id, player, text, token_ceiling, fingerprint)
+        return await send(
+            request_id,
+            conversation_id,
+            player,
+            text,
+            token_ceiling,
+            fingerprint,
+            **({"sticker_entry_id": sticker_entry_id} if sticker_entry_id else {}),
+        )
 
     async def list_messages(self, conversation_id: ConversationId) -> tuple[ChatMessage, ...]:
         return await self._store.list_for_player(
@@ -350,12 +383,18 @@ class ChatMessageService:
         )
 
     async def complete_direct(
-        self, claim: ClaimedDirectTurn, text: str, *, events=(), memories=()
+        self, claim: ClaimedDirectTurn, text: str, *, events=(), memories=(), media=None
     ) -> ChatMessage:
         self._validate_reply(text)
         return (
-            await self._store.complete_direct(claim, text, events=events, memories=memories)
-            if events or memories
+            await self._store.complete_direct(
+                claim,
+                text,
+                events=events,
+                memories=memories,
+                **({"media": media} if media is not None else {}),
+            )
+            if events or memories or media
             else await self._store.complete_direct(claim, text)
         )
 
@@ -375,15 +414,22 @@ class ChatMessageService:
         *,
         events=(),
         memories=(),
+        media=None,
     ) -> ChatMessage:
         self._validate_reply(text)
         if type(ordinal) is not int or ordinal < 0:
             raise ValueError("chat_reply_ordinal_invalid")
         return (
             await self._store.complete_group_reply(
-                claim, character_id, ordinal, text, events=events, memories=memories
+                claim,
+                character_id,
+                ordinal,
+                text,
+                events=events,
+                memories=memories,
+                **({"media": media} if media is not None else {}),
             )
-            if events or memories
+            if events or memories or media
             else await self._store.complete_group_reply(claim, character_id, ordinal, text)
         )
 

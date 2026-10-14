@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { CoreClient, CoreRequestError, type ChatReplyAvailability } from "@dreamtalk/api-client";
+import { CoreClient, CoreRequestError, type ChatReplyAvailability, type StickerEntry } from "@dreamtalk/api-client";
 import {
   chatReplyFailureFeedback, chatReplyStateFeedback, chatSaveFailureFeedback,
   chatTokenReservationFeedback, type ChatRequestPhase,
 } from "./chatFeedback";
 import { useReplyStream } from "./useReplyStream";
+import { useSpeech } from "./SpeechPlayback";
 import { useTranscriptPages } from "./useTranscriptPages";
 
 interface Options {
@@ -31,19 +32,25 @@ export function useChatReplyWorkflow({
   const [availabilityReading, setAvailabilityReading] = useState(true);
   const [availabilityFailed, setAvailabilityFailed] = useState(false);
   const [draft, setDraft] = useState("");
-  const [pending, setPending] = useState<{ text: string; ceiling: number; requestId: string } | null>(null);
+  const [sticker, setSticker] = useState<StickerEntry | null>(null);
+  const [pending, setPending] = useState<{ text: string; ceiling: number; requestId: string; stickerEntryId?: string } | null>(null);
   const [phase, setPhase] = useState<ChatRequestPhase>(null);
   const [recoveryBusy, setRecoveryBusy] = useState(false);
   const [feedback, setFeedback] = useState("");
   const [replyFailure, setReplyFailure] = useState<{ turnId: string; message: string } | null>(null);
   const actionLock = useRef(false);
   const stream = useReplyStream();
+  const speech = useSpeech();
   const transcript = useTranscriptPages(client, worldId, conversationId, refresh, true);
+  const acceptMessage: typeof transcript.acceptMessage = message => {
+    transcript.acceptMessage(message);
+    speech?.committed(conversationId, message);
+  };
   const available = !readOnly && availability?.available === true && !availabilityReading && !availabilityFailed;
   const budgetFeedback = chatTokenReservationFeedback(availability, tokenCeiling, kind);
   const sending = phase !== null || recoveryBusy;
 
-  useEffect(() => { onDirtyChange?.(Boolean(draft.trim() || pending || sending)); }, [draft, pending, sending, onDirtyChange]);
+  useEffect(() => { onDirtyChange?.(Boolean(draft.trim() || sticker || pending || sending)); }, [draft, sticker, pending, sending, onDirtyChange]);
   useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
   useEffect(() => {
     if (suggestedDraft) { setDraft(suggestedDraft); onSuggestionUsed?.(); }
@@ -101,7 +108,7 @@ export function useChatReplyWorkflow({
     actionLock.current = true;
     setPhase("replying"); setFeedback(""); setReplyFailure(null);
     try {
-      await stream.run(client, worldId, conversationId, turnId, kind, speakers, transcript.acceptMessage);
+      await stream.run(client, worldId, conversationId, turnId, kind, speakers, acceptMessage);
       if (stream.isMounted()) setRefresh(value => value + 1);
     } catch (failure) { await inspectFailedReply(turnId, failure, false); }
     finally { actionLock.current = false; if (stream.isMounted()) setPhase(null); }
@@ -109,21 +116,21 @@ export function useChatReplyWorkflow({
 
   const send = async (event: FormEvent) => {
     event.preventDefault();
-    if (actionLock.current || sending || !available || (!draft.trim() && !pending)) return;
+    if (actionLock.current || sending || !available || (!draft.trim() && !sticker && !pending)) return;
     if (budgetFeedback && !pending) { setFeedback(budgetFeedback); return; }
     if (!transcript.followingLatest) transcript.showLatest();
     actionLock.current = true;
-    const current = pending ?? { text: draft, ceiling: tokenCeiling, requestId: crypto.randomUUID() };
+    const current = pending ?? { text: draft, ceiling: tokenCeiling, requestId: crypto.randomUUID(), stickerEntryId: sticker?.entry_id };
     setPending(current); setPhase("saving"); setFeedback("");
     try {
       const sent = kind === "direct"
-        ? await client.sendPlayerMessage(worldId, conversationId, current.text, current.ceiling, current.requestId)
-        : await client.sendGroupMessage(worldId, conversationId, current.text, current.ceiling, current.requestId);
+        ? await client.sendPlayerMessage(worldId, conversationId, current.text, current.ceiling, current.requestId, current.stickerEntryId)
+        : await client.sendGroupMessage(worldId, conversationId, current.text, current.ceiling, current.requestId, current.stickerEntryId);
       if (!stream.isMounted()) return;
-      setPending(null); setDraft(""); setReplyFailure(null);
+      setPending(null); setDraft(""); setSticker(null); setReplyFailure(null);
       setRefresh(value => value + 1); setPhase("replying");
       try {
-        await stream.run(client, worldId, conversationId, sent.turn_id, kind, speakers, transcript.acceptMessage);
+        await stream.run(client, worldId, conversationId, sent.turn_id, kind, speakers, acceptMessage);
         if (stream.isMounted()) setRefresh(value => value + 1);
       } catch (failure) { await inspectFailedReply(sent.turn_id, failure, true); }
     } catch (failure) {
@@ -138,7 +145,7 @@ export function useChatReplyWorkflow({
 
   return {
     ...transcript, refresh, setRefresh, available, availabilityReading, availabilityFailed,
-    budgetFeedback, draft, setDraft, pending, phase, sending, setRecoveryBusy, feedback,
+    budgetFeedback, draft, setDraft, sticker, setSticker, pending, phase, sending, setRecoveryBusy, feedback,
     stream, visibleStreamDraft, latestPlayerMessage, checkReply, generateSavedReply, send,
   };
 }

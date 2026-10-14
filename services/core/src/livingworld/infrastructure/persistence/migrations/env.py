@@ -6,6 +6,8 @@ from livingworld.infrastructure.persistence import (  # noqa: F401
     character_card_bindings,
     director_rotation,
     location_policy_models,  # noqa: F401
+    media_models,
+    speech_models,
 )
 from livingworld.infrastructure.persistence.content_builder import (
     ContentBuilderJobRecord,  # noqa: F401

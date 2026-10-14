@@ -4,13 +4,21 @@
 
 开始修改前完整阅读 [AGENTS.md](../AGENTS.md)、[HANDOFF.md](../HANDOFF.md) 和[当前状态](PROJECT_STATUS.md)。当前采用 React / TypeScript / Vite 前端、Tauri 桌面宿主与 Python Core，存储使用 SQLite，数据库迁移由 Alembic 管理。兼容身份保持 app.livingworld.desktop。
 
+## 当前本地工作与交接
+
+此前公开Git基线为v0.1.53／a3f2183，本次按用户明确授权发布Desktop0.1.76、迁移0050_sticker_library_freshness的大更新；源码、完整Windows资产与更新频道结果见[记录](maintenance/2026-10-14-major-release.md)。模型环境、配音／视觉权重、录音、存档、个人配置和发布密钥不随源码或安装包提供。日常不打包规则继续适用，本次仅为具体GitHub发布例外。
+
+本机图片服务自动启动及两个本地模型不限次数的原实现见[记录](maintenance/2026-10-13-local-model-startup-and-limits.md)，本次按明确授权构建0.1.76公开安装／便携资产，旧0.1.70包保持。免费云端最新版与付费配音API未测试、待确认；独立表情与配音对照许可均已结束，不运行产品、模型或原存档迁移。可选配音环境仍独立，不向Core加入Torch或CUDA。
+
 ## 本地环境
 
-需要 Node.js、Python / uv、Rust，以及 Windows 桌面构建工具。版本和依赖以 package.json、锁文件、services/core/pyproject.toml、Cargo.toml 和构建脚本为准。源码下载不含个人密钥、存档或发布签名私钥。
+用户体验入口保持直接双击桌面程序：`apps/desktop/src-tauri/target/debug/dreamtalk-desktop.exe`，先从托盘退出旧dreamtalk。工程端复用已有build:desktop必要调试编译（--no-bundle）及未运行的默认target目录，不覆盖用户正在运行的sticker-library-0175入口，不创建安装器、便携包或ZIP。该0.1.76入口依赖当前仓库及.venv，编译和诊断范围见[记录](maintenance/2026-10-14-sticker-context-position.md)。原界面布局保持。
+
+需要 Node.js、Python / uv、Rust，以及 Windows 桌面构建工具。版本和依赖以根目录 package.json、pyproject.toml、锁文件、桌面 Cargo.toml 和构建脚本为准。源码下载不含个人密钥、存档或发布签名私钥。
 
 ```powershell
 npm ci
-uv sync --project services/core
+uv sync --frozen
 npm run lint
 ```
 
@@ -18,9 +26,9 @@ npm run lint
 
 ## 验证边界
 
-当前用户负责运行测试与最终验收。未获得具体授权，不添加或运行自动化测试、浏览器 / 桌面 smoke、真实模型探测或用户存档迁移。保留已有测试和 CI，不弱化断言。允许源码、差异、格式、lint、类型、文档链接与必要编译打包核对。
+当前用户负责运行测试与最终验收。未获得具体授权，不添加或运行自动化测试、浏览器 / 桌面 smoke、真实模型探测或用户存档迁移。保留已有测试和 CI，不弱化断言。允许源码、差异、格式、lint、类型、文档链接与必要编译核对。
 
-构建前检查脚本；便携版使用明确的 --build-only，安装器同样要求 --build-only。构建通过不代表聊天、升级、模型兼容或数据迁移已通过用户验收。
+自2026-10-13起，除用户明确授权的GitHub发布外，不在本机打包；便携包、安装器、ZIP和 --build-only 打包均适用，日常开发完成不自动打包。必要编译或获准发布打包前检查脚本是否包含测试；发布便携版与安装器仍使用明确的 --build-only。编译／打包通过不代表聊天、升级、模型兼容或数据迁移已通过用户验收，发布打包例外也不授权运行测试或模型。
 
 ## 实现导航
 
@@ -34,3 +42,15 @@ npm run lint
 | docs | 使用说明、架构、批准方案与历史维护证据 |
 
 具体 UI → API → 应用 → 存储入口见[交接第 3 节](../HANDOFF.md#3-各部分怎样实现从哪里接手)，架构见[架构概览](architecture/SYSTEM_OVERVIEW.md)。提交和公开发布需要用户授权，不提交密钥、真实存档或构建缓存。
+
+## 发布隐私检查
+
+本地数据库、配置、导出与签名密钥由 .gitignore 排除；已跟踪或强制加入的文件仍须检查。公开文档保留产品契约和必要证据，不写个人目录或私聊原文。打包工具已接入静态隐私门禁；便携目录和安装器解出的实际文件也要通过检查。
+
+```powershell
+python scripts/check-release-privacy.py
+python scripts/check-release-privacy.py --ref HEAD
+python scripts/check-release-privacy.py --package artifacts/portable/本次构建名/dreamtalk
+```
+
+第一个命令检查当前可提交文件，第二个检查真正准备发布的提交，第三个检查实际载荷目录。只报告文件名和问题类型，不输出密钥或正文；它检查已知路径、格式与密钥特征，不能替代人工核对任意格式的数据。历史提交和已发布附件不会因本地文档修改而被清除，本轮也没有重写 Git 历史或修改 GitHub。

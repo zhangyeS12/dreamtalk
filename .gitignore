@@ -14,6 +14,31 @@ Desktop.ini
 !.env.example
 !.env.template
 
+# 本地存档、配置、导出和签名密钥不得随源码发布
+*.db
+*.db-*
+*.sqlite
+*.sqlite-*
+*.sqlite3
+*.sqlite3-*
+*.lwcontent
+*.lworld
+*.dpapi
+*.pfx
+*.p12
+*.key
+*.voicecard
+/data/
+/runtime/
+/config/
+/saves/
+/exports/
+/user-data/
+/app-data/
+llm.json
+desktop-background.json
+speech-credentials.json
+
 # Stage 1 开发环境、缓存和构建产物
 .venv/
 .cache/

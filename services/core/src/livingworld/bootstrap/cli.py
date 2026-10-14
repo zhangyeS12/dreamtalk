@@ -130,6 +130,7 @@ async def run(
     offline_contact = None
     proactive_contact = None
     world_story = None
+    speech = None
     try:
         trigger_registry = TriggerKindRegistry(
             {(INSPECTOR_TRIGGER_KIND, 1): lambda _payload: None} if developer_tools else None
@@ -214,6 +215,15 @@ async def run(
                 database.unit_of_work,
             )
         llm_session = await start_production_llm_session(config.llm_config_path, database, logger)
+        from livingworld.application.chat_media import ChatMediaService
+        from livingworld.infrastructure.media_providers import ChatMediaProviders
+
+        chat_media = ChatMediaService(
+            database.chat_media_store(), ChatMediaProviders(llm_session.credentials), logger
+        )
+        chat_messages.media = chat_media
+        chat_media.maintenance = maintenance
+        await chat_media.store.recover()
         from livingworld.application.action_resolution import ActionResolutionService
         from livingworld.application.conversation_memory import ConversationMemoryService
         from livingworld.application.director import DirectorService
@@ -383,11 +393,26 @@ async def run(
             control_listener.start()
         from livingworld.application.character_activity_setup import CharacterActivitySetupService
         from livingworld.application.chat_export import ChatExportService
+        from livingworld.application.speech import SpeechService
         from livingworld.application.world_content_export import WorldContentExportService
         from livingworld.application.world_covers import WorldCoverService
         from livingworld.application.world_deletion import WorldDeletionService
         from livingworld.infrastructure.exports.json_content import JsonContentExporter
+        from livingworld.infrastructure.speech_cards import inspect_audio
+        from livingworld.infrastructure.speech_providers import IndexSpeechProviders
         from livingworld.infrastructure.world_cover_images import PillowCoverImageProcessor
+
+        speech_store = database.speech_store()
+        await speech_store.recover()
+        speech = SpeechService(
+            speech_store,
+            chat_messages,
+            IndexSpeechProviders(llm_session.credentials, speech_store),
+            inspect_audio,
+            maintenance,
+            logger=logger,
+        )
+        await speech.start()
 
         app = create_app(
             status,
@@ -409,6 +434,8 @@ async def run(
             content_builder,
             database.content_repository(),
             maintenance=maintenance,
+            speech=speech,
+            chat_media=chat_media,
             world_deletion=WorldDeletionService(
                 database.world_deletion_store(),
                 simulation_runtime,
@@ -499,6 +526,8 @@ async def run(
     finally:
         shutdown_error = None
         try:
+            if speech is not None:
+                await speech.aclose()
             if world_story is not None:
                 await world_story.aclose()
             if proactive_contact is not None:

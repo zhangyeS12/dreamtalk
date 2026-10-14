@@ -180,6 +180,15 @@ class ContextPacker:
             total = sum(map(len, self.layout.group_turns))
             omitted = total - len(self.final_data.get("transcript", []))
         categories.append({"label": "近期对话", "included": total - omitted, "omitted": omitted})
+        media = request.metadata.get("chat_media_context_facts")
+        if media is not None and media["library_available"]:
+            categories.append(
+                {
+                    "label": "本轮表情素材",
+                    "included": media["candidate_count"],
+                    "omitted": media["library_sticker_count"] - media["candidate_count"],
+                }
+            )
         report = {
             "version": 1,
             "input_upper_bound": bound,

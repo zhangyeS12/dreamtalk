@@ -35,6 +35,8 @@ def main() -> None:
     if os.name != "nt":
         raise SystemExit("portable_build_requires_windows")
     root = Path(__file__).resolve().parents[1]
+    privacy = root / "scripts" / "check-release-privacy.py"
+    subprocess.run([sys.executable, str(privacy)], check=True, cwd=root)
     artifacts = root / "artifacts"
     if artifacts.is_symlink() or not artifacts.resolve().is_relative_to(root.resolve()):
         raise SystemExit("artifacts_directory_invalid")
@@ -106,7 +108,13 @@ def main() -> None:
     shutil.copy2(root / "docs" / "licenses" / "jieba-0.42.1.txt", package / "JIEBA_LICENSE.txt")
     shutil.copytree(root / "docs" / "licenses", package / "third-party-licenses")
     shutil.copy2(root / "docs" / "PORTABLE_WINDOWS.md", package / "README.md")
+    (package / "scripts").mkdir()
+    shutil.copy2(root / "scripts" / "serve-indextts.py", package / "scripts/serve-indextts.py")
+    shutil.copy2(
+        root / "scripts" / "repair-local-speech.py", package / "scripts/repair-local-speech.py"
+    )
     copy_portable_docs(root, package)
+    subprocess.run([sys.executable, str(privacy), "--package", str(package)], check=True, cwd=root)
     version = json.loads((root / "apps/desktop/package.json").read_text(encoding="utf-8"))[
         "version"
     ]

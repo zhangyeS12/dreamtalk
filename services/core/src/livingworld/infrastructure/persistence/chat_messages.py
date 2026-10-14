@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import replace
 from datetime import UTC, datetime
 from uuid import uuid4
@@ -69,7 +71,15 @@ def _message(row: ChatMessageRecord) -> ChatMessage:
         row.text,
         row.created_at_utc,
         row.story_sent_at_utc,
+        json.loads(row.media_json) if row.media_json else None,
     )
+
+
+def _same_reply_text(row, text):
+    media = json.loads(row.media_json) if row.media_json else None
+    if media and media.get("only_media"):
+        return media.get("fallback_hash") == hashlib.sha256(text.encode()).hexdigest()
+    return row.text == text
 
 
 class SqlAlchemyChatMessageStore(ChatContextReportMixin, ChatReplyRecoveryMixin):
@@ -100,6 +110,8 @@ class SqlAlchemyChatMessageStore(ChatContextReportMixin, ChatReplyRecoveryMixin)
         text: str,
         token_ceiling: int,
         fingerprint: str,
+        *,
+        sticker_entry_id=None,
     ) -> PlayerSend:
         return await self._send_player(
             request_id,
@@ -109,6 +121,7 @@ class SqlAlchemyChatMessageStore(ChatContextReportMixin, ChatReplyRecoveryMixin)
             token_ceiling,
             fingerprint,
             expected_kind="direct",
+            sticker_entry_id=sticker_entry_id,
         )
 
     async def send_group_player(
@@ -119,6 +132,8 @@ class SqlAlchemyChatMessageStore(ChatContextReportMixin, ChatReplyRecoveryMixin)
         text: str,
         token_ceiling: int,
         fingerprint: str,
+        *,
+        sticker_entry_id=None,
     ) -> PlayerSend:
         return await self._send_player(
             request_id,
@@ -128,6 +143,7 @@ class SqlAlchemyChatMessageStore(ChatContextReportMixin, ChatReplyRecoveryMixin)
             token_ceiling,
             fingerprint,
             expected_kind="group",
+            sticker_entry_id=sticker_entry_id,
         )
 
     async def _send_player(
@@ -140,6 +156,7 @@ class SqlAlchemyChatMessageStore(ChatContextReportMixin, ChatReplyRecoveryMixin)
         fingerprint: str,
         *,
         expected_kind: str,
+        sticker_entry_id=None,
     ) -> PlayerSend:
         async with self._sessions() as session, session.begin():
             # SQLite obtains a write reservation before any receipt/position read.
@@ -212,11 +229,19 @@ class SqlAlchemyChatMessageStore(ChatContextReportMixin, ChatReplyRecoveryMixin)
                 position=position,
                 sender_player_id=player_id.value,
                 sender_character_id=None,
-                text=text,
+                text=text if text.strip() else "[表情]",
                 created_at_utc=created_at,
             )
             session.add(row)
             await session.flush()
+            if sticker_entry_id is not None:
+                from livingworld.infrastructure.persistence.chat_media import attach_player_media
+
+                await attach_player_media(session, row, sticker_entry_id)
+                if not text.strip():
+                    value = json.loads(row.media_json)
+                    value["only_media"] = True
+                    row.media_json = json.dumps(value, ensure_ascii=False)
             return PlayerSend(
                 ChatTurnId(conversation_id.world_id, turn_id),
                 _message(row),
@@ -659,7 +684,7 @@ class SqlAlchemyChatMessageStore(ChatContextReportMixin, ChatReplyRecoveryMixin)
             )
 
     async def complete_direct(
-        self, claim: ClaimedDirectTurn, text: str, *, events=(), memories=()
+        self, claim: ClaimedDirectTurn, text: str, *, events=(), memories=(), media=None
     ) -> ChatMessage:
         if not (
             claim.turn_id.world_id
@@ -704,9 +729,8 @@ class SqlAlchemyChatMessageStore(ChatContextReportMixin, ChatReplyRecoveryMixin)
                 )
             )
             if existing is not None:
-                if (
-                    existing.sender_character_id != claim.character_id.value
-                    or existing.text != text
+                if existing.sender_character_id != claim.character_id.value or not _same_reply_text(
+                    existing, text
                 ):
                     raise IdempotencyConflictError("chat_reply_conflict")
                 return _message(existing)
@@ -747,6 +771,9 @@ class SqlAlchemyChatMessageStore(ChatContextReportMixin, ChatReplyRecoveryMixin)
                 await self._story_time(session, world_id, memories),
                 source_player=player_message,
             )
+            from livingworld.infrastructure.persistence.chat_media import attach_character_media
+
+            await attach_character_media(session, row, claim, media)
             execution = await session.get(ChatReplyExecutionRecord, (world_id, claim.turn_id.value))
             if execution is not None:
                 execution.state = "completed"
@@ -832,6 +859,7 @@ class SqlAlchemyChatMessageStore(ChatContextReportMixin, ChatReplyRecoveryMixin)
         *,
         events=(),
         memories=(),
+        media=None,
     ) -> ChatMessage:
         if not (
             claim.turn_id.world_id
@@ -890,7 +918,9 @@ class SqlAlchemyChatMessageStore(ChatContextReportMixin, ChatReplyRecoveryMixin)
             ).all()
             if ordinal < len(replies):
                 existing = replies[ordinal]
-                if existing.sender_character_id != character_id.value or existing.text != text:
+                if existing.sender_character_id != character_id.value or not _same_reply_text(
+                    existing, text
+                ):
                     raise IdempotencyConflictError("chat_reply_conflict")
                 return _message(existing)
             if dispatch.completed_at_utc is not None:
@@ -934,6 +964,9 @@ class SqlAlchemyChatMessageStore(ChatContextReportMixin, ChatReplyRecoveryMixin)
                 await self._story_time(session, world_id, memories),
                 source_player=player_message,
             )
+            from livingworld.infrastructure.persistence.chat_media import attach_character_media
+
+            await attach_character_media(session, row, claim, media)
             return _message(row)
 
     async def finish_group(self, claim: ClaimedGroupTurn) -> GroupTurnView:

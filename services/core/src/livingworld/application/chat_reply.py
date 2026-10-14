@@ -14,6 +14,7 @@ from livingworld.application.chat_capacity import ContextCapacityError, fit_chat
 from livingworld.application.chat_context import DirectChatContextBuilder
 from livingworld.application.chat_event_annotations import (
     AnnotatedDialogue,
+    DialogueFormatError,
     annotate_request,
     annotation_request,
     decode_dialogue,
@@ -21,6 +22,7 @@ from livingworld.application.chat_event_annotations import (
     optional_annotation_request,
     partial_reply,
 )
+from livingworld.application.chat_media import media_request
 from livingworld.application.chat_messages import ChatMessage, ChatMessageService, PlayerSend
 from livingworld.application.llm import (
     FinishReason,
@@ -154,6 +156,8 @@ async def dialogue_text(
     selection: ModelSelection | None,
     progress: ChatProgressSink | None,
     speaker: CharacterId,
+    *,
+    format_failure: Callable[[str], None] | None = None,
 ) -> str | AnnotatedDialogue:
     """Reuse governed execution; stream deltas stay provisional until settlement."""
     try:
@@ -239,7 +243,11 @@ async def dialogue_text(
             )
             if request.streaming and progress is not None and visible and annotated.text != visible:
                 raise ValueError()
-        except ValueError:
+        except ValueError as error:
+            if format_failure is not None:
+                format_failure(
+                    error.reason if isinstance(error, DialogueFormatError) else "stream_mismatch"
+                )
             raise ChatReplyValidationError("chat_reply_format_invalid") from None
         if request.streaming and progress is not None and not visible:
             # Plain dialogue and a complete fenced envelope are withheld until
@@ -249,11 +257,13 @@ async def dialogue_text(
     return text
 
 
-class DirectChatReplyService:
+class ChatReplyConfiguration[ChatContext]:
+    """Shared route configuration; each reply service owns its execution pipeline."""
+
     def __init__(
         self,
         messages: ChatMessageService,
-        context: DirectChatContextBuilder,
+        context: ChatContext,
         gateway: ChatGateway,
         token_bounder: PreflightUsageBounder,
         model: ModelRef,
@@ -283,6 +293,7 @@ class DirectChatReplyService:
         self._selection = selection
         self._input_token_reservation = input_token_reservation
         self._event_capture, self._journal = event_capture, journal
+        self._media = getattr(messages, "media", None)
 
     @property
     def input_token_reservation(self) -> int | None:
@@ -297,6 +308,8 @@ class DirectChatReplyService:
     def available(self) -> bool:
         return self._available()
 
+
+class DirectChatReplyService(ChatReplyConfiguration[DirectChatContextBuilder]):
     async def reply(
         self, sent: PlayerSend, *, progress: ChatProgressSink | None = None
     ) -> ChatMessage:
@@ -320,6 +333,12 @@ class DirectChatReplyService:
             )
         if self._event_capture:
             request = annotate_request(request)
+        if self._media is not None:
+            media_context = await self._media.context(sent, context.character_id)
+            if media_context["media_allowed"]:
+                if not self._event_capture:
+                    request = annotate_request(request)
+            request = media_request(request, media_context, context.layout)
         request = dialogue_request(self._gateway, request, self._selection, progress)
         try:
             self._gateway.plan(request, selection=self._selection)
@@ -336,6 +355,8 @@ class DirectChatReplyService:
             )
         except ContextCapacityError as error:
             raise ChatReplyBudgetError(str(error)) from None
+        if self._media is not None:
+            self._media.packed_context_facts(request)
         claim = await self._messages.claim_direct(sent.message.conversation_id, sent.turn_id)
         async with claimed_reply_execution(self._messages, sent):
             if claim.player_message != sent.message or claim.token_ceiling != sent.token_ceiling:
@@ -345,11 +366,29 @@ class DirectChatReplyService:
             if progress is not None:
                 await progress(ChatProgress("replying", claim.character_id))
             text = await dialogue_text(
-                self._gateway, request, budget, self._selection, progress, claim.character_id
+                self._gateway,
+                request,
+                budget,
+                self._selection,
+                progress,
+                claim.character_id,
+                format_failure=self._media.reply_format_failure
+                if self._media is not None and request.metadata.get("chat_media_requested")
+                else None,
             )
+            media = (
+                await self._media.resolve(sent, claim.character_id, text.media)
+                if self._media is not None and isinstance(text, AnnotatedDialogue)
+                else None
+            )
+            only_media = media is not None and media.only_media
             message = (
                 await self._messages.complete_direct(
-                    claim, text.text, events=text.events, memories=text.memories
+                    claim,
+                    text.text,
+                    events=() if only_media else text.events,
+                    memories=() if only_media else text.memories,
+                    media=media,
                 )
                 if isinstance(text, AnnotatedDialogue)
                 else await self._messages.complete_direct(claim, text)

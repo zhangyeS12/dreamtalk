@@ -1,12 +1,14 @@
 import { useConversationRead } from "./useChatUnread";
 import { ContextReferencePanel } from "./ContextReferencePanel";
 import { MessageTime } from "./MessageTime";
+import { SpeechControls, SpeechFeedback, useSpeechPreviews } from "./SpeechPlayback";
 import { Fragment, useRef, useState } from "react";
 import { CoreClient, type ChatConversation } from "@dreamtalk/api-client";
 import { useChatReplyWorkflow } from "./useChatReplyWorkflow";
 import { ReplyRecoveryControls } from "./ReplyRecoveryControls";
 import { StreamingReplyBubble } from "./StreamingReplyBubble";
 import { useChatScroll } from "./useChatScroll";
+import { MessageMedia, StickerPicker } from "./ChatMedia";
 import { ChatMessageBody } from "./ChatMessageBody";
 import { ChatHistoryPanel } from "./ChatHistoryPanel";
 import { LongChatMemoryPanel } from "./LongChatMemoryPanel";
@@ -40,7 +42,7 @@ export function ChatTranscript({ client, worldId, playerId, conversation, avatar
   const [referenceTurn, setReferenceTurn] = useState<string | null>(null);
   const {
     refresh, setRefresh, available, availabilityReading, availabilityFailed, budgetFeedback,
-    draft, setDraft, pending: pendingSend, phase, sending, setRecoveryBusy, feedback, stream,
+    draft, setDraft, sticker, setSticker, pending: pendingSend, phase, sending, setRecoveryBusy, feedback, stream,
     messages, failed, hasOlder, loadingOlder, loadOlder, followingLatest, showLatest, visibleStreamDraft,
     latestPlayerMessage, checkReply, generateSavedReply, send,
   } = useChatReplyWorkflow({
@@ -48,6 +50,7 @@ export function ChatTranscript({ client, worldId, playerId, conversation, avatar
     speakers: [conversation.character_id], tokenCeiling, suggestedDraft, onSuggestionUsed, onDirtyChange,
   });
   const readReceipt = useConversationRead(client, worldId, conversation.conversation_id, messages);
+  useSpeechPreviews(conversation.conversation_id, messages);
   const { thread, beforePrepend, followBottom } = useChatScroll(messages, visibleStreamDraft?.text);
 
   return <section ref={thread} className="chat-thread" aria-label={`${conversation.character_name}的会话`}>
@@ -79,11 +82,12 @@ export function ChatTranscript({ client, worldId, playerId, conversation, avatar
               {!own && <ContactAvatar name={conversation.character_name} url={avatarUrl} className="message-portrait" />}
               <div className="message-bubble">
                 <span className="message-sender">{own ? "我" : conversation.character_name}</span>
-                <ChatMessageBody text={message.text} />
-                <MessageTime message={message} />{!own ? <button type="button" className="text-action message-reference" onClick={() => setReferenceTurn(message.turn_id)}>本次参考内容</button> : null}
+                <>{!message.media?.only_media && <ChatMessageBody text={message.text} />}<MessageMedia client={client} worldId={worldId} media={message.media} /></>
+                <MessageTime message={message} />{!own ? <><button type="button" className="text-action message-reference" onClick={() => setReferenceTurn(message.turn_id)}>本次参考内容</button>{!message.media?.only_media && <SpeechControls conversation={conversation.conversation_id} message={message.message_id} />}</> : null}
               </div>
             </li></Fragment>;
           })}{visibleStreamDraft ? <StreamingReplyBubble name={conversation.character_name} avatarUrl={avatarUrl} text={visibleStreamDraft.text} /> : null}</ol></>}
+    <SpeechFeedback />
     {conversation.read_only ? <p className="thread-hint" role="status">角色卡已删除，此会话保留为只读历史。</p> : <form className="chat-composer" onSubmit={event => void send(event)}>
       {phase || feedback ? <p role="status" aria-live="polite" className="chat-feedback">{(phase === "replying" && stream.stage === "preparing" ? "消息已保存，正在准备角色回复…" : chatPhaseFeedback(phase, "direct")) || feedback}</p> : null}
       <ReplyRecoveryControls client={client} worldId={worldId} conversationId={conversation.conversation_id} sourceTurnId={latestPlayerMessage?.turn_id} refresh={refresh} tokenCeiling={tokenCeiling} blocked={!available || phase !== null || !!pendingSend} onGenerate={generateSavedReply} onBusyChange={setRecoveryBusy} />
@@ -93,7 +97,7 @@ export function ChatTranscript({ client, worldId, playerId, conversation, avatar
         : !available ? <p className="chat-feedback">当前聊天模型尚不可用，请在设置中核对模型与路由。</p> : null}
       <label htmlFor="direct-chat-draft" className="sr-only">发送给{conversation.character_name}的消息</label>
       <textarea ref={draftInput} id="direct-chat-draft" value={draft} onChange={event => setDraft(event.target.value)} onKeyDown={submitChatOnEnter} disabled={!available || sending || !!pendingSend} maxLength={65536} placeholder="输入消息…" rows={3} />
-      <div className="chat-composer-actions"><small>回车发送 · Shift+回车换行 · 本轮输入与输出共用 {tokenCeiling.toLocaleString("zh-CN")} Token 上限</small>{latestPlayerMessage ? <button type="button" className="text-action" disabled={sending || !!pendingSend} onClick={() => void checkReply()}>检查回复状态</button> : null}{phase === "replying" ? <button type="button" className="text-action" disabled={stream.stopping} onClick={stream.stop}>{stream.stopping ? "正在停止…" : "停止生成"}</button> : null}<button type="submit" className="primary-button" disabled={!available || sending || (!!budgetFeedback && !pendingSend) || (!draft.trim() && !pendingSend)}>{phase === "saving" ? "正在保存…" : phase === "replying" ? "等待回复…" : phase === "checking" ? "检查中…" : pendingSend ? "重试保存" : "发送"}</button></div>
+      <StickerPicker client={client} worldId={worldId} selected={sticker} onSelect={setSticker} disabled={!available || sending || !!pendingSend} /><div className="chat-composer-actions"><small>回车发送 · Shift+回车换行 · 本轮输入与输出共用 {tokenCeiling.toLocaleString("zh-CN")} Token 上限</small>{latestPlayerMessage ? <button type="button" className="text-action" disabled={sending || !!pendingSend} onClick={() => void checkReply()}>检查回复状态</button> : null}{phase === "replying" ? <button type="button" className="text-action" disabled={stream.stopping} onClick={stream.stop}>{stream.stopping ? "正在停止…" : "停止生成"}</button> : null}<button type="submit" className="primary-button" disabled={!available || sending || (!!budgetFeedback && !pendingSend) || (!draft.trim() && !sticker && !pendingSend)}>{phase === "saving" ? "正在保存…" : phase === "replying" ? "等待回复…" : phase === "checking" ? "检查中…" : pendingSend ? "重试保存" : "发送"}</button></div>
     </form>}
   </section>;
 }

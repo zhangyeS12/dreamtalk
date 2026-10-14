@@ -1159,6 +1159,7 @@ class ChatMessageRecord(Base):
     text: Mapped[str] = mapped_column(Text, nullable=False)
     created_at_utc: Mapped[datetime] = mapped_column(UTCTimestampStorage(), nullable=False)
     story_sent_at_utc: Mapped[datetime | None] = mapped_column(UTCTimestampStorage())
+    media_json: Mapped[str | None] = mapped_column(Text())
     __table_args__ = (
         ForeignKeyConstraint(
             ["world_id", "conversation_id"],
