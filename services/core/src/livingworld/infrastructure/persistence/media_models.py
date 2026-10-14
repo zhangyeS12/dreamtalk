@@ -78,6 +78,7 @@ class MediaAttemptRecord(Base):
     source_position: Mapped[int] = mapped_column(Integer(), nullable=False)
     searched: Mapped[bool] = mapped_column(Boolean(), nullable=False)
     sent: Mapped[bool] = mapped_column(Boolean(), nullable=False)
+    sent_kind: Mapped[str | None] = mapped_column(String(16), nullable=True)
     __table_args__ = (
         Index("ix_media_conversation", "world_id", "conversation_id", "source_position"),
     )

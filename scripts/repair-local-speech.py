@@ -13,7 +13,7 @@ import urllib.request
 from ctypes import wintypes
 from pathlib import Path
 
-REVISION = 7
+REVISION = 8
 
 
 class RepairError(ValueError):

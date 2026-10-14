@@ -113,7 +113,8 @@ SPEECH_PREVIEW_REVISION = "0047_speech_preview"
 MEDIA_REVISION = "0048_chat_media"
 LOCAL_MODEL_LIMITS_REVISION = "0049_local_model_limits"
 STICKER_LIBRARY_FRESHNESS_REVISION = "0050_sticker_library_freshness"
-HEAD_REVISION = STICKER_LIBRARY_FRESHNESS_REVISION
+MEDIA_FREQUENCY_KIND_REVISION = "0051_media_frequency_kind"
+HEAD_REVISION = MEDIA_FREQUENCY_KIND_REVISION
 
 # One reviewed linear chain replaces repeated hand-maintained suffix sets.
 _SUPPORTED_REVISIONS = (
@@ -166,6 +167,7 @@ _SUPPORTED_REVISIONS = (
     SPEECH_PREVIEW_REVISION,
     MEDIA_REVISION,
     LOCAL_MODEL_LIMITS_REVISION,
+    STICKER_LIBRARY_FRESHNESS_REVISION,
     HEAD_REVISION,
 )
 _REVISION_RANGES = {
@@ -401,6 +403,9 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
     pre_speech_cache_revision = revision not in _REVISION_RANGES[SPEECH_CACHE_REVISION]
     pre_speech_preview_revision = revision not in _REVISION_RANGES[SPEECH_PREVIEW_REVISION]
     pre_media_revision = revision not in _REVISION_RANGES[MEDIA_REVISION]
+    pre_media_frequency_kind_revision = (
+        revision not in _REVISION_RANGES[MEDIA_FREQUENCY_KIND_REVISION]
+    )
     pre_local_model_limits_revision = revision not in _REVISION_RANGES[LOCAL_MODEL_LIMITS_REVISION]
     pre_sticker_library_freshness_revision = (
         revision not in _REVISION_RANGES[STICKER_LIBRARY_FRESHNESS_REVISION]
@@ -663,6 +668,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
             pre_media_revision=pre_media_revision,
             pre_local_model_limits_revision=pre_local_model_limits_revision,
             pre_sticker_library_freshness_revision=pre_sticker_library_freshness_revision,
+            pre_media_frequency_kind_revision=pre_media_frequency_kind_revision,
             pre_location_name_scope_revision=pre_location_name_scope_revision,
         )
     if revision in {
@@ -768,6 +774,7 @@ def _validate_domain_shape(
     pre_media_revision: bool = True,
     pre_local_model_limits_revision: bool = True,
     pre_sticker_library_freshness_revision: bool = True,
+    pre_media_frequency_kind_revision: bool = True,
 ) -> None:
     """Detect partial/mismatched schemas; never infer a revision from them."""
 
@@ -965,6 +972,11 @@ def _validate_domain_shape(
                 else column.nullable,
             )
             for column in table.columns
+            if not (
+                pre_media_frequency_kind_revision
+                and table.name == "chat_media_attempts"
+                and column.name == "sent_kind"
+            )
             if not (
                 pre_sticker_library_freshness_revision
                 and table.name == "chat_sticker_entries"

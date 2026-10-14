@@ -1,6 +1,6 @@
 # Windows 应用更新
 
-当前全面更新版本为 [0.1.53](https://github.com/zhangyeS12/dreamtalk/releases/tag/v0.1.53)，继承 0.1.46 起的更新入口与完整安装包。0.1.48 修复了 0.1.46／0.1.47 的安装清单问题，历史证据见[修复记录](maintenance/2026-10-08-update-manifest-fix.md)。固定[更新频道](https://github.com/zhangyeS12/dreamtalk/releases/tag/update-preview)用于应用内检查；真实跨版升级仍由用户验收。
+当前审查修复版本为 [0.1.77](https://github.com/zhangyeS12/dreamtalk/releases/tag/v0.1.77)，继承 0.1.46 起的更新入口与完整安装包。0.1.48 修复了 0.1.46／0.1.47 的安装清单问题，历史证据见[修复记录](maintenance/2026-10-08-update-manifest-fix.md)。固定[更新频道](https://github.com/zhangyeS12/dreamtalk/releases/tag/update-preview)用于应用内检查；真实跨版升级仍由用户验收。
 
 ## 使用
 
@@ -51,10 +51,10 @@ pwsh -File scripts/updater-signing.ps1 -Mode Import -RecoveryFile E:\Backup\drea
 
 ## 发布流程
 
-只有获得对应版本 GitHub 发布授权后执行。2026-10-14用户已明确授权v0.1.76配音／表情大更新，包括源码、完整Windows下载和既有更新频道；本轮证据见[发布记录](maintenance/2026-10-14-major-release.md)。此前v0.1.53保留原发布；历史 v0.1.48 修复交付另见[修复记录](maintenance/2026-10-08-update-manifest-fix.md)。
+只有获得对应版本 GitHub 发布授权后执行。2026-10-14用户已明确授权v0.1.77审查修复发布，包括源码、完整Windows下载和既有更新频道；本轮证据见[发布记录](maintenance/2026-10-14-review-fixes-release.md)，原0.1.76大更新记录保持。此前v0.1.53保留原发布；历史 v0.1.48 修复交付另见[修复记录](maintenance/2026-10-08-update-manifest-fix.md)。
 
 1. 编译签名完整包，更新`docs/releases/v<version>.md`中的用户可读说明，检查产物清单和SHA256。
-2. 创建版本Release（如`v0.1.47`，当前仍预发布），上传安装器、`.sig`、便携ZIP、SHA256SUMS及说明。
+2. 创建版本Release（如`v0.1.77`，当前仍预发布），上传安装器、`.sig`、便携ZIP、SHA256SUMS及说明。
 3. 版本资产上传成功后，将该版本`windows.json`上传／替换到固定`update-preview` Release，文件名必须`windows.json`。首次需创建此频道Release；它承载当前预发布清单。
 4. 频道内容使用更高SemVer、对应完整安装器URL及签名。仅提交源码、仅发布便携包或只创建版本Release都不够。
 5. 用户验收跨版本下载／校验／等待任务／安装／Core重启／系统入口／旧文件回收。工程端不把产物存在当作这条链已验收。

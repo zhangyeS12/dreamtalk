@@ -109,7 +109,13 @@ class ChatExportService:
                     yield (("," if count else "") + _json(value)).encode("utf-8")
                 else:
                     extra = f" · 剧情发送：{story}" if story else ""
-                    yield (f"[{created}{extra}] {name}\r\n{message.text}\r\n\r\n").encode()
+                    attachment = ""
+                    if message.media:
+                        # Match JSON's metadata without embedding any image bytes.
+                        attachment = "\r\n附件元数据：" + _json(message.media)
+                    yield (
+                        f"[{created}{extra}] {name}\r\n{message.text}{attachment}\r\n\r\n"
+                    ).encode()
                 count += 1
                 cursor = message.position
         if count != snapshot.message_count:

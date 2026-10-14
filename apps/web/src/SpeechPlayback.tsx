@@ -72,7 +72,6 @@ const phases: Record<string, string> = {
   synthesizing: "本地模型正在合成声音", saving_audio: "正在保存声音",
   downloading_audio: "声音已生成，正在读取音频", validating_audio: "正在核对音频",
   waiting_remote: "任务处理中，远程服务尚未返回完成结果",
-  waiting_legacy_local: "旧版本地服务处理中，尚不支持查询阶段；请升级本地桥接服务",
 };
 function waitForStatus(signal: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {

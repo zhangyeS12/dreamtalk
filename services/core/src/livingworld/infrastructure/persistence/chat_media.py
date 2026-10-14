@@ -97,27 +97,32 @@ async def media_allowed(
     kind="image",
     unlimited_stickers=False,
 ):
-    if kind == "sticker" and unlimited_stickers:
-        # Unlimited removes the inter-round interval, never the original-round
-        # attachment limit shared by group speakers and recovery attempts.
-        sent = await session.scalar(
-            select(MediaAttemptRecord.turn_id)
-            .where(
-                MediaAttemptRecord.world_id == world,
-                MediaAttemptRecord.conversation_id == conversation,
-                MediaAttemptRecord.source_position == source_position,
-                MediaAttemptRecord.sent.is_(True),
-            )
-            .limit(1)
-        )
-        return sent is None
-    latest = await session.scalar(
-        select(func.max(MediaAttemptRecord.source_position)).where(
+    # Every media kind shares the original-round limit, including recovery.
+    sent = await session.scalar(
+        select(MediaAttemptRecord.turn_id)
+        .where(
             MediaAttemptRecord.world_id == world,
             MediaAttemptRecord.conversation_id == conversation,
+            MediaAttemptRecord.source_position == source_position,
             MediaAttemptRecord.sent.is_(True),
         )
+        .limit(1)
     )
+    if sent is not None:
+        return False
+    if kind == "sticker" and unlimited_stickers:
+        return True
+    history = select(func.max(MediaAttemptRecord.source_position)).where(
+        MediaAttemptRecord.world_id == world,
+        MediaAttemptRecord.conversation_id == conversation,
+        MediaAttemptRecord.sent.is_(True),
+    )
+    if unlimited_stickers:
+        # Unknown old receipts conservatively count as images; no body backfill.
+        history = history.where(
+            or_(MediaAttemptRecord.sent_kind == "image", MediaAttemptRecord.sent_kind.is_(None))
+        )
+    latest = await session.scalar(history)
     if latest is None:
         return True
     rounds = await session.scalar(
@@ -212,6 +217,7 @@ async def attach_character_media(session, row, source, prepared):
     if attempt.sent:
         return
     attempt.sent = True
+    attempt.sent_kind = prepared.kind
     row.media_json = json.dumps(
         {
             **asset_view(asset),
@@ -286,6 +292,16 @@ class SqlAlchemyChatMediaStore:
             stmt = (
                 select(StickerEntryRecord, MediaAssetRecord)
                 .join(MediaAssetRecord)
+                .options(
+                    load_only(
+                        MediaAssetRecord.asset_id,
+                        MediaAssetRecord.description,
+                        MediaAssetRecord.mime,
+                        MediaAssetRecord.source_url,
+                        MediaAssetRecord.caption_state,
+                        raiseload=True,
+                    )
+                )
                 .where(StickerEntryRecord.library_key == key, StickerEntryRecord.active.is_(True))
             )
             if query.strip():

@@ -93,129 +93,86 @@ class IndexSpeechProviders:
                     raise SpeechError("speech_local_unavailable") from None
                 if health.status_code == 401:
                     raise SpeechError("speech_local_key_required")
-                if health.status_code != 404:
-                    info = await json_response(health)
-                    if info.get("protocol") != 2 or info.get("engine") != "indextts-2.5":
-                        raise SpeechError("speech_provider_protocol")
-                    if info.get("inference_revision") != 7:
-                        raise SpeechError("speech_local_bridge_outdated")
-                    created = await client.post(
-                        settings.local_url + "/jobs",
+                if health.status_code == 404:
+                    raise SpeechError("speech_local_bridge_outdated")
+                info = await json_response(health)
+                if info.get("protocol") != 2 or info.get("engine") != "indextts-2.5":
+                    raise SpeechError("speech_provider_protocol")
+                if info.get("inference_revision") != 8:
+                    raise SpeechError("speech_local_bridge_outdated")
+                created = await client.post(
+                    settings.local_url + "/jobs",
+                    headers=headers,
+                    json={
+                        "engine": "indextts-2.5",
+                        "text": text,
+                        "language": manifest["language"],
+                        "speed": manifest["speed"],
+                        "reference_name": manifest["reference"],
+                        "reference_base64": base64.b64encode(card.audio).decode("ascii"),
+                        "request_id": str(identity),
+                    },
+                )
+                if created.status_code == 409:
+                    raise SpeechError("speech_busy")
+                await json_response(created)
+                await save_remote(str(identity))
+                for _ in range(900):
+                    response = await client.get(
+                        settings.local_url + "/jobs/" + str(identity),
                         headers=headers,
-                        json={
-                            "engine": "indextts-2.5",
-                            "text": text,
-                            "language": manifest["language"],
-                            "speed": manifest["speed"],
-                            "reference_name": manifest["reference"],
-                            "reference_base64": base64.b64encode(card.audio).decode("ascii"),
-                            "request_id": str(identity),
-                        },
+                        timeout=10,
                     )
-                    if created.status_code == 409:
-                        raise SpeechError("speech_busy")
-                    await json_response(created)
-                    await save_remote(str(identity))
-                    for _ in range(900):
-                        response = await client.get(
-                            settings.local_url + "/jobs/" + str(identity),
-                            headers=headers,
-                            timeout=10,
-                        )
-                        if not response.is_success:
-                            raise SpeechError("speech_status_lost")
-                        result = await json_response(response, job_status=True)
-                        state = result.get("state")
-                        if state == "ready":
-                            progress("downloading_audio")
-                            data = bytearray()
-                            async with client.stream(
-                                "GET",
-                                settings.local_url + "/jobs/" + str(identity) + "/audio",
-                                headers=headers,
-                            ) as response:
-                                if not response.is_success:
-                                    raise SpeechError("speech_audio_download_failed")
-                                async for chunk in response.aiter_bytes():
-                                    if len(data) + len(chunk) > MAX_AUDIO_BYTES:
-                                        raise SpeechError("voice_audio_size_limit")
-                                    data.extend(chunk)
-                            return bytes(data)
-                        if state == "failed":
-                            if result.get("error") in {
-                                "speech_audio_incomplete",
-                                "speech_sentence_capacity",
-                            }:
-                                raise SpeechError(result["error"])
-                            raise SpeechError("speech_generation_failed")
-                        if state == "expired":
-                            raise SpeechError("speech_cache_expired")
-                        if state != "running":
-                            raise SpeechError("speech_provider_protocol")
-                        phase = result.get("phase")
-                        if phase not in {
-                            "accepted",
-                            "loading_model",
-                            "preparing_text",
-                            "synthesizing",
-                            "saving_audio",
-                        }:
-                            raise SpeechError("speech_provider_protocol")
-                        segment, segments = result.get("segment"), result.get("segments")
-                        if segment is not None and (
-                            type(segment) is not int
-                            or type(segments) is not int
-                            or not 1 <= segment <= segments <= 2000
-                        ):
-                            raise SpeechError("speech_provider_protocol")
-                        progress(phase, segment, segments)
-                        await asyncio.sleep(1)
-                    raise SpeechError("speech_status_lost")
-                progress("waiting_legacy_local")
-                try:
-                    async with client.stream(
-                        "POST",
-                        settings.local_url + "/speech",
-                        headers=headers,
-                        json={
-                            "engine": "indextts-2.5",
-                            "text": text,
-                            "language": manifest["language"],
-                            "speed": manifest["speed"],
-                            "reference_name": manifest["reference"],
-                            "reference_base64": base64.b64encode(card.audio).decode("ascii"),
-                            "request_id": str(identity),
-                        },
-                    ) as response:
-                        if response.status_code == 401:
-                            raise SpeechError("speech_local_key_required")
-                        if response.status_code == 409:
-                            raise SpeechError("speech_busy")
-                        if response.status_code == 502:
-                            failure = bytearray()
-                            async for chunk in response.aiter_bytes():
-                                if len(failure) + len(chunk) > 4096:
-                                    raise SpeechError("speech_outcome_unknown")
-                                failure.extend(chunk)
-                            try:
-                                detail = json.loads(failure).get("detail")
-                            except (ValueError, AttributeError):
-                                detail = None
-                            if detail == "speech_local_generation_failed":
-                                raise SpeechError("speech_generation_failed")
-                            raise SpeechError("speech_outcome_unknown")
-                        if not response.is_success:
-                            raise SpeechError("speech_local_unavailable")
+                    if not response.is_success:
+                        raise SpeechError("speech_status_lost")
+                    result = await json_response(response, job_status=True)
+                    state = result.get("state")
+                    if state == "ready":
+                        progress("downloading_audio")
                         data = bytearray()
-                        async for chunk in response.aiter_bytes():
-                            if len(data) + len(chunk) > MAX_AUDIO_BYTES:
-                                raise SpeechError("voice_audio_size_limit")
-                            data.extend(chunk)
+                        async with client.stream(
+                            "GET",
+                            settings.local_url + "/jobs/" + str(identity) + "/audio",
+                            headers=headers,
+                        ) as response:
+                            if not response.is_success:
+                                raise SpeechError("speech_audio_download_failed")
+                            async for chunk in response.aiter_bytes():
+                                if len(data) + len(chunk) > MAX_AUDIO_BYTES:
+                                    raise SpeechError("voice_audio_size_limit")
+                                data.extend(chunk)
                         return bytes(data)
-                except (httpx.ConnectError, httpx.ConnectTimeout):
-                    # A failed connection sent no generation request. Read/write
-                    # failures after dispatch remain uncertain in the service.
-                    raise SpeechError("speech_local_unavailable") from None
+                    if state == "failed":
+                        if result.get("error") in {
+                            "speech_audio_incomplete",
+                            "speech_sentence_capacity",
+                            "speech_outcome_unknown",
+                        }:
+                            raise SpeechError(result["error"])
+                        raise SpeechError("speech_generation_failed")
+                    if state == "expired":
+                        raise SpeechError("speech_cache_expired")
+                    if state != "running":
+                        raise SpeechError("speech_provider_protocol")
+                    phase = result.get("phase")
+                    if phase not in {
+                        "accepted",
+                        "loading_model",
+                        "preparing_text",
+                        "synthesizing",
+                        "saving_audio",
+                    }:
+                        raise SpeechError("speech_provider_protocol")
+                    segment, segments = result.get("segment"), result.get("segments")
+                    if segment is not None and (
+                        type(segment) is not int
+                        or type(segments) is not int
+                        or not 1 <= segment <= segments <= 2000
+                    ):
+                        raise SpeechError("speech_provider_protocol")
+                    progress(phase, segment, segments)
+                    await asyncio.sleep(1)
+                raise SpeechError("speech_status_lost")
             if settings.provider == "huggingface":
                 progress("waiting_remote")
                 return await self._huggingface(client, secret, card, manifest, text, save_remote)

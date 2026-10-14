@@ -1,6 +1,6 @@
 # 项目名称与兼容标识
 
-正式公开名称为 **dreamtalk**（小写）。README、网页标题、应用标题、Tauri 产品名和新构建产物使用此名称。项目计划发布至 GitHub；此文档不代表远程仓库或发行版已经创建。
+正式公开名称为 **dreamtalk**（小写）。README、网页标题、应用标题、Tauri 产品名和新构建产物使用此名称。源码与Windows预发布已公开于[GitHub](https://github.com/zhangyeS12/dreamtalk)；当前版本见[主页](../../README.md)。
 
 以下旧标识暂时保持稳定，以便现有开发数据、会话与导入内容继续可用：
 
@@ -15,4 +15,4 @@
 
 仓库本机路径 `D:\LivingWorld` 也暂时保持不变。路径、应用数据标识和凭据 namespace 的统一迁移必须单独设计与验证；不得通过简单字符串替换导致用户数据不可见。Stage 0 的 W-001 原始研究报告和 Architecture Review 001 是历史归档，保留当时的 LivingWorld 名称及原文。
 
-开源许可证为仓库根目录的 [Apache License 2.0](../../LICENSE)。正式公开前仍须核查 Git 历史中的秘密、第三方素材和发布包；当前未配置 GitHub 远程地址，也未声称已发布。
+开源许可证为仓库根目录的 [Apache License 2.0](../../LICENSE)。每次公开发布前仍须核查源码、第三方素材和实际载荷；检查已知特征不代表旧Git历史或任意隐私内容已经清除。

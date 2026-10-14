@@ -6,6 +6,7 @@ pub mod llm_config;
 pub mod local_images;
 pub mod local_speech;
 pub mod media_credentials;
+pub mod scoped_credentials;
 pub mod speech_credentials;
 pub mod supervisor;
 pub mod updater;
@@ -30,6 +31,78 @@ use credentials::{
 type SharedSupervisor = Arc<Mutex<CoreSupervisor>>;
 type SharedCredentialStore = Arc<dyn CredentialStore>;
 
+async fn put_scoped_credential(
+    domain: scoped_credentials::CredentialDomain,
+    world: &str,
+    reference: &str,
+    secret: &str,
+    config: &LaunchConfig,
+    credentials: &SharedCredentialStore,
+    supervisor: &SharedSupervisor,
+) -> Result<(), String> {
+    let mut supervisor = supervisor.lock().await;
+    let exists = credentials.exists(reference).map_err(credential_error)?;
+    domain
+        .authorize_reference(config, world, reference, exists)
+        .await
+        .map_err(str::to_owned)?;
+    credentials
+        .put(reference, secret)
+        .map_err(credential_error)?;
+    if let Err(error) = domain.register(config, world, reference).await {
+        if !exists {
+            let _ = credentials.delete(reference);
+        }
+        return Err(error.to_owned());
+    }
+    supervisor
+        .provision_credential(reference, secret)
+        .await
+        .map_err(str::to_owned)
+}
+
+async fn forget_scoped_credentials(
+    domain: scoped_credentials::CredentialDomain,
+    world: &str,
+    reference: Option<&str>,
+    keep: Option<&str>,
+    config: &LaunchConfig,
+    credentials: &SharedCredentialStore,
+    supervisor: &SharedSupervisor,
+) -> Result<(), String> {
+    let mut supervisor = supervisor.lock().await;
+    if let Some(keep) = keep {
+        domain
+            .authorize_reference(
+                config,
+                world,
+                keep,
+                credentials.exists(keep).map_err(credential_error)?,
+            )
+            .await
+            .map_err(str::to_owned)?;
+    }
+    let references = domain
+        .world_references(config, world, reference)
+        .await
+        .map_err(str::to_owned)?;
+    for reference in references {
+        if keep == Some(reference.as_str()) {
+            continue;
+        }
+        credentials.delete(&reference).map_err(credential_error)?;
+        if let Err(error) = supervisor.remove_session_credential(&reference).await {
+            let _ = supervisor.stop(Duration::from_secs(3)).await;
+            return Err(error.to_owned());
+        }
+        domain
+            .forget(config, world, Some(&reference))
+            .await
+            .map_err(str::to_owned)?;
+    }
+    Ok(())
+}
+
 #[tauri::command]
 async fn speech_credential_put(
     world_id: String,
@@ -44,23 +117,16 @@ async fn speech_credential_put(
         .operation
         .try_lock()
         .map_err(|_| "update_busy".to_owned())?;
-    let mut supervisor = supervisor.lock().await;
-    let exists = credentials.exists(&secret_ref).map_err(credential_error)?;
-    speech_credentials::authorize_reference(&config, &world_id, &secret_ref, exists)
-        .await
-        .map_err(str::to_owned)?;
-    credentials
-        .put(&secret_ref, &secret)
-        .map_err(credential_error)?;
-    if let Err(error) = speech_credentials::register(&config, &world_id, &secret_ref).await {
-        let _ = credentials.delete(&secret_ref);
-        secret.clear();
-        return Err(error.to_owned());
-    }
-    let result = supervisor
-        .provision_credential(&secret_ref, &secret)
-        .await
-        .map_err(str::to_owned);
+    let result = put_scoped_credential(
+        speech_credentials::REGISTRY,
+        &world_id,
+        &secret_ref,
+        &secret,
+        &config,
+        &credentials,
+        &supervisor,
+    )
+    .await;
     secret.clear();
     result
 }
@@ -78,22 +144,16 @@ async fn forget_speech_credentials(
         .operation
         .try_lock()
         .map_err(|_| "update_busy".to_owned())?;
-    let mut supervisor = supervisor.lock().await;
-    let references =
-        speech_credentials::world_references(&config, &world_id, secret_ref.as_deref())
-            .await
-            .map_err(str::to_owned)?;
-    for reference in references {
-        credentials.delete(&reference).map_err(credential_error)?;
-        if let Err(error) = supervisor.remove_session_credential(&reference).await {
-            let _ = supervisor.stop(Duration::from_secs(3)).await;
-            return Err(error.to_owned());
-        }
-        speech_credentials::forget(&config, &world_id, Some(&reference))
-            .await
-            .map_err(str::to_owned)?;
-    }
-    Ok(())
+    forget_scoped_credentials(
+        speech_credentials::REGISTRY,
+        &world_id,
+        secret_ref.as_deref(),
+        None,
+        &config,
+        &credentials,
+        &supervisor,
+    )
+    .await
 }
 
 #[tauri::command]
@@ -110,23 +170,16 @@ async fn media_credential_put(
         .operation
         .try_lock()
         .map_err(|_| "update_busy".to_owned())?;
-    let mut supervisor = supervisor.lock().await;
-    let exists = credentials.exists(&secret_ref).map_err(credential_error)?;
-    media_credentials::authorize_reference(&config, &world_id, &secret_ref, exists)
-        .await
-        .map_err(str::to_owned)?;
-    credentials
-        .put(&secret_ref, &secret)
-        .map_err(credential_error)?;
-    if let Err(error) = media_credentials::register(&config, &world_id, &secret_ref).await {
-        let _ = credentials.delete(&secret_ref);
-        secret.clear();
-        return Err(error.to_owned());
-    }
-    let result = supervisor
-        .provision_credential(&secret_ref, &secret)
-        .await
-        .map_err(str::to_owned);
+    let result = put_scoped_credential(
+        media_credentials::REGISTRY,
+        &world_id,
+        &secret_ref,
+        &secret,
+        &config,
+        &credentials,
+        &supervisor,
+    )
+    .await;
     secret.clear();
     result
 }
@@ -135,6 +188,7 @@ async fn media_credential_put(
 async fn forget_media_credentials(
     world_id: String,
     secret_ref: Option<String>,
+    keep_secret_ref: Option<String>,
     config: State<'_, LaunchConfig>,
     credentials: State<'_, SharedCredentialStore>,
     supervisor: State<'_, SharedSupervisor>,
@@ -144,21 +198,16 @@ async fn forget_media_credentials(
         .operation
         .try_lock()
         .map_err(|_| "update_busy".to_owned())?;
-    let mut supervisor = supervisor.lock().await;
-    let references = media_credentials::world_references(&config, &world_id, secret_ref.as_deref())
-        .await
-        .map_err(str::to_owned)?;
-    for reference in references {
-        credentials.delete(&reference).map_err(credential_error)?;
-        if let Err(error) = supervisor.remove_session_credential(&reference).await {
-            let _ = supervisor.stop(Duration::from_secs(3)).await;
-            return Err(error.to_owned());
-        }
-        media_credentials::forget(&config, &world_id, Some(&reference))
-            .await
-            .map_err(str::to_owned)?;
-    }
-    Ok(())
+    forget_scoped_credentials(
+        media_credentials::REGISTRY,
+        &world_id,
+        secret_ref.as_deref(),
+        keep_secret_ref.as_deref(),
+        &config,
+        &credentials,
+        &supervisor,
+    )
+    .await
 }
 
 #[tauri::command]

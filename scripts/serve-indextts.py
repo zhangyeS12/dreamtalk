@@ -14,6 +14,7 @@ import logging
 import math
 import os
 import re
+import sqlite3
 import tempfile
 import threading
 import time
@@ -27,7 +28,7 @@ from fastapi import FastAPI, Header, HTTPException, Request, Response
 from pydantic import BaseModel, ConfigDict, Field
 
 log = logging.getLogger("dreamtalk.speech.local")
-INFERENCE_REVISION = 7
+INFERENCE_REVISION = 8
 CACHE_SECONDS = 6 * 60 * 60
 DECODE_CANDIDATES = 3
 DECODE_BEAMS = 1
@@ -45,6 +46,47 @@ class IncompleteSpeechError(ValueError):
 
 class SentenceCapacityError(ValueError):
     pass
+
+
+class SpeechReceipts:
+    """Content-free dispatch receipts outlive the bounded in-memory audio cache."""
+
+    def __init__(self, path):
+        if path.is_symlink():
+            raise ValueError("speech_receipts_path_invalid")
+        self.connection = sqlite3.connect(path, isolation_level=None)
+        self.connection.execute("PRAGMA journal_mode=WAL")
+        self.connection.execute(
+            "CREATE TABLE IF NOT EXISTS receipts "
+            "(identity TEXT PRIMARY KEY, state TEXT NOT NULL, error TEXT)"
+        )
+
+    def claim(self, identity):
+        return (
+            self.connection.execute(
+                "INSERT OR IGNORE INTO receipts VALUES (?, 'running', NULL)", (identity,)
+            ).rowcount
+            == 1
+        )
+
+    def finish(self, identity, state, error=None):
+        self.connection.execute(
+            "UPDATE receipts SET state = ?, error = ? WHERE identity = ?", (state, error, identity)
+        )
+
+    def lookup(self, identity):
+        row = self.connection.execute(
+            "SELECT state, error FROM receipts WHERE identity = ?", (identity,)
+        ).fetchone()
+        if row is None:
+            return None
+        state, error = row
+        if state == "running":
+            # A restart or another bridge owns this claim. Never infer it again.
+            state, error = "failed", "speech_outcome_unknown"
+        elif state == "ready":
+            state, error = "expired", "speech_cache_expired"
+        return dict(state=state, phase=state, segment=None, segments=None, error=error)
 
 
 class ReferenceIdentity:
@@ -378,6 +420,9 @@ def main():
     model = None
     reference_identity = ReferenceIdentity()
     jobs = {}
+    receipts = SpeechReceipts(
+        options.token_file.resolve().parent / "dreamtalk-speech-receipts.sqlite3"
+    )
     status_lock = threading.Lock()
     cache_changed = asyncio.Event()
 
@@ -394,6 +439,11 @@ def main():
                     job.update(state="expired", phase="expired", error="speech_cache_expired")
                 else:
                     delay = min(delay, remaining)
+            # Keep recent live/cache metadata bounded without losing dispatch IDs.
+            terminal = [key for key, job in jobs.items() if job["state"] != "running"]
+            terminal.sort(key=lambda key: "audio" in jobs[key])
+            for identity in terminal[: max(0, len(jobs) - 1024)]:
+                del jobs[identity]
         return max(0.1, delay)
 
     async def clean_cache():
@@ -413,6 +463,7 @@ def main():
         finally:
             cleanup.cancel()
             await asyncio.gather(cleanup, return_exceptions=True)
+            receipts.connection.close()
 
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
 
@@ -546,12 +597,14 @@ def main():
 
     async def run(body, reference, job):
         try:
-            job["audio"] = await asyncio.to_thread(infer, body, reference, job)
+            data = await asyncio.to_thread(infer, body, reference, job)
+            receipts.finish(body.request_id, "ready")
+            job["audio"] = data
             job["audio_saved"] = time.monotonic()
             job["state"] = "ready"
             phase(job, "ready")
             cache_changed.set()
-            # Bounded derived audio; receipts remain so an old ID never regenerates.
+            # Bounded derived audio; durable receipts prevent old-ID regeneration.
             total = sum(len(item.get("audio", b"")) for item in jobs.values())
             for item in jobs.values():
                 if total <= 96 * 1024 * 1024:
@@ -575,7 +628,14 @@ def main():
             job.update(state="failed", error="speech_generation_failed")
             phase(job, "failed")
         finally:
+            if job["state"] == "failed":
+                try:
+                    receipts.finish(body.request_id, "failed", job["error"])
+                except sqlite3.Error:
+                    # The durable running claim remains unknown, never replayable.
+                    log.error("local_speech receipt_update_failed")
             gate.release()
+            cache_changed.set()
 
     def snapshot(job):
         with status_lock:
@@ -621,11 +681,18 @@ def main():
             raise HTTPException(422, "speech_request_invalid") from None
         if body.request_id in jobs:
             return body.request_id, snapshot(jobs[body.request_id])
+        if stored := receipts.lookup(body.request_id):
+            return body.request_id, stored
         if gate.locked():
             raise HTTPException(409, "speech_local_busy")
-        if len(jobs) >= 1024:
-            raise HTTPException(503, "speech_local_receipts_full")
         await gate.acquire()
+        try:
+            if not receipts.claim(body.request_id):
+                gate.release()
+                return body.request_id, receipts.lookup(body.request_id)
+        except sqlite3.Error:
+            gate.release()
+            raise HTTPException(503, "speech_local_receipts_unavailable") from None
         job = {
             "state": "running",
             "phase": "accepted",
@@ -650,7 +717,9 @@ def main():
     async def legacy_speech(request: Request, authorization: str = Header(default="")):
         # Preserve the old single-response transport without another inference.
         identity, _result = await submit(request, authorization)
-        job = jobs[identity]
+        job = jobs.get(identity)
+        if job is None:
+            raise HTTPException(502, "speech_cache_expired")
         if task := job.get("task"):
             await asyncio.shield(task)
         if job["state"] != "ready" or "audio" not in job:
@@ -661,9 +730,11 @@ def main():
     async def status(identity: str, authorization: str = Header(default="")):
         authorize(authorization)
         expire_audio()
-        if identity not in jobs:
-            raise HTTPException(404, "speech_job_not_found")
-        return snapshot(jobs[identity])
+        if identity in jobs:
+            return snapshot(jobs[identity])
+        if stored := receipts.lookup(identity):
+            return stored
+        raise HTTPException(404, "speech_job_not_found")
 
     @app.get("/jobs/{identity}/audio")
     async def audio(identity: str, authorization: str = Header(default="")):

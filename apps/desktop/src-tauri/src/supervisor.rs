@@ -324,7 +324,8 @@ impl CoreSupervisor {
                 self.provision_credentials(&llm_configuration.credential_refs)
                     .await?;
                 // Missing optional voice keys must not degrade text-model configuration.
-                if let Ok(references) = crate::speech_credentials::references(config).await {
+                if let Ok(references) = crate::speech_credentials::REGISTRY.references(config).await
+                {
                     for reference in references {
                         if let Ok(mut secret) = self.credentials.resolve(&reference) {
                             self.provision_credential(&reference, &secret).await?;
@@ -332,7 +333,8 @@ impl CoreSupervisor {
                         }
                     }
                 }
-                if let Ok(references) = crate::media_credentials::references(config).await {
+                if let Ok(references) = crate::media_credentials::REGISTRY.references(config).await
+                {
                     for reference in references {
                         if let Ok(mut secret) = self.credentials.resolve(&reference) {
                             self.provision_credential(&reference, &secret).await?;

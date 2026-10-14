@@ -8,11 +8,11 @@ dreamtalk 是一款开源桌面应用。你可以创建自己的世界，导入�
 
 每个世界有自己的角色、地点、聊天和记忆。你可以在一个世界是璃月的旅人，在另一个世界是新艾利都的居民，随时回到书架换一本书。
 
-[下载 Windows 体验版](https://github.com/zhangyeS12/dreamtalk/releases/tag/v0.1.76) · [本次更新内容](docs/releases/v0.1.76.md) · [完整设置说明](docs/SETTINGS_HANDBOOK.md) · [反馈问题](https://github.com/zhangyeS12/dreamtalk/issues)
+[下载 Windows 体验版](https://github.com/zhangyeS12/dreamtalk/releases/tag/v0.1.77) · [本次更新内容](docs/releases/v0.1.77.md) · [完整设置说明](docs/SETTINGS_HANDBOOK.md) · [反馈问题](https://github.com/zhangyeS12/dreamtalk/issues)
 
 目前提供 **Windows 10 / 11 的 64 位体验版**。应用免费开源；聊天所用的模型服务需要你自己提供 API 密钥，服务商可能按使用量收费。当前版本仍在持续完善，欢迎反馈实际体验。
 
-0.1.76是配音、表情包与聊天图片大更新：角色可使用公共／专属表情，用户有自己的表情库；支持按聊天环境配图、可选联网与图片分析。用户已确认角色发送和新增表情识别有效，使用方法见[表情与图片](docs/CHAT_MEDIA.md)。
+0.1.77修复本地配音长期运行、媒体频率、表情列表和图片密钥保存问题。此前配音、表情与图片能力保持：角色可使用公共／专属表情，用户有自己的表情库；支持按聊天环境配图、可选联网与图片分析。用户已确认角色发送和新增表情识别有效，使用方法见[表情与图片](docs/CHAT_MEDIA.md)。
 
 角色可绑定参考人声或音色卡，生成配音、复用六小时缓存，以及重新配音后试听决定是否替换。本地配音效果已有用户确认；官方免费云端最新版和付费API仍待确认，见[角色配音](docs/CHARACTER_VOICES.md)。本地配音／视觉模型需要另行准备，下载包不附带这些权重或参考录音；未部署视觉模型时可手动填写表情说明。
 
@@ -20,9 +20,9 @@ dreamtalk 是一款开源桌面应用。你可以创建自己的世界，导入�
 
 ### 1. 安装
 
-推荐下载 [Windows 安装包](https://github.com/zhangyeS12/dreamtalk/releases/download/v0.1.76/dreamtalk_0.1.76_x64-setup.exe)，按提示安装。
+推荐下载 [Windows 安装包](https://github.com/zhangyeS12/dreamtalk/releases/download/v0.1.77/dreamtalk_0.1.77_x64-setup.exe)，按提示安装。
 
-也可以使用 [便携版压缩包](https://github.com/zhangyeS12/dreamtalk/releases/download/v0.1.76/dreamtalk-0.1.76-windows-x64.zip)：完整解压到一个固定目录，打开 dreamtalk 文件夹里的 dreamtalk-desktop.exe。不要直接在压缩包中运行，也不要只复制其中的程序文件。
+也可以使用 [便携版压缩包](https://github.com/zhangyeS12/dreamtalk/releases/download/v0.1.77/dreamtalk-0.1.77-windows-x64.zip)：完整解压到一个固定目录，打开 dreamtalk 文件夹里的 dreamtalk-desktop.exe。不要直接在压缩包中运行，也不要只复制其中的程序文件。
 
 下载页中的 **Source code** 是给开发者看的源码，请选择上面的安装包或便携包。若系统缺少网页显示组件，可安装 [Microsoft WebView2](https://developer.microsoft.com/microsoft-edge/webview2/)。首次安装可能提示未知发布者：目前已有应用更新签名，但尚无 Windows 发布者证书。
 

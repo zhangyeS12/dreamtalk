@@ -132,12 +132,14 @@ export function ChatMediaSettingsPanel({ client, worldId, onDirtyChange }: { cli
   const [usage, setUsage] = useState<number | null>(null), [refresh, setRefresh] = useState(0);
   const [loading, setLoading] = useState(true);
   const [local, setLocal] = useState<LocalImageStatus | null>(null);
-  const dirty = JSON.stringify(value) !== JSON.stringify(saved) || Boolean(key) || busy;
+  const pendingReference = useRef<string | null>(null), saving = useRef(false);
+  const dirty = JSON.stringify(value) !== JSON.stringify(saved) || Boolean(key) || Boolean(pendingReference.current) || busy;
   useDesktopUpdateBlock(busy ? "正在处理图片设置或本机服务。" : dirty ? "图片设置尚未保存。" : null);
   useEffect(() => { onDirtyChange(dirty); return () => onDirtyChange(false); }, [dirty, onDirtyChange]);
   useEffect(() => {
     let active = true; const controller = new AbortController();
     setLoading(true); setFeedback(""); setValue(null); setSaved(null); setUsage(null);
+    pendingReference.current = null; setKey("");
     void client.mediaSettings(worldId, controller.signal).then(settings => { if (active) { setValue(settings); setSaved(settings); } }).catch(failure => { if (active) setFeedback(`未能读取设置。${failureText(failure)}`); }).finally(() => { if (active) setLoading(false); });
     void client.mediaUsage(worldId).then(result => { if (active) setUsage(result.caption_calls); }).catch(() => undefined);
     return () => { active = false; controller.abort(); };
@@ -161,17 +163,33 @@ export function ChatMediaSettingsPanel({ client, worldId, onDirtyChange }: { cli
   };
   const update = (patch: Partial<ChatMediaSettings>) => setValue(current => current ? { ...current, ...patch } : current);
   const save = async () => {
-    if (!value || busy) return;
+    if (!value || busy || saving.current) return;
+    saving.current = true;
     setBusy(true); setFeedback("");
     try {
       const next = { ...value };
       if (isTauri() && next.caption_route === "ollama" && next.caption_model.trim() && ["http://127.0.0.1:11434", "http://localhost:11434"].includes(next.caption_endpoint.replace(/\/$/, ""))) {
         setLocal(await invoke<LocalImageStatus>("prepare_local_image", { modelRoot: null }));
       }
-      if (key) { next.secret_ref = `media:${worldId}:${crypto.randomUUID()}`; await invoke("media_credential_put", { worldId, secretRef: next.secret_ref, secret: key }); }
-      const result = await client.saveMediaSettings(worldId, next); setSaved(result); setValue(result); setKey(""); setFeedback("已保存。保存设置不会发起搜索或图片分析。");
+      if (key) {
+        if (!isTauri()) throw new Error("desktop_credentials_required");
+        // Read the persisted reference before pruning, including an uncertain
+        // previous save whose response may have been lost. Keep the active key.
+        const current = await client.mediaSettings(worldId);
+        await invoke("forget_media_credentials", { worldId, secretRef: null, keepSecretRef: current.secret_ref });
+        next.secret_ref = pendingReference.current ?? `media:${worldId}:${crypto.randomUUID()}`;
+        pendingReference.current = next.secret_ref;
+        await invoke("media_credential_put", { worldId, secretRef: next.secret_ref, secret: key });
+      } else if (pendingReference.current) next.secret_ref = pendingReference.current;
+      const result = await client.saveMediaSettings(worldId, next);
+      setSaved(result); setValue(result); setKey(""); pendingReference.current = null;
+      setFeedback("已保存。保存设置不会发起搜索或图片分析。");
+      if (isTauri()) {
+        try { await invoke("forget_media_credentials", { worldId, secretRef: null, keepSecretRef: result.secret_ref }); }
+        catch { setFeedback("设置已保存；旧密钥清理未完成，下次保存会再次清理。"); }
+      }
     } catch (failure) { setFeedback(key && !(failure instanceof CoreRequestError) ? "密钥未能安全保存。云端密钥需要在桌面版配置。" : failureText(failure)); }
-    finally { setBusy(false); }
+    finally { saving.current = false; setBusy(false); }
   };
   return <section className="chat-media-settings">{value ? <><label className="speech-check"><input type="checkbox" checked={value.enabled} disabled={busy} onChange={event => update({ enabled: event.target.checked })} /><span>允许角色按聊天环境发送表情或图片</span></label><label className="speech-check"><input type="checkbox" checked={Boolean(value.unlimited_stickers)} disabled={busy} onChange={event => update({ unlimited_stickers: event.target.checked })} /><span>不限制角色发送表情包的频率<small>开启后每轮都可以发表情，仍由角色按聊天需要选择；每轮最多一张，群聊所有角色合计。</small></span></label><label className="field"><span>{value.unlimited_stickers ? "普通图片发送频率" : "发送频率"}</span><input type="number" min={1} max={1000} value={value.frequency} disabled={busy} onChange={event => update({ frequency: Number(event.target.value) })} /><small>任意连续{value.frequency || "N"}轮聊天，角色合计最多发送一张{value.unlimited_stickers ? "普通图片；表情包不受这个间隔限制" : "表情或图片"}。达到间隔也不必发送；群聊所有角色共用每轮限额。</small></label><label className="speech-check"><input type="checkbox" checked={value.online_enabled} disabled={busy} onChange={event => update({ online_enabled: event.target.checked })} /><span>允许联网找图<small>表情仅在需要发送且公共与专属库没有匹配时搜索。普通图片按聊天主题搜索；每轮最多一次搜索，失败保留文字。</small></span></label><details><summary>图片分析与用量</summary><div className="media-analysis-fields"><label className="speech-check"><input type="checkbox" checked={value.auto_caption} disabled={busy} onChange={event => update({ auto_caption: event.target.checked })} /><span>自动分析新导入或联网获取的素材<small>仅处理新图；已有分析结果不会重复调用。GIF分析首帧，播放保留动画。</small></span></label><label className="field"><span>分析方式</span><select value={value.caption_route} disabled={busy} onChange={event => update({ caption_route: event.target.value as "ollama" | "compatible", caption_endpoint: event.target.value === "ollama" ? "http://127.0.0.1:11434" : "", secret_ref: null, remote_caption_consent: false })}><option value="ollama">本机Ollama视觉模型</option><option value="compatible">云端视觉模型（Chat Completions兼容）</option></select></label>{value.caption_route === "ollama" && isTauri() && ["http://127.0.0.1:11434", "http://localhost:11434"].includes(value.caption_endpoint.replace(/\/$/, "")) && <div className="speech-local-service"><p role="status">{local?.state === "ready" ? "本机图片服务已启动" : "本机图片服务尚未就绪"}</p><div className="profile-actions"><button type="button" disabled={busy} onClick={() => void prepareLocal(false)}>检查并启动图片服务</button><button type="button" className="text-action" disabled={busy} onClick={() => void prepareLocal(true)}>选择模型目录</button></div>{local?.model_root && <details><summary>查看模型目录</summary><p className="inline-hint">{local.model_root}</p></details>}</div>}<label className="field"><span>服务地址{value.caption_route === "compatible" ? "（填至/v1，不含/chat/completions）" : ""}</span><input value={value.caption_endpoint} disabled={busy} onChange={event => update({ caption_endpoint: event.target.value })} /></label><label className="field"><span>完整视觉模型名称</span><input value={value.caption_model} disabled={busy} onChange={event => update({ caption_model: event.target.value })} /></label>{value.caption_route === "compatible" && <><label className="field"><span>API密钥{value.secret_ref ? "（已保存，留空保留）" : ""}</span><input type="password" autoComplete="new-password" value={key} disabled={busy} onChange={event => setKey(event.target.value)} /></label><label className="speech-check"><input type="checkbox" checked={value.remote_caption_consent} disabled={busy} onChange={event => update({ remote_caption_consent: event.target.checked })} /><span>我同意将待分析图片发送至上述服务，并承担其可能产生的费用。聊天正文与角色资料不附带发送。</span></label></>}{value.caption_route === "compatible" && <label className="field"><span>全机每日云端图片分析次数上限（UTC日期，0表示禁止）</span><input type="number" min={0} max={1000} value={value.daily_caption_limit} disabled={busy} onChange={event => update({ daily_caption_limit: Number(event.target.value) })} /></label>}<label className="field"><span>每次分析输出Token上限</span><input type="number" min={32} max={1024} value={value.caption_output_tokens} disabled={busy} onChange={event => update({ caption_output_tokens: Number(event.target.value) })} /></label><p className="inline-hint">{value.caption_route === "ollama" ? "本机图片分析不限次数。服务随dreamtalk启动；开启程序的开机后台启动后，也会随登录启动。模型首次分析时加载，空闲后释放显存。" : <>今天已提交{usage ?? "…"}次云端分析。失败与未知结果也计次；输入图片也可能收费，次数与输出上限不等于账单金额上限。</>}</p></div></details><button type="button" className="primary-button" disabled={busy || !dirty} onClick={() => void save()}>{busy ? "正在保存…" : "保存设置"}</button></> : loading ? <p role="status">正在读取设置…</p> : <button type="button" onClick={() => setRefresh(old => old + 1)}>重新读取设置</button>}{feedback && <p className="app-alert" role="status">{feedback}</p>}</section>;
 }

@@ -131,7 +131,7 @@ async fn health(secret: &str) -> Result<Option<bool>, String> {
     if info["engine"] != "indextts-2.5" || info["protocol"] != 2 {
         return Err("speech_provider_protocol".into());
     }
-    if info["inference_revision"] != 7 {
+    if info["inference_revision"] != 8 {
         return Err("speech_local_bridge_outdated".into());
     }
     Ok(Some(true))
@@ -388,13 +388,15 @@ async fn provision(
     let exists = credentials
         .exists(secret_ref)
         .map_err(|_| "speech_key_required")?;
-    speech_credentials::authorize_reference(config, world_id, secret_ref, exists)
+    speech_credentials::REGISTRY
+        .authorize_reference(config, world_id, secret_ref, exists)
         .await
         .map_err(str::to_owned)?;
     credentials
         .put(secret_ref, secret)
         .map_err(|_| "speech_key_required")?;
-    speech_credentials::register(config, world_id, secret_ref)
+    speech_credentials::REGISTRY
+        .register(config, world_id, secret_ref)
         .await
         .map_err(str::to_owned)?;
     host.provision_credential(secret_ref, secret)
@@ -421,7 +423,8 @@ pub async fn repair_local_speech(
     let exists = credentials
         .exists(&secret_ref)
         .map_err(|_| "speech_key_required")?;
-    speech_credentials::authorize_reference(&config, &world_id, &secret_ref, exists)
+    speech_credentials::REGISTRY
+        .authorize_reference(&config, &world_id, &secret_ref, exists)
         .await
         .map_err(str::to_owned)?;
     let connection = supervisor
