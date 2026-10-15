@@ -85,6 +85,7 @@ export function SaveBackupPanel({ recovery = false, initial }: { recovery?: bool
     {status?.credential_cleanup_incomplete && <p className="app-alert" role="alert">仍有已登记的旧API密钥等待清理。清理记录已保留；可在下方再次确认清空，以重试移除。</p>}
     {status && <><p className="inline-hint">{status.current ? `当前存档：${status.current.counts.worlds} 个世界、${status.current.counts.chat_messages} 条消息。` : "当前存档暂未读取。"}有变化时每 {status.automatic_minutes} 分钟自动备份，保留近7日每日备份和最近3次升级前备份。</p>{status.backup_directory && <p className="inline-hint">备份位置：{status.backup_directory}</p>}</>}
     {status?.can_retry_start && <div className="setting-row"><p className="inline-hint">重新检查会使用当前存档完成启动与升级核对，保留原数据和备份。核对通过后进入书架；不会恢复或重发旧生成任务。</p><button type="button" className="secondary-button" disabled={working || Boolean(blockReason)} onClick={() => void act("retry_save_start")}>{working ? "正在重新检查…" : "重新检查并启动"}</button></div>}
+    {status?.problem === "save_restored_review_required" && <button type="button" className="secondary-button" disabled={working || !status.current} onClick={() => void act("resume_restored_save")}>确认并继续使用</button>}
     <details className="handbook-fold" open={recovery ? undefined : true}><summary><strong>历史快照与恢复</strong><span>需要找回以前的内容时展开；恢复会替换当前存档</span></summary>
     <div className="setting-row"><button type="button" className="secondary-button" disabled={working || recovery || !status} onClick={() => void act("create_save_backup", {}, "完整存档备份已保存并通过校验。")}>立即备份</button>
       <button type="button" className="secondary-button" disabled={working} onClick={() => void act("configure_save_backup_location", {}, "备份位置已更新，旧备份仍保留。")}>选择备份位置</button>
@@ -95,7 +96,6 @@ export function SaveBackupPanel({ recovery = false, initial }: { recovery?: bool
       <label className="field"><span><input type="checkbox" checked={confirmed} disabled={working} onChange={event => setConfirmed(event.target.checked)} />我确认恢复这份备份，替换当前存档</span></label>
       {blockReason && <p className="inline-hint">{blockReason} 完成编辑后才能恢复存档。</p>}
       <div className="setting-row"><button type="button" className="secondary-button" disabled={working || !confirmed || Boolean(blockReason)} onClick={() => void act("restore_save_backup", { snapshotId: selected, confirmed: true })}>{working ? "正在处理…" : "恢复所选备份"}</button><button type="button" className="secondary-button" disabled={working} onClick={() => void act("export_save_backup", { snapshotId: selected }, "完整备份文件已导出。")}>导出所选备份</button></div></>}
-    {status?.problem === "save_restored_review_required" && <button type="button" className="secondary-button" disabled={working || !status.current} onClick={() => void act("resume_restored_save")}>确认并继续使用</button>}
     {status?.can_rollback && <div className="setting-row"><p className="inline-hint">本次升级尚未完成存档核对，可以恢复匹配的旧程序与升级前存档。当前文件会另行保留；应用将关闭并重新打开。</p><button type="button" className="secondary-button" disabled={working} onClick={() => void act("rollback_desktop_update")}>回退本次未完成的升级</button></div>}
     </details>
     <p className="inline-hint">备份只在本机保存，不调用模型或自动上传。导出文件包含私人聊天和素材，请妥善保存；换机后需要重新填写API密钥。</p>
