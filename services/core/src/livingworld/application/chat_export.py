@@ -2,7 +2,7 @@
 
 import json
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC
 from hashlib import sha256
 
 from livingworld.application.errors import EntityNotFoundError
@@ -50,8 +50,9 @@ class ChatExportSnapshot:
 
 
 class ChatExportService:
-    def __init__(self, store, players):
+    def __init__(self, store, players, wall_clock):
         self._store, self._players = store, players
+        self._clock = wall_clock
 
     async def snapshot(self, conversation, through_position=None, expected_player=None):
         player = await self._players.selected_player(conversation.world_id)
@@ -63,7 +64,7 @@ class ChatExportService:
         metadata = {
             "format": "dreamtalk.chat",
             "version": 1,
-            "exported_at_utc": datetime.now(UTC).isoformat(),
+            "exported_at_utc": self._clock.now_utc().isoformat(),
             **snapshot.metadata(),
         }
         if format == "json":

@@ -105,7 +105,8 @@ class ProductionLLMSession:
         if self.runtime is not None:
             await self.runtime.aclose()
         for runtime in self.world_runtimes.values():
-            await runtime.aclose()
+            if runtime is not None:
+                await runtime.aclose()
 
 
 def _scoped_value(session, factory):
@@ -398,8 +399,10 @@ async def start_production_llm_session(
 ) -> ProductionLLMSession:
     """Load the immutable snapshot while allowing optional LLM failure isolation."""
     try:
-        configuration, worlds = load_world_configurations(config_path)
-        configurations = (configuration, *worlds.values())
+        configuration, worlds = load_world_configurations(config_path, isolate_invalid=True)
+        configurations = tuple(
+            item for item in (configuration, *worlds.values()) if item is not None
+        )
         expected = tuple(
             dict.fromkeys(
                 item.providers[entry.model.provider_id].config.secret_ref
@@ -409,19 +412,29 @@ async def start_production_llm_session(
             )
         )
         credentials = SessionCredentialProvider(expected)
-        runtime = await build_production_llm_runtime(
-            configuration, database, logger, credentials=credentials
+        runtime = (
+            None
+            if configuration is None
+            else await build_production_llm_runtime(
+                configuration, database, logger, credentials=credentials
+            )
         )
         world_runtimes = {}
         try:
             for world, item in worlds.items():
-                world_runtimes[world] = await build_production_llm_runtime(
-                    item, database, logger, credentials=credentials
+                world_runtimes[world] = (
+                    None
+                    if item is None
+                    else await build_production_llm_runtime(
+                        item, database, logger, credentials=credentials
+                    )
                 )
         except BaseException:
-            await runtime.aclose()
+            if runtime is not None:
+                await runtime.aclose()
             for owned in world_runtimes.values():
-                await owned.aclose()
+                if owned is not None:
+                    await owned.aclose()
             raise
         return ProductionLLMSession(credentials, runtime, world_runtimes)
     except LLMProductionConfigurationError:

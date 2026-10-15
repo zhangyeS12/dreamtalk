@@ -169,7 +169,8 @@ def test_player_send_rejects_blank_or_unbounded_text_before_write(tmp_path):
     asyncio.run(run())
 
 
-def test_transcript_pages_are_bounded_stable_and_owner_scoped(tmp_path):
+@pytest.mark.parametrize("total", [69, 140])
+def test_transcript_pages_are_bounded_stable_and_owner_scoped(tmp_path, total):
     db = Database(tmp_path)
     clock = SystemWallClock()
     handler = CommandHandler(
@@ -248,7 +249,7 @@ def test_transcript_pages_are_bounded_stable_and_owner_scoped(tmp_path):
 
         async def check_context_window():
             latest = None
-            for index in range(7, 70):
+            for index in range(7, total + 1):
                 latest = await messages.send_player(
                     RequestId(uuid4()), conversation.conversation_id, f"消息{index}", 50_000
                 )
@@ -257,16 +258,23 @@ def test_transcript_pages_are_bounded_stable_and_owner_scoped(tmp_path):
             bounded = await messages.context_messages(
                 conversation.conversation_id, latest.message, allow_current_replies=False
             )
-            assert len(full) == 69
-            assert len(bounded) == 33
-            assert [item.position for item in bounded] == list(range(37, 70))
+            assert len(full) == total
+            # Store reads 128 prior turns plus the current turn; prompt assembly
+            # then enforces its separate 128-message ceiling without splitting turns.
+            assert len(bounded) == min(total, 129)
+            assert [item.position for item in bounded] == list(
+                range(max(1, total - 128), total + 1)
+            )
+            prompt = recent_chat_transcript(bounded, latest.message, allow_current_replies=False)
+            assert len(prompt) == min(total, 128)
+            assert prompt[-1] == latest.message
             assert recent_chat_transcript(
                 bounded, latest.message, allow_current_replies=False
             ) == recent_chat_transcript(full, latest.message, allow_current_replies=False)
 
             claim = await messages.claim_direct(conversation.conversation_id, first.turn_id)
             delayed = await messages.complete_direct(claim, "很晚才到的回复")
-            assert delayed.position == 70
+            assert delayed.position == total + 1
             assert (
                 await messages.context_messages(
                     conversation.conversation_id, latest.message, allow_current_replies=False
@@ -357,7 +365,9 @@ def test_chat_transcript_http_is_authenticated_and_bound_to_selected_world_playe
                     "sender_kind": "player",
                     "sender_id": str(conversation.player_id.value),
                     "text": "仅当前玩家可见",
+                    "media": None,
                     "created_at_utc": sent.message.created_at_utc.isoformat(),
+                    "story_sent_at_utc": None,
                 }
             ]
             timestamp = datetime.fromisoformat(response.json()[0]["created_at_utc"])
@@ -397,7 +407,11 @@ def test_chat_transcript_http_is_authenticated_and_bound_to_selected_world_playe
             assert client.get(
                 f"/api/v1/worlds/{worlds[0].value}/conversations/reply-availability",
                 headers=headers,
-            ).json() == {"available": False}
+            ).json() == {
+                "available": False,
+                "input_token_reservation": None,
+                "max_output_tokens": None,
+            }
             assert client.post(path, json=body, headers=send_headers).json() == pending
             assert (
                 client.post(path, json={**body, "text": "改写"}, headers=send_headers).status_code

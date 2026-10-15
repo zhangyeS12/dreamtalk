@@ -194,6 +194,34 @@
       "input_tokens": 1048576,
       "output_tokens": 65536,
       "bound_encoding": null
+    },
+    {
+      "provider_kind": "openai-compatible",
+      "provider_id": "kimi",
+      "model_id": "kimi-k2.5",
+      "base_urls": [
+        "https://api.moonshot.cn/v1"
+      ],
+      "context_tokens": 262144,
+      "input_tokens": 262144,
+      "output_tokens": 262144,
+      "bound_encoding": null,
+      "reviewed_at": "2026-10-15",
+      "source": "https://www.kimi.ai/help/kimi-api/api-troubleshooting"
+    },
+    {
+      "provider_kind": "openai-compatible",
+      "provider_id": "glm",
+      "model_id": "glm-4.7",
+      "base_urls": [
+        "https://api.z.ai/api/paas/v4"
+      ],
+      "context_tokens": 200000,
+      "input_tokens": 200000,
+      "output_tokens": 128000,
+      "bound_encoding": null,
+      "reviewed_at": "2026-10-15",
+      "source": "https://docs.z.ai/guides/llm/glm-4.7"
     }
   ]
 }

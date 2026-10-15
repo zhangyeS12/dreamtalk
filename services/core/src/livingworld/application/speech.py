@@ -9,8 +9,6 @@ from datetime import datetime, timedelta
 from time import monotonic
 from uuid import UUID, uuid4, uuid5
 
-import httpx
-
 from livingworld.application.llm_config import CredentialUnavailableError
 from livingworld.application.speech_contracts import CACHE_SECONDS, SpeechError
 from livingworld.application.speech_signal import pcm_signal_facts
@@ -250,8 +248,6 @@ class SpeechService:
             await self.store.finish(world, identity, "unknown", error="speech_timeout")
         except CredentialUnavailableError:
             await self.store.finish(world, identity, "failed", error="speech_key_required")
-        except httpx.HTTPError:
-            await self.store.finish(world, identity, "unknown", error="speech_status_lost")
         except SpeechError as error:
             state = (
                 "unknown"

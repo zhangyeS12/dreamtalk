@@ -135,6 +135,23 @@ def dialogue_request(gateway, request, selection, progress) -> LLMRequest:
     return streamed
 
 
+PROVIDER_FAILURE_CODES = {
+    LLMErrorCode.AUTHENTICATION: "chat_provider_authentication",
+    LLMErrorCode.PERMISSION_DENIED: "chat_provider_permission_denied",
+    LLMErrorCode.NOT_FOUND: "chat_provider_not_found",
+    LLMErrorCode.RATE_LIMITED: "chat_provider_rate_limited",
+    LLMErrorCode.QUOTA_EXHAUSTED: "chat_provider_quota_exhausted",
+    LLMErrorCode.TIMEOUT: "chat_provider_timeout",
+    LLMErrorCode.CONTEXT_LIMIT: "chat_provider_context_limit",
+    LLMErrorCode.UNSUPPORTED_CAPABILITY: "chat_provider_unsupported",
+}
+
+
+def generation_failure_code(failure):
+    code = str(failure)
+    return code if code in PROVIDER_FAILURE_CODES.values() else "chat_generation_failed"
+
+
 def _generation_error(failure):
     if failure.code is LLMErrorCode.STRUCTURED_OUTPUT_FAILED:
         reason = failure.structured_detail.reason if failure.structured_detail else None
@@ -146,7 +163,8 @@ def _generation_error(failure):
             else "chat_reply_format_invalid"
         )
         return ChatReplyValidationError(code)
-    return ChatReplyGenerationError("chat_generation_failed")
+    code = PROVIDER_FAILURE_CODES.get(failure.code, "chat_generation_failed")
+    return ChatReplyGenerationError(code)
 
 
 async def dialogue_text(
@@ -343,10 +361,6 @@ class DirectChatReplyService(ChatReplyConfiguration[DirectChatContextBuilder]):
             request = media_request(request, media_context, context.layout)
         request = dialogue_request(self._gateway, request, self._selection, progress)
         try:
-            self._gateway.plan(request, selection=self._selection)
-        except RoutingError:
-            raise ChatReplyUnavailableError("chat_model_unavailable") from None
-        try:
             request, report = await fit_chat_context(
                 request,
                 context.layout,
@@ -355,6 +369,8 @@ class DirectChatReplyService(ChatReplyConfiguration[DirectChatContextBuilder]):
                 self._selection,
                 sent.token_ceiling,
             )
+        except RoutingError:
+            raise ChatReplyUnavailableError("chat_model_unavailable") from None
         except ContextCapacityError as error:
             raise ChatReplyBudgetError(str(error)) from None
         if self._media is not None:

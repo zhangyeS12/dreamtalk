@@ -77,7 +77,17 @@ def test_known_event_http_requires_auth_and_returns_only_safe_display_fields():
         assert event["title"] == "有人移动了位置"
         assert event["occurred_at"] == "5"
         assert event["observed_at"] == "7"
-        assert set(event) == {"event_id", "title", "occurred_at", "observed_at", "ledger_position"}
+        assert set(event) == {
+            "event_id",
+            "title",
+            "occurred_at",
+            "observed_at",
+            "ledger_position",
+            "description",
+            "observation_channel",
+        }
+        assert event["description"] is None
+        assert event["observation_channel"] is None
         assert (
             client.post(
                 f"{path}/me/player", headers=headers, json={"player_id": str(feed.player.value)}

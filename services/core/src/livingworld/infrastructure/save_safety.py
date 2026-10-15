@@ -720,16 +720,17 @@ def quarantine_restored_tasks(database: Path) -> None:
                 connection.execute(
                     f"UPDATE \"{table}\" SET enabled=0,state='off',revision=revision+1"
                 )
-        for table, states in (
-            ("director_plans", ("planning",)),
-            ("world_news_batches", ("queued", "dispatched")),
-            ("offline_contact_episodes", ("queued", "planning", "writing")),
-            ("proactive_contact_episodes", ("writing",)),
+        for table, states, has_error in (
+            ("director_plans", ("planning",), True),
+            ("world_news_batches", ("queued", "dispatched"), False),
+            ("offline_contact_episodes", ("queued", "planning", "writing"), True),
+            ("proactive_contact_episodes", ("writing",), True),
         ):
             if table in tables:
                 placeholders = ",".join("?" for _ in states)
+                error_assignment = ",error='save_restored'" if has_error else ""
                 connection.execute(
-                    f"UPDATE \"{table}\" SET state='interrupted',error='save_restored' "
+                    f"UPDATE \"{table}\" SET state='interrupted'{error_assignment} "
                     f"WHERE state IN ({placeholders})",
                     states,
                 )

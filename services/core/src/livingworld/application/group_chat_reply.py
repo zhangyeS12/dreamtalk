@@ -22,10 +22,10 @@ from livingworld.application.chat_reply import (
     ChatProgressSink,
     ChatReplyBudgetError,
     ChatReplyConfiguration,
-    ChatReplyGenerationError,
     ChatReplyIntegrityError,
     ChatReplyUnavailableError,
     ChatReplyValidationError,
+    _generation_error,
     claimed_reply_execution,
     dialogue_request,
     dialogue_text,
@@ -133,8 +133,8 @@ class GroupChatReplyService(ChatReplyConfiguration[GroupChatContextBuilder]):
             raise ChatReplyUnavailableError("chat_model_unavailable") from None
         except ExecutionDeadlineError:
             raise ChatReplyUnavailableError("chat_route_deadline_exhausted") from None
-        except LLMError:
-            raise ChatReplyGenerationError("chat_generation_failed") from None
+        except LLMError as failure:
+            raise _generation_error(failure.failure) from None
         finally:
             _count_group_fact("selection_ms", int((perf_counter() - started) * 1000))
         if budget.bound_violated:

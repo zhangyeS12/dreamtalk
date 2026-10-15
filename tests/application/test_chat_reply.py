@@ -2,6 +2,7 @@
 
 import asyncio
 import io
+import json
 from dataclasses import replace
 from datetime import UTC, datetime
 from types import SimpleNamespace
@@ -122,11 +123,26 @@ class _Messages:
             datetime.now(UTC),
         )
 
+    async def save_context_report(self, sent, character, report):
+        assert sent.turn_id == self.claim.turn_id
+        assert character == self.claim.character_id
+        assert report["input_upper_bound"] + report["output_upper_bound"] <= sent.token_ceiling
+
+    async def fail_reply_execution(self, sent, validation_failed):
+        assert sent.turn_id == self.claim.turn_id
+        assert isinstance(validation_failed, bool)
+
 
 class _Context:
     async def build(self, sent):
         assert sent.message.text == "玩家私聊"
-        return DirectChatContext((LLMMessage(MessageRole.USER, (TextContent("玩家私聊"),)),))
+        return DirectChatContext(
+            (
+                LLMMessage(MessageRole.SYSTEM, (TextContent("保持角色身份"),)),
+                LLMMessage(MessageRole.USER, (TextContent(json.dumps({"character": {}})),)),
+                LLMMessage(MessageRole.USER, (TextContent("玩家私聊"),)),
+            )
+        )
 
 
 class _Gateway:

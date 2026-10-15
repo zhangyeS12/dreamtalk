@@ -221,8 +221,9 @@ async fn forget_media_credentials(
 #[tauri::command]
 async fn core_connection(
     supervisor: State<'_, SharedSupervisor>,
+    config: State<'_, LaunchConfig>,
 ) -> Result<CoreConnection, String> {
-    let deadline = tokio::time::Instant::now() + Duration::from_secs(14);
+    let deadline = tokio::time::Instant::now() + config.startup_timeout + Duration::from_secs(5);
     loop {
         {
             let supervisor = supervisor.lock().await;
@@ -238,6 +239,58 @@ async fn core_connection(
         }
         tokio::time::sleep(Duration::from_millis(40)).await;
     }
+}
+
+#[tauri::command]
+async fn retry_core_start(
+    app: tauri::AppHandle,
+    config: State<'_, LaunchConfig>,
+    supervisor: State<'_, SharedSupervisor>,
+    updates: State<'_, updater::UpdateState>,
+) -> Result<CoreConnection, String> {
+    let _operation = updates.operation.try_lock().map_err(|_| "update_busy")?;
+    let mut host = supervisor.lock().await;
+    let (connection, restarted) = recover_core_start(&config, &mut host).await?;
+    if !restarted {
+        return Ok(connection);
+    }
+    drop(host);
+    updater::verify_pending_start(&app, &config, &supervisor).await?;
+    let (startup_app, startup_config, startup_supervisor) = (
+        app.clone(),
+        config.inner().clone(),
+        supervisor.inner().clone(),
+    );
+    tauri::async_runtime::spawn(async move {
+        tokio::join!(
+            local_speech::on_start(
+                startup_app.clone(),
+                startup_config.clone(),
+                startup_supervisor.clone()
+            ),
+            local_images::on_start(startup_app, startup_config, startup_supervisor),
+        );
+    });
+    Ok(connection)
+}
+
+async fn recover_core_start(
+    config: &LaunchConfig,
+    host: &mut CoreSupervisor,
+) -> Result<(CoreConnection, bool), String> {
+    // A late successful start is reused; never stop a live model task to retry UI discovery.
+    if let Ok(connection) = host.connection() {
+        return Ok((connection, false));
+    }
+    if host.state != supervisor::SupervisorState::Failed || !host.safely_stopped() {
+        return Err("core_start_in_progress".into());
+    }
+    if updater::update_unverified(config) {
+        return Err("save_update_retry_unavailable".into());
+    }
+    host.start(config).await.map_err(str::to_owned)?;
+    let connection = host.connection().map_err(str::to_owned)?;
+    Ok((connection, true))
 }
 
 #[tauri::command]
@@ -453,6 +506,110 @@ struct ModelUpdateOutcome {
 }
 
 #[tauri::command]
+async fn repair_chat_model(
+    setup: llm_config::ChatModelSetup,
+    secret: String,
+    streaming: bool,
+    world_id: Option<String>,
+    config: State<'_, LaunchConfig>,
+    credentials: State<'_, SharedCredentialStore>,
+    supervisor: State<'_, SharedSupervisor>,
+    updates: State<'_, updater::UpdateState>,
+) -> Result<(), String> {
+    let _operation = updates.operation.try_lock().map_err(|_| "update_busy")?;
+    let mut host = supervisor.lock().await;
+    repair_chat_model_with(
+        setup,
+        secret,
+        streaming,
+        world_id.as_deref(),
+        &config,
+        credentials.inner().as_ref(),
+        &mut host,
+    )
+    .await
+}
+
+async fn repair_chat_model_with(
+    setup: llm_config::ChatModelSetup,
+    mut secret: String,
+    streaming: bool,
+    world: Option<&str>,
+    config: &LaunchConfig,
+    credentials: &dyn CredentialStore,
+    host: &mut CoreSupervisor,
+) -> Result<(), String> {
+    llm_config::validate_world_scope(world).map_err(str::to_owned)?;
+    if secret.trim().is_empty() || secret.len() > 4096 {
+        return Err("model_update_new_secret_required".into());
+    }
+    let health = host
+        .authenticated_health_for_world(world)
+        .await
+        .map_err(str::to_owned)?;
+    if health.llm_status != "degraded" {
+        return Err("model_setup_state_changed".into());
+    }
+    let previous = tokio::fs::read(&config.llm_config_path)
+        .await
+        .map_err(|_| "llm_config_read_failed")?;
+    if previous.len() > 1_048_576 {
+        return Err("model_configuration_too_large".into());
+    }
+    let reference = Uuid::new_v4().to_string();
+    let document = llm_config::single_chat_document_streaming(&setup, &reference, streaming)
+        .map_err(str::to_owned)?;
+    let document = llm_config::repair_scope(&previous, &document, world).map_err(str::to_owned)?;
+    let connection = host.connection().map_err(str::to_owned)?;
+    if let Err(error) = save_safety::drain(&connection).await {
+        let _ = updater::maintenance(&connection, "cancel").await;
+        return Err(error);
+    }
+    let prepare = async {
+        // Preserve exact bytes and every existing credential before replacing this scope.
+        let archive = config
+            .app_data
+            .join("config/model-recovery")
+            .join(format!("{}.json", Uuid::new_v4()));
+        tokio::fs::create_dir_all(archive.parent().ok_or("llm_config_path_invalid")?)
+            .await
+            .map_err(|_| "llm_config_write_failed")?;
+        llm_config::write_atomic(&archive, &previous)
+            .await
+            .map_err(str::to_owned)?;
+        credentials
+            .put(&reference, &secret)
+            .map_err(credential_error)?;
+        secret.clear();
+        if llm_config::write_atomic(&config.llm_config_path, &document)
+            .await
+            .is_err()
+        {
+            let _ = credentials.delete(&reference);
+            return Err("llm_config_write_failed".to_owned());
+        }
+        Ok::<(), String>(())
+    }
+    .await;
+    if let Err(error) = prepare {
+        let _ = updater::maintenance(&connection, "cancel").await;
+        return Err(error);
+    }
+    let stopped = host.stop_for_update(Duration::from_secs(30)).await;
+    let started = stopped.is_ok() && host.start(config).await.is_ok();
+    if !started
+        || !host
+            .authenticated_health_for_world(world)
+            .await
+            .is_ok_and(|health| health.llm_status == "ready")
+    {
+        rollback_chat_model_setup(host, config, credentials, &reference, &previous).await?;
+        return Err("model_setup_failed".into());
+    }
+    Ok(())
+}
+
+#[tauri::command]
 async fn update_chat_model(
     setup: llm_config::ChatModelSetup,
     secret: String,
@@ -583,10 +740,15 @@ async fn update_chat_model_streaming_with(
         }
         return Err("model_setup_failed".to_owned());
     }
-    let retained = llm_config::credential_references(&document).map_err(str::to_owned)?;
+    let retained = llm_config::credential_references(&document).ok();
     let old_credential_cleanup_incomplete = new_reference.is_some()
-        && !retained.contains(&managed.secret_ref)
-        && credentials.delete(&managed.secret_ref).is_err();
+        && match retained {
+            Some(retained) => {
+                !retained.contains(&managed.secret_ref)
+                    && credentials.delete(&managed.secret_ref).is_err()
+            }
+            None => true, // An unreadable other scope may still reference the old key.
+        };
     Ok(ModelUpdateOutcome {
         old_credential_cleanup_incomplete,
     })
@@ -789,6 +951,7 @@ pub fn run() {
         .manage(credentials)
         .invoke_handler(tauri::generate_handler![
             core_connection,
+            retry_core_start,
             report_ui_ready,
             credential_put,
             credential_delete,
@@ -805,6 +968,7 @@ pub fn run() {
             local_images::choose_local_image_folder,
             local_images::prepare_local_image,
             configure_chat_model,
+            repair_chat_model,
             managed_chat_model_setup,
             update_chat_model,
             use_default_chat_model,
@@ -969,6 +1133,146 @@ pub fn run() {
 #[cfg(all(test, windows))]
 mod model_update_tests {
     use super::*;
+
+    #[test]
+    fn startup_retry_restarts_a_stopped_failed_host_and_reuses_a_live_core() {
+        tauri::async_runtime::block_on(async {
+            let directory = tempfile::tempdir().unwrap();
+            let mut config = LaunchConfig {
+                project_root: directory.path().join("missing-runtime"),
+                app_data: directory.path().join("app"),
+                startup_timeout: Duration::from_secs(20),
+                llm_config_path: directory.path().join("app/config/llm.json"),
+            };
+            let mut host =
+                CoreSupervisor::with_credential_store(Arc::new(MemoryCredentialStore::default()));
+            assert!(host.start(&config).await.is_err());
+            assert_eq!(host.state, supervisor::SupervisorState::Failed);
+            assert!(host.safely_stopped());
+            config.project_root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("../../..")
+                .canonicalize()
+                .unwrap();
+            let (connection, restarted) = recover_core_start(&config, &mut host).await.unwrap();
+            assert!(restarted);
+            let (same, restarted) = recover_core_start(&config, &mut host).await.unwrap();
+            assert!(!restarted);
+            assert_eq!(same.generation, connection.generation);
+            host.stop(Duration::from_secs(4)).await.unwrap();
+        });
+    }
+
+    #[test]
+    fn degraded_configuration_can_be_repaired_without_touching_other_worlds_or_old_keys() {
+        tauri::async_runtime::block_on(async {
+            let directory = tempfile::tempdir().unwrap();
+            let config = LaunchConfig {
+                project_root: std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                    .join("../../..")
+                    .canonicalize()
+                    .unwrap(),
+                app_data: directory.path().to_owned(),
+                startup_timeout: Duration::from_secs(20),
+                llm_config_path: directory.path().join("config/llm.json"),
+            };
+            let credentials = Arc::new(MemoryCredentialStore::default());
+            let mut host = CoreSupervisor::with_credential_store(credentials.clone());
+            let reference = "00000000-0000-0000-0000-000000000001";
+            let world = "00000000-0000-0000-0000-000000000002";
+            let other = "00000000-0000-0000-0000-000000000003";
+            credentials.put(reference, "OLD-KEY-CANARY").unwrap();
+            let setup = llm_config::ChatModelSetup {
+                provider_kind: "anthropic".into(),
+                model_id: "example-model".into(),
+                base_url: None,
+                max_billable_input_tokens: 20000,
+                max_output_tokens: 2000,
+                timeout_ms: 30000,
+                native_json: false,
+            };
+            let valid: serde_json::Value = serde_json::from_slice(
+                &llm_config::single_chat_document(&setup, reference).unwrap(),
+            )
+            .unwrap();
+            let original = serde_json::json!({"version":2,"default":valid,
+                "worlds":{world:{"invalid":true},other:valid}});
+            let bytes = serde_json::to_vec(&original).unwrap();
+            std::fs::create_dir_all(config.llm_config_path.parent().unwrap()).unwrap();
+            llm_config::write_atomic(&config.llm_config_path, &bytes)
+                .await
+                .unwrap();
+            host.start(&config).await.unwrap();
+            assert_eq!(
+                host.authenticated_health_for_world(Some(world))
+                    .await
+                    .unwrap()
+                    .llm_status,
+                "degraded"
+            );
+            assert_eq!(
+                host.authenticated_health_for_world(Some(other))
+                    .await
+                    .unwrap()
+                    .llm_status,
+                "ready"
+            );
+            // A failed secure-store write leaves the source configuration intact.
+            credentials.set_unavailable(true);
+            assert_eq!(
+                repair_chat_model_with(
+                    setup.clone(),
+                    "NEW-KEY-CANARY".into(),
+                    false,
+                    Some(world),
+                    &config,
+                    credentials.as_ref(),
+                    &mut host
+                )
+                .await
+                .unwrap_err(),
+                "secure_storage_unavailable"
+            );
+            assert_eq!(std::fs::read(&config.llm_config_path).unwrap(), bytes);
+            credentials.set_unavailable(false);
+            repair_chat_model_with(
+                setup,
+                "NEW-KEY-CANARY".into(),
+                false,
+                Some(world),
+                &config,
+                credentials.as_ref(),
+                &mut host,
+            )
+            .await
+            .unwrap();
+            let repaired: serde_json::Value =
+                serde_json::from_slice(&std::fs::read(&config.llm_config_path).unwrap()).unwrap();
+            assert_eq!(repaired["default"], original["default"]);
+            assert_eq!(repaired["worlds"][other], original["worlds"][other]);
+            assert_eq!(credentials.resolve(reference).unwrap(), "OLD-KEY-CANARY");
+            let archives: Vec<_> = std::fs::read_dir(config.app_data.join("config/model-recovery"))
+                .unwrap()
+                .map(|entry| std::fs::read(entry.unwrap().path()).unwrap())
+                .collect();
+            assert!(archives.iter().all(|archive| archive == &bytes));
+            assert!(!archives.is_empty());
+            assert_eq!(
+                host.authenticated_health_for_world(Some(world))
+                    .await
+                    .unwrap()
+                    .llm_status,
+                "ready"
+            );
+            assert_eq!(
+                host.authenticated_health_for_world(Some(other))
+                    .await
+                    .unwrap()
+                    .llm_status,
+                "ready"
+            );
+            host.stop(Duration::from_secs(4)).await.unwrap();
+        });
+    }
     use credentials::MemoryCredentialStore;
 
     #[test]

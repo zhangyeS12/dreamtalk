@@ -264,7 +264,7 @@ def load_configuration(path: Path | None) -> ProductionLLMConfiguration:
     return load_world_configurations(path)[0]
 
 
-def load_world_configurations(path: Path | None):
+def load_world_configurations(path: Path | None, *, isolate_invalid=False):
     """Legacy v1 remains the default; v2 keeps independent world snapshots."""
     if path is None or not path.exists():
         return empty_configuration(), {}
@@ -272,6 +272,27 @@ def load_world_configurations(path: Path | None):
         if not path.is_file() or path.is_symlink() or path.stat().st_size > MAX_CONFIG_BYTES:
             raise LLMProductionConfigurationError()
         raw = json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=_unique_object)
+        if isolate_invalid and isinstance(raw, dict) and raw.get("version") == 2:
+            if set(raw) != {"version", "default", "worlds"} or not isinstance(raw["worlds"], dict):
+                raise LLMProductionConfigurationError()
+
+            def isolated(value):
+                try:
+                    _reject_secret_keys(value)
+                    return _convert(
+                        LLMConfigDocument.model_validate_json(json.dumps(value), strict=True)
+                    )
+                except (ValueError, TypeError, ValidationError, LLMContractError):
+                    return None
+
+            worlds = {}
+            for key, value in raw["worlds"].items():
+                identity = UUID(key)
+                if str(identity) != key:
+                    raise LLMProductionConfigurationError()
+                # Keep an invalid explicit override: it must never inherit a key.
+                worlds[WorldId(identity)] = isolated(value)
+            return isolated(raw["default"]), worlds
         _reject_secret_keys(raw)
         encoded = json.dumps(raw, ensure_ascii=False, separators=(",", ":"))
         if isinstance(raw, dict) and raw.get("version") == 2:

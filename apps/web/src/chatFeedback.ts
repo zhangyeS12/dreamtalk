@@ -24,6 +24,17 @@ export function chatReplyFailureFeedback(failure: unknown, kind: ChatKind): stri
   const code = failure instanceof CoreRequestError ? failure.code : null;
   const prefix = kind === "group" ? "这一轮未能完整结束。已有发言仍会保留。" : "这轮回复未完成。消息已保存。";
   const noReplay = "系统不会自动重试模型调用；你可以检查回复状态；允许恢复时可手动重新生成，或继续发送新消息。";
+  const providerFailure = code ? ({
+    chat_provider_authentication: "API 密钥无效或已失效，请打开模型设置，重新填写当前世界使用的 API 密钥。",
+    chat_provider_permission_denied: "当前 API 密钥没有使用这个模型的权限，请打开模型设置更换模型或密钥。",
+    chat_provider_not_found: "服务未找到这个模型或接口，请打开模型设置核对服务地址和模型名称。",
+    chat_provider_rate_limited: "模型服务请求过于频繁，请稍后再发送。",
+    chat_provider_quota_exhausted: "模型服务的可用额度不足，请检查供应商账户余额或套餐，或更换可用的 API。",
+    chat_provider_timeout: "等待模型回复超时，本次结果和费用可能尚未确认。可以在模型设置增加等待时间；系统不会自动重发。",
+    chat_provider_context_limit: "这段对话超过模型可接受的长度，请打开模型设置选择容量更大的模型。",
+    chat_provider_unsupported: "模型服务不支持当前请求方式，请打开模型设置关闭逐步显示回复，或更换支持的模型服务。",
+  } as Record<string, string>)[code] : undefined;
+  if (providerFailure) return `${prefix}${providerFailure}${noReplay}`;
   if (code === "chat_turn_token_limit_exceeded") return "聊天额度不足，无法预留输入和回复。请提高设置中的每轮 Token 上限后发送新消息；这条消息已保存，系统不会自动重试。";
   if (code === "chat_input_bound_unavailable") return "无法确认本次模型调用的可信 Token 上界。请核对模型及路由设置后发送新消息；这条消息已保存，系统不会自动重试。";
   if (failure instanceof CoreRequestError && failure.status === 422) return kind === "group"

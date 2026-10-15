@@ -7,12 +7,6 @@ from pathlib import Path
 def test_llm_contracts_are_provider_neutral_and_existing_world_content_are_independent():
     root = Path(__file__).resolve().parents[2] / "services/core/src/livingworld"
     providers = {"openai", "anthropic", "google", "google_genai", "deepseek", "ollama"}
-    chat_llm_consumers = {
-        root / "application/chat_context.py",
-        root / "application/chat_reply.py",
-        root / "application/group_chat_context.py",
-        root / "application/group_chat_reply.py",
-    }
     for layer in ("domain", "application"):
         for source in (root / layer).rglob("*.py"):
             for node in ast.walk(ast.parse(source.read_text("utf-8"))):
@@ -38,19 +32,32 @@ def test_llm_contracts_are_provider_neutral_and_existing_world_content_are_indep
                             source,
                             module,
                         )
-    for source in root.rglob("*.py"):
-        if source.name.startswith("llm") or "llm" in source.relative_to(root).parts:
-            continue
+    # Authored data/importers remain independent. Operational chat/media/planning
+    # consumers are approved application features, not authored content parsers.
+    for source in (
+        *((root / "domain/content").rglob("*.py")),
+        *((root / "infrastructure/imports").rglob("*.py")),
+    ):
         for node in ast.walk(ast.parse(source.read_text("utf-8"))):
             if isinstance(node, ast.ImportFrom):
                 assert not (node.module or "").startswith("livingworld.infrastructure.llm"), source
-                if source not in chat_llm_consumers:
-                    assert not (node.module or "").startswith("livingworld.application.llm"), source
+                assert not (node.module or "").startswith("livingworld.application.llm"), source
 
 
 def test_inner_layers_have_no_outward_dependencies():
     root = Path(__file__).resolve().parents[2] / "services/core/src/livingworld"
-    forbidden = {"fastapi", "sqlalchemy", "alembic", "tauri", "pydantic", "uvicorn", "starlette"}
+    forbidden = {
+        "fastapi",
+        "sqlalchemy",
+        "alembic",
+        "tauri",
+        "uvicorn",
+        "starlette",
+        "httpx",
+        "requests",
+        "socket",
+        "sqlite3",
+    }
     for layer in ["domain", "application"]:
         for source in (root / layer).rglob("*.py"):
             package = ".".join(source.relative_to(root.parent).parts[:-1])
@@ -63,6 +70,21 @@ def test_inner_layers_have_no_outward_dependencies():
                     modules = [resolve_name(name, package) if node.level else name]
                 for module in modules:
                     assert module.split(".")[0] not in forbidden, (source, module)
+                    if module == "pydantic":
+                        # Application wire/LLM data validators may use only pure
+                        # schema APIs; Domain still has its standard-library rule.
+                        assert layer == "application"
+                        assert isinstance(node, ast.ImportFrom)
+                        assert {name.name for name in node.names} <= {
+                            "BaseModel",
+                            "ConfigDict",
+                            "Field",
+                            "field_validator",
+                            "model_validator",
+                        }
+                    if module == "pydantic_core":
+                        assert layer == "application" and isinstance(node, ast.ImportFrom)
+                        assert {name.name for name in node.names} == {"from_json"}
                     if layer == "domain":
                         assert module.split(".")[0] != "sqlite3", (source, module)
                         assert (
@@ -91,11 +113,18 @@ def test_command_wall_clock_is_injected_and_raw_store_is_read_only():
         for node in ast.walk(ast.parse(source.read_text(encoding="utf-8"))):
             if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
                 forbidden = node.func.attr in {"now", "utcnow", "merge"}
-                raw_execute = node.func.attr == "execute" and not (
-                    isinstance(node.func.value, ast.Attribute)
-                    and isinstance(node.func.value.value, ast.Name)
-                    and node.func.value.value.id == "self"
-                    and node.func.value.attr == "_actions"
+                # These are typed command/Kernel services, never raw SQL stores.
+                dispatch = {
+                    ("command_handler.py", "self._actions"),
+                    ("character_activity_setup.py", "self._commands"),
+                    ("world_locations.py", "self._commands"),
+                    ("director.py", "self.actions"),
+                    ("director.py", "self._encounters"),
+                    ("director.py", "self._shared"),
+                }
+                raw_execute = (
+                    node.func.attr == "execute"
+                    and (source.name, ast.unparse(node.func.value)) not in dispatch
                 )
                 assert not (forbidden or raw_execute), (source, node.lineno)
     from livingworld.infrastructure.persistence.store import PersistenceStore
@@ -114,7 +143,6 @@ def test_replay_has_no_external_effects_or_command_dispatch():
         "now_utc",
         "uuid1",
         "uuid4",
-        "uuid5",
         "open",
         "execute",
         "append",

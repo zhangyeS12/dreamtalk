@@ -9,16 +9,17 @@ import { DesktopUpdateEntry, DesktopUpdateProvider } from "./DesktopUpdates";
 
 interface Props {
   discover: () => Promise<CoreConnection>;
+  recover?: () => Promise<CoreConnection>;
   onReady?: (generation: string) => Promise<void>;
 }
 
-export function App({ discover, onReady }: Props) {
+export function App({ discover, recover, onReady }: Props) {
   const [ready, setReady] = useState(false);
   const revealed = useCallback(() => setReady(true), []);
-  return <DesktopUpdateProvider ready={ready}><SaveSafetyGate><ConnectedApp discover={discover} onReady={onReady} onRevealed={revealed} /></SaveSafetyGate></DesktopUpdateProvider>;
+  return <DesktopUpdateProvider ready={ready}><SaveSafetyGate><ConnectedApp discover={discover} recover={recover} onReady={onReady} onRevealed={revealed} /></SaveSafetyGate></DesktopUpdateProvider>;
 }
 
-function ConnectedApp({ discover, onReady, onRevealed }: Props & { onRevealed: () => void }) {
+function ConnectedApp({ discover, recover, onReady, onRevealed }: Props & { onRevealed: () => void }) {
   const [state, setState] = useState<"Connecting" | "Ready" | "Failed">("Connecting");
   const [client, setClient] = useState<CoreClient | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -34,10 +35,10 @@ function ConnectedApp({ discover, onReady, onRevealed }: Props & { onRevealed: (
   useEffect(() => {
     let active = true;
     const controller = new AbortController();
-    const timeout = setTimeout(() => { controller.abort(); if (active) setState("Failed"); }, 15_000);
+    const timeout = setTimeout(() => { controller.abort(); if (active) setState("Failed"); }, 60_000);
     async function connect() {
       try {
-        const connection = await discover();
+        const connection = await (attempt > 0 && recover ? recover() : discover());
         if (!active || controller.signal.aborted) return;
         const connected = new CoreClient(connection);
         await connected.health(controller.signal);
@@ -50,7 +51,7 @@ function ConnectedApp({ discover, onReady, onRevealed }: Props & { onRevealed: (
     }
     void connect();
     return () => { active = false; clearTimeout(timeout); controller.abort(); };
-  }, [discover, onReady, attempt]);
+  }, [discover, recover, onReady, attempt]);
   useEffect(() => {
     if (!client || developer || archive !== "Pending") return;
     const timer = setTimeout(() => setArchive("Failed"), 15_000);

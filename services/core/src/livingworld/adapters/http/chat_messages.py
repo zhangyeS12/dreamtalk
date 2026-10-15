@@ -28,6 +28,7 @@ from livingworld.application.chat_reply import (
     ChatReplyUnavailableError,
     ChatReplyValidationError,
     DirectChatReplyService,
+    generation_failure_code,
 )
 from livingworld.application.errors import (
     ChatTurnUnavailableError,
@@ -158,6 +159,8 @@ def _stream_failure(error: Exception) -> tuple[int, str]:
         return 404, "chat_turn_not_found"
     if isinstance(error, ChatReplyValidationError):
         return 502, _validation_failure_code(error)
+    if isinstance(error, ChatReplyGenerationError):
+        return 502, generation_failure_code(error)
     return 502, "chat_generation_failed"
 
 
@@ -446,8 +449,8 @@ def chat_message_router(
             raise HTTPException(503, "chat_accounting_unavailable") from None
         except ChatReplyValidationError as error:
             raise HTTPException(502, _validation_failure_code(error)) from None
-        except ChatReplyGenerationError:
-            raise HTTPException(502, "chat_generation_failed") from None
+        except ChatReplyGenerationError as error:
+            raise HTTPException(502, generation_failure_code(error)) from None
 
     @router.get("/{conversation_id}/turns/{turn_id}")
     async def get_turn(world_id: UUID, conversation_id: UUID, turn_id: UUID) -> dict:
@@ -495,8 +498,8 @@ def chat_message_router(
             raise HTTPException(503, "chat_accounting_unavailable") from None
         except ChatReplyValidationError as error:
             raise HTTPException(502, _validation_failure_code(error)) from None
-        except ChatReplyGenerationError:
-            raise HTTPException(502, "chat_generation_failed") from None
+        except ChatReplyGenerationError as error:
+            raise HTTPException(502, generation_failure_code(error)) from None
 
     @router.post("/{conversation_id}/turns/{turn_id}/reply/stream")
     async def stream_direct_reply(world_id: UUID, conversation_id: UUID, turn_id: UUID):

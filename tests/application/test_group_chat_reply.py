@@ -153,7 +153,11 @@ def test_group_http_send_reply_and_retry_keep_one_durable_turn(tmp_path):
             assert client.get(
                 base + "/group-reply-availability",
                 headers=headers,
-            ).json() == {"available": True}
+            ).json() == {
+                "available": True,
+                "input_token_reservation": None,
+                "max_output_tokens": 80,
+            }
             sent = client.post(
                 path + "/group-messages",
                 headers=headers,

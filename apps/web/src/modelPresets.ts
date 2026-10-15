@@ -5,6 +5,8 @@ type ModelPreset = {
   provider_kind: string; model_id: string; base_urls: string[];
   context_tokens: number; input_tokens: number; output_tokens: number;
   bound_encoding: string | null;
+  reviewed_at?: string;
+  source?: string;
 };
 export const modelPresets: ModelPreset[] = catalog.models;
 export const presetsReviewedAt = catalog.reviewed_at;

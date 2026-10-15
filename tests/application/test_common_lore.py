@@ -48,7 +48,16 @@ def test_common_lore_is_explicit_current_world_scoped_and_group_visible(tmp_path
                 )
                 await LocalPlayerOnboardingService(handler, players).start_at_home(identity)
             document = book_document()
-            document["entries"]["0"]["content"] = "PUBLIC_CITY_BACKGROUND_CANARY"
+            # This test exercises authorization, not the advanced source fixture's
+            # character/trigger/keyword filters, which have separate coverage.
+            document["entries"]["0"] = {
+                "uid": 0,
+                "key": [],
+                "comment": "City",
+                "content": "PUBLIC_CITY_BACKGROUND_CANARY",
+                "constant": True,
+                "disable": False,
+            }
             document["entries"]["1"]["content"] = "HIDDEN_PLOT_CANARY"
             document["entries"]["1"]["disable"] = False
             staged = await imports.prepare(world, "lorebook", json_bytes(document))

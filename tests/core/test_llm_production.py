@@ -38,6 +38,7 @@ from livingworld.infrastructure.llm.production_config import (
     CONFIG_VERSION,
     LLMProductionConfigurationError,
     load_configuration,
+    load_world_configurations,
 )
 from livingworld.infrastructure.logging import StructuredLogger
 from livingworld.infrastructure.persistence import Database
@@ -121,6 +122,34 @@ def write_config(tmp_path, value=None):
     path = tmp_path / "llm.json"
     path.write_text(json.dumps(value if value is not None else document()), encoding="utf-8")
     return path
+
+
+def test_runtime_isolates_invalid_world_without_falling_back_to_default_key(tmp_path):
+    from livingworld.domain.identifiers import WorldId
+
+    bad = WorldId(UUID("00000000-0000-0000-0000-000000000011"))
+    good = WorldId(UUID("00000000-0000-0000-0000-000000000012"))
+    path = write_config(
+        tmp_path,
+        {
+            "version": 2,
+            "default": document(),
+            "worlds": {str(bad.value): {"broken": True}, str(good.value): document()},
+        },
+    )
+    with pytest.raises(LLMProductionConfigurationError):
+        load_world_configurations(path)
+    default, worlds = load_world_configurations(path, isolate_invalid=True)
+    assert default is not None and worlds[good] is not None
+    assert bad in worlds and worlds[bad] is None
+    sentinel = object()
+    session = composition.ProductionLLMSession(
+        SessionCredentialProvider(), sentinel, {bad: None, good: sentinel}
+    )
+    assert session.for_world(bad).runtime is None
+    assert session.health(bad) == "degraded"
+    assert session.for_world(good).runtime is sentinel
+    assert session.for_world(UUID(int=99)).runtime is sentinel
 
 
 def frame(value):

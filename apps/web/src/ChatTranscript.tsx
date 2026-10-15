@@ -31,9 +31,10 @@ interface Props {
   onSuggestionUsed?: () => void;
   onBack: () => void;
   onDirtyChange?: (dirty: boolean) => void;
+  onModelSettings?: () => void;
 }
 
-export function ChatTranscript({ client, worldId, playerId, conversation, avatarUrl, tokenCeiling, suggestedDraft, onSuggestionUsed, onBack, onDirtyChange }: Props) {
+export function ChatTranscript({ client, worldId, playerId, conversation, avatarUrl, tokenCeiling, suggestedDraft, onSuggestionUsed, onBack, onDirtyChange, onModelSettings }: Props) {
   const draftInput = useRef<HTMLTextAreaElement>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
@@ -90,6 +91,7 @@ export function ChatTranscript({ client, worldId, playerId, conversation, avatar
     <SpeechFeedback />
     {conversation.read_only ? <p className="thread-hint" role="status">角色卡已删除，此会话保留为只读历史。</p> : <form className="chat-composer" onSubmit={event => void send(event)}>
       {phase || feedback ? <p role="status" aria-live="polite" className="chat-feedback">{(phase === "replying" && stream.stage === "preparing" ? "消息已保存，正在准备角色回复…" : chatPhaseFeedback(phase, "direct")) || feedback}</p> : null}
+      {feedback && !phase && onModelSettings && <button type="button" className="text-action" onClick={onModelSettings}>打开当前世界模型设置</button>}
       <ReplyRecoveryControls client={client} worldId={worldId} conversationId={conversation.conversation_id} sourceTurnId={latestPlayerMessage?.turn_id} refresh={refresh} tokenCeiling={tokenCeiling} blocked={!available || phase !== null || !!pendingSend} onGenerate={generateSavedReply} onBusyChange={setRecoveryBusy} />
       {budgetFeedback ? <p className="chat-feedback" role="alert">{budgetFeedback}</p> : null}
       {availabilityReading ? <p className="chat-feedback" role="status">正在核对聊天模型状态…</p>

@@ -64,6 +64,7 @@ def _session(*, model_count: int, routed: bool, fallback: bool = False, key_inde
     refs = {model.provider_id: SecretRef(uuid4()) for model in models}
     runtime = SimpleNamespace(
         registry=registry,
+        token_bounder=None,
         gateway=object(),
         configuration=SimpleNamespace(
             routing=RoutingConfiguration(policies),

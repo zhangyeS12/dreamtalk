@@ -79,6 +79,15 @@ class IndexSpeechProviders:
         return secret.reveal_for_adapter()
 
     async def synthesize(self, settings, card, manifest, text, identity, save_remote, progress):
+        try:
+            return await self._synthesize(
+                settings, card, manifest, text, identity, save_remote, progress
+            )
+        except httpx.HTTPError:
+            # A transport failure cannot establish whether the submitted job ran.
+            raise SpeechError("speech_status_lost") from None
+
+    async def _synthesize(self, settings, card, manifest, text, identity, save_remote, progress):
         secret = await self._secret(settings)
         async with httpx.AsyncClient(
             timeout=httpx.Timeout(900, connect=15), follow_redirects=False, trust_env=False

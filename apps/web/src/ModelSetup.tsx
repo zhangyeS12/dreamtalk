@@ -39,10 +39,11 @@ const statusText: Record<LLMRuntimeStatus, string> = {
 
 export type ModelSetupSummary = { status: LLMRuntimeStatus | null; model: string | null; replyTokens: number | null };
 
-export function ModelSetup({ client, worldId, turnTokenCeiling, onConfigured = () => window.location.reload(), onDirtyChange, onSummaryChange }: {
+export function ModelSetup({ client, worldId, turnTokenCeiling, onApplyTokenCeiling, onConfigured = () => window.location.reload(), onDirtyChange, onSummaryChange }: {
   client: CoreClient;
   worldId?: string;
   turnTokenCeiling?: number;
+  onApplyTokenCeiling?: (ceiling: number) => void;
   onConfigured?: () => void;
   onDirtyChange?: (dirty: boolean) => void;
   onSummaryChange?: (summary: ModelSetupSummary) => void;
@@ -50,6 +51,7 @@ export function ModelSetup({ client, worldId, turnTokenCeiling, onConfigured = (
   const [status, setStatus] = useState<LLMRuntimeStatus | null>(null);
   const [managed, setManaged] = useState<ChatModelSetup | null>(null);
   const [managedUnsupported, setManagedUnsupported] = useState(false);
+  const [repairing, setRepairing] = useState(false);
   const [advancedDefault, setAdvancedDefault] = useState(false);
   const [inherited, setInherited] = useState(Boolean(worldId));
   const scopedWarningKey = worldId ? `${cleanupWarningKey}:${worldId}` : cleanupWarningKey;
@@ -175,13 +177,13 @@ export function ModelSetup({ client, worldId, turnTokenCeiling, onConfigured = (
       });
       return;
     }
-    if (!isTauri() || (status !== "unconfigured" && !editing && !advancedDefault)) {
+    if (!isTauri() || (!repairing && status !== "unconfigured" && !editing && !advancedDefault)) {
       setError("当前无法保存模型设置，请重新打开桌面应用的设置页面。");
       return;
     }
     setSaving(true);
     try {
-      const outcome = await invoke<ModelUpdateOutcome | void>(editing ? "update_chat_model" : "configure_chat_model", {
+      const outcome = await invoke<ModelUpdateOutcome | void>(repairing ? "repair_chat_model" : editing ? "update_chat_model" : "configure_chat_model", {
         setup: {
           provider_kind: providerKind,
           model_id: modelId,
@@ -197,7 +199,7 @@ export function ModelSetup({ client, worldId, turnTokenCeiling, onConfigured = (
       });
       setSecret("");
       if (outcome?.old_credential_cleanup_incomplete) {
-        try { window.sessionStorage.setItem(scopedWarningKey, "模型已更新，但旧凭据未能从 Windows 安全凭据存储清理。请检查本机凭据存储。"); } catch { /* The update remains committed. */ }
+        try { window.sessionStorage.setItem(scopedWarningKey, "模型已更新。部分旧密钥仍保留在 Windows 安全凭据存储中，当前配置不受影响。"); } catch { /* The update remains committed. */ }
       }
       setDirty(false);
       onConfigured();
@@ -207,6 +209,9 @@ export function ModelSetup({ client, worldId, turnTokenCeiling, onConfigured = (
       else if (failure === "model_update_new_secret_required") setError("更换提供商、服务地址或补齐缺失凭据时，请填写新 API 密钥。");
       else if (failure === "model_setup_requires_empty_configuration") setError("模型状态已变化，请重新打开设置页面后再编辑。已有配置未被覆盖。");
       else if (failure === "model_setup_recovery_failed") setError("模型更新和恢复均未完成。请重启应用后检查模型状态。");
+      else if (failure === "model_setup_state_changed") setError("模型状态已经变化，本次未覆盖配置。请重新打开模型设置。");
+      else if (failure === "save_tasks_running") setError("还有任务正在处理，请等它结束再保存。当前配置和密钥保持原样。");
+      else if (failure === "model_world_scope_invalid") setError("原模型配置的世界标识无法确认，已保留原配置并停止替换。");
       else setError("模型设置未完成。请核对模型名称、服务地址和回复长度，或重新启动程序后重试。");
     } finally { setSaving(false); }
   };
@@ -218,7 +223,7 @@ export function ModelSetup({ client, worldId, turnTokenCeiling, onConfigured = (
     try {
       const outcome = await invoke<ModelUpdateOutcome>("use_default_chat_model", { worldId });
       if (outcome.old_credential_cleanup_incomplete) {
-        try { window.sessionStorage.setItem(scopedWarningKey, "已恢复默认模型，但旧凭据清理未完成。请检查本机凭据存储。"); } catch { /* The configuration is already saved. */ }
+        try { window.sessionStorage.setItem(scopedWarningKey, "已恢复默认模型。部分旧密钥仍安全保留，当前配置不受影响。"); } catch { /* The configuration is already saved. */ }
       }
       setSecret("");
       setDirty(false);
@@ -238,12 +243,23 @@ export function ModelSetup({ client, worldId, turnTokenCeiling, onConfigured = (
       : "这里保存书架默认配置，供尚未单独设置的世界使用。已保存独立配置的世界不受这里的修改影响。"}</p>
     {worldId && !inherited && isTauri() ? <div className="group-actions"><button type="button" className="secondary-button" disabled={saving} onClick={() => void restoreDefault()}>恢复使用书架默认配置</button></div> : null}
     {error ? <p className="app-alert" role="alert">{error}</p> : null}
+    {status === "degraded" && isTauri() && <div className="model-repair"><p className="inline-hint">重新填写 API 即可修复当前模型配置。程序会保留原配置和旧密钥，不更改聊天或世界资料，不会测试或重发模型请求。其他可读取的世界配置会保留。</p>{!repairing && <button type="button" className="primary-button" onClick={() => { setRepairing(true); setManagedUnsupported(false); }}>重新配置{worldId ? "当前世界" : "默认"}API</button>}</div>}
     {managedUnsupported && status !== "unconfigured" ? <p className="inline-hint">当前配置由高级方式管理；此处不会覆盖其中的路由、定价或其他设置。</p> : null}
     {advancedDefault ? <p className="inline-hint">书架默认配置由高级方式管理。下方可以为当前世界另建独立模型配置，原默认配置会保留。</p> : null}
     {turnTokenCeiling !== undefined && !requestBoundAvailable && Number.isSafeInteger(inputBound) && inputBound > 0 && inputBound + outputBound > turnTokenCeiling && (editing || advancedDefault || status === "unconfigured") ? <p className="compatibility-notice" role="status">此服务的一次调用需要预留 {inputBound.toLocaleString("zh-CN")} Token 输入。当前每轮额度为 {turnTokenCeiling.toLocaleString("zh-CN")}；至少 {(inputBound + 1).toLocaleString("zh-CN")} 才能留出输出空间，{Number.isSafeInteger(outputBound) && outputBound > 0 ? `预留一次完整回复需 ${(inputBound + outputBound).toLocaleString("zh-CN")}。` : ""} 群聊选人、多角色发言及重试仍共用整轮额度，需要更多余量。模型设置仍可保存。容量预留不代表实际发送量；请按官方说明填写，勿为通过检查虚填较低值。</p> : null}
-    {isTauri() && status !== null && status !== "degraded" && !managedUnsupported && (status === "unconfigured" || editing || advancedDefault) ? <form noValidate aria-busy={saving} onChangeCapture={() => setDirty(true)} onSubmit={event => void save(event)}>
+    {isTauri() && status !== null && (status !== "degraded" || repairing) && (!managedUnsupported || repairing) && (status === "unconfigured" || editing || advancedDefault || repairing) ? <form noValidate aria-busy={saving} onChangeCapture={() => setDirty(true)} onSubmit={event => void save(event)}>
       {submitAttempted && firstInvalidField ? <p className="app-alert" role="alert">尚未保存：{validationErrors[firstInvalidField]} 请修改标红的字段后再保存。</p> : null}
       <div className="model-setup-fields">
+        <label className="field"><span>常用服务与型号</span><select value="" disabled={saving} onChange={event => {
+          const choice = modelPresets[Number(event.target.value)];
+          if (!choice || !event.target.value) return;
+          setProviderKind(choice.provider_kind as ProviderKind); setModelId(choice.model_id);
+          setBaseUrl(choice.base_urls[0] ?? ""); resetCapacity();
+          setReplyLength(String(Math.min(8192, choice.output_tokens)));
+          if (choice.output_tokens < 8192 && ![2048, 8192, 16384].includes(choice.output_tokens)) {
+            setReplyLength("custom"); setOutputLimit(String(choice.output_tokens));
+          }
+        }}><option value="">选择后自动填写地址、型号和容量；也可自行填写</option>{modelPresets.map((item, index) => <option key={index} value={String(index)}>{item.provider_kind === "openai-compatible" ? new URL(item.base_urls[0]).hostname : item.provider_kind} · {item.model_id}</option>)}</select></label>
         <label className="field"><span>提供商</span><select value={providerKind} disabled={saving} onChange={event => { setProviderKind(event.target.value as ProviderKind); resetCapacity(); }}><option value="openai-responses">OpenAI</option><option value="anthropic">Anthropic</option><option value="gemini">Gemini</option><option value="openai-compatible">兼容 Chat Completions 的服务</option></select></label>
         <div className="field">
           <label htmlFor={`${formId}-model_id`}>模型名称</label>
@@ -272,7 +288,8 @@ export function ModelSetup({ client, worldId, turnTokenCeiling, onConfigured = (
           <option value="2048">简短 · 2,048 Token</option><option value="8192">标准 · 8,192 Token</option><option value="16384">较长 · 16,384 Token</option><option value="custom">自定义</option>
         </select></label>
         <p className="inline-hint">这是回复可用的最多 Token，不是每次固定用量。推理模型的思考也会占用此额度；聊天仍受每轮总额度约束。</p>
-        {preset ? <p className="inline-hint">已匹配模型容量：上下文 {preset.context_tokens.toLocaleString("zh-CN")} Token，模型输出最多 {preset.output_tokens.toLocaleString("zh-CN")} Token。资料核对日期：{presetsReviewedAt}。{requestBoundAvailable ? "聊天按当前对话预留输入额度；无法核对时采用模型容量保守预留。" : "此服务暂按模型输入容量保守预留聊天额度。"}</p> : <p className="compatibility-notice">尚未匹配此服务与模型，请在高级设置按提供商文档填写输入容量。模型 ID 相同的第三方服务也需要单独核对。</p>}
+        {preset ? <p className="inline-hint">已匹配模型容量：上下文 {preset.context_tokens.toLocaleString("zh-CN")} Token，模型输出最多 {preset.output_tokens.toLocaleString("zh-CN")} Token。资料核对日期：{preset.reviewed_at ?? presetsReviewedAt}。{requestBoundAvailable ? "聊天按当前对话预留输入额度；无法核对时采用模型容量保守预留。" : "此服务暂按模型输入容量保守预留聊天额度。"}</p> : <p className="compatibility-notice">尚未匹配此服务与模型，请在高级设置按提供商文档填写输入容量。模型 ID 相同的第三方服务也需要单独核对。</p>}
+        {onApplyTokenCeiling && turnTokenCeiling !== undefined && !requestBoundAvailable && Number.isSafeInteger(inputBound) && inputBound > 0 && Number.isSafeInteger(outputBound) && outputBound > 0 && inputBound + outputBound > turnTokenCeiling && <div className="compatibility-notice"><p>此型号需要提高聊天额度才能开始回复。点击将每轮最多可用额度设为 {(inputBound + outputBound).toLocaleString("zh-CN")} Token。它会提高单轮可能产生的费用上限；实际按供应商用量计费，群聊仍共用整轮额度。</p><button type="button" className="secondary-button" disabled={saving} onClick={() => onApplyTokenCeiling(inputBound + outputBound)}>应用此型号所需的聊天额度</button></div>}
         <details open={advancedOpen} onToggle={event => setAdvancedOpen(event.currentTarget.open)}>
           <summary>高级设置：容量、超时与结构化输出</summary>
           {preset ? <label className="field"><span>输入容量来源</span><select disabled={saving} value={manualLimits ? "manual" : "auto"} onChange={event => { setManualLimits(event.target.value === "manual"); if (!inputLimit) setInputLimit(String(preset.input_tokens)); }}><option value="auto">自动匹配</option><option value="manual">手动指定（保留自定义值）</option></select></label> : null}
@@ -299,7 +316,7 @@ export function ModelSetup({ client, worldId, turnTokenCeiling, onConfigured = (
           <p className="inline-hint">手动输入容量必须按提供商文档核对。没有可靠请求上界的服务仍按此容量预留；请勿为了通过额度检查填写更小的数值。</p>
         </details>
       </div>
-      <div className="group-actions"><button type="submit" className="primary-button" disabled={saving}>{saving ? "正在保存并重启核心…" : worldId ? "保存当前世界模型" : editing ? "更新默认模型配置" : "保存默认模型配置"}</button></div>
+      <div className="group-actions"><button type="submit" className="primary-button" disabled={saving}>{saving ? "正在保存并重新连接…" : repairing ? "保存 API 并修复" : worldId ? "保存当前世界模型" : editing ? "更新默认模型配置" : "保存默认模型配置"}</button></div>
       <p className="inline-hint">保存后核心会重新启动，页面自动连接。不会测试密钥有效性，也不会在设置时产生模型费用。更新失败时会恢复原配置。</p>
     </form> : null}
     {status === "unconfigured" && !isTauri() ? <p className="inline-hint">当前浏览器开发入口不保存模型密钥。请在桌面应用完成首次设置。</p> : null}

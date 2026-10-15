@@ -5,6 +5,8 @@ import { GroupChatDetails, GroupChatSetup } from "./GroupChat";
 
 afterEach(cleanup);
 
+import { withChatReads } from "./testClient";
+
 const contact = (id: string, name: string): WorldContentItem => ({
   import_id: id, replaces_import_id: null, kind: "character", reviewed_hash: "hash",
   characters: [{ id, name, description: "", personality: "", background: "", scenario: "", speech_guidance: "", creator_notes: "", tags: [], example_dialogue: [], authored_instructions: {} }],
@@ -19,7 +21,7 @@ it("retries an uncertain group create with the same request identity and member 
     worldContent: vi.fn().mockResolvedValue([contact("card-a", "角色甲"), contact("card-b", "角色乙")]),
     createGroupConversation,
   } as unknown as CoreClient;
-  render(<GroupChatSetup client={client} worldId="world-a" onCreated={onCreated} onBack={() => {}} />);
+  render(<GroupChatSetup client={withChatReads(client)} worldId="world-a" onCreated={onCreated} onBack={() => {}} />);
   fireEvent.click(await screen.findByRole("checkbox", { name: "角色甲" }));
   fireEvent.click(screen.getByRole("checkbox", { name: "角色乙" }));
   fireEvent.click(screen.getByRole("button", { name: "创建群聊" }));
@@ -42,7 +44,7 @@ it("sends one group turn and shows the committed character reply", async () => {
   const generateGroupReply = vi.fn().mockResolvedValue({ turn_id: "t1", state: "completed", token_ceiling: 500, player_message: player, replies: [reply] });
   const conversationMessagePage = vi.fn().mockResolvedValueOnce({ items: [], next_before_position: null }).mockResolvedValue({ items: [player, reply], next_before_position: null });
   const client = { conversationMessagePage, sendGroupMessage, generateGroupReply, groupReplyAvailability: vi.fn().mockResolvedValue({ available: true }) } as unknown as CoreClient;
-  render(<GroupChatDetails client={client} worldId="world-a" playerId="player-a" group={group} tokenCeiling={500} onBack={() => {}} />);
+  render(<GroupChatDetails client={withChatReads(client)} worldId="world-a" playerId="player-a" group={group} tokenCeiling={500} onBack={() => {}} />);
   const draft = await screen.findByRole("textbox", { name: "发送群聊消息" });
   await waitFor(() => expect(draft).toHaveProperty("disabled", false));
   fireEvent.change(draft, { target: { value: "@角色乙 你好" } });
@@ -63,7 +65,7 @@ it("reports group budget denial without replaying the saved turn", async () => {
   const client = { conversationMessagePage: vi.fn().mockResolvedValue({ items: [], next_before_position: null }), sendGroupMessage,
     generateGroupReply, groupTurn: vi.fn().mockResolvedValue({ state: "pending" }),
     groupReplyAvailability: vi.fn().mockResolvedValue({ available: true }) } as unknown as CoreClient;
-  render(<GroupChatDetails client={client} worldId="world-a" playerId="player-a" group={group} tokenCeiling={500} onBack={() => {}} />);
+  render(<GroupChatDetails client={withChatReads(client)} worldId="world-a" playerId="player-a" group={group} tokenCeiling={500} onBack={() => {}} />);
   const draft = await screen.findByRole("textbox", { name: "发送群聊消息" });
   await waitFor(() => expect(draft).toHaveProperty("disabled", false));
   fireEvent.change(draft, { target: { value: "你好" } });
@@ -81,7 +83,7 @@ it("lets the player edit a group message rejected before persistence", async () 
   const sendGroupMessage = vi.fn().mockRejectedValue(new CoreRequestError(422));
   const client = { conversationMessagePage: vi.fn().mockResolvedValue({ items: [], next_before_position: null }), sendGroupMessage,
     groupReplyAvailability: vi.fn().mockResolvedValue({ available: true }) } as unknown as CoreClient;
-  render(<GroupChatDetails client={client} worldId="world-a" playerId="player-a" group={group} tokenCeiling={500} onBack={() => {}} />);
+  render(<GroupChatDetails client={withChatReads(client)} worldId="world-a" playerId="player-a" group={group} tokenCeiling={500} onBack={() => {}} />);
   const draft = await screen.findByRole("textbox", { name: "发送群聊消息" });
   await waitFor(() => expect(draft).toHaveProperty("disabled", false));
   fireEvent.change(draft, { target: { value: "原文" } });

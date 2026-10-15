@@ -514,7 +514,9 @@ async def run(
             content_exports=WorldContentExportService(
                 world_content.store, database.content_repository(), JsonContentExporter()
             ),
-            chat_exports=ChatExportService(database.chat_export_store(), player_event_feed),
+            chat_exports=ChatExportService(
+                database.chat_export_store(), player_event_feed, wall_clock
+            ),
             world_covers=WorldCoverService(
                 database.world_cover_repository(),
                 database.content_asset_store(),

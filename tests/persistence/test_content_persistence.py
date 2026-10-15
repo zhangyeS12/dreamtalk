@@ -63,13 +63,15 @@ async def rows(database, tables):
 
 async def table_columns(database, tables):
     async with database.engine.connect() as connection:
-        return {
+        columns = {
             table: tuple(
                 row.name
                 for row in (await connection.execute(text(f"PRAGMA table_info({table})"))).all()
             )
             for table in tables
         }
+        # Only tables present in the historical schema can have preserved rows.
+        return {table: value for table, value in columns.items() if value}
 
 
 async def rows_for_columns(database, columns):

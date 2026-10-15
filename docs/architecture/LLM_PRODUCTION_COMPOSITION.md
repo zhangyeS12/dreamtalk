@@ -36,7 +36,7 @@ Python Core bootstrap
 | `execution_policy` | bounded attempts、backoff、共享 elapsed deadline、typed retry switches |
 | `pricing_catalog` | source-labelled effective-dated schedules、rates、aliases；价格是 Decimal data |
 
-解析器拒绝重复 JSON key、秘密字段名、未知字段/adapter、重复身份、悬空或 disabled route、capability/profile 不一致、无效 limits/SecretRef/retry/pricing reference。诊断只返回固定错误码，不回显被拒绝的内容。model id 是 opaque string；组装和路由不搜索 `gpt`、`claude`、`gemini` 或其他名称片段。空配置合法，对应 `UNCONFIGURED`。结构损坏使 LLM 子系统为 `DEGRADED`，不会阻止 World/content/database Core 启动，也不会触发 provider 调用。
+解析器拒绝重复 JSON key、秘密字段名、未知字段/adapter、重复身份、悬空或 disabled route、capability/profile 不一致、无效 limits/SecretRef/retry/pricing reference。诊断只返回固定错误码，不回显被拒绝的内容。model id 是 opaque string；组装和路由不搜索 `gpt`、`claude`、`gemini` 或其他名称片段。空配置合法，对应 `UNCONFIGURED`。结构损坏使 LLM 子系统为 `DEGRADED`，不会阻止 World/content/database Core 启动，也不会触发 provider 调用。 当前运行入口对有效v2容器逐作用域校验；无效的显式世界覆盖保留为不可用，绝不继承默认密钥。外层结构、重复键或世界标识不合法仍整体拒绝，严格解析入口保持不变。
 
 ## 3. 桌面凭据边界
 
@@ -89,7 +89,7 @@ rotation 先写 native store，再替换 Core session value；已 dispatch reque
 
 ## 7. 首次聊天模型设置
 
-桌面“设置 → 聊天模型”在配置仍为空且 Core 报告 `unconfigured` 时，允许明确选择四种已支持的 adapter 之一、填写 exact model ID、必要的兼容服务地址、API key，以及由用户核对的单次输入计费与输出 Token 上界。必填 Token 参数直接显示；点击保存会定位并解释不合格字段，缺少可信上界时不会执行保存。这个入口只建立一条可用聊天模型配置，不进行模型发现、凭据试用或有费用的调用；浏览器开发入口只读。已有配置不由该入口覆盖。
+桌面书架默认模型与“设置 → 模型与聊天”的当前世界模型支持首次配置和受管理配置更新。可选择收录型号自动填写地址及容量，或填写准确API型号／地址／密钥；未收录服务需可信容量，不能按品牌猜测。容量与超时在高级设置，输入不合格时保存定位到对应字段。浏览器开发入口不保存密钥，配置本身不调用模型。异常状态提供显式 `repair_chat_model`：维护屏障内保存原配置字节、保留旧密钥，只替换所选作用域并重新启动核对，失败沿原回滚路径处理。其他可读取世界独立配置保留；资料、聊天及存档结构不改。见[本轮实施](../maintenance/2026-10-15-new-user-fixes.md)。
 
 Rust 将 key 写入 native credential store，将不含key的配置原子写入app-data `config/llm.json`（默认v1或默认／世界v2容器），随后重启 Core 并以 authenticated health 确认 `ready`。如果重启或加载失败，恢复原配置并重启原 Core；恢复失败则报告固定错误码。页面成功后重新连接 Core。用户填写的 usage limits 是显式配置，不是应用推测的 provider 事实；选择与核实相应模型的可信上界仍是配置者责任。该流程未配置价格，因此需要可信价格的 HARD 金额预算仍会拒绝无可验证定价的调用。
 

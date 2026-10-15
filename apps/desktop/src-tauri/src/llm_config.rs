@@ -119,19 +119,27 @@ pub fn credential_references(bytes: &[u8]) -> Result<Vec<String>, &'static str> 
 /// The default remains intact when a world saves its own provider and key.
 pub fn scope_document(bytes: &[u8], world: Option<&str>) -> Result<(Vec<u8>, bool), &'static str> {
     validate_world_scope(world)?;
-    credential_references(bytes)?;
     let value: serde_json::Value =
         serde_json::from_slice(bytes).map_err(|_| "model_configuration_invalid")?;
     if value["version"] != 2 {
+        credential_references(bytes)?;
         return Ok((bytes.to_vec(), world.is_some()));
+    }
+    if value.as_object().is_none_or(|value| value.len() != 3)
+        || !value["worlds"].is_object()
+        || value.get("default").is_none()
+    {
+        return Err("model_configuration_invalid");
+    }
+    for key in value["worlds"].as_object().unwrap().keys() {
+        validate_world_scope(Some(key))?;
     }
     let selected = world.and_then(|world| value["worlds"].get(world));
     let inherited = world.is_some() && selected.is_none();
-    Ok((
-        serde_json::to_vec(selected.unwrap_or(&value["default"]))
-            .map_err(|_| "model_configuration_invalid")?,
-        inherited,
-    ))
+    let selected = serde_json::to_vec(selected.unwrap_or(&value["default"]))
+        .map_err(|_| "model_configuration_invalid")?;
+    credential_references(&selected)?;
+    Ok((selected, inherited))
 }
 
 pub fn replace_scope(
@@ -139,26 +147,72 @@ pub fn replace_scope(
     document: &[u8],
     world: Option<&str>,
 ) -> Result<Vec<u8>, &'static str> {
+    scope_document(bytes, world)?;
+    repair_scope(bytes, document, world)
+}
+
+/// Repair only the requested scope. Unreadable bytes are archived by the caller.
+pub fn repair_scope(
+    bytes: &[u8],
+    document: &[u8],
+    world: Option<&str>,
+) -> Result<Vec<u8>, &'static str> {
     validate_world_scope(world)?;
-    credential_references(bytes)?;
-    let mut value: serde_json::Value =
-        serde_json::from_slice(bytes).map_err(|_| "model_configuration_invalid")?;
-    if value["version"] != 2 && world.is_none() {
-        return Ok(document.to_vec());
-    }
-    if value["version"] != 2 {
-        value = serde_json::json!({"version": 2, "default": value, "worlds": {}});
-    }
-    let document: serde_json::Value =
-        serde_json::from_slice(document).map_err(|_| "model_configuration_invalid")?;
+    credential_references(document)?;
+    let next: serde_json::Value =
+        serde_json::from_slice(document).map_err(|_| "model_setup_invalid")?;
+    let old = serde_json::from_slice::<serde_json::Value>(bytes).ok();
+    let mut container = match old {
+        Some(value) if value["version"] == 2 && value["worlds"].is_object() => {
+            for key in value["worlds"].as_object().unwrap().keys() {
+                validate_world_scope(Some(key))?;
+            }
+            serde_json::json!({"version":2,"default":value["default"],"worlds":value["worlds"]})
+        }
+        Some(value) if world.is_some() => {
+            serde_json::json!({"version":2,"default":value,"worlds":{}})
+        }
+        _ if world.is_some() => serde_json::json!({"version":2,"default":null,"worlds":{}}),
+        _ => return Ok(document.to_vec()),
+    };
     if let Some(world) = world {
-        value["worlds"][world] = document;
+        container["worlds"][world] = next;
     } else {
-        value["default"] = document;
+        container["default"] = next;
     }
-    let output = serde_json::to_vec(&value).map_err(|_| "model_configuration_invalid")?;
-    credential_references(&output)?;
-    Ok(output)
+    serde_json::to_vec(&container).map_err(|_| "model_setup_invalid")
+}
+
+fn available_credential_references(bytes: &[u8]) -> Vec<String> {
+    if let Ok(references) = credential_references(bytes) {
+        return references;
+    }
+    let Ok(value) = serde_json::from_slice::<serde_json::Value>(bytes) else {
+        return Vec::new();
+    };
+    if value["version"] != 2 {
+        return Vec::new();
+    }
+    let Some(worlds) = value["worlds"].as_object() else {
+        return Vec::new();
+    };
+    let mut references = Vec::new();
+    for document in std::iter::once(&value["default"]).chain(
+        worlds
+            .iter()
+            .filter_map(|(world, value)| validate_world_scope(Some(world)).ok().map(|_| value)),
+    ) {
+        if let Ok(document) = serde_json::to_vec(document) {
+            if let Ok(known) = credential_references(&document) {
+                for reference in known {
+                    if !references.contains(&reference) {
+                        references.push(reference);
+                    }
+                }
+            }
+        }
+    }
+    references
 }
 
 pub fn inherit_default(bytes: &[u8], world: &str) -> Result<Vec<u8>, &'static str> {
@@ -505,7 +559,7 @@ pub async fn load(path: &Path) -> Result<HostLlmConfiguration, &'static str> {
         .await
         .map_err(|_| "llm_config_read_failed")?;
     Ok(HostLlmConfiguration {
-        credential_refs: credential_references(&bytes).unwrap_or_default(),
+        credential_refs: available_credential_references(&bytes),
     })
 }
 
@@ -514,6 +568,28 @@ mod tests {
     use super::*;
 
     const REFERENCE: &str = "00000000-0000-0000-0000-000000000001";
+
+    #[test]
+    fn repairing_one_scope_preserves_other_scopes_and_never_inherits_a_broken_world() {
+        let world = "00000000-0000-0000-0000-000000000002";
+        let other = "00000000-0000-0000-0000-000000000003";
+        let valid = single_chat_document(&setup("anthropic", None), REFERENCE).unwrap();
+        let value: serde_json::Value = serde_json::from_slice(&valid).unwrap();
+        let original = serde_json::json!({"version":2,"default":value,"worlds":{
+            world: {"broken":"scope"}, other:value
+        }});
+        let bytes = serde_json::to_vec(&original).unwrap();
+        assert!(scope_document(&bytes, Some(world)).is_err());
+        assert_eq!(scope_document(&bytes, Some(other)).unwrap().1, false);
+        assert_eq!(available_credential_references(&bytes), [REFERENCE]);
+        let repaired = repair_scope(&bytes, &valid, Some(world)).unwrap();
+        let repaired: serde_json::Value = serde_json::from_slice(&repaired).unwrap();
+        assert_eq!(repaired["default"], original["default"]);
+        assert_eq!(repaired["worlds"][other], original["worlds"][other]);
+        assert_eq!(repaired["worlds"][world], value);
+        let bad_world = serde_json::json!({"version":2,"default":value,"worlds":{"invalid":null}});
+        assert!(repair_scope(&serde_json::to_vec(&bad_world).unwrap(), &valid, None).is_err());
+    }
 
     fn setup(kind: &str, base_url: Option<&str>) -> ChatModelSetup {
         ChatModelSetup {

@@ -803,7 +803,21 @@ def test_no_content_database_runtime_or_receipt_mutation_and_restart_retains_exp
                     return {
                         table: (
                             await connection.execute(
-                                text(f'SELECT * FROM "{table}" ORDER BY rowid')
+                                text(
+                                    f'SELECT * FROM "{table}" ORDER BY '
+                                    + ",".join(
+                                        str(i + 1)
+                                        for i in range(
+                                            len(
+                                                (
+                                                    await connection.execute(
+                                                        text(f'PRAGMA table_info("{table}")')
+                                                    )
+                                                ).all()
+                                            )
+                                        )
+                                    )
+                                )
                             )
                         ).all()
                         for table in tables
