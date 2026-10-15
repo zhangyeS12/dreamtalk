@@ -1,12 +1,14 @@
 ; Lifecycle hooks supplement Tauri's owned-file uninstall and shortcut handling.
 ; No app-data removal, registry scanning or arbitrary portable-directory deletion.
 Var DreamtalkBackupDone
+; Resolve while including this file, before a caller expands the macro elsewhere.
+!define DREAMTALK_BACKUP_SCRIPT_SOURCE "${__FILEDIR__}\installer-save-backup.ps1"
 !macro DREAMTALK_BACKUP_BEFORE_INSTALL
   ${If} $DreamtalkBackupDone != 1
     Push $R0
     Push $R1
     InitPluginsDir
-    File /oname=$PLUGINSDIR\dreamtalk-save-backup.ps1 "${__FILEDIR__}\installer-save-backup.ps1"
+    File /oname=$PLUGINSDIR\dreamtalk-save-backup.ps1 "${DREAMTALK_BACKUP_SCRIPT_SOURCE}"
     nsExec::ExecToStack '$\"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe$\" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $\"$PLUGINSDIR\dreamtalk-save-backup.ps1$\" -Version $\"${VERSION}$\"'
     Pop $R0
     Pop $R1
