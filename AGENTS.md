@@ -15,7 +15,7 @@
 
 ## 接手导航与完成度口径
 
-- **当前完成度**：当前源码Desktop **0.1.78**（存档保护及媒体可靠性源码，未发布）／迁移head0052_sticker_entry_description；API1、配音revision8；v0.1.77审查修复已公开，发行源码e192331，完整Windows资产及原更新频道核对见[本轮记录](docs/maintenance/2026-10-14-review-fixes-release.md)。前轮0.1.76配音、三库表情、聊天图片和本机服务大更新已公开，完整Windows签名安装包／便携ZIP及原update-preview清单已核对，见[发布记录](docs/maintenance/2026-10-14-major-release.md)。用户确认本地配音效果、角色发送和新增公共表情识别的具体体验；免费云端最新版与付费API仍待确认，其他媒体／升级场景不扩为整体验收。此前四次配音对照和七次合成表情测试许可均已结束；日常不本机打包规则继续适用。
+- **当前完成度**：当前源码Desktop **0.1.78**（存档保护与媒体可靠性预发布已公开，发行源码e4b7164）／迁移head0052_sticker_entry_description；API1、配音revision8；v0.1.77审查修复已公开，发行源码e192331，完整Windows资产及原更新频道核对见[本轮记录](docs/maintenance/2026-10-14-review-fixes-release.md)。前轮0.1.76配音、三库表情、聊天图片和本机服务大更新已公开，完整Windows签名安装包／便携ZIP及原update-preview清单已核对，见[发布记录](docs/maintenance/2026-10-14-major-release.md)。用户确认本地配音效果、角色发送和新增公共表情识别的具体体验；免费云端最新版与付费API仍待确认，其他媒体／升级场景不扩为整体验收。此前四次配音对照和七次合成表情测试许可均已结束；日常不本机打包规则继续适用。
 
 - [HANDOFF第1节](HANDOFF.md#1-五分钟了解当前完成度)先看“已实现/历史体验/待验收/未实现/未批准”，[第3节](HANDOFF.md#3-各部分怎样实现从哪里接手)看UI→API→Core→Store/调度入口，[PROJECT_STATUS.md](docs/PROJECT_STATUS.md)看逐项能力和限制。
 - 用户不满意0.1.36并明确授权继续重构；0.1.37观星室切片已实现并build-only交付，证据见HANDOFF第6节，接续按新版体验修复。长期记忆、RAG、相遇、共同休闲、在线/双人主动联系、阵营及头像已有实现，不重新列为开发任务。
@@ -25,7 +25,7 @@
 
 ## 当前范围提醒
 
-- 当前工作为用户已批准的媒体审查修复及本机存档保护：统一图片凭据与世界归属、图库独立说明、图片事务与旧孤立素材回收、搜索关键词保守过滤、群聊无正文诊断；保留独立备份、恢复、卸载保留、存档连续性核对、缺清单修复升级及未完成升级回退。媒体范围见[本轮记录](docs/maintenance/2026-10-15-media-contract-reliability.md)。Desktop源码0.1.78；用户随后明确授权本轮GitHub源码及完整Windows发布，使用--build-only；仍不运行测试/模型/真实存档。发布结果见[记录](docs/maintenance/2026-10-15-release-0178.md)。见[本轮记录](docs/maintenance/2026-10-14-save-safety.md)。此前本机人工恢复许可不作为本轮验证授权。
+- 当前工作为用户已批准的媒体审查修复及本机存档保护：统一图片凭据与世界归属、图库独立说明、图片事务与旧孤立素材回收、搜索关键词保守过滤、群聊无正文诊断；保留独立备份、恢复、卸载保留、存档连续性核对、缺清单修复升级及未完成升级回退。媒体范围见[本轮记录](docs/maintenance/2026-10-15-media-contract-reliability.md)。Desktop源码0.1.78；本轮已按用户授权完成GitHub源码及完整Windows预发布与原更新频道核对，使用--build-only；未运行测试/模型/真实存档。发布结果见[记录](docs/maintenance/2026-10-15-release-0178.md)。见[本轮记录](docs/maintenance/2026-10-14-save-safety.md)。此前本机人工恢复许可不作为本轮验证授权。
 
 - 前轮2026-10-14用户在审查汇报后明确授权修复并发布0.1.77，范围为已报告的可靠性／冗余和文档冲突。该轮源码Desktop0.1.77、API1、0051_media_frequency_kind、配音revision8；仅该轮是第20节GitHub发布打包例外，使用--build-only。该旧许可不复用；当前0.1.78的打包/发布以用户本次明确要求及发布记录为准，仍无运行授权，见[前轮记录](docs/maintenance/2026-10-14-review-fixes-release.md)。
 - 上轮0.1.76配音／表情大更新已公开；用户只确认本地配音、角色发送及新增公共表情识别的具体体验，免费云端最新版／付费API和其他场景待验收。此前四次配音对照、七次合成表情测试及限定元数据读取许可已结束，不复用为本轮测试／诊断授权。见[原发布记录](docs/maintenance/2026-10-14-major-release.md)。
