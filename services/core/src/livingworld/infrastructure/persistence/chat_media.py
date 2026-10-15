@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 import jieba
-from sqlalchemy import and_, func, or_, select, update
+from sqlalchemy import String, and_, case, cast, delete, func, or_, select, update
 from sqlalchemy.orm import load_only
 
 from livingworld.application.chat_media import MediaError, MediaSettings, PreparedMedia, prompt_text
@@ -49,10 +49,14 @@ def sticker_scope(world, root):
     )
 
 
-def asset_view(asset):
+def entry_description(entry, asset):
+    return entry.description if entry.description is not None else asset.description
+
+
+def asset_view(asset, description=None):
     return {
         "asset_id": str(asset.asset_id),
-        "description": asset.description,
+        "description": asset.description if description is None else description,
         "mime": asset.mime,
         "source_url": asset.source_url,
         "caption_state": asset.caption_state,
@@ -64,7 +68,7 @@ async def root_for_character(session, world, character):
     return row.root_import_id if row is not None else None
 
 
-async def collect_sticker(session, world, root, asset):
+async def collect_sticker(session, world, root, asset, description):
     key = library_key(world, "character", root)
     existing = await session.scalar(
         select(StickerEntryRecord).where(
@@ -81,6 +85,7 @@ async def collect_sticker(session, world, root, asset):
                 root_import_id=root,
                 asset_id=asset,
                 active=True,
+                description=description,
                 added_at_utc=datetime.now(UTC),
             )
         )
@@ -146,7 +151,7 @@ async def attach_player_media(session, row, entry_id):
     asset = await session.get(MediaAssetRecord, entry.asset_id)
     row.media_json = json.dumps(
         {
-            **asset_view(asset),
+            **asset_view(asset, entry_description(entry, asset)),
             "kind": "sticker",
             "entry_id": str(entry.entry_id),
             "only_media": not row.text.strip(),
@@ -162,7 +167,9 @@ async def attach_player_media(session, row, entry_id):
     for character in participants:
         root = await root_for_character(session, row.world_id, character)
         if root is not None:
-            await collect_sticker(session, row.world_id, root, asset.asset_id)
+            await collect_sticker(
+                session, row.world_id, root, asset.asset_id, entry_description(entry, asset)
+            )
 
 
 async def attach_character_media(session, row, source, prepared):
@@ -185,9 +192,12 @@ async def attach_character_media(session, row, source, prepared):
         unlimited_stickers=settings.unlimited_stickers,
     ):
         return
-    asset = await session.get(MediaAssetRecord, prepared.asset_id)
     root = await root_for_character(session, row.world_id, row.sender_character_id)
-    if asset is None or asset.world_id not in {None, row.world_id} or root is None:
+    if root is None:
+        return
+    asset = await session.get(MediaAssetRecord, prepared.asset_id)
+    pending_download = asset is None and prepared.data is not None and prepared.entry_id is None
+    if not pending_download and (asset is None or asset.world_id not in {None, row.world_id}):
         return
     if prepared.entry_id is not None:
         entry = await session.get(StickerEntryRecord, prepared.entry_id)
@@ -201,7 +211,7 @@ async def attach_character_media(session, row, source, prepared):
             }
         ):
             return
-    elif asset.world_id != row.world_id:
+    elif not pending_download and asset.world_id != row.world_id:
         return
     attempt = await session.get(MediaAttemptRecord, (row.world_id, source.turn_id.value))
     if attempt is None:
@@ -216,11 +226,24 @@ async def attach_character_media(session, row, source, prepared):
         session.add(attempt)
     if attempt.sent:
         return
+    if pending_download:
+        # No durable bytes exist until all attachment admission checks pass.
+        asset = MediaAssetRecord(
+            asset_id=prepared.asset_id,
+            world_id=row.world_id,
+            digest=hashlib.sha256(prepared.data).hexdigest(),
+            data=prepared.data,
+            mime=prepared.mime,
+            description=prepared.description,
+            source_url=prepared.source_url,
+            caption_state=prepared.caption_state,
+        )
+        session.add(asset)
     attempt.sent = True
     attempt.sent_kind = prepared.kind
     row.media_json = json.dumps(
         {
-            **asset_view(asset),
+            **asset_view(asset, prepared.description),
             "kind": prepared.kind,
             "only_media": prepared.only_media,
             "fallback_hash": hashlib.sha256(row.text.encode()).hexdigest(),
@@ -230,7 +253,7 @@ async def attach_character_media(session, row, source, prepared):
     if prepared.only_media:
         row.text = "[表情]" if prepared.kind == "sticker" else "[图片]"
     if prepared.kind == "sticker":
-        await collect_sticker(session, row.world_id, root, asset.asset_id)
+        await collect_sticker(session, row.world_id, root, asset.asset_id, prepared.description)
 
 
 class SqlAlchemyChatMediaStore:
@@ -249,6 +272,42 @@ class SqlAlchemyChatMediaStore:
                 update(MediaCaptionCallRecord)
                 .where(MediaCaptionCallRecord.state == "running")
                 .values(state="unknown")
+            )
+            # Legacy downloads were saved before their message. Startup has no
+            # active generations; retain every library entry, including removals,
+            # and every historical attachment. Only orphan web assets qualify.
+            attachment_id = case(
+                (
+                    func.json_valid(ChatMessageRecord.media_json),
+                    func.json_extract(ChatMessageRecord.media_json, "$.asset_id"),
+                ),
+                else_=None,
+            )
+            # NOT IN lets SQLite build the reference set once, rather than scan
+            # all message attachments again for every candidate asset.
+            referenced = select(func.lower(func.replace(attachment_id, "-", ""))).where(
+                attachment_id.is_not(None)
+            )
+            in_library = select(StickerEntryRecord.asset_id)
+            abandoned = (
+                select(MediaAssetRecord.asset_id)
+                .where(
+                    MediaAssetRecord.source_url.is_not(None),
+                    MediaAssetRecord.asset_id.not_in(in_library),
+                    cast(MediaAssetRecord.asset_id, String).not_in(referenced),
+                    ~select(ChatMessageRecord.message_id)
+                    .where(
+                        ChatMessageRecord.media_json.is_not(None),
+                        func.json_valid(ChatMessageRecord.media_json) == 0,
+                    )
+                    .exists(),
+                )
+                .limit(32)
+            )
+            await session.execute(
+                delete(MediaAssetRecord)
+                .where(MediaAssetRecord.asset_id.in_(abandoned))
+                .execution_options(synchronize_session=False)
             )
 
     async def scope(self, session, world, library, root=None):
@@ -306,7 +365,9 @@ class SqlAlchemyChatMediaStore:
             )
             if query.strip():
                 stmt = stmt.where(
-                    MediaAssetRecord.description.contains(query.strip(), autoescape=True)
+                    func.coalesce(
+                        StickerEntryRecord.description, MediaAssetRecord.description
+                    ).contains(query.strip(), autoescape=True)
                 )
             rows = (
                 await session.execute(
@@ -315,7 +376,11 @@ class SqlAlchemyChatMediaStore:
             ).all()
             return {
                 "items": [
-                    {**asset_view(asset), "entry_id": str(entry.entry_id), "library": library}
+                    {
+                        **asset_view(asset, entry_description(entry, asset)),
+                        "entry_id": str(entry.entry_id),
+                        "library": library,
+                    }
                     for entry, asset in rows[:100]
                 ],
                 "has_more": len(rows) > 100,
@@ -361,12 +426,17 @@ class SqlAlchemyChatMediaStore:
                     asset_id=asset.asset_id,
                     active=True,
                     added_at_utc=datetime.now(UTC),
+                    description=description,
                 )
                 session.add(entry)
             else:
                 entry.active = True
                 entry.added_at_utc = datetime.now(UTC)
-            return {**asset_view(asset), "entry_id": str(entry.entry_id), "library": library}
+            return {
+                **asset_view(asset, entry_description(entry, asset)),
+                "entry_id": str(entry.entry_id),
+                "library": library,
+            }
 
     async def edit_entry(self, world, entry_id, description=None, remove=False):
         async with self.sessions() as session, session.begin():
@@ -377,8 +447,38 @@ class SqlAlchemyChatMediaStore:
             if remove:
                 entry.active = False
             if description is not None:
-                asset = await session.get(MediaAssetRecord, entry.asset_id)
-                asset.description = description
+                entry.description = description
+
+    async def caption_entry_description(self, world, asset_id, entry_id):
+        async with self.sessions() as session:
+            entry = await session.get(StickerEntryRecord, entry_id)
+            if (
+                entry is None
+                or not entry.active
+                or entry.world_id not in {None, world}
+                or entry.asset_id != asset_id
+            ):
+                raise MediaError("media_sticker_unavailable")
+            await self.scope(session, world, entry.library, entry.root_import_id)
+            return entry.description
+
+    async def apply_entry_caption(self, world, asset_id, entry_id, expected, caption):
+        async with self.sessions() as session, session.begin():
+            await session.connection(execution_options={"livingworld_write_intent": True})
+            await self.scope(session, world, "public")
+            await session.execute(
+                update(StickerEntryRecord)
+                .where(
+                    StickerEntryRecord.entry_id == entry_id,
+                    StickerEntryRecord.asset_id == asset_id,
+                    StickerEntryRecord.world_id.is_(None) | (StickerEntryRecord.world_id == world),
+                    StickerEntryRecord.active.is_(True),
+                    StickerEntryRecord.description.is_(None)
+                    if expected is None
+                    else StickerEntryRecord.description == expected,
+                )
+                .values(description=caption[:200])
+            )
 
     async def asset(self, world, asset_id):
         async with self.sessions() as session:
@@ -416,7 +516,9 @@ class SqlAlchemyChatMediaStore:
                 sticker_scope(world, root),
                 or_(
                     *(
-                        MediaAssetRecord.description.contains(term, autoescape=True)
+                        func.coalesce(
+                            StickerEntryRecord.description, MediaAssetRecord.description
+                        ).contains(term, autoescape=True)
                         for term in terms
                     )
                 ),
@@ -426,7 +528,7 @@ class SqlAlchemyChatMediaStore:
         ranked = sorted(
             rows,
             key=lambda pair: (
-                sum(term in pair[1].description.casefold() for term in terms),
+                sum(term in entry_description(*pair).casefold() for term in terms),
                 pair[0].library == "character",
             ),
             reverse=True,
@@ -538,7 +640,7 @@ class SqlAlchemyChatMediaStore:
                     {
                         "entry_id": str(e.entry_id),
                         "library": e.library,
-                        "description": a.description[:200],
+                        "description": entry_description(e, a)[:200],
                         "added_at_utc": e.added_at_utc.isoformat() if e.added_at_utc else None,
                         "newest_known_addition": latest_added is not None
                         and e.added_at_utc == latest_added,
@@ -581,7 +683,7 @@ class SqlAlchemyChatMediaStore:
                     return PreparedMedia(
                         asset.asset_id,
                         "sticker",
-                        asset.description,
+                        entry_description(entry, asset),
                         asset.source_url,
                         entry.entry_id,
                         intent.only_media,
@@ -594,7 +696,7 @@ class SqlAlchemyChatMediaStore:
                 return PreparedMedia(
                     asset.asset_id,
                     "sticker",
-                    asset.description,
+                    entry_description(entry, asset),
                     asset.source_url,
                     entry.entry_id,
                     intent.only_media,
@@ -652,24 +754,12 @@ class SqlAlchemyChatMediaStore:
                 row.searched = True
             return True
 
-    async def save_search_result(self, source, speaker, intent, data, mime, description, url):
+    async def claim_prepared_caption(self, source, prepared, settings):
         world = source_message(source).conversation_id.world_id.value
         async with self.sessions() as session, session.begin():
+            await session.connection(execution_options={"livingworld_write_intent": True})
             await self.scope(session, world, "public")
-            asset = MediaAssetRecord(
-                asset_id=uuid4(),
-                world_id=world,
-                digest=hashlib.sha256(data).hexdigest(),
-                mime=mime,
-                data=data,
-                description=description[:200],
-                source_url=url,
-                caption_state="new",
-            )
-            session.add(asset)
-            return PreparedMedia(
-                asset.asset_id, intent.kind, asset.description, url, None, intent.only_media
-            )
+            await self._claim_caption_call(session, world, prepared.asset_id, settings)
 
     async def claim_caption(self, world, asset_id, settings, *, retry=False):
         async with self.sessions() as session, session.begin():
@@ -678,42 +768,45 @@ class SqlAlchemyChatMediaStore:
             asset = await session.get(MediaAssetRecord, asset_id)
             if asset is None or asset.world_id not in {None, world}:
                 raise MediaError("media_asset_unavailable")
-            if (
-                asset.caption_state in {"running", "done"}
-                or asset.caption_state == "failed"
-                and not retry
-            ):
+            if asset.caption_state == "running":
+                raise MediaError("media_caption_in_progress")
+            if asset.caption_state == "done":
                 return None
-            if not settings.caption_model.strip():
-                raise MediaError("media_caption_not_configured")
-            if settings.caption_route == "compatible" and not settings.remote_caption_consent:
-                raise MediaError("media_caption_consent_required")
-            day = datetime.now(UTC).date().isoformat()
-            is_local = settings.caption_route == "ollama"
-            if not is_local:
-                count = await session.scalar(
-                    select(func.count())
-                    .select_from(MediaCaptionCallRecord)
-                    .where(
-                        MediaCaptionCallRecord.utc_day == day,
-                        MediaCaptionCallRecord.is_local.is_not(True),
-                    )
-                )
-                if count >= settings.daily_caption_limit:
-                    raise MediaError("media_caption_daily_limit")
+            if asset.caption_state == "failed" and not retry:
+                raise MediaError("media_caption_failed")
+            await self._claim_caption_call(session, world, asset_id, settings)
             asset.caption_state = "running"
-            session.add(
-                MediaCaptionCallRecord(
-                    call_id=uuid4(),
-                    world_scope=world,
-                    asset_id=asset_id,
-                    utc_day=day,
-                    state="running",
-                    usage_json=None,
-                    is_local=is_local,
+            return asset.data, asset.mime
+
+    async def _claim_caption_call(self, session, world, asset_id, settings):
+        if not settings.caption_model.strip():
+            raise MediaError("media_caption_not_configured")
+        if settings.caption_route == "compatible" and not settings.remote_caption_consent:
+            raise MediaError("media_caption_consent_required")
+        day = datetime.now(UTC).date().isoformat()
+        is_local = settings.caption_route == "ollama"
+        if not is_local:
+            count = await session.scalar(
+                select(func.count())
+                .select_from(MediaCaptionCallRecord)
+                .where(
+                    MediaCaptionCallRecord.utc_day == day,
+                    MediaCaptionCallRecord.is_local.is_not(True),
                 )
             )
-            return asset.data, asset.mime
+            if count >= settings.daily_caption_limit:
+                raise MediaError("media_caption_daily_limit")
+        session.add(
+            MediaCaptionCallRecord(
+                call_id=uuid4(),
+                world_scope=world,
+                asset_id=asset_id,
+                utc_day=day,
+                state="running",
+                usage_json=None,
+                is_local=is_local,
+            )
+        )
 
     async def finish_caption(self, world, asset_id, caption, usage):
         await self._caption_result(world, asset_id, caption, usage, "done")

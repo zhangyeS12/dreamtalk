@@ -72,6 +72,8 @@ def create_app(
     chat_exports=None,
     speech=None,
     chat_media=None,
+    storage_metadata=None,
+    storage_observer=None,
 ) -> FastAPI:
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
@@ -136,7 +138,9 @@ def create_app(
     if world_settings is not None:
         from livingworld.adapters.http.worlds import world_router
 
-        app.include_router(world_router(world_settings, authorize, world_deletion))
+        app.include_router(
+            world_router(world_settings, authorize, world_deletion, storage_observer)
+        )
 
     if player_event_feed is not None:
         from livingworld.adapters.http.player_events import player_events_router
@@ -234,6 +238,21 @@ def create_app(
         @app.post("/system/update/cancel", dependencies=[Depends(authorize)])
         async def cancel_update():
             return maintenance.cancel()
+
+        @app.post("/system/update/verified", dependencies=[Depends(authorize)])
+        async def verified_update():
+            return maintenance.verified()
+
+    if storage_metadata is not None:
+
+        @app.get("/system/storage", dependencies=[Depends(authorize)])
+        async def storage_evidence():
+            import asyncio
+
+            try:
+                return await asyncio.to_thread(storage_metadata)
+            except Exception:
+                raise HTTPException(503, "save_database_unavailable") from None
 
     @app.post("/system/shutdown", dependencies=[Depends(authorize)])
     async def stop(x_request_id: Annotated[str | None, Header()] = None) -> dict[str, bool | str]:

@@ -5,6 +5,7 @@
   "max_secret_bytes": 4096,
   "message_types": [
     "credential_upsert",
+    "media_credential_upsert",
     "credential_remove",
     "credential_sync_complete"
   ]

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from threading import RLock
+from uuid import UUID
 
 from livingworld.application.llm import LLMContractError
 from livingworld.application.llm_config import (
@@ -23,6 +24,7 @@ class SessionCredentialProvider:
             raise LLMContractError("invalid_expected_credentials")
         self._expected = frozenset(expected)
         self._values: dict[SecretRef, SecretValue] = {}
+        self._media_worlds: dict[SecretRef, UUID] = {}
         self._lock = RLock()
         self._sync_complete = False
         self._degraded = False
@@ -40,6 +42,33 @@ class SessionCredentialProvider:
         with self._lock:
             return reference in self._values
 
+    def media_reference_owned(self, world: UUID, reference: SecretRef) -> bool:
+        with self._lock:
+            return (
+                isinstance(world, UUID)
+                and isinstance(reference, SecretRef)
+                and not self._degraded
+                and self._media_worlds.get(reference) == world
+                and reference in self._values
+            )
+
+    async def resolve_media(self, world: UUID, reference: SecretRef) -> SecretValue:
+        with self._lock:
+            if not self.media_reference_owned(world, reference):
+                raise CredentialUnavailableError()
+            return self._values[reference]
+
+    def upsert_media(self, world: UUID, reference: SecretRef, secret: str) -> None:
+        if not isinstance(world, UUID):
+            raise LLMContractError("invalid_media_world")
+        with self._lock:
+            previous = self._media_worlds.get(reference)
+            if previous is not None and previous != world:
+                raise LLMContractError("invalid_media_credential_scope")
+            self.upsert(reference, secret)
+            if not self._degraded:
+                self._media_worlds[reference] = world
+
     def upsert(self, reference: SecretRef, secret: str) -> None:
         if not isinstance(reference, SecretRef):
             raise LLMContractError("invalid_secret_reference")
@@ -56,6 +85,7 @@ class SessionCredentialProvider:
             raise LLMContractError("invalid_secret_reference")
         with self._lock:
             self._values.pop(reference, None)
+            self._media_worlds.pop(reference, None)
 
     def complete_sync(self, *, secure_store_available: bool) -> None:
         if type(secure_store_available) is not bool:
@@ -68,6 +98,7 @@ class SessionCredentialProvider:
         with self._lock:
             self._degraded = True
             self._values.clear()
+            self._media_worlds.clear()
 
     @property
     def health(self) -> LLMRuntimeHealth:

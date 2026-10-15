@@ -78,6 +78,22 @@ impl CredentialDomain {
         Ok(self.load(config).await?.into_values().flatten().collect())
     }
 
+    pub async fn scoped_references(
+        self,
+        config: &LaunchConfig,
+    ) -> Result<Vec<(String, String)>, &'static str> {
+        Ok(self
+            .load(config)
+            .await?
+            .into_iter()
+            .flat_map(|(world, references)| {
+                references
+                    .into_iter()
+                    .map(move |reference| (world.clone(), reference))
+            })
+            .collect())
+    }
+
     pub async fn world_references(
         self,
         config: &LaunchConfig,

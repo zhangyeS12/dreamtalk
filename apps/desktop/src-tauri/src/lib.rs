@@ -6,6 +6,7 @@ pub mod llm_config;
 pub mod local_images;
 pub mod local_speech;
 pub mod media_credentials;
+pub mod save_safety;
 pub mod scoped_credentials;
 pub mod speech_credentials;
 pub mod supervisor;
@@ -55,10 +56,17 @@ async fn put_scoped_credential(
         }
         return Err(error.to_owned());
     }
-    supervisor
-        .provision_credential(reference, secret)
-        .await
-        .map_err(str::to_owned)
+    match domain {
+        scoped_credentials::CredentialDomain::Media => {
+            supervisor
+                .provision_media_credential(world, reference, secret)
+                .await
+        }
+        scoped_credentials::CredentialDomain::Speech => {
+            supervisor.provision_credential(reference, secret).await
+        }
+    }
+    .map_err(str::to_owned)
 }
 
 async fn forget_scoped_credentials(
@@ -811,7 +819,16 @@ pub fn run() {
             updater::claim_desktop_update_popup,
             updater::dismiss_desktop_update_popup,
             updater::install_desktop_update,
-            updater::acknowledge_desktop_update
+            updater::acknowledge_desktop_update,
+            updater::rollback_desktop_update,
+            save_safety::save_safety_status,
+            save_safety::create_save_backup,
+            save_safety::restore_save_backup,
+            save_safety::resume_restored_save,
+            save_safety::configure_save_backup_location,
+            save_safety::export_save_backup,
+            save_safety::import_save_backup,
+            save_safety::clear_saved_data
         ])
         .setup(|app| {
             let mut app_data = app.path().app_data_dir()?;
@@ -827,7 +844,13 @@ pub fn run() {
                 .parent()
                 .ok_or("desktop_executable_directory_missing")?
                 .to_path_buf();
-            let project_root = if executable_dir
+            let project_root = if cfg!(debug_assertions)
+                && !executable_dir.join(".dreamtalk-package.json").is_file()
+            {
+                std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                    .join("../../..")
+                    .canonicalize()?
+            } else if executable_dir
                 .join("core")
                 .join("dreamtalk-core.exe")
                 .is_file()
@@ -851,9 +874,33 @@ pub fn run() {
             app.manage(local_speech::LocalSpeechState::default());
             app.manage(local_images::LocalImageState::default());
             let speech_app = app.handle().clone();
+            save_safety::start_automatic(speech_app.clone(), config.clone(), supervisor.clone());
             tauri::async_runtime::spawn(async move {
                 let result = supervisor.lock().await.start(&config).await;
+                if result.is_err() && config.app_data.join("updates/handoff.json").exists() {
+                    let _ = tokio::fs::write(
+                        config.app_data.join("update-failure.json"),
+                        b"{\"code\":\"save_update_start_failed\"}",
+                    )
+                    .await;
+                }
                 if result.is_ok() {
+                    if updater::verify_pending_start(&speech_app, &config, &supervisor)
+                        .await
+                        .is_err()
+                    {
+                        let _ = supervisor
+                            .lock()
+                            .await
+                            .stop_for_update(Duration::from_secs(30))
+                            .await;
+                        let _ = tokio::fs::write(
+                            config.app_data.join("update-failure.json"),
+                            b"{\"code\":\"save_update_verification_failed\"}",
+                        )
+                        .await;
+                        return;
+                    }
                     tokio::join!(
                         local_speech::on_start(
                             speech_app.clone(),

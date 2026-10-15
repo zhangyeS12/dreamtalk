@@ -10,11 +10,12 @@ class UpdateMaintenance:
         self._until = 0.0
         self.active = 0
         self.deleting = False
+        self.startup_hold = False
         self.on_resume = lambda: None
 
     @property
     def preparing(self):
-        if self.deleting:
+        if self.deleting or self.startup_hold:
             return True
         if self._until and monotonic() >= self._until:
             self._until = 0.0
@@ -31,11 +32,17 @@ class UpdateMaintenance:
     def cancel(self):
         if self.deleting:
             return self.snapshot()
-        was_preparing = bool(self._until)
+        was_preparing = bool(self._until) and not self.startup_hold
         self._until = 0.0
         if was_preparing:
             self.on_resume()
         return self.snapshot()
+
+    def verified(self):
+        """Only the host releases startup admission after durable save verification."""
+        self.startup_hold = False
+        self._until = monotonic() + 300
+        return self.cancel()
 
     def begin_deletion(self):
         if self.preparing or self.active != 1:

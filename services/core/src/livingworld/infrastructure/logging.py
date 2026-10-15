@@ -152,6 +152,45 @@ class StructuredLogger:
             }
         )
 
+    def emit_group_reply_facts(
+        self,
+        *,
+        outcome: str,
+        elapsed_ms: int,
+        selection_calls: int,
+        reply_calls: int,
+        selection_ms: int,
+        reply_ms: int,
+        admission_blocks: int,
+        reserved_attempts: int,
+    ) -> None:
+        """Local counters only; logical calls differ from physical reservations."""
+        if outcome not in {"completed", "failed", "cancelled"}:
+            raise ValueError("invalid_group_reply_outcome")
+        counters = {
+            "elapsed_ms": elapsed_ms,
+            "selection_calls": selection_calls,
+            "reply_calls": reply_calls,
+            "selection_ms": selection_ms,
+            "reply_ms": reply_ms,
+            "admission_blocks": admission_blocks,
+            "reserved_attempts": reserved_attempts,
+        }
+        if any(
+            type(value) is not int or not 0 <= value <= 2**63 - 1 for value in counters.values()
+        ):
+            raise ValueError("invalid_group_reply_counter")
+        self._write(
+            {
+                "timestamp": datetime.now(UTC).isoformat(),
+                "level": "INFO",
+                "component": "group_chat",
+                "event": "turn_execution_facts",
+                "outcome": outcome,
+                **counters,
+            }
+        )
+
     def emit_scheduler(
         self,
         event: str,

@@ -8,11 +8,11 @@ dreamtalk 是一款开源桌面应用。你可以创建自己的世界，导入�
 
 每个世界有自己的角色、地点、聊天和记忆。你可以在一个世界是璃月的旅人，在另一个世界是新艾利都的居民，随时回到书架换一本书。
 
-[下载 Windows 体验版](https://github.com/zhangyeS12/dreamtalk/releases/tag/v0.1.77) · [本次更新内容](docs/releases/v0.1.77.md) · [完整设置说明](docs/SETTINGS_HANDBOOK.md) · [反馈问题](https://github.com/zhangyeS12/dreamtalk/issues)
+[下载 Windows 体验版](https://github.com/zhangyeS12/dreamtalk/releases/tag/v0.1.78) · [本次更新内容](docs/releases/v0.1.78.md) · [完整设置说明](docs/SETTINGS_HANDBOOK.md) · [反馈问题](https://github.com/zhangyeS12/dreamtalk/issues)
 
 目前提供 **Windows 10 / 11 的 64 位体验版**。应用免费开源；聊天所用的模型服务需要你自己提供 API 密钥，服务商可能按使用量收费。当前版本仍在持续完善，欢迎反馈实际体验。
 
-0.1.77修复本地配音长期运行、媒体频率、表情列表和图片密钥保存问题。此前配音、表情与图片能力保持：角色可使用公共／专属表情，用户有自己的表情库；支持按聊天环境配图、可选联网与图片分析。用户已确认角色发送和新增表情识别有效，使用方法见[表情与图片](docs/CHAT_MEDIA.md)。
+0.1.78新增整份存档备份／恢复、卸载保留及升级保护，修复云端图片密钥的完整调用链、图库说明串改和联网图片保存问题。此前配音、表情与图片能力保持：角色可使用公共／专属表情，用户有自己的表情库；支持按聊天环境配图、可选联网与图片分析。用户已确认角色发送和新增表情识别有效，使用方法见[表情与图片](docs/CHAT_MEDIA.md)。
 
 角色可绑定参考人声或音色卡，生成配音、复用六小时缓存，以及重新配音后试听决定是否替换。本地配音效果已有用户确认；官方免费云端最新版和付费API仍待确认，见[角色配音](docs/CHARACTER_VOICES.md)。本地配音／视觉模型需要另行准备，下载包不附带这些权重或参考录音；未部署视觉模型时可手动填写表情说明。
 
@@ -20,9 +20,11 @@ dreamtalk 是一款开源桌面应用。你可以创建自己的世界，导入�
 
 ### 1. 安装
 
-推荐下载 [Windows 安装包](https://github.com/zhangyeS12/dreamtalk/releases/download/v0.1.77/dreamtalk_0.1.77_x64-setup.exe)，按提示安装。
+推荐下载 [Windows 安装包](https://github.com/zhangyeS12/dreamtalk/releases/download/v0.1.78/dreamtalk_0.1.78_x64-setup.exe)，按提示安装。
 
-也可以使用 [便携版压缩包](https://github.com/zhangyeS12/dreamtalk/releases/download/v0.1.77/dreamtalk-0.1.77-windows-x64.zip)：完整解压到一个固定目录，打开 dreamtalk 文件夹里的 dreamtalk-desktop.exe。不要直接在压缩包中运行，也不要只复制其中的程序文件。
+本版提供[数据与备份](docs/DATA_BACKUPS.md)，新版卸载保留数据，安装／升级前先备份。旧版卸载器若仍出现“删除应用程序数据”，不要选择；重要备份建议另存其他磁盘。备份／恢复及升级故障场景仍待实际验收。
+
+也可以使用 [便携版压缩包](https://github.com/zhangyeS12/dreamtalk/releases/download/v0.1.78/dreamtalk-0.1.78-windows-x64.zip)：完整解压到一个固定目录，打开 dreamtalk 文件夹里的 dreamtalk-desktop.exe。不要直接在压缩包中运行，也不要只复制其中的程序文件。
 
 下载页中的 **Source code** 是给开发者看的源码，请选择上面的安装包或便携包。若系统缺少网页显示组件，可安装 [Microsoft WebView2](https://developer.microsoft.com/microsoft-edge/webview2/)。首次安装可能提示未知发布者：目前已有应用更新签名，但尚无 Windows 发布者证书。
 
@@ -261,7 +263,7 @@ dreamtalk 是一款开源桌面应用。你可以创建自己的世界，导入�
 
 **没有开启后台功能，可以只聊天吗？** 可以。自动活动、相遇、共同休闲、世界动态和主动联系均可保持关闭。
 
-目前还没有完整的关机期间生活重建、自动持续剧情与关系成长、一键生成完整可运行世界、完整存档备份 / 分支。已有记忆和活动也不能保证模型永不出错。
+目前还没有完整的关机期间生活重建、自动持续剧情与关系成长、一键生成完整可运行世界、单世界时间线分支／合并。已有记忆和活动也不能保证模型永不出错。
 
 ## 帮助与参与
 
@@ -270,3 +272,11 @@ dreamtalk 是一款开源桌面应用。你可以创建自己的世界，导入�
 通过 [GitHub Issues](https://github.com/zhangyeS12/dreamtalk/issues) 反馈时，请提供版本、操作步骤、预期与实际表现。请先遮住 API 密钥和私人聊天。新版本的实际使用和升级仍需要用户验收，构建成功不等于所有场景都已通过。
 
 dreamtalk 使用 [Apache-2.0 开源许可证](LICENSE)。想参与开发可查看[开发说明](docs/DEVELOPMENT.md)；项目实现和验收范围另见[状态清单](docs/PROJECT_STATUS.md)。
+
+## Code signing policy
+
+dreamtalk is awaiting review of its submitted application for free open-source signing with SignPath Foundation. The application has not been approved and the current downloads do not carry a Windows publisher certificate from the Foundation. Their existing Tauri updater signature verifies update integrity only.
+
+Planned attribution after approval: Free code signing provided by SignPath.io, certificate by SignPath Foundation.
+
+See [Code signing policy](https://github.com/zhangyeS12/dreamtalk/blob/main/docs/CODE_SIGNING.md) and [Privacy information](https://github.com/zhangyeS12/dreamtalk/blob/main/docs/PRIVACY.md).

@@ -1,8 +1,8 @@
 """Explicit media intent, world-scoped libraries and optional bounded image services."""
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import Literal
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -15,6 +15,9 @@ class MediaError(ValueError):
 
 CAPTION_FAILURE_CODES = frozenset(
     {
+        "media_reference_invalid",
+        "media_credential_scope_invalid",
+        "media_caption_in_progress",
         "media_caption_endpoint_invalid",
         "media_caption_local_required",
         "media_caption_https_required",
@@ -78,6 +81,9 @@ class PreparedMedia:
     source_url: str | None = None
     entry_id: UUID | None = None
     only_media: bool = False
+    data: bytes | None = field(default=None, repr=False)
+    mime: str | None = None
+    caption_state: str = "new"
 
 
 MEDIA_INSTRUCTIONS = (
@@ -304,32 +310,66 @@ class ChatMediaService:
             if found is None:
                 return None
             data, mime, description, source_url = found
-            result = await self.store.save_search_result(
-                source, speaker, intent, data, mime, description, source_url
+            result = PreparedMedia(
+                uuid4(),
+                intent.kind,
+                description[:200],
+                source_url,
+                None,
+                intent.only_media,
+                data=data,
+                mime=mime,
             )
             if settings.auto_caption:
                 try:
-                    await self.caption(original.conversation_id.world_id.value, result.asset_id)
-                    result = replace(
-                        result, description=await self.store.description(result.asset_id)
+                    world = original.conversation_id.world_id.value
+                    await self.store.claim_prepared_caption(source, result, settings)
+                    caption, usage = await self.providers.caption(
+                        settings, data, mime, world_id=world
                     )
-                except MediaError:
-                    pass
+                    await self.store.finish_caption(world, result.asset_id, caption, usage)
+                    result = replace(result, description=caption, caption_state="done")
+                except Exception:
+                    await self.store.fail_caption(
+                        original.conversation_id.world_id.value, result.asset_id
+                    )
+                    result = replace(result, caption_state="failed")
             return result
+        except MediaError as error:
+            self._failed(
+                "search_query_rejected"
+                if str(error) == "media_search_query_rejected"
+                else "search_failed"
+            )
+            return None
         except Exception:
             # Media is optional; failures never trigger another search or text-model call.
             self._failed("search_failed")
             return None
 
-    async def caption(self, world_id, asset_id, *, retry=False):
+    async def caption(self, world_id, asset_id, *, retry=False, entry_id=None):
+        expected = (
+            await self.store.caption_entry_description(world_id, asset_id, entry_id)
+            if entry_id is not None
+            else None
+        )
         settings = await self.store.settings(world_id)
         claimed = await self.store.claim_caption(world_id, asset_id, settings, retry=retry)
         if claimed is None:
-            return await self.store.description(asset_id)
+            caption = await self.store.description(asset_id)
+            if entry_id is not None:
+                await self.store.apply_entry_caption(
+                    world_id, asset_id, entry_id, expected, caption
+                )
+            return caption
         data, mime = claimed
         try:
-            caption, usage = await self.providers.caption(settings, data, mime)
+            caption, usage = await self.providers.caption(settings, data, mime, world_id=world_id)
             await self.store.finish_caption(world_id, asset_id, caption, usage)
+            if entry_id is not None:
+                await self.store.apply_entry_caption(
+                    world_id, asset_id, entry_id, expected, caption
+                )
             return caption
         except Exception as error:
             await self.store.fail_caption(world_id, asset_id)

@@ -93,6 +93,28 @@ async def run(
 ) -> None:
     logger = StructuredLogger()
     config = read_bootstrap(bootstrap_path)
+    # This guard runs before migrations, recall initialization, or background providers.
+    from livingworld.infrastructure.save_safety import (
+        create_snapshot,
+        guard,
+        metadata,
+        observe_world_change,
+    )
+
+    if desktop:
+        storage = await asyncio.to_thread(guard, config.data_dir.parent)
+        if storage["recovery_required"]:
+            raise ValueError("save_recovery_required")
+        if storage["current"]:
+            from livingworld.infrastructure.persistence.migration import HEAD_REVISION
+
+            if storage["current"]["revisions"] != [HEAD_REVISION]:
+                await asyncio.to_thread(
+                    create_snapshot,
+                    config.data_dir.parent,
+                    "pre_migration",
+                    version("dreamtalk-core"),
+                )
     generation = str(uuid4())
     session = derive_session(
         config.bootstrap_secret.get_secret_value(), config.instance_nonce, generation
@@ -114,6 +136,17 @@ async def run(
     from livingworld.application.update_maintenance import UpdateMaintenance
 
     maintenance = UpdateMaintenance()
+    if desktop and (config.data_dir.parent / "updates/handoff.json").exists():
+        handoff = json.loads(
+            (config.data_dir.parent / "updates/handoff.json").read_text(encoding="utf-8")
+        )
+        verified_path = config.data_dir.parent / "updates/verified.json"
+        verified = (
+            json.loads(verified_path.read_text(encoding="utf-8")) if verified_path.exists() else {}
+        )
+        if verified.get("recovery") != handoff.get("recovery"):
+            maintenance.startup_hold = True
+            maintenance.prepare()
     shutdown = ShutdownRequests()
     ready_path = bootstrap_path.parent / "ready.json"
     ready_path.unlink(missing_ok=True)
@@ -357,6 +390,7 @@ async def run(
                 social_reader=database.faction_store().context_for_character,
             ),
             journal=story_store,
+            logger=logger,
         )
         from livingworld.application.content_builder import ContentBuilder
         from livingworld.infrastructure.content_research import DDGSContentResearch
@@ -434,6 +468,10 @@ async def run(
             content_builder,
             database.content_repository(),
             maintenance=maintenance,
+            storage_metadata=(lambda: metadata(config.data_dir)) if desktop else None,
+            storage_observer=(lambda: observe_world_change(config.data_dir.parent))
+            if desktop
+            else None,
             speech=speech,
             chat_media=chat_media,
             world_deletion=WorldDeletionService(
@@ -557,10 +595,20 @@ async def run(
 def main() -> None:
     parser = argparse.ArgumentParser(description="dreamtalk system runtime")
     parser.add_argument("--desktop", action="store_true")
-    parser.add_argument("--bootstrap-path", type=Path, required=True)
+    parser.add_argument("--bootstrap-path", type=Path)
+    parser.add_argument("--storage-request", type=Path)
     parser.add_argument("--parent-pid", type=int)
     parser.add_argument("--developer-tools", action="store_true")
     args = parser.parse_args()
+    if args.storage_request:
+        if args.desktop or args.bootstrap_path or args.developer_tools:
+            parser.error("storage_tool_arguments_invalid")
+        from livingworld.infrastructure.save_safety import run_request
+
+        run_request(args.storage_request)
+        return
+    if args.bootstrap_path is None:
+        parser.error("bootstrap_path_required")
     if args.desktop and (args.parent_pid is None or args.parent_pid <= 0):
         parser.error("desktop_parent_pid_required")
     try:

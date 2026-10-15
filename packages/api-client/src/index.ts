@@ -304,7 +304,7 @@ export class CoreClient {
   editSticker(world: string, entry: string, description: string): Promise<{ saved: boolean }> { return this.productRequest(`/worlds/${world}/media/stickers/${entry}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ description }) }); }
   removeSticker(world: string, entry: string): Promise<{ removed: boolean }> { return this.productRequest(`/worlds/${world}/media/stickers/${entry}`, { method: "DELETE" }); }
   mediaImage(world: string, asset: string, signal?: AbortSignal): Promise<Blob> { return this.productRequest(`/worlds/${world}/media/assets/${asset}`, { signal }, true); }
-  captionMedia(world: string, asset: string): Promise<{ description: string }> { return this.productRequest(`/worlds/${world}/media/assets/${asset}/caption`, { method: "POST" }); }
+  captionMedia(world: string, asset: string, entry?: string): Promise<{ description: string }> { return this.productRequest(`/worlds/${world}/media/assets/${asset}/caption${entry ? `?entry_id=${encodeURIComponent(entry)}` : ""}`, { method: "POST" }); }
   speechSettings(worldId: string, signal?: AbortSignal): Promise<SpeechStatus> {
     return this.productRequest(`/worlds/${worldId}/speech`, { signal });
   }

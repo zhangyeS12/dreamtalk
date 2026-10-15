@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
-from dataclasses import replace
+from contextvars import ContextVar
+from dataclasses import dataclass, replace
+from time import perf_counter
 from uuid import UUID, uuid4
 
 from livingworld.application.chat_capacity import ContextCapacityError, fit_chat_context
@@ -53,6 +56,24 @@ _SELECT_OUTPUT_TOKENS = 8192
 _PURPOSE = LLMPurpose("character_dialogue")
 
 
+@dataclass(slots=True)
+class _GroupFacts:
+    selection_calls: int = 0
+    reply_calls: int = 0
+    selection_ms: int = 0
+    reply_ms: int = 0
+    admission_blocks: int = 0
+    budget: ChatTurnTokenBudget | None = None
+
+
+_GROUP_FACTS: ContextVar[_GroupFacts | None] = ContextVar("group_reply_facts", default=None)
+
+
+def _count_group_fact(name, amount=1):
+    if (facts := _GROUP_FACTS.get()) is not None:
+        setattr(facts, name, getattr(facts, name) + amount)
+
+
 class GroupChatReplyService(ChatReplyConfiguration[GroupChatContextBuilder]):
     """Speaker scheduling stays separate from Director and WorldEvent commits."""
 
@@ -93,14 +114,18 @@ class GroupChatReplyService(ChatReplyConfiguration[GroupChatContextBuilder]):
         except RoutingError:
             raise ChatReplyUnavailableError("chat_model_unavailable") from None
         except ContextCapacityError as error:
+            _count_group_fact("admission_blocks")
             raise ChatReplyBudgetError(str(error)) from None
 
     async def _generate(self, request: LLMRequest, budget: ChatTurnTokenBudget) -> LLMResponse:
+        _count_group_fact("selection_calls")
+        started = perf_counter()
         try:
             response = await self._gateway.generate(
                 request, selection=self._selection, turn_budget=budget
             )
         except (BudgetAdmissionError, TurnTokenBudgetError):
+            _count_group_fact("admission_blocks")
             raise ChatReplyBudgetError("chat_admission_denied") from None
         except (BudgetIntegrityError, AccountingInfrastructureError):
             raise ChatReplyIntegrityError("chat_accounting_unavailable") from None
@@ -110,6 +135,8 @@ class GroupChatReplyService(ChatReplyConfiguration[GroupChatContextBuilder]):
             raise ChatReplyUnavailableError("chat_route_deadline_exhausted") from None
         except LLMError:
             raise ChatReplyGenerationError("chat_generation_failed") from None
+        finally:
+            _count_group_fact("selection_ms", int((perf_counter() - started) * 1000))
         if budget.bound_violated:
             raise ChatReplyValidationError("chat_token_bound_violated")
         if response.invocation_id != request.invocation_id:
@@ -206,19 +233,57 @@ class GroupChatReplyService(ChatReplyConfiguration[GroupChatContextBuilder]):
         await self._messages.save_context_report(source, speaker, report)
         if progress is not None:
             await progress(ChatProgress("replying", speaker))
-        return await dialogue_text(
-            self._gateway,
-            prepared,
-            budget,
-            self._selection,
-            progress,
-            speaker,
-            format_failure=self._media.reply_format_failure
-            if self._media is not None and prepared.metadata.get("chat_media_requested")
-            else None,
-        )
+        _count_group_fact("reply_calls")
+        started = perf_counter()
+        try:
+            return await dialogue_text(
+                self._gateway,
+                prepared,
+                budget,
+                self._selection,
+                progress,
+                speaker,
+                format_failure=self._media.reply_format_failure
+                if self._media is not None and prepared.metadata.get("chat_media_requested")
+                else None,
+            )
+        except ChatReplyBudgetError:
+            _count_group_fact("admission_blocks")
+            raise
+        finally:
+            _count_group_fact("reply_ms", int((perf_counter() - started) * 1000))
 
     async def reply(
+        self, sent: PlayerSend, *, progress: ChatProgressSink | None = None
+    ) -> GroupTurnView:
+        facts = _GroupFacts()
+        token = _GROUP_FACTS.set(facts)
+        started, outcome = perf_counter(), "failed"
+        try:
+            result = await self._reply_turn(sent, progress=progress)
+            outcome = "completed"
+            return result
+        except asyncio.CancelledError:
+            outcome = "cancelled"
+            raise
+        finally:
+            _GROUP_FACTS.reset(token)
+            if self._logger is not None:
+                try:
+                    self._logger.emit_group_reply_facts(
+                        outcome=outcome,
+                        elapsed_ms=int((perf_counter() - started) * 1000),
+                        selection_calls=facts.selection_calls,
+                        reply_calls=facts.reply_calls,
+                        selection_ms=facts.selection_ms,
+                        reply_ms=facts.reply_ms,
+                        admission_blocks=facts.admission_blocks,
+                        reserved_attempts=facts.budget.reserved_attempts if facts.budget else 0,
+                    )
+                except (OSError, ValueError):
+                    pass
+
+    async def _reply_turn(
         self, sent: PlayerSend, *, progress: ChatProgressSink | None = None
     ) -> GroupTurnView:
         if not isinstance(sent, PlayerSend):
@@ -226,6 +291,8 @@ class GroupChatReplyService(ChatReplyConfiguration[GroupChatContextBuilder]):
         if not self.available:
             raise ChatReplyUnavailableError("chat_model_unavailable")
         budget = ChatTurnTokenBudget(sent.token_ceiling)
+        if (facts := _GROUP_FACTS.get()) is not None:
+            facts.budget = budget
         try:
             mentioned = await self._context.mentioned_character(sent)
         except ValueError:

@@ -35,8 +35,7 @@ def chat_media_router(service, authorize):
     @router.put("/settings")
     async def save_settings(world_id: UUID, body: MediaSettings):
         validate_caption_endpoint(body)
-        if body.secret_ref is not None and not body.secret_ref.startswith(f"media:{world_id}:"):
-            raise MediaError("media_credential_scope_invalid")
+        await service.providers.wait_for_credential(world_id, body)
         if (
             body.caption_route == "compatible"
             and body.auto_caption
@@ -78,9 +77,11 @@ def chat_media_router(service, authorize):
             world_id, library, root, bytes(data), mime, description
         )
         settings = await service.store.settings(world_id)
-        if settings.auto_caption:
+        if settings.auto_caption and result["caption_state"] == "new":
             try:
-                result["description"] = await service.caption(world_id, UUID(result["asset_id"]))
+                result["description"] = await service.caption(
+                    world_id, UUID(result["asset_id"]), entry_id=UUID(result["entry_id"])
+                )
                 result["caption_state"] = "done"
             except MediaError:
                 result["caption_state"] = "failed"
@@ -106,8 +107,10 @@ def chat_media_router(service, authorize):
         )
 
     @router.post("/assets/{asset_id}/caption")
-    async def caption(world_id: UUID, asset_id: UUID):
-        return {"description": await service.caption(world_id, asset_id, retry=True)}
+    async def caption(world_id: UUID, asset_id: UUID, entry_id: UUID | None = None):
+        return {
+            "description": await service.caption(world_id, asset_id, retry=True, entry_id=entry_id)
+        }
 
     return router
 

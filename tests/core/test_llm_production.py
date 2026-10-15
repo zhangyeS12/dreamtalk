@@ -289,6 +289,7 @@ def test_bounded_control_protocol_and_secret_canary(tmp_path):
     assert "SECRET-CANARY" not in output.getvalue()
     assert set(HOST_CONTROL_CONTRACT["message_types"]) == {
         "credential_upsert",
+        "media_credential_upsert",
         "credential_remove",
         "credential_sync_complete",
     }

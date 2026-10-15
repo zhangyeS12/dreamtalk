@@ -52,6 +52,26 @@ pub fn credential_upsert(secret_ref: &str, secret: &str) -> Result<Vec<u8>, &'st
     }))
 }
 
+pub fn media_credential_upsert(
+    world: &str,
+    secret_ref: &str,
+    secret: &str,
+) -> Result<Vec<u8>, &'static str> {
+    let limits = contract();
+    validate_reference(world, limits.max_secret_ref_bytes)?;
+    validate_reference(secret_ref, limits.max_secret_ref_bytes)?;
+    if secret.is_empty() || secret.len() > limits.max_secret_bytes {
+        return Err("host_control_value_size_invalid");
+    }
+    encode(json!({
+        "version": limits.protocol_version,
+        "type": "media_credential_upsert",
+        "world_id": world,
+        "secret_ref": secret_ref,
+        "secret": secret,
+    }))
+}
+
 pub fn credential_remove(secret_ref: &str) -> Result<Vec<u8>, &'static str> {
     let contract = contract();
     validate_reference(secret_ref, contract.max_secret_ref_bytes)?;
@@ -103,7 +123,7 @@ mod tests {
         assert_eq!(contract.protocol_version, 1);
         assert_eq!(contract.max_frame_bytes, 8192);
         assert_eq!(contract.max_secret_ref_bytes, 36);
-        assert_eq!(contract.message_types.len(), 3);
+        assert_eq!(contract.message_types.len(), 4);
         let frame = credential_upsert(REFERENCE, "FRAME-SECRET-CANARY").unwrap();
         let value = body(&frame);
         assert_eq!(value["version"], contract.protocol_version);

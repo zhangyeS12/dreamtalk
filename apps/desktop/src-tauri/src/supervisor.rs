@@ -333,11 +333,14 @@ impl CoreSupervisor {
                         }
                     }
                 }
-                if let Ok(references) = crate::media_credentials::REGISTRY.references(config).await
+                if let Ok(references) = crate::media_credentials::REGISTRY
+                    .scoped_references(config)
+                    .await
                 {
-                    for reference in references {
+                    for (world, reference) in references {
                         if let Ok(mut secret) = self.credentials.resolve(&reference) {
-                            self.provision_credential(&reference, &secret).await?;
+                            self.provision_media_credential(&world, &reference, &secret)
+                                .await?;
                             secret.clear();
                         }
                     }
@@ -431,6 +434,19 @@ impl CoreSupervisor {
             return Ok(());
         }
         let frame = host_control::credential_upsert(secret_ref, secret)?;
+        self.send_control(&frame).await
+    }
+
+    pub async fn provision_media_credential(
+        &mut self,
+        world: &str,
+        secret_ref: &str,
+        secret: &str,
+    ) -> Result<(), &'static str> {
+        if self.child.is_none() {
+            return Ok(());
+        }
+        let frame = host_control::media_credential_upsert(world, secret_ref, secret)?;
         self.send_control(&frame).await
     }
 

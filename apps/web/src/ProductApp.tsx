@@ -1,4 +1,5 @@
 import { DesktopUpdateProvider, DesktopUpdateEntry, useDesktopUpdateBlock } from "./DesktopUpdates";
+import { SaveBackupPanel } from "./SaveBackups";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { BackgroundSettings, type DesktopStatus } from "./BackgroundSettings";
 import { OfflineContactSettings } from "./OfflineContactSettings";
@@ -376,6 +377,7 @@ function WorldWorkspaceContent({ client, initialWorldId, initialTab, onArchive }
       <SettingsHandbook client={client} world={world} visible={tab === "settings"} page={settingsPage} onPage={setSettingsPage} onArchive={returnArchive}
         dirtyPages={{ model: modelDirty || Number(tokenCeilingInput) !== tokenCeiling, speech: speechDirty, media: mediaDirty, background: backgroundDirty, activities: false }}
         panels={{
+          backups: <SaveBackupPanel />,
           media: <ChatMediaSettingsPanel key={`media:${worldId}`} client={client} worldId={worldId} onDirtyChange={setMediaDirty} />,
           speech: <SpeechSettings client={client} worldId={worldId} onDirtyChange={setSpeechDirty} />,
           model: <>

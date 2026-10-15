@@ -10,6 +10,7 @@ import { useWorldCovers } from "./useWorldCovers";
 import { Brand } from "./Brand";
 import "./world-archive.css";
 import "./world-cover.css";
+import { SaveBackupPanel } from "./SaveBackups";
 
 export function WorldArchivePage({ client, initialWorldId, onEnter, displayTime, onStartupStatus }: {
   client: CoreClient; initialWorldId: string | null;
@@ -52,6 +53,7 @@ export function WorldArchivePage({ client, initialWorldId, onEnter, displayTime,
   const [managing, setManaging] = useState(false);
   const [contentDirty, setContentDirty] = useState(false);
   const [modelOpen, setModelOpen] = useState(false);
+  const [backupsOpen, setBackupsOpen] = useState(false);
   const [modelDirty, setModelDirty] = useState(false);
   const [content, setContent] = useState<{ worldId: string; items: WorldContentItem[] } | null>(null);
   const [contentError, setContentError] = useState("");
@@ -237,12 +239,14 @@ export function WorldArchivePage({ client, initialWorldId, onEnter, displayTime,
   };
   return <div className="product-shell archive-shell">
     <header className="archive-header"><Brand /><span className="archive-header-label">世界档案库</span><DesktopUpdateEntry />
+      <button type="button" className="text-action" onClick={() => setBackupsOpen(value => !value)}>数据与备份</button>
       <button type="button" className="text-action" disabled={busy || entering || coverBusy} onClick={() => {
         if (modelOpen) { leaveEditor(); return; }
         if (leaveEditor()) { clearSelection(); setModelOpen(true); }
       }}>模型设置</button>
     </header>
     <main className="archive-main">
+      {backupsOpen && <div className="archive-editor"><SaveBackupPanel /></div>}
       <div className="archive-intro"><div><h1 ref={heading} tabIndex={-1}>世界书架</h1><p>挑一本书，走进其中的世界。</p></div>
         <button type="button" className="text-action" disabled={loading || busy || entering || coverBusy} onClick={refreshArchive}>{loading ? "正在读取…" : "刷新书架"}</button>
       </div>

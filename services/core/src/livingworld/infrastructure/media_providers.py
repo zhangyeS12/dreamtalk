@@ -5,15 +5,19 @@ import base64
 import io
 import ipaddress
 import json
+import re
 import socket
+import unicodedata
 from urllib.parse import urlsplit, urlunsplit
+from uuid import UUID
 
 import httpx
 from ddgs import DDGS
 from PIL import Image
 
-from livingworld.application.chat_media import MediaError
+from livingworld.application.chat_media import MediaError, MediaSettings
 from livingworld.application.llm_config import SecretRef
+from livingworld.infrastructure.llm.credentials import SessionCredentialProvider
 
 MAX_IMAGE_BYTES = 8 * 1024 * 1024
 CAPTION_PROMPT = (
@@ -134,10 +138,64 @@ def validate_caption_endpoint(settings):
         raise MediaError("media_caption_https_required")
 
 
+def public_search_query(intent):
+    """Conservative local gate, not a claim to recognize all personal information.
+
+    Reject the whole query rather than redact into a different search. Only fixed
+    risk labels may leave this function; rejected values must never enter logs.
+    """
+    fields = (
+        [intent.persona, intent.style, intent.keywords or intent.intent]
+        if intent.kind == "sticker"
+        else [intent.keywords or intent.intent]
+    )
+    query = unicodedata.normalize("NFKC", " ".join(filter(None, fields))).strip()
+    if (
+        not query
+        or len(query) > 80
+        or len(query.split()) > 12
+        or any(not (c.isalnum() or c in " -_·") for c in query)
+        or re.search(r"\d{6,}|[a-zA-Z0-9_-]{24,}|\d+\s*(?:号|栋|单元|楼|室)", query)
+        or re.search(
+            r"身份证|手机号|电话号码|家庭地址|住址|我的地址|我的名字|真名|邮箱|密码|"
+            r"验证码|密钥|私聊|秘密|私人经历|"
+            r"\b(?:password|secret|token|email|address|phone|latitude|longitude|api.?key)\b",
+            query,
+            re.IGNORECASE,
+        )
+    ):
+        raise MediaError("media_search_query_rejected")
+    return " ".join(query.split())
+
+
 class ChatMediaProviders:
-    def __init__(self, credentials):
+    def __init__(self, credentials: SessionCredentialProvider):
         self.credentials = credentials
         self.caption_lock = asyncio.Lock()
+
+    def validate_credential(self, world: UUID, settings: MediaSettings):
+        if settings.secret_ref is None:
+            return
+        try:
+            identity = UUID(settings.secret_ref)
+            if str(identity) != settings.secret_ref:
+                raise ValueError()
+        except (ValueError, TypeError, AttributeError):
+            raise MediaError("media_reference_invalid") from None
+        if not self.credentials.media_reference_owned(world, SecretRef(identity)):
+            raise MediaError("media_credential_scope_invalid")
+
+    async def wait_for_credential(self, world: UUID, settings: MediaSettings):
+        # The host pipe is one-way. Wait only for local provisioning, never call
+        # a provider to validate a key or accept an unowned UUID as a shortcut.
+        for attempt in range(41):
+            try:
+                self.validate_credential(world, settings)
+                return
+            except MediaError as error:
+                if str(error) != "media_credential_scope_invalid" or attempt == 40:
+                    raise
+            await asyncio.sleep(0.05)
 
     @staticmethod
     def _search(query, kind):
@@ -154,11 +212,7 @@ class ChatMediaProviders:
             )
 
     async def search(self, intent):
-        query = (
-            " ".join(filter(None, [intent.persona, intent.style, intent.keywords or intent.intent]))
-            if intent.kind == "sticker"
-            else intent.keywords or intent.intent
-        )
+        query = public_search_query(intent)
         async with asyncio.timeout(18):
             rows = await asyncio.to_thread(self._search, query[:220], intent.kind)
             for row in rows[:3]:
@@ -178,13 +232,16 @@ class ChatMediaProviders:
                     continue
         return None
 
-    async def caption(self, settings, data, mime):
+    async def caption(self, settings: MediaSettings, data: bytes, mime: str, *, world_id: UUID):
         del mime
         validate_caption_endpoint(settings)
         encoded = await asyncio.to_thread(caption_image, data)
         headers = {}
         if settings.secret_ref is not None:
-            secret = await self.credentials.resolve(SecretRef(settings.secret_ref))
+            self.validate_credential(world_id, settings)
+            secret = await self.credentials.resolve_media(
+                world_id, SecretRef(UUID(settings.secret_ref))
+            )
             headers["Authorization"] = "Bearer " + secret.reveal_for_adapter()
         endpoint = settings.caption_endpoint.rstrip("/")
         if settings.caption_route == "ollama":

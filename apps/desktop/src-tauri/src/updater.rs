@@ -12,6 +12,7 @@ use tauri::{Emitter, State};
 use tauri_plugin_autostart::ManagerExt;
 use tauri_plugin_updater::{Update, UpdaterExt};
 use tokio::sync::Mutex;
+use uuid::Uuid;
 
 const IDENTITY: &str = "app.livingworld.desktop";
 const MAX_PACKAGE: u64 = 512 * 1024 * 1024;
@@ -35,6 +36,7 @@ pub struct UpdateStatus {
     suppress_popup: bool,
     signing_ready: bool,
     installed: bool,
+    repair_install: bool,
     release: Option<ReleaseInfo>,
     cleanup_notice: Option<String>,
 }
@@ -139,6 +141,7 @@ pub async fn desktop_update_status(
         suppress_popup: state.preferences.lock().await.suppress_popup,
         signing_ready: signing_ready(&app),
         installed: root.join(".dreamtalk-installed").is_file(),
+        repair_install: !root.join(".dreamtalk-package.json").is_file(),
         release: state.pending.lock().await.as_ref().map(release),
         cleanup_notice: state.cleanup_notice.lock().await.clone(),
     })
@@ -263,6 +266,176 @@ pub(crate) async fn maintenance(
         .map_err(|_| "update_core_unavailable".to_owned())
 }
 
+/// Verify the actual Core store before admitting business requests/background work.
+/// UI readiness alone must never certify an empty replacement database.
+pub(crate) async fn verify_pending_start(
+    app: &tauri::AppHandle,
+    config: &LaunchConfig,
+    supervisor: &SharedSupervisor,
+) -> Result<(), String> {
+    let path = config.app_data.join("updates/handoff.json");
+    if !path.exists() {
+        return Ok(());
+    }
+    let mut handoff: Handoff = serde_json::from_slice(
+        &tokio::fs::read(&path)
+            .await
+            .map_err(|_| "update_handoff_invalid")?,
+    )
+    .map_err(|_| "update_handoff_invalid")?;
+    if handoff.identity != IDENTITY {
+        return Err("update_handoff_invalid".into());
+    }
+    let connection = supervisor
+        .lock()
+        .await
+        .connection()
+        .map_err(str::to_owned)?;
+    let previous_verification = std::fs::read(config.app_data.join("updates/verified.json"))
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok());
+    if previous_verification
+        .is_some_and(|value| value["recovery"] == serde_json::json!(handoff.recovery))
+    {
+        return Ok(());
+    }
+    if handoff.version != app.package_info().version.to_string() {
+        return Err("update_handoff_invalid".into());
+    }
+    let live = crate::save_safety::evidence(&connection).await?;
+    if handoff.save_snapshot_id.is_none() {
+        let adopted = crate::save_safety::tool(config, &app.package_info().version.to_string(),
+            serde_json::json!({"action":"adopt_legacy_update", "recovery":handoff.recovery, "expected_file_identity":live["file_identity"]})).await?;
+        handoff.save_snapshot_id = adopted["id"].as_str().map(str::to_owned);
+        atomic_json(&path, &handoff)?;
+    }
+    let snapshot_id = handoff
+        .save_snapshot_id
+        .as_ref()
+        .ok_or("save_legacy_update_review_required")?;
+    crate::save_safety::tool(config, &app.package_info().version.to_string(),
+        serde_json::json!({"action":"verify_update", "snapshot_id":snapshot_id, "expected_file_identity":live["file_identity"]})).await?;
+    atomic_json(
+        &config.app_data.join("updates/verified.json"),
+        &serde_json::json!({"recovery":handoff.recovery, "version":handoff.version}),
+    )?;
+    maintenance(&connection, "verified").await?;
+    Ok(())
+}
+
+pub(crate) fn rollback_available(config: &LaunchConfig) -> bool {
+    let Ok(bytes) = std::fs::read(config.app_data.join("updates/handoff.json")) else {
+        return false;
+    };
+    let Ok(handoff) = serde_json::from_slice::<Handoff>(&bytes) else {
+        return false;
+    };
+    if handoff.identity != IDENTITY || handoff.old_package.is_none() {
+        return false;
+    }
+    let verified = std::fs::read(config.app_data.join("updates/verified.json"))
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok());
+    !verified.is_some_and(|value| value["recovery"] == serde_json::json!(handoff.recovery))
+}
+
+pub(crate) fn update_unverified(config: &LaunchConfig) -> bool {
+    let Ok(bytes) = std::fs::read(config.app_data.join("updates/handoff.json")) else {
+        return false;
+    };
+    let Ok(handoff) = serde_json::from_slice::<Handoff>(&bytes) else {
+        return true;
+    };
+    let verified = std::fs::read(config.app_data.join("updates/verified.json"))
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok());
+    !verified.is_some_and(|value| value["recovery"] == serde_json::json!(handoff.recovery))
+}
+
+pub(crate) fn use_restored_checkpoint(
+    config: &LaunchConfig,
+    snapshot_id: &str,
+    version: &str,
+) -> Result<(), String> {
+    if !update_unverified(config) {
+        return Ok(());
+    }
+    let path = config.app_data.join("updates/handoff.json");
+    let mut handoff: Handoff =
+        serde_json::from_slice(&std::fs::read(&path).map_err(|_| "update_handoff_invalid")?)
+            .map_err(|_| "update_handoff_invalid")?;
+    if handoff.identity != IDENTITY || Uuid::parse_str(snapshot_id).is_err() {
+        return Err("update_handoff_invalid".into());
+    }
+    handoff.save_snapshot_id = Some(snapshot_id.to_owned());
+    handoff.version = version.to_owned();
+    atomic_json(&path, &handoff)
+}
+
+#[tauri::command]
+pub async fn rollback_desktop_update(
+    app: tauri::AppHandle,
+    config: State<'_, LaunchConfig>,
+    state: State<'_, UpdateState>,
+    supervisor: State<'_, SharedSupervisor>,
+) -> Result<(), String> {
+    let _operation = state.operation.try_lock().map_err(|_| "update_busy")?;
+    if !rollback_available(&config) {
+        return Err("save_rollback_unavailable".into());
+    }
+    let handoff: Handoff = serde_json::from_slice(
+        &tokio::fs::read(config.app_data.join("updates/handoff.json"))
+            .await
+            .map_err(|_| "update_handoff_invalid")?,
+    )
+    .map_err(|_| "update_handoff_invalid")?;
+    let mut host = supervisor.lock().await;
+    if let Ok(connection) = host.connection() {
+        crate::save_safety::drain(&connection).await?;
+        host.stop_for_update(Duration::from_secs(30))
+            .await
+            .map_err(str::to_owned)?;
+    }
+    let directory = config
+        .app_data
+        .join("updates/rollback-runners")
+        .join(Uuid::new_v4().to_string());
+    tokio::fs::create_dir_all(&directory)
+        .await
+        .map_err(|_| "save_rollback_unavailable")?;
+    let script = directory.join("rollback.ps1");
+    tokio::fs::write(&script, include_str!("../rollback-update.ps1"))
+        .await
+        .map_err(|_| "save_rollback_unavailable")?;
+    let request = directory.join("request.json");
+    atomic_json(
+        &request,
+        &serde_json::json!({"app_data":config.app_data, "program_root":executable_root()?, "recovery":handoff.recovery}),
+    )?;
+    let system = std::env::var_os("SystemRoot").ok_or("save_rollback_unavailable")?;
+    let mut command = tokio::process::Command::new(
+        PathBuf::from(system).join("System32/WindowsPowerShell/v1.0/powershell.exe"),
+    );
+    #[cfg(windows)]
+    command.creation_flags(0x08000000);
+    command
+        .args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+        ])
+        .arg(script)
+        .arg("-RequestPath")
+        .arg(request)
+        .spawn()
+        .map_err(|_| "save_rollback_unavailable")?;
+    drop(host);
+    app.exit(0);
+    Ok(())
+}
+
 #[derive(Clone, Deserialize, Serialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 struct PackageManifest {
@@ -277,7 +450,9 @@ struct Handoff {
     identity: String,
     version: String,
     old_root: PathBuf,
-    old_package: PackageManifest,
+    old_package: Option<PackageManifest>,
+    #[serde(default)]
+    save_snapshot_id: Option<String>,
     autostart: bool,
     recovery: PathBuf,
     installer: PathBuf,
@@ -395,6 +570,13 @@ fn make_backup(
     let result = (|| {
         copy_tree(&directory.join("data"), &recovery.join("data"))?;
         copy_tree(&directory.join("config"), &recovery.join("config"))?;
+        std::fs::create_dir_all(recovery.join("config")).map_err(|_| "update_backup_failed")?;
+        if directory.join(".dreamtalk-storage.json").is_file() {
+            copy_tree(
+                &directory.join(".dreamtalk-storage.json"),
+                &recovery.join(".dreamtalk-storage.json"),
+            )?;
+        }
         for relative in manifest.files.keys() {
             let target = owned_file(&recovery.join("program"), relative)?;
             copy_tree(&owned_file(root, relative)?, &target)?;
@@ -506,7 +688,13 @@ pub async fn install_desktop_update(
         return Err("update_recovery_pending".to_owned());
     }
     let root = executable_root()?;
-    let manifest = package_manifest(&root)?;
+    // An old inventory is required for cleanup, not for installing a signed
+    // full payload. Missing inventories take the repair path and preserve origin.
+    let manifest = match package_manifest(&root) {
+        Ok(value) => Some(value),
+        Err(error) if error == "update_package_manifest_missing" => None,
+        Err(error) => return Err(error),
+    };
     let autostart = app
         .autolaunch()
         .is_enabled()
@@ -566,6 +754,13 @@ pub async fn install_desktop_update(
         return Err(error);
     }
     progress(&app, "preparing", 0, None);
+    let storage_evidence = match crate::save_safety::evidence(&connection).await {
+        Ok(value) => value,
+        Err(error) => {
+            let _ = maintenance(&connection, "cancel").await;
+            return Err(error);
+        }
+    };
     // Refuse forced termination for upgrades. Existing shutdown behavior stays intact.
     if let Err(error) = host.stop_for_update(Duration::from_secs(30)).await {
         let _ = maintenance(&connection, "cancel").await;
@@ -573,7 +768,23 @@ pub async fn install_desktop_update(
     }
     let directory = state.directory.clone();
     let backup_root = root.clone();
-    let backup_manifest = manifest.clone();
+    let snapshot = crate::save_safety::tool(&config, &app.package_info().version.to_string(),
+        serde_json::json!({"action":"backup", "reason":"pre_update", "expected_file_identity":storage_evidence["file_identity"]})).await;
+    let save_snapshot_id = match snapshot {
+        Ok(value) => value["id"]
+            .as_str()
+            .ok_or("update_backup_failed")?
+            .to_owned(),
+        Err(_) => {
+            let _ = host.start(&config).await;
+            return Err("update_backup_failed".into());
+        }
+    };
+    let backup_manifest = manifest.clone().unwrap_or(PackageManifest {
+        identity: IDENTITY.to_owned(),
+        version: app.package_info().version.to_string(),
+        files: BTreeMap::new(),
+    });
     let backup = tauri::async_runtime::spawn_blocking(move || {
         make_backup(&directory, &backup_root, &backup_manifest)
     })
@@ -621,6 +832,7 @@ pub async fn install_desktop_update(
         version,
         old_root: root,
         old_package: manifest,
+        save_snapshot_id: Some(save_snapshot_id),
         autostart,
         recovery,
         installer: installer.clone(),
@@ -649,7 +861,9 @@ pub async fn install_desktop_update(
             let _ = std::fs::remove_file(&installer);
             let _ = std::fs::remove_dir(&installer_root);
             if host.start(&config).await.is_ok() {
-                let _ = remove_owned_files(&handoff.recovery.join("program"), &handoff.old_package);
+                if let Some(package) = &handoff.old_package {
+                    let _ = remove_owned_files(&handoff.recovery.join("program"), package);
+                }
                 let _ =
                     std::fs::remove_file(handoff.recovery.join("program/.dreamtalk-package.json"));
                 let _ = std::fs::remove_dir(handoff.recovery.join("program"));
@@ -712,7 +926,10 @@ pub async fn acknowledge_desktop_update(
             .map_err(|_| "update_handoff_invalid")?;
     if handoff.identity != IDENTITY
         || handoff.version != app.package_info().version.to_string()
-        || handoff.old_package.identity != IDENTITY
+        || handoff
+            .old_package
+            .as_ref()
+            .is_some_and(|package| package.identity != IDENTITY)
         || handoff.recovery.parent() != Some(state.directory.join("updates/recovery").as_path())
         || uuid::Uuid::parse_str(
             &handoff
@@ -750,37 +967,40 @@ pub async fn acknowledge_desktop_update(
         let manifest = handoff.old_package.clone();
         let directory = state.directory.clone();
         tauri::async_runtime::spawn_blocking(move || {
-            if old_root != current_root {
-                // Revalidate the package marker/root before removing a portable origin.
-                let marker = old_root.join(".dreamtalk-package.json");
-                if marker.exists() {
-                    let recorded: PackageManifest = serde_json::from_slice(
-                        &std::fs::read(&marker).map_err(|_| "update_cleanup_package_changed")?,
-                    )
-                    .map_err(|_| "update_cleanup_package_changed")?;
-                    if recorded != manifest || old_root.join(".git").exists() {
+            if let Some(manifest) = manifest {
+                if old_root != current_root {
+                    // Revalidate the package marker/root before removing a portable origin.
+                    let marker = old_root.join(".dreamtalk-package.json");
+                    if marker.exists() {
+                        let recorded: PackageManifest = serde_json::from_slice(
+                            &std::fs::read(&marker)
+                                .map_err(|_| "update_cleanup_package_changed")?,
+                        )
+                        .map_err(|_| "update_cleanup_package_changed")?;
+                        if recorded != manifest || old_root.join(".git").exists() {
+                            return Err("update_cleanup_package_changed".to_owned());
+                        }
+                        remove_owned_files(&old_root, &manifest)?;
+                        std::fs::remove_file(old_root.join(".dreamtalk-package.json"))
+                            .map_err(|_| "update_cleanup_failed")?;
+                    } else if manifest.files.keys().any(|relative| {
+                        owned_file(&old_root, relative).map_or(true, |path| path.exists())
+                    }) {
                         return Err("update_cleanup_package_changed".to_owned());
                     }
-                    remove_owned_files(&old_root, &manifest)?;
-                    std::fs::remove_file(old_root.join(".dreamtalk-package.json"))
-                        .map_err(|_| "update_cleanup_failed")?;
-                } else if manifest.files.keys().any(|relative| {
-                    owned_file(&old_root, relative).map_or(true, |path| path.exists())
-                }) {
-                    return Err("update_cleanup_package_changed".to_owned());
+                    let _ = std::fs::remove_dir(&old_root);
+                } else {
+                    let current = package_manifest(&current_root)?;
+                    let mut obsolete = manifest.clone();
+                    obsolete
+                        .files
+                        .retain(|relative, _| !current.files.contains_key(relative));
+                    remove_owned_files(&current_root, &obsolete)?;
                 }
-                let _ = std::fs::remove_dir(&old_root);
-            } else {
-                let current = package_manifest(&current_root)?;
-                let mut obsolete = manifest.clone();
-                obsolete
-                    .files
-                    .retain(|relative, _| !current.files.contains_key(relative));
-                remove_owned_files(&current_root, &obsolete)?;
+                remove_owned_files(&recovery.join("program"), &manifest)?;
+                let _ = std::fs::remove_file(recovery.join("program/.dreamtalk-package.json"));
+                let _ = std::fs::remove_dir(recovery.join("program"));
             }
-            remove_owned_files(&recovery.join("program"), &manifest)?;
-            let _ = std::fs::remove_file(recovery.join("program/.dreamtalk-package.json"));
-            let _ = std::fs::remove_dir(recovery.join("program"));
             prune_recovery(&directory, &recovery)?;
             Ok::<_, String>(())
         })

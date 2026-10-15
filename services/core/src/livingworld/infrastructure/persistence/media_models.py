@@ -46,6 +46,7 @@ class StickerEntryRecord(Base):
         UUIDStorage(), ForeignKey("chat_media_assets.asset_id"), nullable=False
     )
     active: Mapped[bool] = mapped_column(Boolean(), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text(), nullable=True)
     added_at_utc: Mapped[datetime | None] = mapped_column(UTCTimestampStorage(), nullable=True)
     __table_args__ = (
         UniqueConstraint("library_key", "asset_id", name="uq_sticker_library_asset"),

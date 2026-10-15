@@ -273,6 +273,7 @@ class ChatReplyConfiguration[ChatContext]:
         input_token_reservation: int | None = None,
         event_capture: bool = False,
         journal=None,
+        logger=None,
     ) -> None:
         if (
             not isinstance(model, ModelRef)
@@ -294,6 +295,7 @@ class ChatReplyConfiguration[ChatContext]:
         self._input_token_reservation = input_token_reservation
         self._event_capture, self._journal = event_capture, journal
         self._media = getattr(messages, "media", None)
+        self._logger = logger
 
     @property
     def input_token_reservation(self) -> int | None:

@@ -37,6 +37,7 @@ class ControlMessage:
     secret_ref: SecretRef | None = None
     secret: str | None = field(default=None, repr=False)
     secure_store_available: bool | None = None
+    world_id: UUID | None = None
 
 
 def _read_exact(stream: BinaryIO, length: int) -> bytes:
@@ -76,8 +77,10 @@ def decode_frame(stream: BinaryIO) -> ControlMessage | None:
             raise ControlProtocolError()
         return ControlMessage(message_type, secure_store_available=data["secure_store_available"])
     required = {"version", "type", "secret_ref"}
-    if message_type == "credential_upsert":
+    if message_type in {"credential_upsert", "media_credential_upsert"}:
         required.add("secret")
+    if message_type == "media_credential_upsert":
+        required.add("world_id")
     if set(data) != required:
         raise ControlProtocolError()
     reference = data["secret_ref"]
@@ -92,12 +95,22 @@ def decode_frame(stream: BinaryIO) -> ControlMessage | None:
     secret = data["secret"]
     if type(secret) is not str or not secret or len(secret.encode("utf-8")) > MAX_SECRET_BYTES:
         raise ControlProtocolError()
-    return ControlMessage(message_type, secret_ref=secret_ref, secret=secret)
+    world = None
+    if message_type == "media_credential_upsert":
+        try:
+            world = UUID(data["world_id"])
+            if str(world) != data["world_id"]:
+                raise ValueError()
+        except (ValueError, TypeError, AttributeError):
+            raise ControlProtocolError() from None
+    return ControlMessage(message_type, secret_ref=secret_ref, secret=secret, world_id=world)
 
 
 def apply_message(message: ControlMessage, credentials: SessionCredentialProvider) -> None:
     if message.message_type == "credential_upsert":
         credentials.upsert(message.secret_ref, message.secret)
+    elif message.message_type == "media_credential_upsert":
+        credentials.upsert_media(message.world_id, message.secret_ref, message.secret)
     elif message.message_type == "credential_remove":
         credentials.remove(message.secret_ref)
     elif message.message_type == "credential_sync_complete":

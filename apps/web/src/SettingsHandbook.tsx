@@ -9,6 +9,7 @@ export const settingsPages = [
   { id: "media", label: "表情与图片", scope: "当前世界", hint: "使用频率、联网配图与图片分析" },
   { id: "speech", label: "角色配音", scope: "当前世界", hint: "自动说话、音色与配音服务" },
   { id: "background", label: "后台运行", scope: "应用设置", hint: "登录启动与系统托盘" },
+  { id: "backups", label: "数据与备份", scope: "应用设置", hint: "自动备份、完整存档导出与恢复" },
   { id: "time", label: "世界时间", scope: "当前世界", hint: "时间状态与推进速度" },
   { id: "activities", label: "角色活动", scope: "当前世界", hint: "日常活动、相遇与共同休闲" },
   { id: "offline", label: "主动联系", scope: "当前世界", hint: "共同邀请、未回复限制与离线消息" },

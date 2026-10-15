@@ -139,16 +139,23 @@ def configure_group_chat_reply(
     messages: ChatMessageService,
     context: GroupChatContextBuilder,
     journal=None,
+    logger=None,
 ) -> GroupChatReplyService | None:
     if session.world_runtimes:
         return _scoped_value(
-            session, lambda scoped: configure_group_chat_reply(scoped, messages, context, journal)
+            session,
+            lambda scoped: configure_group_chat_reply(scoped, messages, context, journal, logger),
         )
     configured = _chat_reply_configuration(session)
     if configured is None:
         return None
     return GroupChatReplyService(
-        messages, context, *configured, event_capture=_capture_available(session), journal=journal
+        messages,
+        context,
+        *configured,
+        event_capture=_capture_available(session),
+        journal=journal,
+        logger=logger,
     )
 
 

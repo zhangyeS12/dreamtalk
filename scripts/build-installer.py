@@ -151,6 +151,7 @@ def main():
                     "installMode": "currentUser",
                     "languages": ["SimpChinese", "English"],
                     "installerHooks": str(tauri_root / "installer-hooks.nsh"),
+                    "template": str(tauri_root / "installer-template.nsi"),
                 },
             },
         },

@@ -57,6 +57,11 @@ class ChatTurnTokenBudget:
     def bound_violated(self) -> bool:
         return self._bound_violated
 
+    @property
+    def reserved_attempts(self) -> int:
+        """Successful reservations, including retries and undispatched releases."""
+        return len(self._seen)
+
     def reserve(
         self,
         attempt_id: UUID,

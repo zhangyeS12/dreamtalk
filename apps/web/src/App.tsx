@@ -4,6 +4,7 @@ import { Inspector } from "./Inspector";
 import { ProductApp } from "./ProductApp";
 import { StartupSplash } from "./StartupSplash";
 import { Brand } from "./Brand";
+import { SaveSafetyGate } from "./SaveBackups";
 
 interface Props {
   discover: () => Promise<CoreConnection>;
@@ -11,6 +12,10 @@ interface Props {
 }
 
 export function App({ discover, onReady }: Props) {
+  return <SaveSafetyGate><ConnectedApp discover={discover} onReady={onReady} /></SaveSafetyGate>;
+}
+
+function ConnectedApp({ discover, onReady }: Props) {
   const [state, setState] = useState<"Connecting" | "Ready" | "Failed">("Connecting");
   const [client, setClient] = useState<CoreClient | null>(null);
   const [attempt, setAttempt] = useState(0);

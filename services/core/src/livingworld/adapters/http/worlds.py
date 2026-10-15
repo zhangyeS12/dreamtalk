@@ -51,7 +51,10 @@ def _response(item: WorldSettings) -> dict[str, str]:
 
 
 def world_router(
-    service: WorldSettingsService, authorize: Callable[..., None], deletion=None
+    service: WorldSettingsService,
+    authorize: Callable[..., None],
+    deletion=None,
+    storage_observer=None,
 ) -> APIRouter:
     router = APIRouter(prefix=f"/api/v{API_PROTOCOL}", dependencies=[Depends(authorize)])
 
@@ -66,7 +69,12 @@ def world_router(
         if deletion is None:
             raise HTTPException(503, "world_deletion_unavailable")
         try:
-            return await deletion.delete(WorldId(world_id), body.expected_name)
+            result = await deletion.delete(WorldId(world_id), body.expected_name)
+            if storage_observer:
+                import asyncio
+
+                await asyncio.to_thread(storage_observer)
+            return result
         except EntityNotFoundError:
             raise HTTPException(404, "world_not_found") from None
         except ValueError as error:
@@ -93,6 +101,10 @@ def world_router(
             raise HTTPException(409, "world_creation_conflict") from None
         except DomainInvariantError:
             raise HTTPException(422, "invalid_world_name") from None
+        if storage_observer:
+            import asyncio
+
+            await asyncio.to_thread(storage_observer)
         return {"world_id": str(world_id.value)}
 
     @router.post("/worlds/{world_id}/clock/pause")
