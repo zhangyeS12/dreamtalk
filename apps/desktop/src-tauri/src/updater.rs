@@ -273,9 +273,30 @@ pub(crate) async fn verify_pending_start(
     config: &LaunchConfig,
     supervisor: &SharedSupervisor,
 ) -> Result<(), String> {
+    verify_pending_start_inner(app, config, supervisor, false).await
+}
+
+pub(crate) async fn verify_retried_start(
+    app: &tauri::AppHandle,
+    config: &LaunchConfig,
+    supervisor: &SharedSupervisor,
+) -> Result<(), String> {
+    verify_pending_start_inner(app, config, supervisor, true).await
+}
+
+async fn verify_pending_start_inner(
+    app: &tauri::AppHandle,
+    config: &LaunchConfig,
+    supervisor: &SharedSupervisor,
+    force: bool,
+) -> Result<(), String> {
     let path = config.app_data.join("updates/handoff.json");
     if !path.exists() {
-        return Ok(());
+        return if force {
+            Err("save_update_retry_unavailable".into())
+        } else {
+            Ok(())
+        };
     }
     let mut handoff: Handoff = serde_json::from_slice(
         &tokio::fs::read(&path)
@@ -294,8 +315,9 @@ pub(crate) async fn verify_pending_start(
     let previous_verification = std::fs::read(config.app_data.join("updates/verified.json"))
         .ok()
         .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok());
-    if previous_verification
-        .is_some_and(|value| value["recovery"] == serde_json::json!(handoff.recovery))
+    if !force
+        && previous_verification
+            .is_some_and(|value| value["recovery"] == serde_json::json!(handoff.recovery))
     {
         return Ok(());
     }
@@ -315,12 +337,83 @@ pub(crate) async fn verify_pending_start(
         .ok_or("save_legacy_update_review_required")?;
     crate::save_safety::tool(config, &app.package_info().version.to_string(),
         serde_json::json!({"action":"verify_update", "snapshot_id":snapshot_id, "expected_file_identity":live["file_identity"]})).await?;
+    for previous in &handoff.prior_snapshot_ids {
+        crate::save_safety::tool(config, &app.package_info().version.to_string(),
+            serde_json::json!({"action":"verify_update", "snapshot_id":previous, "expected_file_identity":live["file_identity"]})).await?;
+    }
     atomic_json(
         &config.app_data.join("updates/verified.json"),
         &serde_json::json!({"recovery":handoff.recovery, "version":handoff.version}),
     )?;
     maintenance(&connection, "verified").await?;
+    match std::fs::remove_file(config.app_data.join("update-failure.json")) {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(_) => return Err("save_update_retry_unavailable".into()),
+    }
     Ok(())
+}
+
+fn retry_handoff(config: &LaunchConfig, version: &str) -> Result<Handoff, String> {
+    let invalid = || "save_update_retry_unavailable".to_owned();
+    if ["restore-hold.json", "restore-in-progress.json"]
+        .iter()
+        .any(|name| config.app_data.join(name).exists())
+    {
+        return Err(invalid());
+    }
+    let failure: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(config.app_data.join("update-failure.json")).map_err(|_| invalid())?,
+    )
+    .map_err(|_| invalid())?;
+    if !matches!(
+        failure["code"].as_str(),
+        Some("save_update_start_failed" | "save_update_verification_failed")
+    ) {
+        return Err(invalid());
+    }
+    let handoff: Handoff = serde_json::from_slice(
+        &std::fs::read(config.app_data.join("updates/handoff.json")).map_err(|_| invalid())?,
+    )
+    .map_err(|_| invalid())?;
+    fn triplet(value: &str) -> Option<[u64; 3]> {
+        let mut parts = value.split('.');
+        let parts_value = [
+            parts.next()?.parse().ok()?,
+            parts.next()?.parse().ok()?,
+            parts.next()?.parse().ok()?,
+        ];
+        (parts.next().is_none()
+            && format!("{}.{}.{}", parts_value[0], parts_value[1], parts_value[2]) == value)
+            .then_some(parts_value)
+    }
+    let previous = triplet(&handoff.version).ok_or_else(invalid)?;
+    let current = triplet(version).ok_or_else(invalid)?;
+    // A fixed patch can finish a failed upgrade without replacing its save or
+    // old-program checkpoint. Never adopt a downgrade or another release line.
+    if handoff.identity != IDENTITY
+        || previous[..2] != current[..2]
+        || previous[2] > current[2]
+        || handoff.recovery.parent() != Some(config.app_data.join("updates/recovery").as_path())
+        || handoff
+            .recovery
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_none_or(|name| Uuid::parse_str(name).is_err())
+    {
+        return Err(invalid());
+    }
+    Ok(handoff)
+}
+
+pub(crate) fn retry_start_available(config: &LaunchConfig, version: &str) -> bool {
+    retry_handoff(config, version).is_ok()
+}
+
+pub(crate) fn prepare_start_retry(config: &LaunchConfig, version: &str) -> Result<(), String> {
+    let mut handoff = retry_handoff(config, version)?;
+    handoff.version = version.to_owned();
+    atomic_json(&config.app_data.join("updates/handoff.json"), &handoff)
 }
 
 pub(crate) fn rollback_available(config: &LaunchConfig) -> bool {
@@ -368,6 +461,7 @@ pub(crate) fn use_restored_checkpoint(
         return Err("update_handoff_invalid".into());
     }
     handoff.save_snapshot_id = Some(snapshot_id.to_owned());
+    handoff.prior_snapshot_ids.clear(); // Explicit restoration selects a new baseline.
     handoff.version = version.to_owned();
     atomic_json(&path, &handoff)
 }
@@ -453,6 +547,8 @@ struct Handoff {
     old_package: Option<PackageManifest>,
     #[serde(default)]
     save_snapshot_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    prior_snapshot_ids: Vec<String>,
     autostart: bool,
     recovery: PathBuf,
     installer: PathBuf,
@@ -684,9 +780,30 @@ pub async fn install_desktop_update(
     if update.version != version {
         return Err("update_version_changed".to_owned());
     }
-    if state.directory.join("updates/handoff.json").exists() {
-        return Err("update_recovery_pending".to_owned());
-    }
+    let previous_path = state.directory.join("updates/handoff.json");
+    let previous = if previous_path.exists() {
+        // Only a recognized failed patch or an already verified update may be
+        // superseded. Keep its checkpoint and verify the original chain later.
+        let value: Handoff = serde_json::from_slice(
+            &std::fs::read(&previous_path).map_err(|_| "update_recovery_pending")?,
+        )
+        .map_err(|_| "update_recovery_pending")?;
+        if value.identity != IDENTITY
+            || value.recovery.parent() != Some(config.app_data.join("updates/recovery").as_path())
+            || value
+                .recovery
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_none_or(|name| Uuid::parse_str(name).is_err())
+            || (update_unverified(&config)
+                && !retry_start_available(&config, &app.package_info().version.to_string()))
+        {
+            return Err("update_recovery_pending".into());
+        }
+        Some(value)
+    } else {
+        None
+    };
     let root = executable_root()?;
     // An old inventory is required for cleanup, not for installing a signed
     // full payload. Missing inventories take the repair path and preserve origin.
@@ -727,44 +844,98 @@ pub async fn install_desktop_update(
     }
     progress(&app, "waiting", 0, None);
     let mut host = supervisor.lock().await;
-    let connection = host.connection().map_err(str::to_owned)?;
-    if let Err(error) = maintenance(&connection, "prepare").await {
-        let _ = maintenance(&connection, "cancel").await;
-        return Err(error);
-    }
-    let drain = async {
-        let deadline = tokio::time::Instant::now() + Duration::from_secs(180);
-        loop {
-            let status = maintenance(&connection, "status").await?;
-            if !status.preparing {
-                return Err("update_barrier_expired".to_owned());
-            }
-            if status.active == 0 {
-                return Ok(());
-            }
-            if tokio::time::Instant::now() >= deadline {
-                return Err("update_tasks_still_running".to_owned());
-            }
-            tokio::time::sleep(Duration::from_millis(500)).await;
-        }
-    }
-    .await;
-    if let Err(error) = drain {
-        let _ = maintenance(&connection, "cancel").await;
-        return Err(error);
-    }
-    progress(&app, "preparing", 0, None);
-    let storage_evidence = match crate::save_safety::evidence(&connection).await {
-        Ok(value) => value,
-        Err(error) => {
+    let connection = host.connection().ok();
+    let restart_core = connection.is_some();
+    let storage_evidence = if let Some(connection) = &connection {
+        if let Err(error) = maintenance(connection, "prepare").await {
             let _ = maintenance(&connection, "cancel").await;
             return Err(error);
         }
+        let drain = async {
+            let deadline = tokio::time::Instant::now() + Duration::from_secs(180);
+            loop {
+                let status = maintenance(&connection, "status").await?;
+                if !status.preparing {
+                    return Err("update_barrier_expired".to_owned());
+                }
+                if status.active == 0 {
+                    return Ok(());
+                }
+                if tokio::time::Instant::now() >= deadline {
+                    return Err("update_tasks_still_running".to_owned());
+                }
+                tokio::time::sleep(Duration::from_millis(500)).await;
+            }
+        }
+        .await;
+        if let Err(error) = drain {
+            let _ = maintenance(&connection, "cancel").await;
+            return Err(error);
+        }
+        progress(&app, "preparing", 0, None);
+        let storage_evidence = match crate::save_safety::evidence(connection).await {
+            Ok(value) => value,
+            Err(error) => {
+                let _ = maintenance(&connection, "cancel").await;
+                return Err(error);
+            }
+        };
+        // Refuse forced termination for upgrades. Existing shutdown behavior stays intact.
+        if let Err(error) = host.stop_for_update(Duration::from_secs(30)).await {
+            let _ = maintenance(&connection, "cancel").await;
+            return Err(error.to_owned());
+        }
+        storage_evidence
+    } else {
+        if !host.safely_stopped() {
+            return Err("update_core_unavailable".into());
+        }
+        let status = crate::save_safety::tool(
+            &config,
+            &app.package_info().version.to_string(),
+            serde_json::json!({"action":"guard"}),
+        )
+        .await?;
+        if status["current"].is_null()
+            || matches!(
+                status["problem"].as_str(),
+                Some(
+                    "save_restore_interrupted"
+                        | "save_restored_review_required"
+                        | "save_database_unavailable"
+                )
+            )
+        {
+            return Err("update_backup_failed".into());
+        }
+        status["current"].clone()
     };
-    // Refuse forced termination for upgrades. Existing shutdown behavior stays intact.
-    if let Err(error) = host.stop_for_update(Duration::from_secs(30)).await {
-        let _ = maintenance(&connection, "cancel").await;
-        return Err(error.to_owned());
+    let mut prior_snapshot_ids = Vec::new();
+    if let Some(previous) = &previous {
+        if update_unverified(&config) {
+            prior_snapshot_ids.clone_from(&previous.prior_snapshot_ids);
+            let id = if let Some(id) = &previous.save_snapshot_id {
+                id.clone()
+            } else {
+                let adopted = crate::save_safety::tool(
+                    &config,
+                    &app.package_info().version.to_string(),
+                    serde_json::json!({"action":"adopt_legacy_update", "recovery":previous.recovery,
+                        "expected_file_identity":storage_evidence["file_identity"]}),
+                )
+                .await?;
+                adopted["id"]
+                    .as_str()
+                    .ok_or("update_backup_failed")?
+                    .to_owned()
+            };
+            if !prior_snapshot_ids.contains(&id) {
+                prior_snapshot_ids.push(id);
+            }
+            if prior_snapshot_ids.len() > 8 {
+                return Err("update_recovery_pending".into());
+            }
+        }
     }
     let directory = state.directory.clone();
     let backup_root = root.clone();
@@ -776,7 +947,9 @@ pub async fn install_desktop_update(
             .ok_or("update_backup_failed")?
             .to_owned(),
         Err(_) => {
-            let _ = host.start(&config).await;
+            if restart_core {
+                let _ = host.start(&config).await;
+            }
             return Err("update_backup_failed".into());
         }
     };
@@ -792,7 +965,9 @@ pub async fn install_desktop_update(
     let recovery = match backup {
         Ok(Ok(path)) => path,
         _ => {
-            let _ = host.start(&config).await;
+            if restart_core {
+                let _ = host.start(&config).await;
+            }
             return Err("update_backup_failed".to_owned());
         }
     };
@@ -803,7 +978,9 @@ pub async fn install_desktop_update(
     let installer = match owned_file(&installer_root, "installer.exe") {
         Ok(path) => path,
         Err(_) => {
-            let _ = host.start(&config).await;
+            if restart_core {
+                let _ = host.start(&config).await;
+            }
             return Err("update_installer_failed".to_owned());
         }
     };
@@ -823,7 +1000,9 @@ pub async fn install_desktop_update(
     if save.is_err() {
         let _ = std::fs::remove_file(&installer);
         let _ = std::fs::remove_dir(&installer_root);
-        let _ = host.start(&config).await;
+        if restart_core {
+            let _ = host.start(&config).await;
+        }
         return Err("update_installer_failed".to_owned());
     }
     drop(bytes);
@@ -833,14 +1012,24 @@ pub async fn install_desktop_update(
         old_root: root,
         old_package: manifest,
         save_snapshot_id: Some(save_snapshot_id),
+        prior_snapshot_ids,
         autostart,
         recovery,
         installer: installer.clone(),
     };
+    if let Some(previous) = &previous {
+        let history = state
+            .directory
+            .join("updates/history")
+            .join(format!("{}.json", Uuid::new_v4()));
+        atomic_json(&history, previous)?; // Preserve the old receipt and files.
+    }
     if atomic_json(&state.directory.join("updates/handoff.json"), &handoff).is_err() {
         let _ = std::fs::remove_file(&installer);
         let _ = std::fs::remove_dir(&installer_root);
-        let _ = host.start(&config).await;
+        if restart_core {
+            let _ = host.start(&config).await;
+        }
         return Err("update_handoff_failed".to_owned());
     }
     progress(&app, "installing", 0, None);
@@ -857,10 +1046,14 @@ pub async fn install_desktop_update(
             Ok(())
         }
         Err(_) => {
-            let _ = std::fs::remove_file(state.directory.join("updates/handoff.json"));
+            if let Some(previous) = &previous {
+                let _ = atomic_json(&previous_path, previous);
+            } else {
+                let _ = std::fs::remove_file(&previous_path);
+            }
             let _ = std::fs::remove_file(&installer);
             let _ = std::fs::remove_dir(&installer_root);
-            if host.start(&config).await.is_ok() {
+            if restart_core && host.start(&config).await.is_ok() {
                 if let Some(package) = &handoff.old_package {
                     let _ = remove_owned_files(&handoff.recovery.join("program"), package);
                 }

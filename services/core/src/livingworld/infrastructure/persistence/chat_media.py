@@ -260,7 +260,7 @@ class SqlAlchemyChatMediaStore:
     def __init__(self, sessions):
         self.sessions = sessions
 
-    async def recover(self):
+    async def recover(self, *, clean_orphans=True):
         # Keep call receipts; never replay a caption whose provider result is unknown.
         async with self.sessions() as session, session.begin():
             await session.execute(
@@ -276,6 +276,8 @@ class SqlAlchemyChatMediaStore:
             # Legacy downloads were saved before their message. Startup has no
             # active generations; retain every library entry, including removals,
             # and every historical attachment. Only orphan web assets qualify.
+            if not clean_orphans:
+                return  # Upgrade continuity must be checked before optional GC.
             attachment_id = case(
                 (
                     func.json_valid(ChatMessageRecord.media_json),

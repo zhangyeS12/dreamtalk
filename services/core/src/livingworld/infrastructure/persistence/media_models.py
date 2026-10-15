@@ -46,8 +46,9 @@ class StickerEntryRecord(Base):
         UUIDStorage(), ForeignKey("chat_media_assets.asset_id"), nullable=False
     )
     active: Mapped[bool] = mapped_column(Boolean(), nullable=False)
-    description: Mapped[str | None] = mapped_column(Text(), nullable=True)
     added_at_utc: Mapped[datetime | None] = mapped_column(UTCTimestampStorage(), nullable=True)
+    # Preserve the physical append order of migrations 0050 then 0052.
+    description: Mapped[str | None] = mapped_column(Text(), nullable=True)
     __table_args__ = (
         UniqueConstraint("library_key", "asset_id", name="uq_sticker_library_asset"),
         Index("ix_sticker_library", "library_key", "active"),

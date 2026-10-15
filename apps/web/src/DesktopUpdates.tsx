@@ -24,7 +24,7 @@ function updateError(error: unknown): string {
     update_backup_failed: "无法完成更新前备份，已停止安装并尝试恢复当前版本。请检查磁盘空间。",
     update_package_manifest_missing: "旧程序清单未能读取。请重新检查更新；修复升级会保留旧目录并先保护存档。",
     update_package_modified: "当前程序校验未通过，已停止本次更新。存档和已有备份仍保留。",
-    update_recovery_pending: "上次安装尚未完成确认。请完成安装或按更新说明处理恢复记录，再进行更新。",
+    update_recovery_pending: "上次更新记录暂时无法安全接续。当前存档与快照保留，请先重新启动检查；仍失败时使用完整修正版。",
     update_installer_failed: "安装程序未能启动，已尝试恢复当前版本。恢复备份仍保留。",
     update_core_shutdown_timeout: "当前服务未能正常退出，已取消安装。请等待任务结束后重试。",
     update_core_unavailable: "无法确认当前任务状态，未启动安装。请稍后重试。",

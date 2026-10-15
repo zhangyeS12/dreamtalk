@@ -54,7 +54,7 @@ try {
     $ownerFile = Join-Path $root '.dreamtalk-backup-root.json'
     if ((Test-Path -LiteralPath $ownerFile) -and (Get-Content -LiteralPath $ownerFile -Raw | ConvertFrom-Json).identity -ne $identity) { throw 'save_backup_location_invalid' }
     @{identity=$identity} | ConvertTo-Json | Set-Content -LiteralPath $ownerFile -Encoding UTF8
-    $folder = Join-Path (Join-Path $root 'snapshots') $id
+    $folder = Join-Path (Join-Path $root 'incomplete') $id
     $payload = Join-Path $folder 'payload'
     New-Item -ItemType Directory -Path $payload | Out-Null
     CopyTree (Join-Path $live 'data') (Join-Path $payload 'data')
@@ -81,5 +81,8 @@ try {
     }
     @{identity=$identity;format=1;id=$id;storage_id=$storage;created_at=[DateTime]::UtcNow.ToString('o');version=$Version;reason='pre_install';info=$null;files=$files;complete=$true} |
         ConvertTo-Json -Depth 7 | Set-Content -LiteralPath (Join-Path $folder 'snapshot.json') -Encoding UTF8
+    $published = Join-Path (Join-Path $root 'snapshots') $id
+    New-Item -ItemType Directory -Path (Split-Path -Parent $published) -Force | Out-Null
+    Move-Item -LiteralPath $folder -Destination $published
     Write-Output 'save_preinstall_backup_created'
 } catch { Write-Output 'save_preinstall_backup_failed'; exit 1 }

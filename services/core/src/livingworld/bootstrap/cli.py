@@ -93,6 +93,8 @@ async def run(
 ) -> None:
     logger = StructuredLogger()
     config = read_bootstrap(bootstrap_path)
+    if config.retry_update_verification and not desktop:
+        raise ValueError("save_update_retry_unavailable")
     # This guard runs before migrations, recall initialization, or background providers.
     from livingworld.infrastructure.save_safety import (
         create_snapshot,
@@ -102,7 +104,21 @@ async def run(
     )
 
     if desktop:
-        storage = await asyncio.to_thread(guard, config.data_dir.parent)
+        if config.retry_update_verification:
+            # Only the private desktop bootstrap may request this explicit retry.
+            # Keep the failure marker until the host verifies the actual store.
+            handoff_path = config.data_dir.parent / "updates/handoff.json"
+            from livingworld.infrastructure.save_safety import IDENTITY, read_json
+
+            handoff = read_json(handoff_path)
+            if handoff.get("identity") != IDENTITY:
+                raise ValueError("save_update_retry_unavailable")
+        storage = await asyncio.to_thread(
+            guard,
+            config.data_dir.parent,
+            retry_update_verification=config.retry_update_verification,
+            include_snapshots=False,
+        )
         if storage["recovery_required"]:
             raise ValueError("save_recovery_required")
         if storage["current"]:
@@ -144,7 +160,7 @@ async def run(
         verified = (
             json.loads(verified_path.read_text(encoding="utf-8")) if verified_path.exists() else {}
         )
-        if verified.get("recovery") != handoff.get("recovery"):
+        if config.retry_update_verification or verified.get("recovery") != handoff.get("recovery"):
             maintenance.startup_hold = True
             maintenance.prepare()
     shutdown = ShutdownRequests()
@@ -256,7 +272,7 @@ async def run(
         )
         chat_messages.media = chat_media
         chat_media.maintenance = maintenance
-        await chat_media.store.recover()
+        await chat_media.store.recover(clean_orphans=not maintenance.startup_hold)
         from livingworld.application.action_resolution import ActionResolutionService
         from livingworld.application.conversation_memory import ConversationMemoryService
         from livingworld.application.director import DirectorService

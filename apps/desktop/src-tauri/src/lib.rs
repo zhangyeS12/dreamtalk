@@ -822,6 +822,7 @@ pub fn run() {
             updater::acknowledge_desktop_update,
             updater::rollback_desktop_update,
             save_safety::save_safety_status,
+            save_safety::retry_save_start,
             save_safety::create_save_backup,
             save_safety::restore_save_backup,
             save_safety::resume_restored_save,
@@ -876,7 +877,19 @@ pub fn run() {
             let speech_app = app.handle().clone();
             save_safety::start_automatic(speech_app.clone(), config.clone(), supervisor.clone());
             tauri::async_runtime::spawn(async move {
-                let result = supervisor.lock().await.start(&config).await;
+                // A repaired patch can resume a known interrupted upgrade.
+                // Keep the maintenance hold and all checks; never replay work.
+                let version = speech_app.package_info().version.to_string();
+                let retry = updater::retry_start_available(&config, &version);
+                let result = if retry && updater::prepare_start_retry(&config, &version).is_err() {
+                    Err("save_update_retry_unavailable")
+                } else {
+                    supervisor
+                        .lock()
+                        .await
+                        .start_with_update_retry(&config, retry)
+                        .await
+                };
                 if result.is_err() && config.app_data.join("updates/handoff.json").exists() {
                     let _ = tokio::fs::write(
                         config.app_data.join("update-failure.json"),
@@ -885,10 +898,12 @@ pub fn run() {
                     .await;
                 }
                 if result.is_ok() {
-                    if updater::verify_pending_start(&speech_app, &config, &supervisor)
-                        .await
-                        .is_err()
-                    {
+                    let verification = if retry {
+                        updater::verify_retried_start(&speech_app, &config, &supervisor).await
+                    } else {
+                        updater::verify_pending_start(&speech_app, &config, &supervisor).await
+                    };
+                    if verification.is_err() {
                         let _ = supervisor
                             .lock()
                             .await

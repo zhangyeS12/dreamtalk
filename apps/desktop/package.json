@@ -1,6 +1,6 @@
 {
   "name": "@dreamtalk/desktop",
-  "version": "0.1.78",
+  "version": "0.1.80",
   "private": true,
   "license": "Apache-2.0",
   "scripts": {

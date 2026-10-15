@@ -15,6 +15,7 @@ import sqlite3
 import tempfile
 import time
 import zipfile
+from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import UUID, uuid4
@@ -139,11 +140,12 @@ def roots() -> list[Path]:
     return list(dict.fromkeys([base, backup_root(), *(plain(Path(item)) for item in values)]))
 
 
-def metadata(data: Path, *, integrity=False) -> dict:
+def metadata(data: Path, *, integrity=False, frozen=False) -> dict:
     database = plain(data) / "runtime.sqlite3"
     if not database.is_file():
         raise SaveSafetyError("save_database_missing")
-    connection = sqlite3.connect(database.as_uri() + "?mode=ro", uri=True, timeout=5)
+    uri = database.as_uri() + ("?mode=ro&immutable=1" if frozen else "?mode=ro")
+    connection = sqlite3.connect(uri, uri=True, timeout=5)
     try:
         connection.execute("PRAGMA query_only=ON")
         connection.execute("BEGIN")
@@ -243,10 +245,23 @@ def snapshot_manifest(folder: Path) -> dict:
     return value
 
 
+def verify_payload(payload: Path, expected: dict) -> None:
+    actual = inventory(payload)
+    # SHM is a rebuildable WAL index, never committed user data. Old read-only
+    # inspection could also create an unrecorded empty WAL beside a sealed DB.
+    # A recorded WAL or any nonempty WAL remains protected byte for byte.
+    actual.pop("data/runtime.sqlite3-shm", None)
+    expected = {name: info for name, info in expected.items() if name != "data/runtime.sqlite3-shm"}
+    wal = "data/runtime.sqlite3-wal"
+    if wal not in expected and actual.get(wal, {}).get("bytes") == 0:
+        actual.pop(wal)
+    if actual != expected:
+        raise SaveSafetyError("save_snapshot_damaged")
+
+
 def verify_snapshot(folder: Path) -> dict:
     value = snapshot_manifest(folder)
-    if inventory(folder / "payload") != value["files"]:
-        raise SaveSafetyError("save_snapshot_damaged")
+    verify_payload(folder / "payload", value["files"])
     marker = read_json(folder / "payload" / MARKER, 16_384)
     if marker.get("identity") != IDENTITY or marker.get("storage_id") != value["storage_id"]:
         raise SaveSafetyError("save_snapshot_damaged")
@@ -260,21 +275,26 @@ def verify_snapshot(folder: Path) -> dict:
     return value
 
 
-def snapshot_metadata(folder: Path, *, integrity=False) -> dict:
+@contextmanager
+def snapshot_database(folder: Path):
     data = folder / "payload/data"
     if not (data / "runtime.sqlite3-wal").exists():
-        return metadata(data, integrity=integrity)
-    # Never let SQLite rebuild a captured SHM file inside preserved evidence.
-    temporary = folder / f"analysis-{uuid4()}"
-    temporary.mkdir()
-    try:
-        for name in ("runtime.sqlite3", "runtime.sqlite3-wal", "runtime.sqlite3-shm"):
+        # Only sealed, quiescent snapshot files use immutable; never the live DB.
+        yield data, True
+        return
+    # SQLite may rebuild SHM even for mode=ro. Use a disposable working copy
+    # whenever a captured WAL must be read, leaving the original snapshot sealed.
+    with tempfile.TemporaryDirectory(prefix="dreamtalk-snapshot-") as temporary_name:
+        temporary = Path(temporary_name)
+        for name in ("runtime.sqlite3", "runtime.sqlite3-wal"):
             if (data / name).exists():
                 shutil.copy2(data / name, temporary / name)
-        return metadata(temporary, integrity=integrity)
-    finally:
-        if plain(temporary).parent == plain(folder):
-            shutil.rmtree(temporary)
+        yield temporary, False
+
+
+def snapshot_metadata(folder: Path, *, integrity=False) -> dict:
+    with snapshot_database(folder) as (data, frozen):
+        return metadata(data, integrity=integrity, frozen=frozen)
 
 
 def list_snapshots() -> list[dict]:
@@ -287,14 +307,16 @@ def list_snapshots() -> list[dict]:
             try:
                 plain(path)
                 value = snapshot_manifest(path)
-                info = value.get("info") or snapshot_metadata(path)
+                # Listing history is metadata-only. A legacy opaque installer
+                # backup is verified when selected, not opened on every startup.
+                info = value.get("info")
                 result.append(
                     {
                         "id": value["id"],
                         "created_at": value["created_at"],
                         "reason": value["reason"],
                         "version": value.get("version", ""),
-                        "counts": info["counts"],
+                        "counts": info["counts"] if info else None,
                         "bytes": sum(item["bytes"] for item in value["files"].values()),
                     }
                 )
@@ -312,37 +334,60 @@ def locate(snapshot_id: str) -> Path:
     raise SaveSafetyError("save_snapshot_missing")
 
 
-def guard(app_data: Path) -> dict:
+def guard(
+    app_data: Path, *, retry_update_verification: bool = False, include_snapshots=True
+) -> dict:
     app_data = plain(app_data)
-    snapshots = list_snapshots()
     current, problem = None, None
+    database_present = (app_data / "data/runtime.sqlite3").exists()
     try:
         current = metadata(app_data / "data")
     except (OSError, ValueError, sqlite3.Error):
-        if (app_data / "data/runtime.sqlite3").exists() or snapshots:
+        if database_present:
             problem = "save_database_unavailable"
+    snapshots, backup_problem, backup_directory = [], None, ""
+    try:
+        backup_directory = str(backup_root())
+        if include_snapshots or current is None or current["counts"]["worlds"] == 0:
+            snapshots = list_snapshots()
+    except (OSError, ValueError, KeyError, sqlite3.Error):
+        backup_problem = "save_backup_catalog_unavailable"
+    if current is None and (snapshots or backup_problem):
+        problem = "save_database_unavailable"
     marker = read_json(app_data / MARKER, 16_384) if (app_data / MARKER).exists() else {}
+    if (
+        current
+        and not current["counts"]["worlds"]
+        and backup_problem
+        and not marker.get("allow_empty")
+    ):
+        problem = "save_previous_worlds_found"
     if current is None and marker and not marker.get("allow_empty"):
         problem = "save_database_unavailable"
     if (
         current
         and current["counts"]["worlds"] == 0
         and not marker.get("allow_empty")
-        and any(item["counts"]["worlds"] for item in snapshots)
+        and any(item["counts"] is None or item["counts"]["worlds"] for item in snapshots)
     ):
         problem = "save_previous_worlds_found"
     if (app_data / "restore-in-progress.json").exists():
         problem = "save_restore_interrupted"
     elif (app_data / "restore-hold.json").exists():
         problem = "save_restored_review_required"
-    elif (app_data / "update-failure.json").exists():
+    elif (
+        (app_data / "update-failure.json").exists()
+        and (app_data / "updates/handoff.json").exists()
+        and not retry_update_verification
+    ):
         problem = "save_update_review_required"
     return {
         "recovery_required": bool(problem),
         "problem": problem,
         "current": current,
         "snapshots": snapshots[:100],
-        "backup_directory": str(backup_root()),
+        "backup_directory": backup_directory,
+        "backup_problem": backup_problem,
         "automatic_minutes": 30,
     }
 
@@ -388,7 +433,7 @@ def create_snapshot(app_data: Path, reason: str, version: str, *, automatic=Fals
     if automatic and history.exists() and read_json(history).get("fingerprint") == stamp:
         return {"skipped": True}
     name = str(uuid4())
-    folder = plain(root / "snapshots" / name)
+    folder = plain(root / "incomplete" / name)
     payload = folder / "payload"
     payload.mkdir(parents=True, exist_ok=False)
     deadline = time.monotonic() + 180
@@ -431,7 +476,7 @@ def create_snapshot(app_data: Path, reason: str, version: str, *, automatic=Fals
             inventory(config)  # reject links before traversing user-owned config
             shutil.copytree(config, payload / "config")
         shutil.copy2(app_data / MARKER, payload / MARKER)
-        copied = metadata(payload / "data", integrity=True)
+        copied = metadata(payload / "data", integrity=True, frozen=True)
         if copied["counts"] != info["counts"] or copied["ids_digest"] != info["ids_digest"]:
             raise SaveSafetyError("save_changed_during_backup")
         value = {
@@ -448,29 +493,49 @@ def create_snapshot(app_data: Path, reason: str, version: str, *, automatic=Fals
         }
         atomic_json(folder / "snapshot.json", value)
         verify_snapshot(folder)
-        atomic_json(history, {"fingerprint": stamp, "created_at": value["created_at"]})
-        for known_root in roots():
-            if (known_root / "snapshots").is_dir():
-                prune(known_root)
-        return {"id": name, "counts": copied["counts"], "created_at": value["created_at"]}
+        published = plain(root / "snapshots" / name)
+        published.parent.mkdir(parents=True, exist_ok=True)
+        os.rename(folder, published)
+        result = {"id": name, "counts": copied["counts"], "created_at": value["created_at"]}
+        try:
+            atomic_json(history, {"fingerprint": stamp, "created_at": value["created_at"]})
+            protected = set()
+            handoff_path = app_data / "updates/handoff.json"
+            if handoff_path.exists():
+                handoff = read_json(handoff_path)
+                if handoff.get("identity") != IDENTITY:
+                    raise SaveSafetyError("save_legacy_update_invalid")
+                protected.update(handoff.get("prior_snapshot_ids", []))
+                protected.add(handoff.get("save_snapshot_id"))
+            for known_root in roots():
+                if (known_root / "snapshots").is_dir():
+                    prune(known_root, protected=protected)
+        except (OSError, ValueError, KeyError, sqlite3.Error):
+            # Retention is optional housekeeping. A verified published snapshot
+            # must not become a failed backup because an older root is offline.
+            result["retention_warning"] = "save_retention_incomplete"
+        return result
     except Exception:
         # Keep incomplete material; it is not listed and never replaces a good backup.
         raise
 
 
-def prune(root: Path) -> None:
+def prune(root: Path, *, protected=()) -> None:
     directory = plain(root / "snapshots")
     candidates = []
     for path in directory.iterdir():
         try:
-            value = snapshot_manifest(path)
+            value = verify_snapshot(path)
             candidates.append((path, value))
-        except (OSError, ValueError, KeyError):
+        except (OSError, ValueError, KeyError, sqlite3.Error):
             continue
     candidates.sort(key=lambda pair: pair[1]["created_at"], reverse=True)
     keep, days, upgrades, automatic = set(), set(), 0, 0
     cutoff = datetime.now(UTC) - timedelta(days=7)
     for path, value in candidates:
+        if path.name in protected:
+            keep.add(path)
+            continue
         created = datetime.fromisoformat(value["created_at"])
         reason = value["reason"]
         if reason not in ("automatic", "pre_update", "pre_install", "pre_migration"):
@@ -514,9 +579,9 @@ def restore(app_data: Path, snapshot_id: str, version: str) -> dict:
     preserved = app_data / f"restore-preserved-{uuid4()}"
     payload = locate(snapshot_id) / "payload"
     shutil.copytree(payload, incoming)
-    if inventory(incoming) != value["files"]:
-        raise SaveSafetyError("save_snapshot_damaged")
+    verify_payload(incoming, value["files"])
     # Installer snapshots may have a WAL; normalize only the working copy.
+    (incoming / "data/runtime.sqlite3-shm").unlink(missing_ok=True)
     if (incoming / "data/runtime.sqlite3-wal").exists():
         source = sqlite3.connect(
             (incoming / "data/runtime.sqlite3").as_uri() + "?mode=ro", uri=True
@@ -780,16 +845,25 @@ def verify_continuity(app_data: Path, snapshot_id: str) -> dict:
     folder = locate(snapshot_id)
     value = verify_snapshot(folder)
     actual = metadata(app_data / "data", integrity=True)
-    saved_data = folder / "payload/data"
-    temporary = None
-    if (saved_data / "runtime.sqlite3-wal").exists():
-        temporary = folder / f"continuity-{uuid4()}"
-        temporary.mkdir()
-        for name in ("runtime.sqlite3", "runtime.sqlite3-wal", "runtime.sqlite3-shm"):
-            if (saved_data / name).exists():
-                shutil.copy2(saved_data / name, temporary / name)
-        saved_data = temporary
-    source = sqlite3.connect((saved_data / "runtime.sqlite3").as_uri() + "?mode=ro", uri=True)
+    with snapshot_database(folder) as (saved_data, frozen):
+        _verify_database_continuity(app_data, saved_data, frozen=frozen)
+    # Program startup cannot certify success with missing pictures/config.
+    for name, expected in value["files"].items():
+        if name in (
+            "data/runtime.sqlite3",
+            "data/runtime.sqlite3-wal",
+            "data/runtime.sqlite3-shm",
+        ):
+            continue
+        path = app_data / valid_relative(name)
+        if not path.is_file() or digest(path) != expected["sha256"]:
+            raise SaveSafetyError("save_update_assets_changed")
+    return {"verified": True, "current": actual}
+
+
+def _verify_database_continuity(app_data: Path, saved_data: Path, *, frozen: bool) -> None:
+    suffix = "?mode=ro&immutable=1" if frozen else "?mode=ro"
+    source = sqlite3.connect((saved_data / "runtime.sqlite3").as_uri() + suffix, uri=True)
     current = sqlite3.connect((app_data / "data/runtime.sqlite3").as_uri() + "?mode=ro", uri=True)
     try:
         for schema, table, kind, *_ in source.execute("PRAGMA table_list"):
@@ -845,23 +919,9 @@ def verify_continuity(app_data: Path, snapshot_id: str) -> dict:
                     ).fetchone()
                     if old != new:
                         raise SaveSafetyError("save_update_content_changed")
-        # Program startup cannot certify success with missing pictures/config.
-        for name, expected in value["files"].items():
-            if name in (
-                "data/runtime.sqlite3",
-                "data/runtime.sqlite3-wal",
-                "data/runtime.sqlite3-shm",
-            ):
-                continue
-            path = app_data / valid_relative(name)
-            if not path.is_file() or digest(path) != expected["sha256"]:
-                raise SaveSafetyError("save_update_assets_changed")
     finally:
         source.close()
         current.close()
-        if temporary and plain(temporary).parent == plain(folder):
-            shutil.rmtree(temporary)
-    return {"verified": True, "current": actual}
 
 
 def adopt_legacy_update(app_data: Path, recovery: Path) -> dict:
@@ -882,7 +942,8 @@ def adopt_legacy_update(app_data: Path, recovery: Path) -> dict:
         if not path.is_relative_to(recovery) or digest(path) != expected:
             raise SaveSafetyError("save_snapshot_damaged")
     name = str(uuid4())
-    folder = backup_root() / "snapshots" / name
+    root = backup_root()
+    folder = plain(root / "incomplete" / name)
     payload = folder / "payload"
     payload.mkdir(parents=True)
     for part in ("data", "config"):
@@ -917,7 +978,12 @@ def adopt_legacy_update(app_data: Path, recovery: Path) -> dict:
         "info": None,
     }
     atomic_json(folder / "snapshot.json", value)
-    verify_continuity(app_data, name)
+    verified = verify_snapshot(folder)
+    value["info"] = verified["info"]
+    atomic_json(folder / "snapshot.json", value)
+    target = plain(root / "snapshots" / name)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    os.rename(folder, target)
     return {"id": name}
 
 
@@ -928,7 +994,14 @@ def export_snapshot(snapshot_id: str, output: Path) -> dict:
     if output.exists() or output.suffix != ".dreamsave":
         raise SaveSafetyError("save_export_target_invalid")
     with zipfile.ZipFile(output, "x", compression=zipfile.ZIP_DEFLATED, compresslevel=3) as archive:
-        archive.write(folder / "snapshot.json", "snapshot.json")
+        # Export canonical keys and omit the rebuildable WAL index. Do not alter
+        # an older source snapshot just to make it portable.
+        value["files"] = {
+            name: info
+            for name, info in value["files"].items()
+            if name != "data/runtime.sqlite3-shm"
+        }
+        archive.writestr("snapshot.json", json.dumps(value, ensure_ascii=False))
         for name in value["files"]:
             archive.write(folder / "payload" / valid_relative(name), f"payload/{name}")
     return {"exported": True}
@@ -990,7 +1063,7 @@ def run_request(request_path: Path) -> None:
         version = request.get("version", "")
         action = request["action"]
         if action in ("status", "guard"):
-            result = guard(app_data)
+            result = guard(app_data, include_snapshots=action == "status")
         elif action == "backup":
             if (
                 request.get("expected_file_identity")

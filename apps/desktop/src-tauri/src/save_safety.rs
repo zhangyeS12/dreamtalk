@@ -131,6 +131,7 @@ pub(crate) async fn backup(
 
 #[tauri::command]
 pub async fn save_safety_status(
+    include_backups: Option<bool>,
     app: tauri::AppHandle,
     config: State<'_, LaunchConfig>,
     updates: State<'_, updater::UpdateState>,
@@ -139,13 +140,21 @@ pub async fn save_safety_status(
     let outcome = tool(
         &config,
         &app.package_info().version.to_string(),
-        json!({"action":"status"}),
+        json!({"action": if include_backups.unwrap_or(true) { "status" } else { "guard" }}),
     )
     .await;
     let can_rollback = updater::rollback_available(&config);
     match outcome {
         Ok(mut value) => {
             value["can_rollback"] = json!(can_rollback);
+            value["can_retry_start"] = json!(
+                value["problem"] == "save_update_review_required"
+                    && !value["current"].is_null()
+                    && updater::retry_start_available(
+                        &config,
+                        &app.package_info().version.to_string()
+                    )
+            );
             value["credential_cleanup_incomplete"] = json!(config
                 .app_data
                 .join("config/credential-cleanup.json")
@@ -159,6 +168,58 @@ pub async fn save_safety_status(
         ),
         Err(error) => Err(error),
     }
+}
+
+#[tauri::command]
+pub async fn retry_save_start(
+    app: tauri::AppHandle,
+    config: State<'_, LaunchConfig>,
+    updates: State<'_, updater::UpdateState>,
+    supervisor: State<'_, SharedSupervisor>,
+) -> Result<(), String> {
+    let _operation = updates.operation.try_lock().map_err(|_| "save_busy")?;
+    let version = app.package_info().version.to_string();
+    let status = tool(&config, &version, json!({"action":"status"})).await?;
+    if status["problem"] != "save_update_review_required" || status["current"].is_null() {
+        return Err("save_update_retry_unavailable".into());
+    }
+    let mut host = supervisor.lock().await;
+    if let Ok(connection) = host.connection() {
+        if let Err(error) = drain(&connection).await {
+            let _ = updater::maintenance(&connection, "cancel").await;
+            return Err(error);
+        }
+        host.stop_for_update(Duration::from_secs(30))
+            .await
+            .map_err(str::to_owned)?;
+    }
+    updater::prepare_start_retry(&config, &version)?;
+    host.start_with_update_retry(&config, true)
+        .await
+        .map_err(|_| "save_update_retry_failed")?;
+    drop(host);
+    if let Err(error) = updater::verify_retried_start(&app, &config, &supervisor).await {
+        let _ = supervisor
+            .lock()
+            .await
+            .stop_for_update(Duration::from_secs(30))
+            .await;
+        return Err(error);
+    }
+    let startup_app = app.clone();
+    let startup_config = config.inner().clone();
+    let startup_supervisor = supervisor.inner().clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::join!(
+            crate::local_speech::on_start(
+                startup_app.clone(),
+                startup_config.clone(),
+                startup_supervisor.clone()
+            ),
+            crate::local_images::on_start(startup_app, startup_config, startup_supervisor),
+        );
+    });
+    Ok(())
 }
 
 #[tauri::command]

@@ -19,6 +19,7 @@ class BootstrapInput(BaseModel):
     log_dir: Path
     allowed_origins: list[str] = Field(default_factory=list, max_length=8)
     llm_config_path: Path | None = None
+    retry_update_verification: bool = Field(default=False, strict=True)
 
     @field_validator("data_dir", "log_dir", "llm_config_path")
     @classmethod

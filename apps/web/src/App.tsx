@@ -5,6 +5,7 @@ import { ProductApp } from "./ProductApp";
 import { StartupSplash } from "./StartupSplash";
 import { Brand } from "./Brand";
 import { SaveSafetyGate } from "./SaveBackups";
+import { DesktopUpdateEntry, DesktopUpdateProvider } from "./DesktopUpdates";
 
 interface Props {
   discover: () => Promise<CoreConnection>;
@@ -12,10 +13,12 @@ interface Props {
 }
 
 export function App({ discover, onReady }: Props) {
-  return <SaveSafetyGate><ConnectedApp discover={discover} onReady={onReady} /></SaveSafetyGate>;
+  const [ready, setReady] = useState(false);
+  const revealed = useCallback(() => setReady(true), []);
+  return <DesktopUpdateProvider ready={ready}><SaveSafetyGate><ConnectedApp discover={discover} onReady={onReady} onRevealed={revealed} /></SaveSafetyGate></DesktopUpdateProvider>;
 }
 
-function ConnectedApp({ discover, onReady }: Props) {
+function ConnectedApp({ discover, onReady, onRevealed }: Props & { onRevealed: () => void }) {
   const [state, setState] = useState<"Connecting" | "Ready" | "Failed">("Connecting");
   const [client, setClient] = useState<CoreClient | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -23,7 +26,7 @@ function ConnectedApp({ discover, onReady }: Props) {
   const [revealed, setRevealed] = useState(false);
   const developer = new URLSearchParams(window.location.search).get("developer") === "1";
   const archiveStatus = useCallback((success: boolean) => setArchive(current => current === "Pending" ? success ? "Ready" : "Failed" : current), []);
-  const complete = useCallback(() => setRevealed(true), []);
+  const complete = useCallback(() => { setRevealed(true); onRevealed(); }, [onRevealed]);
   const retry = useCallback(() => {
     setState("Connecting"); setClient(null); setArchive("Pending"); setRevealed(false);
     setAttempt(value => value + 1);
@@ -58,8 +61,9 @@ function ConnectedApp({ discover, onReady }: Props) {
   return <>
     {client && state === "Ready" && <div className="startup-destination" inert={!revealed} aria-hidden={!revealed}>
       {developer ? <main><div className="brand"><Brand /><p role="status">核心已就绪</p></div><Inspector client={client} /></main>
-        : <ProductApp key={attempt} client={client} onStartupStatus={archiveStatus} startupReady={revealed} />}
+        : <ProductApp key={attempt} client={client} onStartupStatus={archiveStatus} />}
     </div>}
     {!revealed && <StartupSplash key={attempt} ready={ready} failed={failed} onRetry={retry} onComplete={complete} />}
+    {failed && <div className="startup-update-entry"><DesktopUpdateEntry /></div>}
   </>;
 }

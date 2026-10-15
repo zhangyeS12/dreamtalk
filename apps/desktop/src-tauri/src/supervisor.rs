@@ -159,13 +159,29 @@ impl CoreSupervisor {
         self.session.clone().ok_or("core_session_missing")
     }
 
+    pub(crate) fn safely_stopped(&mut self) -> bool {
+        self.child
+            .as_mut()
+            .is_none_or(|child| child.try_wait().is_ok_and(|result| result.is_some()))
+    }
+
     pub async fn start(&mut self, config: &LaunchConfig) -> Result<(), &'static str> {
+        self.start_with_update_retry(config, false).await
+    }
+
+    pub(crate) async fn start_with_update_retry(
+        &mut self,
+        config: &LaunchConfig,
+        retry_update_verification: bool,
+    ) -> Result<(), &'static str> {
         if self.child.is_some() {
             return Err("core_already_started");
         }
         self.state = SupervisorState::Starting;
         event("supervisor_starting");
-        let result = self.spawn_and_discover(config).await;
+        let result = self
+            .spawn_and_discover(config, retry_update_verification)
+            .await;
         if let Err(reason) = result {
             // Every reason here is a fixed internal code, never an OS error or secret.
             event(reason);
@@ -176,7 +192,11 @@ impl CoreSupervisor {
         result
     }
 
-    async fn spawn_and_discover(&mut self, config: &LaunchConfig) -> Result<(), &'static str> {
+    async fn spawn_and_discover(
+        &mut self,
+        config: &LaunchConfig,
+        retry_update_verification: bool,
+    ) -> Result<(), &'static str> {
         if !cfg!(windows) {
             return Err("desktop_runtime_requires_windows");
         }
@@ -199,13 +219,16 @@ impl CoreSupervisor {
         self.runtime_dir = Some(runtime.clone());
         DevelopmentBootstrapPolicy.validate_directory(&runtime)?;
         let bootstrap_path = runtime.join("bootstrap.json");
-        let input = serde_json::json!({
+        let mut input = serde_json::json!({
             "bootstrap_secret": secret, "instance_nonce": nonce,
             "protocol_min": api.api_protocol, "protocol_max": api.api_protocol,
             "data_dir": config.app_data.join("data"), "log_dir": config.app_data.join("logs"),
             "allowed_origins": ["http://127.0.0.1:1420", "http://tauri.localhost", "tauri://localhost"]
             ,"llm_config_path": config.llm_config_path
         });
+        if retry_update_verification {
+            input["retry_update_verification"] = serde_json::json!(true);
+        }
         let mut file = tokio::fs::OpenOptions::new()
             .write(true)
             .create_new(true)

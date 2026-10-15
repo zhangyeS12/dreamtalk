@@ -1000,7 +1000,7 @@ dependencies = [
 
 [[package]]
 name = "dreamtalk-desktop"
-version = "0.1.78"
+version = "0.1.80"
 dependencies = [
  "hmac 0.12.1",
  "keyring",
