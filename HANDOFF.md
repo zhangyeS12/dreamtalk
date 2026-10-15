@@ -1,6 +1,6 @@
 # dreamtalk 工作交接
 
-更新日期：**2026-10-15**。当前源码Desktop **0.1.80**（快照与升级修复，发布准备中）、API1、迁移head0052_sticker_entry_description、配音revision8。公开v0.1.78固定e4b7164，用户升级后报alembic_schema_shape_mismatch，已定位字段追加顺序冲突并接线显式重新核对入口，见[本轮记录](docs/maintenance/2026-10-15-save-snapshot-update.md)。原[发布证据](docs/maintenance/2026-10-15-release-0178.md)仅覆盖构建、静态载荷和匿名下载；真实升级未通过，不扩大为验收。本地配音、角色发送与新增公共表情识别有前轮具体反馈，其他场景继续待验收。
+更新日期：**2026-10-15**。当前源码Desktop **0.1.80**（已公开预发布）、API1、迁移head0052_sticker_entry_description、配音revision8。发行源码固定c7bcf3b，完整Windows安装／便携与原更新频道已发布，见[发布记录](docs/maintenance/2026-10-15-release-0180.md)。本轮修复字段顺序、快照副文件误报及升级交接，见[实施记录](docs/maintenance/2026-10-15-save-snapshot-update.md)。发布文件核对不代表真实升级通过；本地配音、角色发送和新增公共表情识别仅沿前轮具体反馈，其他场景仍待用户验收。
 
 ## 1. 五分钟了解当前完成度
 
@@ -12,24 +12,24 @@
 | 有明确使用反馈 | 2026-10-14用户确认可以发表情；2026-10-13用户在0.1.68交付后反馈本地配音效果良好；用户报告卡/书生成、单聊、群聊@及无@正常，认可循环书架；0.1.23连接卡顿和0.1.30已读红点问题获确认解决。2026-10-07本轮CCv2角色卡与World Info JSON世界书外部导入获用户确认通过。 | 反馈只覆盖当次功能／资料，不代表最新版全量通过。 |
 | 已实现、待最新版验收 | 0.1.78完整存档保护与可靠更新；三库表情、媒体附件、可设频率与一次搜索、可选图片分析；配音三路线、六小时缓存、独立候选试听替换、一键服务修复；本地配音已有前轮用户确认。 | 存档备份/恢复/安装升级/回退待运行验收；免费云端最新版和付费API未测试、待确认；其他场景不推定全通过。 |
 | 尚未实现的愿景 | 完整离线演化、更广剧情/关系/知识演化、一键构建完整运行世界/持续资料更新、单世界分支、时间线合并与分支恢复。 | 详见第4节。未冻结的产品行为须先讨论，不是默认下一步授权。 |
-| 发行未完成 | 0.1.78已公开但用户升级失败；0.1.80源码修复未发布，正式稳定版尚未完成。 | 先验收修正版启动与存档核对，本轮0.1.80已获完整发布授权，运行由用户验收。 |
+| 发行未完成 | 0.1.78已公开但用户升级失败；0.1.80完整预发布已公开，正式稳定版尚未完成。 | 先验收修正版启动与存档核对，本轮0.1.80已获完整发布授权，运行由用户验收。 |
 | 范围规则 | 只推进已批准需求和有证据的修复。 | 不从历史建议、领域类名或“继续推进”推导新授权。 |
 
-**最近进展：** 0.1.78用户升级失败，限定只读诊断已完成，未打开数据库。0.1.80源码修复模型字段顺序，并修复快照副文件误报，提供启动失败页更新和保留原数据的重新启动检查，仍须在维护屏障内通过原完整连续性核对，详见[本轮记录](docs/maintenance/2026-10-15-save-snapshot-update.md)。当前按用户要求准备完整GitHub发布，仅build-only；不运行真实存档、测试或模型；原存档保护和媒体实现沿用，不将失败页解释成数据已丢失。
+**最近进展：** 0.1.78用户升级失败，限定只读诊断已完成，未打开数据库。0.1.80源码修复模型字段顺序，并修复快照副文件误报，提供启动失败页更新和保留原数据的重新启动检查，仍须在维护屏障内通过原完整连续性核对，详见[本轮记录](docs/maintenance/2026-10-15-save-snapshot-update.md)。本轮完整GitHub预发布已公开，仅build-only；不运行真实存档、测试或模型；原存档保护和媒体实现沿用，不将失败页解释成数据已丢失。
 
 ## 2. 仓库、运行和版本现场
 
-本轮本地修复入口仍为apps/desktop/src-tauri/target/debug/dreamtalk-desktop.exe，产品版本0.1.79、30,912,000字节，SHA256 713b9e8bf4d4c93a034e00e2fb93f3623454d3dc924f163a45c1c1b9e7a19776；已编译、未启动。它包含本轮快照／更新修复，供用户退出旧实例后从应用内升级至0.1.80，不作为公开发行。正式源码为0.1.80；完整安装／便携及原频道正在按授权准备，不覆盖旧标签和附件。原0.1.78发行e4b7164的[记录](docs/maintenance/2026-10-15-release-0178.md)保留，实际运行失败与静态核对分开登记。
+本轮本地修复入口仍为apps/desktop/src-tauri/target/debug/dreamtalk-desktop.exe，产品版本0.1.79、30,912,000字节，SHA256 713b9e8bf4d4c93a034e00e2fb93f3623454d3dc924f163a45c1c1b9e7a19776；已编译、未启动。它包含本轮快照／更新修复，供用户退出旧实例后从应用内升级至0.1.80，不作为公开发行。正式0.1.80源码c7bcf3b及完整安装／便携／原频道已公开，不覆盖旧标签和附件。原0.1.78发行e4b7164的[记录](docs/maintenance/2026-10-15-release-0178.md)保留，实际运行失败与静态核对分开登记。
 
 | 项 | 当前事实与边界 |
 | --- | --- |
 | 正式仓库 | D:\LivingWorld，开发分支codex/world-archive；当前HEAD／main以Git实际状态核对。源码发布快进同步，不改写旧历史。 |
-| 版本／协议 | Desktop0.1.80（源码未发布），Core／Web0.1.0，API1，配音revision8；既有标识app.livingworld.desktop保持。 |
+| 版本／协议 | Desktop0.1.80（已公开预发布），Core／Web0.1.0，API1，配音revision8；既有标识app.livingworld.desktop保持。 |
 | 迁移 | 源码head0052_sticker_entry_description，增加独立条目说明并复制旧资产说明；0051和更早形状校验保留。不读取聊天正文回填，不执行真实迁移。 |
-| GitHub | 最新公开[v0.1.78](https://github.com/zhangyeS12/dreamtalk/releases/tag/v0.1.78)，发行源码e4b7164；完整安装／便携版及原update-preview频道已同版更新，不改变旧附件或频道说明。 |
+| GitHub | 最新公开[v0.1.80](https://github.com/zhangyeS12/dreamtalk/releases/tag/v0.1.80)，发行源码c7bcf3b；完整安装／便携版及原update-preview频道已同版更新，不改变旧附件或频道说明。 |
 | 配音／图片模型 | 独立Git忽略环境和权重，不进入Core／安装包。登记路径并保存启用配置后随dreamtalk启动，模型按需加载；已有开机后台入口使登录后运行，不是关机期间运行。 |
-| 数据／系统入口 | 本轮不读取真实存档、聊天、原图或音频，不注册／修改自启动、快捷方式或进程。旧对照／元数据读取许可不复用。 |
-| 检查责任 | 用户负责测试和最终验收；0.1.80本轮只有静态／必要直接EXE编译，不运行测试、应用、模型或真实存档，不打包／发布。 |
+| 数据／系统入口 | 仅按本轮新许可核对升级记录、对应快照清单和文件摘要，不打开数据库或读取正文；不恢复／修改真实存档，不修改自启动、快捷方式或结束应用进程。 |
+| 检查责任 | 用户负责测试和最终验收；本轮静态／编译、获准build-only打包、签名／归档及公开下载核对已完成；不运行测试、应用、模型或真实存档。 |
 
 不要覆盖其他任务改动，不强推、不移动或删除DB/WAL，不以旧EXE打开已经升级的存档。源码head、包版本和实际运行EXE分别核对。
 
@@ -72,7 +72,7 @@
 | 阵营/头像/人物网 | `ContactSocial.tsx`、`RelationshipUniverse.tsx`；聊天`useChatAvatars.ts` | [factions.py](services/core/src/livingworld/infrastructure/persistence/factions.py)、`adapters/http/factions.py`：直接成员多重归属、相识来源区分、退出可选择切断／保留，真实相遇和其他共享阵营保护；父子不继承；头像本地资产、3d-force-graph/Three.js真三维拾取/相机/漂浮，聊天/Director使用有界相识输入；0036。 |
 | Logo、启动/界面材质 | `Brand.tsx`、`StartupSplash.tsx`、`celestialVortex.ts`、`world-terminal.css` | 前台首帧至少1.5秒且Core/书架真实就绪后交接；Three.js真实纵深，隐藏后台停渲染、静态/错误回退；0.1.37观星室四页及双天体星轨；0.1.37视觉切片未改Core，本轮维护另见第6节。 |
 | Kernel/知识/持久化基础 | 普通功能经应用接线；开发Inspector独立 | [command_handler.py](services/core/src/livingworld/application/command_handler.py)、`action_resolution.py`、`ledger.py`/`replay.py`、`domain/knowledge.py`、`application/memory.py`、`persistence/unit_of_work.py`：CAS/幂等/事务事件、投影重建、owner授权Observation/EpisodicMemory；不是普通聊天自动写Truth。 |
-| Windows应用更新 | [使用说明](docs/WINDOWS_UPDATES.md) | `DesktopUpdates.tsx` → Rust `updater.rs` → Core `update_maintenance.py`；完整资源由 `build-installer.py`／NSIS hooks交付，`updater-signing.ps1`仅保管发布私钥。版本Release和update-preview频道须另获发布授权；旧无清单包需一次手动安装。 |
+| Windows应用更新 | [使用说明](docs/WINDOWS_UPDATES.md) | `DesktopUpdates.tsx` → Rust `updater.rs` → Core `update_maintenance.py`；完整资源由 `build-installer.py`／NSIS hooks交付，`updater-signing.ps1`仅保管发布私钥。版本Release和update-preview频道按相应用户授权发布；完全没有更新器的旧包需一次安装，已有更新器缺清单可走签名修复。 |
 | 内容包/外部导出基础 | 资料管理导出／会话菜单；`FileExportDialog.tsx` | [world_content_export.py](services/core/src/livingworld/application/world_content_export.py)、[chat_export.py](services/core/src/livingworld/application/chat_export.py)、[file_exports.py](services/core/src/livingworld/adapters/http/file_exports.py)：角色 V2/V3 JSON、World Info JSON、完整已保存聊天 TXT/JSON，桌面另存为。旧 `.lwcontent` 基础继续存在；导出不是运行世界备份，不含运行状态／头像包，聊天无导入 UI。 |
 
 ## 4. 未完成与必须保留的范围边界
@@ -105,7 +105,7 @@
 
 0. **配音按路线维护验收状态**：本地效果已有2026-10-13用户确认；免费云端最新版和付费API尚未测试、待确认。其他缓存／试听替换／服务修复场景仍由用户验收。前轮四次GPT对照许可已经用完，不自动新增模型或付费服务调用；见[当前手册](docs/CHARACTER_VOICES.md)。
 
-1. **先验收0.1.80启动修复与显式重新检查**，再验收存档保护：自动/手动备份、导入导出、独立恢复、清空确认、手动安装保留、旧清单修复、升级失败回退；工程端不运行这些场景。**在修正版上继续验收下载与升级**：确认完整安装／便携包的Core、设置、0051→0052旧存档升级、云端图片凭据／说明隔离／联网取消与回收／过滤、缓存／试听替换／服务修复及模型效果；云端免费／付费配音仍待确认。继承地点、阵营、记忆、世界动态、后台与权限等未确认场景，不由发布完成代替验收。工程端不运行产品、模型或真实迁移。
+1. **先从本地0.1.79修复入口进行应用内0.1.80更新，确认重启后的原世界与聊天**，再验收存档保护：自动/手动备份、导入导出、独立恢复、清空确认、手动安装保留、旧清单修复、升级失败回退；工程端不运行这些场景。**在修正版上继续验收下载与升级**：确认完整安装／便携包的Core、设置、0051→0052旧存档升级、云端图片凭据／说明隔离／联网取消与回收／过滤、缓存／试听替换／服务修复及模型效果；云端免费／付费配音仍待确认。继承地点、阵营、记忆、世界动态、后台与权限等未确认场景，不由发布完成代替验收。工程端不运行产品、模型或真实迁移。
 2. **验收尚未确认的关键链路**（共同联系目前由用户先等待，不主动触发或排查）：记忆纠正/停用和旧事召回、活动真实终态/权限、动态池公共背景→生成→逐条发布→标记、在线单人/双人同事由→等待回复→原会话回复→合法下次机会、离线联动。主动联系失败先查保存状态/前提/终端原因，不靠反复开关或自动重放API排查。
 3. **只按证据修复**：记录现象、版本、受影响模块和可观察完成条件；新功能先调查成熟实现并确认新增范围。用户仍负责测试；未获新许可不运行自动测试、GUI smoke、真实存档/模型诊断。
 4. **新方向先讨论**：将4.2中的愿景与当前功能验收分开；0.1.78已获本轮存档保护与媒体修复预发布授权，未来发行仍须相应批准。已有记忆底座不需要重新搭建。
@@ -114,7 +114,7 @@
 
 ## 6. 交付与证据
 
-本轮0.1.80检查与直接EXE编译见[启动修复记录](docs/maintenance/2026-10-15-save-snapshot-update.md)；0.1.78构建和GitHub回执见[发布记录](docs/maintenance/2026-10-15-release-0178.md)，0.1.77见[审查修复记录](docs/maintenance/2026-10-14-review-fixes-release.md)。已发生的升级启动失败与静态发布证据分别记录，不将编译扩大为运行验收。
+本轮0.1.80完整发布见[发行记录](docs/maintenance/2026-10-15-release-0180.md)，检查与直接EXE编译见[启动修复记录](docs/maintenance/2026-10-15-save-snapshot-update.md)；0.1.78构建和GitHub回执见[发布记录](docs/maintenance/2026-10-15-release-0178.md)，0.1.77见[审查修复记录](docs/maintenance/2026-10-14-review-fixes-release.md)。已发生的升级启动失败与静态发布证据分别记录，不将编译扩大为运行验收。
 
 历史完整HANDOFF查[收敛前Git快照](https://github.com/zhangyeS12/dreamtalk/blob/f1964d150d6702f4273bdf23d1ae181ee3156582/HANDOFF.md)，各轮维护／哈希记录仍在[历史索引](docs/history/README.md)和维护文档。近期重点：
 
