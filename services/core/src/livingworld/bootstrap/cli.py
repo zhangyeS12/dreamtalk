@@ -592,14 +592,17 @@ async def run(
             server.should_exit = True
             if not task.done():
                 await task
+            logger.emit("core", "core_http_stopped")
             ready_path.unlink(missing_ok=True)
             sock.close()
             session = ""
     finally:
         shutdown_error = None
         try:
+            logger.emit("core", "core_background_stop_started")
             if speech is not None:
                 await speech.aclose()
+            logger.emit("core", "core_speech_stopped")
             if world_story is not None:
                 await world_story.aclose()
             if proactive_contact is not None:
@@ -612,15 +615,20 @@ async def run(
                 await simulation_runtime.aclose()
             elif scheduler_runtime is not None:
                 await scheduler_runtime.aclose()
+            logger.emit("core", "core_background_stopped")
         except BaseException as error:
             shutdown_error = error
             logger.emit("simulation_runtime", "clock_checkpoint_failed", level="ERROR")
         finally:
+            logger.emit("core", "core_resources_stop_started")
             if control_listener is not None and not control_listener.join(1.0):
                 logger.emit("host_control", "host_control_close_timeout", level="ERROR")
+            logger.emit("core", "core_host_control_joined")
             if llm_session is not None:
                 await llm_session.aclose()
+            logger.emit("core", "core_llm_connections_closed")
             await database.close()
+            logger.emit("core", "core_database_closed")
         if shutdown_error is not None:
             raise shutdown_error
         logger.emit("core", "core_shutdown_completed")

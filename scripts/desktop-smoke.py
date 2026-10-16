@@ -23,7 +23,8 @@ with tempfile.TemporaryDirectory(prefix="dreamtalk-desktop-smoke-") as app_data:
             text=True,
             encoding="utf-8",
             errors="replace",
-            timeout=45,
+            # Startup and ordinary quit each have a 30s host bound.
+            timeout=90,
         )
     except subprocess.TimeoutExpired as error:
         output = error.stdout or b""
@@ -42,6 +43,7 @@ required = [
     "ui_ready",
     "shutdown_requested",
     "runtime_stopped",
+    "core_shutdown_completed",
     "supervisor_stopped_gracefully",
 ]
 if (
@@ -49,6 +51,16 @@ if (
     or not all(event in events for event in required)
     or "supervisor_forced_termination" in events
 ):
-    print(json.dumps({"event": "desktop_smoke_failed", "observed_events": events}))
+    timeline = [
+        {"event": record["event"], "timestamp": record.get("timestamp")}
+        for line in result.stdout.splitlines()
+        if line.startswith("{")
+        for record in [json.loads(line)]
+    ]
+    print(
+        json.dumps(
+            {"event": "desktop_smoke_failed", "observed_events": events, "timeline": timeline}
+        )
+    )
     raise SystemExit(1)
 print(json.dumps({"event": "desktop_smoke_passed", "observed_events": events}))

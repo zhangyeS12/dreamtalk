@@ -41,7 +41,7 @@
 - Rust14项单元及4项开发Core监督检查通过。另一个打包Core生命周期测试在缺少载荷环境时提前返回，本轮不据此声称实际载荷已验证；该路径仍留在Windows CI打包步骤。
 - 隔离浏览器主流程通过：校园预览不创建世界、明确确认后三位角色出现；普通世界创建、时间暂停／恢复、额度保存、V2导入／V3更新、群聊持久化、世界书导入、身份保存与跨世界隔离，以及开发检查器均通过，页面错误为0。旧检查中的入口和提示定位按当前界面更新，保留原覆盖，并明确断言无模型时输入和发送禁用。
 - Ruff、ESLint／TypeScript、严格Clippy、Git差异格式与文档链接检查通过。隐私门禁检查942个源码文件、0项发现；仅对固定路径与固定SHA256的原创校园资源豁免作者内容导出规则，其他凭据／私人路径检查照常执行，修改内容或其他路径不获豁免。
-- `npm run build:desktop`完成前端与Tauri debug `--no-bundle`编译。当前直接EXE为0.1.80、31,016,960字节，SHA256 `209fa6b870e82d86c206e973ddacb8ac5fd5b0c3ec7dec5e53b6982bd1d98d62`；仍在原`apps/desktop/src-tauri/target/debug/dreamtalk-desktop.exe`入口。未启动此EXE，没有安装器、便携包或ZIP。
+- `npm run build:desktop`完成前端与Tauri debug `--no-bundle`编译，退出等待修正后再次编译。当前直接EXE为0.1.80、31,016,960字节，SHA256 `61c0bd7c209448a976178e7d4dd42a07b576f78e988ba2d279ed25a7939b5bea`；仍在原`apps/desktop/src-tauri/target/debug/dreamtalk-desktop.exe`入口。未启动此EXE，没有安装器、便携包或ZIP。
 
 保留的警告：Starlette/AnyIO弃用提示；Vite部分块超过500kB；桌面构建的STATIC_VCRUNTIME弃用及增量缓存硬链接降级为复制。未隐藏警告或扩大为功能故障、性能达标结论。
 
@@ -58,3 +58,9 @@
 Linux Python 3.12启动测试另发现ONNX Runtime的原生stderr警告被测试合入stdout后当作JSON解析；分离两个通道，保留stdout逐行JSON、鉴权、随机端口、正常退出与日志字段断言，并将密钥防泄漏检查扩展至两个通道。Windows定向启动6项通过；Linux结果须由修正后的远端矩阵核对，不将本机结果冒充Linux结果。首次运行的Windows Python 3.12整组已通过。
 
 第二轮bb5d718的Linux浏览器通过；Linux 3.13随后在校园创建中捕获真实玩家绑定锁冲突。SqlAlchemyPlayerEventFeedStore.bind_player原先在延迟事务中先查询玩家，再写绑定；后台事务提交后无法升级旧WAL读快照。新增受控并发回归在旧代码稳定复现相同INSERT锁错误，改用已有livingworld_write_intent，在读取前取得短写事务，相关身份／绑定／校园9项通过。未扩大幂等重放、费用、权限或持久化结构；不关闭后台调度，也不通过放宽断言或增加自动重试掩盖问题。修正后需对新完整提交重新验证CI，失败的旧运行保留可查。
+
+第三轮fd4d581的四组Python及前端全部通过；Windows桌面作业通过格式、严格Clippy、Rust检查和直接EXE编译后，在原生正常退出检查失败。日志已到runtime_stopped，但没有core_shutdown_completed，随后出现supervisor_forced_termination；首次运行同一路径曾通过，说明此处有时序不稳定，不能把单次成功当作退出可靠性结论。
+
+普通退出原先只给Core八秒等待；源码中的HTTP排空、控制线程等待和SQLite收尾分别有自己的上限，总和可能超出宿主预算。普通退出沿用已有三十秒等待预算，更新的禁止强制结束契约不变。增加固定的收尾阶段事件，不记录聊天、素材、密钥或配置内容；实际阻塞在哪个阶段仍须根据新日志确认，不把预算推断写成已证明的唯一根因。原生检查同时要求Core完整收尾及宿主正常退出，仍拒绝任何强制结束，并在三个全新临时用户目录分别运行；脚本总期限随启动和退出两个三十秒上限调整至九十秒。
+
+本机定向启动六项、Rust十四项单元及四项开发监督检查、Ruff与严格Clippy已通过；无载荷时提前返回的第五项Rust监督测试仍不计作实际打包生命周期证据。启动测试新增完整Core收尾断言，未放宽旧检查。直接EXE仅编译未启动；原生WebView及完整载荷生命周期由隔离GitHub Windows作业验证，结果以该修正提交的实际Actions记录为准。

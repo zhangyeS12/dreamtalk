@@ -1119,7 +1119,10 @@ pub fn run() {
                     let supervisor = supervisor.clone();
                     let handle = handle.clone();
                     tauri::async_runtime::spawn(async move {
-                        let _ = supervisor.lock().await.stop(Duration::from_secs(8)).await;
+                        // Core HTTP draining, control closure and SQLite cleanup
+                        // have separate bounds; allow the existing 30s shutdown
+                        // budget before ordinary quit considers its fallback.
+                        let _ = supervisor.lock().await.stop(Duration::from_secs(30)).await;
                         handle
                             .state::<local_speech::LocalSpeechState>()
                             .0

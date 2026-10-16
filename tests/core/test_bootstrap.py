@@ -150,7 +150,9 @@ def test_random_loopback_readiness_and_graceful_shutdown(tmp_path):
         assert all(
             {"timestamp", "level", "component", "event"} <= record.keys() for record in records
         )
-        assert "runtime_stopped" in {record["event"] for record in records}
+        assert {"runtime_stopped", "core_shutdown_completed"} <= {
+            record["event"] for record in records
+        }
         disk_log = next((tmp_path / "logs").glob("core-*.jsonl")).read_text(encoding="utf-8")
         assert payload["bootstrap_secret"] not in disk_log and token not in disk_log
     finally:
