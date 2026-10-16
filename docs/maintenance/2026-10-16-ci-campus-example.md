@@ -56,3 +56,5 @@
 远端npm安装报告source-map-js 1.2.1的高风险公告[GHSA-68fv-2mgg-jv7q](https://github.com/advisories/GHSA-68fv-2mgg-jv7q)。按官方补丁仅更新原锁文件中的1.2.1→1.2.2，沿用既有依赖范围与BSD-3-Clause许可，无新增组件或大版本升级。复核npm告警为0，前端66项、ESLint／TypeScript及编译通过；构建体积警告保持。后续运行仍需核对全部作业，不以单项通过或重跑掩盖其他失败。
 
 Linux Python 3.12启动测试另发现ONNX Runtime的原生stderr警告被测试合入stdout后当作JSON解析；分离两个通道，保留stdout逐行JSON、鉴权、随机端口、正常退出与日志字段断言，并将密钥防泄漏检查扩展至两个通道。Windows定向启动6项通过；Linux结果须由修正后的远端矩阵核对，不将本机结果冒充Linux结果。首次运行的Windows Python 3.12整组已通过。
+
+第二轮bb5d718的Linux浏览器通过；Linux 3.13随后在校园创建中捕获真实玩家绑定锁冲突。SqlAlchemyPlayerEventFeedStore.bind_player原先在延迟事务中先查询玩家，再写绑定；后台事务提交后无法升级旧WAL读快照。新增受控并发回归在旧代码稳定复现相同INSERT锁错误，改用已有livingworld_write_intent，在读取前取得短写事务，相关身份／绑定／校园9项通过。未扩大幂等重放、费用、权限或持久化结构；不关闭后台调度，也不通过放宽断言或增加自动重试掩盖问题。修正后需对新完整提交重新验证CI，失败的旧运行保留可查。

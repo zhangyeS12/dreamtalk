@@ -72,6 +72,9 @@ class SqlAlchemyPlayerEventFeedStore:
 
     async def bind_player(self, player_id: PlayerId) -> None:
         async with self._sessions() as session, session.begin():
+            # Acquire the writer before reading: a WAL read snapshot cannot be
+            # upgraded after a concurrent clock/settings transaction commits.
+            await session.connection(execution_options={"livingworld_write_intent": True})
             exists = await session.scalar(
                 select(PlayerRecord.player_id).where(
                     PlayerRecord.world_id == player_id.world_id.value,

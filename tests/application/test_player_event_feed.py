@@ -7,6 +7,10 @@ from livingworld.application.player_event_feed import PlayerEventFeedService
 from livingworld.domain.identifiers import LocationId, PlayerId
 from livingworld.domain.participants import PlayerAvailability
 from livingworld.domain.values import Revision
+from livingworld.infrastructure.persistence.models import LocalUserProfileRecord, PlayerRecord
+from sqlalchemy import event
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+from sqlalchemy.ext.asyncio import AsyncSession
 
 
 def test_event_feed_is_bound_to_one_player_and_never_reads_unobserved_events(environment):
@@ -69,6 +73,74 @@ def test_event_feed_is_bound_to_one_player_and_never_reads_unobserved_events(env
             assert len(other_known) == 1
             assert other_known[0].event_id != known[0].event_id
         finally:
+            await env.database.close()
+
+    asyncio.run(run())
+
+
+def test_player_binding_waits_for_an_existing_writer_without_a_stale_snapshot(
+    environment, monkeypatch
+):
+    async def run():
+        env = environment
+        await env.initialize()
+        service = PlayerEventFeedService(env.database.player_event_feed_store())
+        binding_started, read_finished, release_read = (
+            asyncio.Event(),
+            asyncio.Event(),
+            asyncio.Event(),
+        )
+        scalar = AsyncSession.scalar
+
+        async def hold_player_read(session, statement, *args, **kwargs):
+            result = await scalar(session, statement, *args, **kwargs)
+            if getattr(statement, "column_descriptions", [{}])[0].get("entity") is PlayerRecord:
+                read_finished.set()
+                await release_read.wait()
+            return result
+
+        def observe_begin(connection, cursor, statement, parameters, context, many):
+            if statement.startswith("BEGIN"):
+                binding_started.set()
+
+        monkeypatch.setattr(AsyncSession, "scalar", hold_player_read)
+        task, listening = None, False
+        try:
+            async with env.database.engine.connect() as connection:
+                writer = await connection.execution_options(livingworld_write_intent=True)
+                async with writer.begin():
+                    await writer.execute(
+                        sqlite_insert(LocalUserProfileRecord).values(
+                            singleton=1,
+                            name="Synthetic concurrent writer",
+                            description="",
+                            revision=1,
+                        )
+                    )
+                    event.listen(
+                        env.database.engine.sync_engine, "before_cursor_execute", observe_begin
+                    )
+                    listening = True
+                    task = asyncio.create_task(service.bind_player(env.player))
+                    await asyncio.wait_for(binding_started.wait(), 3)
+                    # A deferred reader can finish here; a writer must wait for the
+                    # transaction above. Release either case after the same commit.
+                    try:
+                        await asyncio.wait_for(read_finished.wait(), 1)
+                    except TimeoutError:
+                        pass
+            release_read.set()
+            await asyncio.wait_for(task, 5)
+            assert await service.selected_player(env.world) == env.player
+        finally:
+            release_read.set()
+            if task is not None and not task.done():
+                task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
+            if listening:
+                event.remove(
+                    env.database.engine.sync_engine, "before_cursor_execute", observe_begin
+                )
             await env.database.close()
 
     asyncio.run(run())
