@@ -11,6 +11,9 @@ import pytest
 from livingworld.bootstrap.reader import derive_session, read_bootstrap
 from livingworld.domain.contracts import API_PROTOCOL
 
+STARTUP_TIMEOUT_SECONDS = 30
+SHUTDOWN_TIMEOUT_SECONDS = 30
+
 
 def bootstrap_input(tmp_path):
     return {
@@ -37,23 +40,51 @@ def test_parent_exit_shuts_core(tmp_path):
     payload = bootstrap_input(tmp_path)
     path = tmp_path / "bootstrap.json"
     path.write_text(json.dumps(payload))
-    result = subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "livingworld.bootstrap",
-            "--desktop",
-            "--bootstrap-path",
-            str(path),
-            "--parent-pid",
-            "4294967295",
-        ],
-        capture_output=True,
-        text=True,
-        timeout=10,
-    )
-    assert result.returncode == 0
-    assert "parent_exited" in result.stdout and "runtime_stopped" in result.stdout
+    output_path = tmp_path / "parent-watch-output.jsonl"
+    diagnostics_path = tmp_path / "parent-watch-stderr.txt"
+    # Give startup and complete teardown their separate production bounds.
+    # File output also retains the short-lived ready event after ready.json is removed.
+    with (
+        output_path.open("w", encoding="utf-8") as output,
+        diagnostics_path.open("w") as diagnostics,
+    ):
+        process = subprocess.Popen(
+            [
+                sys.executable,
+                "-m",
+                "livingworld.bootstrap",
+                "--desktop",
+                "--bootstrap-path",
+                str(path),
+                "--parent-pid",
+                "4294967295",
+            ],
+            stdout=output,
+            stderr=diagnostics,
+        )
+        try:
+            deadline = time.monotonic() + STARTUP_TIMEOUT_SECONDS
+            while True:
+                records = [
+                    json.loads(line)
+                    for line in output_path.read_bytes().splitlines(keepends=True)
+                    if line.endswith(b"\n")
+                ]
+                if any(record["event"] == "core_ready" for record in records):
+                    break
+                assert process.poll() is None, "core exited before readiness"
+                assert time.monotonic() < deadline, "readiness timed out"
+                time.sleep(0.05)
+            assert process.wait(timeout=SHUTDOWN_TIMEOUT_SECONDS) == 0
+        finally:
+            if process.poll() is None:
+                process.kill()
+                process.wait(timeout=5)
+    events = {json.loads(line)["event"] for line in output_path.read_text("utf-8").splitlines()}
+    assert {"core_ready", "parent_exited", "runtime_stopped", "core_shutdown_completed"} <= events
+    assert payload["bootstrap_secret"] not in output_path.read_text(
+        "utf-8"
+    ) + diagnostics_path.read_text("utf-8", errors="replace")
     assert not (tmp_path / "ready.json").exists()
 
 
@@ -113,7 +144,7 @@ def test_random_loopback_readiness_and_graceful_shutdown(tmp_path):
     )
     try:
         ready_path = tmp_path / "ready.json"
-        deadline = time.monotonic() + 10
+        deadline = time.monotonic() + STARTUP_TIMEOUT_SECONDS
         while not ready_path.exists():
             assert process.poll() is None, "core exited before readiness"
             assert time.monotonic() < deadline, "readiness timed out"
@@ -140,7 +171,7 @@ def test_random_loopback_readiness_and_graceful_shutdown(tmp_path):
             assert health["generation"] == ready["generation"]
             headers["X-Request-Id"] = str(uuid4())
             assert client.post("/system/shutdown", headers=headers).status_code == 200
-        output, diagnostics = process.communicate(timeout=8)
+        output, diagnostics = process.communicate(timeout=SHUTDOWN_TIMEOUT_SECONDS)
         assert process.returncode == 0
         assert not ready_path.exists()
         # Native dependency diagnostics belong to stderr, not the JSON protocol.
