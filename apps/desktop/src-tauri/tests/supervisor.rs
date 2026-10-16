@@ -2,7 +2,9 @@
 
 use dreamtalk_desktop_lib::credentials::{CredentialStore, MemoryCredentialStore};
 use dreamtalk_desktop_lib::llm_config::{single_chat_document, write_atomic, ChatModelSetup};
-use dreamtalk_desktop_lib::supervisor::{contract, CoreSupervisor, LaunchConfig, SupervisorState};
+use dreamtalk_desktop_lib::supervisor::{
+    contract, CoreSupervisor, LaunchConfig, SupervisorState, CORE_STARTUP_TIMEOUT,
+};
 use std::{path::PathBuf, sync::Arc, time::Duration};
 
 #[test]
@@ -15,7 +17,7 @@ fn windows_packaged_core_lifecycle() {
         let config = LaunchConfig {
             project_root: PathBuf::from(root),
             app_data: directory.path().to_owned(),
-            startup_timeout: Duration::from_secs(30),
+            startup_timeout: CORE_STARTUP_TIMEOUT,
             llm_config_path: directory.path().join("config").join("llm.json"),
         };
         assert!(config
@@ -48,7 +50,7 @@ fn windows_supervisor_lifecycle_restart_and_authentication() {
                 .canonicalize()
                 .unwrap(),
             app_data: directory.path().to_owned(),
-            startup_timeout: Duration::from_secs(12),
+            startup_timeout: CORE_STARTUP_TIMEOUT,
             llm_config_path: directory.path().join("config").join("llm.json"),
         };
         let mut supervisor = CoreSupervisor::new();
@@ -134,7 +136,7 @@ fn windows_credentials_are_reprovisioned_after_restart_without_disk_leak() {
                 .canonicalize()
                 .unwrap(),
             app_data: directory.path().to_owned(),
-            startup_timeout: Duration::from_secs(12),
+            startup_timeout: CORE_STARTUP_TIMEOUT,
             llm_config_path: config_path,
         };
         let credentials = Arc::new(MemoryCredentialStore::default());
@@ -179,7 +181,7 @@ fn windows_first_time_chat_setup_restarts_core_with_in_memory_credential() {
                 .canonicalize()
                 .unwrap(),
             app_data: directory.path().to_owned(),
-            startup_timeout: Duration::from_secs(12),
+            startup_timeout: CORE_STARTUP_TIMEOUT,
             llm_config_path: config_path.clone(),
         };
         let credentials = Arc::new(MemoryCredentialStore::default());
@@ -231,7 +233,7 @@ fn windows_forced_termination_fallback() {
                 .canonicalize()
                 .unwrap(),
             app_data: directory.path().to_owned(),
-            startup_timeout: Duration::from_secs(12),
+            startup_timeout: CORE_STARTUP_TIMEOUT,
             llm_config_path: directory.path().join("config").join("llm.json"),
         };
         let mut supervisor = CoreSupervisor::new();

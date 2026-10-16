@@ -22,6 +22,8 @@ use crate::{
 pub const CONTRACT: &str =
     include_str!("../../../../services/core/src/livingworld/domain/api_contract.json");
 
+pub const CORE_STARTUP_TIMEOUT: Duration = Duration::from_secs(30);
+
 #[derive(Deserialize)]
 pub struct ApiContract {
     pub api_protocol: u32,

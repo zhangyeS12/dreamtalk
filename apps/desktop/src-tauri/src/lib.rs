@@ -1043,7 +1043,7 @@ pub fn run() {
             let config = LaunchConfig {
                 project_root,
                 app_data: app_data.clone(),
-                startup_timeout: Duration::from_secs(30),
+                startup_timeout: supervisor::CORE_STARTUP_TIMEOUT,
                 llm_config_path: app_data.join("config").join("llm.json"),
             };
             let supervisor = app.state::<SharedSupervisor>().inner().clone();
@@ -1156,7 +1156,7 @@ mod model_update_tests {
             let mut config = LaunchConfig {
                 project_root: directory.path().join("missing-runtime"),
                 app_data: directory.path().join("app"),
-                startup_timeout: Duration::from_secs(20),
+                startup_timeout: supervisor::CORE_STARTUP_TIMEOUT,
                 llm_config_path: directory.path().join("app/config/llm.json"),
             };
             let mut host =
@@ -1187,7 +1187,7 @@ mod model_update_tests {
                     .canonicalize()
                     .unwrap(),
                 app_data: directory.path().to_owned(),
-                startup_timeout: Duration::from_secs(20),
+                startup_timeout: supervisor::CORE_STARTUP_TIMEOUT,
                 llm_config_path: directory.path().join("config/llm.json"),
             };
             let credentials = Arc::new(MemoryCredentialStore::default());
@@ -1300,7 +1300,7 @@ mod model_update_tests {
                     .canonicalize()
                     .unwrap(),
                 app_data: directory.path().to_owned(),
-                startup_timeout: Duration::from_secs(12),
+                startup_timeout: supervisor::CORE_STARTUP_TIMEOUT,
                 llm_config_path: directory.path().join("config").join("llm.json"),
             };
             let credentials = Arc::new(MemoryCredentialStore::default());
