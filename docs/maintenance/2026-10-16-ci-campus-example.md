@@ -10,13 +10,13 @@
 
 ## CI与发行门禁
 
-- 只读核对：GitHub工作流foundation.yml处于active，当前公开API返回0条运行记录，不能报告CI失败或通过；未触发原因尚未确认。
+- 只读核对：GitHub工作流foundation.yml处于active，推送前公开API返回0条运行记录，不能据此报告CI失败或通过；未触发原因未确认。
 - 增加workflow_dispatch、按分支取消旧运行、超时、Python矩阵独立完成和统一CI Gate。Python保留Windows/Linux及3.12/3.13，前端和Windows桌面原有验证继续保留。
 - checkout与setup-node固定至本轮通过官方GitHub引用核对的v7提交，不引入新依赖。
 - Windows Clippy发现并修复复杂返回类型、单分支match、布尔断言和冗余借用；Tauri命令因独立注入四项托管状态保留既有IPC签名，用带原因的局部expect限定参数数量提示。未放宽全仓警告或测试断言。严格Clippy已通过。
 - 干净环境打包缺少语义模型资源准备步骤，补入既有prepare-semantic-model.py；仅下载固定修订并校验，不运行模型。
 - 发布使用的build-only便携构建与安装器先执行check-release-ci.py：要求工作区已提交且干净、当前完整SHA的最新同工作流push／手动运行成功。PR通常检查合成合并引用，不能替代发布提交的检查。缺失、运行中、取消或失败均阻止打包，不能用其他提交的绿灯代替。
-- 此门禁不等于GitHub分支保护已设置；本轮没有修改远端仓库设置，也没有取得新的远端CI成功证据。
+- 此门禁不等于GitHub分支保护已设置；本轮不修改远端仓库设置；是否通过须查对应完整提交的实际运行。
 
 ## 校园示例接线
 
@@ -46,3 +46,13 @@
 保留的警告：Starlette/AnyIO弃用提示；Vite部分块超过500kB；桌面构建的STATIC_VCRUNTIME弃用及增量缓存硬链接降级为复制。未隐藏警告或扩大为功能故障、性能达标结论。
 
 本地检查与编译不等于GitHub已经运行成功。用户随后明确批准仅推送源码并验证CI；实际结果按[Actions工作流](https://github.com/zhangyeS12/dreamtalk/actions/workflows/foundation.yml)中本轮完整提交核对。新版本发布、安装器/便携打包须另有对应授权。没有访问真实存档、系统凭据或现有API配置，没有执行真实安装升级或模型生成。用户真实API与最新版完整体验仍待验收。
+
+## 首次远端运行与定向修正
+
+源码f831674已快进同步到main及原开发分支。推送后仍无运行记录，使用既有手动入口派发成功：[首次运行](https://github.com/zhangyeS12/dreamtalk/actions/runs/38861169178)。工作流执行的是同一完整提交，未更改Actions设置；不能据此判断先前自动触发缺失的根因。
+
+首次Linux浏览器检查在群聊重载处失败。持久成员按稳定导入UUID排序，旧测试写死了姓名顺序；改为同时核对两名成员、唯一群聊及可见状态，并保留重载和跨世界隔离断言。本机隔离浏览器复核通过，不修改应用群成员排序。
+
+远端npm安装报告source-map-js 1.2.1的高风险公告[GHSA-68fv-2mgg-jv7q](https://github.com/advisories/GHSA-68fv-2mgg-jv7q)。按官方补丁仅更新原锁文件中的1.2.1→1.2.2，沿用既有依赖范围与BSD-3-Clause许可，无新增组件或大版本升级。复核npm告警为0，前端66项、ESLint／TypeScript及编译通过；构建体积警告保持。后续运行仍需核对全部作业，不以单项通过或重跑掩盖其他失败。
+
+Linux Python 3.12启动测试另发现ONNX Runtime的原生stderr警告被测试合入stdout后当作JSON解析；分离两个通道，保留stdout逐行JSON、鉴权、随机端口、正常退出与日志字段断言，并将密钥防泄漏检查扩展至两个通道。Windows定向启动6项通过；Linux结果须由修正后的远端矩阵核对，不将本机结果冒充Linux结果。首次运行的Windows Python 3.12整组已通过。

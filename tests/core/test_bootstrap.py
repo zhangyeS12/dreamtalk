@@ -108,7 +108,7 @@ def test_random_loopback_readiness_and_graceful_shutdown(tmp_path):
     process = subprocess.Popen(
         [sys.executable, "-m", "livingworld.bootstrap", "--bootstrap-path", str(path)],
         stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
+        stderr=subprocess.PIPE,
         text=True,
     )
     try:
@@ -140,10 +140,12 @@ def test_random_loopback_readiness_and_graceful_shutdown(tmp_path):
             assert health["generation"] == ready["generation"]
             headers["X-Request-Id"] = str(uuid4())
             assert client.post("/system/shutdown", headers=headers).status_code == 200
-        output, _ = process.communicate(timeout=8)
+        output, diagnostics = process.communicate(timeout=8)
         assert process.returncode == 0
         assert not ready_path.exists()
-        assert payload["bootstrap_secret"] not in output and token not in output
+        # Native dependency diagnostics belong to stderr, not the JSON protocol.
+        assert payload["bootstrap_secret"] not in output + diagnostics
+        assert token not in output + diagnostics
         records = [json.loads(line) for line in output.splitlines()]
         assert all(
             {"timestamp", "level", "component", "event"} <= record.keys() for record in records

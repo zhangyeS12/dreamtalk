@@ -59,4 +59,4 @@ python scripts/check-release-privacy.py --package artifacts/portable/本次构�
 
 foundation.yml覆盖Python矩阵、前端／浏览器和Windows桌面，统一由CI Gate报告。源码推送与手动触发均需遵守本轮具体授权；不能通过skip-ci、跳过检查或弱化断言取得发布通过结论。
 
-发布用的build-only便携构建及安装器构建会先调用scripts/check-release-ci.py，要求源文件已提交且工作区干净，并核对该完整SHA的最新工作流成功。没有运行、仍在运行、取消或失败均阻止构建，不使用其他提交的成功记录。当前没有远端成功结果，不据此声称已过CI。此检查只读，不自动推送、重跑或改仓库设置。
+发布用的build-only便携构建及安装器构建会先调用scripts/check-release-ci.py，要求源文件已提交且工作区干净，并核对该完整SHA的最新工作流成功。没有运行、仍在运行、取消或失败均阻止构建，不使用其他提交的成功记录。每轮结果按Actions中的完整提交核对；本地通过不能替代远端结果。此检查只读，不自动推送、重跑或改仓库设置。

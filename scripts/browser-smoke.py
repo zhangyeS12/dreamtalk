@@ -233,10 +233,14 @@ try:
         page.get_by_role("heading", name="世界书架", exact=True).wait_for()
         enter_world("world_profile_smoke")
         page.get_by_role("button", name="聊天", exact=True).click()
-        group_row = page.locator(".conversation-list .conversation-row").filter(
-            has_text="Fixture Billy、Fixture Charlie"
+        group_row = (
+            page.locator(".conversation-list .conversation-row")
+            .filter(has_text="Fixture Billy")
+            .filter(has_text="Fixture Charlie")
         )
-        group_row.wait_for()
+        # Member display order follows stable import IDs, not checkbox order.
+        expect(group_row).to_have_count(1)
+        expect(group_row).to_be_visible()
         group_row.click()
         page.get_by_role("region", name="群聊").wait_for()
         archive()
