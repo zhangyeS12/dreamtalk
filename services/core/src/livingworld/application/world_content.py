@@ -144,6 +144,8 @@ class WorldContentService:
         kind: ImportKind,
         payload: bytes,
         replaces_import_id: UUID | None = None,
+        *,
+        import_id: UUID | None = None,
     ) -> PendingWorldContent:
         await self.store.require_world(world_id)
         if replaces_import_id is not None:
@@ -169,7 +171,7 @@ class WorldContentService:
             imported = self._normalize(imported)
         preview = imported.preview()
         item = AcceptedWorldContent(
-            uuid4(),
+            import_id or uuid4(),
             world_id,
             preview.content.preview_hash,
             kind,

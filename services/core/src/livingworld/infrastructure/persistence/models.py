@@ -37,6 +37,23 @@ class Base(DeclarativeBase):
     pass
 
 
+class ExampleWorldSetupRecord(Base):
+    """Resumable local setup intent, created before the canonical world exists."""
+
+    __tablename__ = "example_world_setups"
+    request_id: Mapped[UUID] = mapped_column(UUIDStorage(), primary_key=True)
+    world_id: Mapped[UUID] = mapped_column(UUIDStorage(), nullable=False, unique=True)
+    template_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    reviewed_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    public_entries_json: Mapped[str] = mapped_column(Text, nullable=False)
+    state: Mapped[str] = mapped_column(String(16), nullable=False)
+    __table_args__ = (
+        CheckConstraint("state IN ('pending','complete')", name="ck_example_setup_state"),
+        CheckConstraint("length(reviewed_hash) = 64", name="ck_example_setup_hash"),
+        CheckConstraint("json_valid(public_entries_json)", name="ck_example_setup_entries"),
+    )
+
+
 class WorldRecord(Base):
     __tablename__ = "worlds"
     world_id: Mapped[UUID] = mapped_column(UUIDStorage(), primary_key=True)

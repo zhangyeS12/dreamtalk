@@ -82,6 +82,9 @@ class WorldSettingsService:
         )
         return world_id
 
+    async def deleted(self, world_id: WorldId) -> bool:
+        return await self._directory.deleted(world_id)
+
     async def pause(self, world_id: WorldId) -> None:
         await self._runtime.pause(world_id)
 

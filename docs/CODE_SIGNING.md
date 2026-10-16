@@ -17,7 +17,7 @@ If accepted, the attribution will be: “Free code signing provided by SignPath.
 
 ## Build and artifact policy
 
-The project has GitHub Actions continuous integration. Current public Windows installers were produced locally; the verifiable GitHub-hosted release build and SignPath integration are not implemented yet. Existing local installers must not be represented as GitHub-built signing candidates.
+The repository contains a GitHub Actions continuous integration workflow, but no successful hosted run has been verified as of 2026-10-16. Current public Windows installers were produced locally; the verifiable GitHub-hosted release build and SignPath integration are not implemented yet. Existing local installers must not be represented as GitHub-built signing candidates.
 
 Planned signing candidates are the project's own Windows desktop executable, Core executable, project-owned helper executable, and installer. Third-party binaries retain their own identity and licenses; they are not signed as project-authored code. Optional speech/vision weights and local environments are separate from the installer.
 

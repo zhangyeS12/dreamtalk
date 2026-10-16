@@ -16,10 +16,10 @@ interface Props {
 export function App({ discover, recover, onReady }: Props) {
   const [ready, setReady] = useState(false);
   const revealed = useCallback(() => setReady(true), []);
-  return <DesktopUpdateProvider ready={ready}><SaveSafetyGate><ConnectedApp discover={discover} recover={recover} onReady={onReady} onRevealed={revealed} /></SaveSafetyGate></DesktopUpdateProvider>;
+  return <DesktopUpdateProvider ready={ready}><SaveSafetyGate>{storageReady => <ConnectedApp storageReady={storageReady} discover={discover} recover={recover} onReady={onReady} onRevealed={revealed} />}</SaveSafetyGate></DesktopUpdateProvider>;
 }
 
-function ConnectedApp({ discover, recover, onReady, onRevealed }: Props & { onRevealed: () => void }) {
+function ConnectedApp({ discover, recover, onReady, onRevealed, storageReady }: Props & { onRevealed: () => void; storageReady: boolean }) {
   const [state, setState] = useState<"Connecting" | "Ready" | "Failed">("Connecting");
   const [client, setClient] = useState<CoreClient | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -33,6 +33,12 @@ function ConnectedApp({ discover, recover, onReady, onRevealed }: Props & { onRe
     setAttempt(value => value + 1);
   }, []);
   useEffect(() => {
+    // Keep the original splash mounted while the save gate is pending. Discovery
+    // and its timeout start only after the existing storage checks allow access.
+    if (!storageReady) {
+      setState("Connecting"); setClient(null); setArchive("Pending"); setRevealed(false);
+      return;
+    }
     let active = true;
     const controller = new AbortController();
     const timeout = setTimeout(() => { controller.abort(); if (active) setState("Failed"); }, 60_000);
@@ -51,20 +57,20 @@ function ConnectedApp({ discover, recover, onReady, onRevealed }: Props & { onRe
     }
     void connect();
     return () => { active = false; clearTimeout(timeout); controller.abort(); };
-  }, [discover, recover, onReady, attempt]);
+  }, [discover, recover, onReady, attempt, storageReady]);
   useEffect(() => {
     if (!client || developer || archive !== "Pending") return;
     const timer = setTimeout(() => setArchive("Failed"), 15_000);
     return () => clearTimeout(timer);
   }, [client, developer, archive]);
-  const ready = state === "Ready" && (developer || archive === "Ready");
-  const failed = state === "Failed" || archive === "Failed";
+  const ready = storageReady && state === "Ready" && (developer || archive === "Ready");
+  const failed = storageReady && (state === "Failed" || archive === "Failed");
   return <>
-    {client && state === "Ready" && <div className="startup-destination" inert={!revealed} aria-hidden={!revealed}>
+    {storageReady && client && state === "Ready" && <div className="startup-destination" inert={!revealed} aria-hidden={!revealed}>
       {developer ? <main><div className="brand"><Brand /><p role="status">核心已就绪</p></div><Inspector client={client} /></main>
         : <ProductApp key={attempt} client={client} onStartupStatus={archiveStatus} />}
     </div>}
-    {!revealed && <StartupSplash key={attempt} ready={ready} failed={failed} onRetry={retry} onComplete={complete} />}
+    {(!storageReady || !revealed) && <StartupSplash key={attempt} ready={ready} failed={failed} onRetry={retry} onComplete={complete} />}
     {failed && <div className="startup-update-entry"><DesktopUpdateEntry /></div>}
   </>;
 }

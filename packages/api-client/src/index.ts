@@ -1,3 +1,9 @@
+export type ExampleWorldTemplate = {
+  id: string; name: string; description: string; reviewed_hash: string; locations: string[];
+  entries: { key: string; title: string; content: string }[];
+  characters: { key: string; name: string; role: string; description: string; personality: string; scenario: string; first_mes: string }[];
+  pending: { request_id: string; reviewed_hash: string; public_entries: string[] }[];
+};
 export type CoverFace = "front" | "spine" | "back";
 export type CoverCrop = { x: number; y: number; width: number; height: number; rotation: 0 | 90 | 180 | 270 };
 export type CoverImage = { digest: string; size: number; media_type: string; width: number; height: number };
@@ -813,6 +819,17 @@ export class CoreClient {
     return this.productRequest("/worlds", {
       method: "POST", headers: { "Content-Type": "application/json", "X-Request-Id": requestId },
       body: JSON.stringify({ name }),
+    });
+  }
+
+  exampleWorld(): Promise<ExampleWorldTemplate> {
+    return this.productRequest("/world-examples");
+  }
+
+  createExampleWorld(template: ExampleWorldTemplate, requestId: string, publicEntries: string[]): Promise<{ world_id: string }> {
+    return this.productRequest(`/world-examples/${encodeURIComponent(template.id)}`, {
+      method: "POST", headers: { "Content-Type": "application/json", "X-Request-Id": requestId },
+      body: JSON.stringify({ confirmed: true, reviewed_hash: template.reviewed_hash, public_entries: publicEntries }),
     });
   }
   pauseProductWorld(worldId: string): Promise<{ ok: boolean }> {

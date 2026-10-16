@@ -1,6 +1,6 @@
 # dreamtalk 工作交接
 
-更新日期：**2026-10-15**。当前源码Desktop **0.1.80**（已公开预发布）、API1、迁移head0052_sticker_entry_description、配音revision8。发行源码固定c7bcf3b，完整Windows安装／便携与原更新频道已发布，见[发布记录](docs/maintenance/2026-10-15-release-0180.md)。本轮修复字段顺序、快照副文件误报及升级交接，见[实施记录](docs/maintenance/2026-10-15-save-snapshot-update.md)。发布文件核对不代表真实升级通过；本地配音、角色发送和新增公共表情识别仅沿前轮具体反馈，其他场景仍待用户验收。
+更新日期：**2026-10-16**。当前源码Desktop **0.1.80**、API1、迁移head0053_example_world_setup、配音revision8。公开预发布0.1.80仍固定c7bcf3b及0052，前轮源码7747ba8已同步；用户已批准本轮开屏连续性、CI与原创校园示例的源码同步和CI验证，不发布新版本或安装包。源码新增不等于公开包具备或运行验收通过；见[本轮记录](docs/maintenance/2026-10-16-ci-campus-example.md)。
 
 ## 1. 五分钟了解当前完成度
 
@@ -17,15 +17,17 @@
 
 **最近进展：** 用户在[隔离审查](docs/maintenance/2026-10-15-new-user-audit.md)后要求修复，已完成A-01～A-06对应源码与检查维护，详见[实施记录](docs/maintenance/2026-10-15-new-user-fixes.md)。完整Python回归1734通过／2项旧响应断言失败，修正后相关48项通过，另存档／传输4项通过；前端62项、Rust14项通过，浏览器正常聊天、模拟401和异常配置修复通过。未重新把定向结果计成全量通过；没有真实安装升级／外部模型验收。用户随后明确要求推送GitHub，本次仅同步源码／测试／文档；版本未变、未打包或创建发行，旧下载包不含修复，测试服务已停止。
 
+本轮新增CI门禁与原创校园示例已接线，详细入口和验证边界见[实施记录](docs/maintenance/2026-10-16-ci-campus-example.md)及[示例说明](docs/EXAMPLE_WORLD.md)。获准隔离检查中Python完整1744项通过，后续相关7项定向复核通过；前端66项、Rust14项单元与4项开发监督检查及浏览器主流程通过。已编译原入口直接EXE，未启动。GitHub执行结果以本轮提交对应的Actions记录为准，不把本地检查当作远端成功；本轮只获准源码同步与CI，不发布或打包。
+
 ## 2. 仓库、运行和版本现场
 
-前轮0.1.79直接EXE只用于当时的0.1.80升级过渡，不含本轮审查修复，不作为当前交付。当前公开0.1.80发行源码仍为c7bcf3b；本轮源码修复单独同步GitHub，未生成新的体验EXE／安装包，不安排普通用户拆换文件。旧产物证据保留在对应维护记录。
+用户请求本机入口后，桌面dreamtalk快捷方式已更正为apps/desktop/src-tauri/target/debug/dreamtalk-desktop.exe。随后按用户截图修复白底存档检查抢先显示的问题：同一原开屏动画贯穿检查、连接与书架准备，存档未放行不进入后续界面，见[原轮记录](docs/maintenance/2026-10-15-startup-splash-continuity.md)。2026-10-16已再次仅编译原入口，当前直接EXE版本0.1.80、31,016,960字节，SHA256 209fa6b870e82d86c206e973ddacb8ac5fd5b0c3ec7dec5e53b6982bd1d98d62，包含本轮校园入口。没有启动此EXE、操作真实存档或改自启动。原动画和1.5秒展示规则保留，实际桌面体验待用户验收；隔离测试不能替代真实升级或模型验收。本轮已获源码推送与CI验证批准，未打包或创建发行，公开0.1.80下载包仍固定c7bcf3b。
 
 | 项 | 当前事实与边界 |
 | --- | --- |
 | 正式仓库 | D:\LivingWorld，开发分支codex/world-archive；当前HEAD／main以Git实际状态核对。源码发布快进同步，不改写旧历史。 |
 | 版本／协议 | Desktop0.1.80（已公开预发布），Core／Web0.1.0，API1，配音revision8；既有标识app.livingworld.desktop保持。 |
-| 迁移 | 源码head0052_sticker_entry_description，增加独立条目说明并复制旧资产说明；0051和更早形状校验保留。不读取聊天正文回填，不执行真实迁移。 |
+| 迁移 | 源码head0053_example_world_setup，只增加可恢复示例创建回执；公开0.1.80仍为0052_sticker_entry_description。旧版本结构核验保持，没有运行真实存档迁移。 |
 | GitHub | 最新公开[v0.1.80](https://github.com/zhangyeS12/dreamtalk/releases/tag/v0.1.80)，发行源码c7bcf3b；完整安装／便携版及原update-preview频道已同版更新，不改变旧附件或频道说明。 |
 | 配音／图片模型 | 独立Git忽略环境和权重，不进入Core／安装包。登记路径并保存启用配置后随dreamtalk启动，模型按需加载；已有开机后台入口使登录后运行，不是关机期间运行。 |
 | 数据／系统入口 | 本轮只读写新建的临时世界、模拟配置和合成数据库；恢复只在另一临时应用目录复现。没有访问或修改真实存档、系统凭据、API配置、自启动或用户应用进程。 |

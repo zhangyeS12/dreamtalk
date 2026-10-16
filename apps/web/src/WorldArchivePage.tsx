@@ -11,6 +11,7 @@ import { Brand } from "./Brand";
 import "./world-archive.css";
 import "./world-cover.css";
 import { SaveBackupPanel } from "./SaveBackups";
+import { ExampleWorldPanel } from "./ExampleWorldPanel";
 
 export function WorldArchivePage({ client, initialWorldId, onEnter, displayTime, onStartupStatus }: {
   client: CoreClient; initialWorldId: string | null;
@@ -54,6 +55,7 @@ export function WorldArchivePage({ client, initialWorldId, onEnter, displayTime,
   const [contentDirty, setContentDirty] = useState(false);
   const [modelOpen, setModelOpen] = useState(false);
   const [backupsOpen, setBackupsOpen] = useState(false);
+  const [exampleOpen, setExampleOpen] = useState(false);
   const [modelDirty, setModelDirty] = useState(false);
   const [content, setContent] = useState<{ worldId: string; items: WorldContentItem[] } | null>(null);
   const [contentError, setContentError] = useState("");
@@ -81,6 +83,14 @@ export function WorldArchivePage({ client, initialWorldId, onEnter, displayTime,
     setSelectedId(current => current && !result.some(item => item.world_id === current) ? "" : current);
     return result;
   }, [client]);
+  const exampleBusy = useCallback((value: boolean) => { lock.current = value; setBusy(value); }, []);
+  const exampleCreated = async (id: string) => {
+    const directory = await refresh();
+    if (!active.current) return;
+    if (!directory.some(item => item.world_id === id)) throw new Error("example_not_readable");
+    setExampleOpen(false); setCreating(false); setBlankIndex(null); setReadyKey(null);
+    setSelectedId(id); setNotice("校园示例已准备好。进入世界后，可在通讯录选择三位同学聊天。");
+  };
   useEffect(() => {
     active.current = true;
     let initialActive = true;
@@ -248,13 +258,15 @@ export function WorldArchivePage({ client, initialWorldId, onEnter, displayTime,
     <main className="archive-main">
       {backupsOpen && <div className="archive-editor"><SaveBackupPanel /></div>}
       <div className="archive-intro"><div><h1 ref={heading} tabIndex={-1}>世界书架</h1><p>挑一本书，走进其中的世界。</p></div>
-        <button type="button" className="text-action" disabled={loading || busy || entering || coverBusy} onClick={refreshArchive}>{loading ? "正在读取…" : "刷新书架"}</button>
+        <div className="archive-intro-actions"><button type="button" className="secondary-button" disabled={loading || busy || entering || coverBusy} onClick={() => { if (leaveEditor()) setExampleOpen(current => !current); }}>体验校园示例</button>
+          <button type="button" className="text-action" disabled={loading || busy || entering || coverBusy} onClick={refreshArchive}>{loading ? "正在读取…" : "刷新书架"}</button></div>
       </div>
       {error && <p className="app-alert" role="alert">{error} <button type="button" className="text-action" disabled={busy || entering || coverBusy || loading} onClick={refreshArchive}>刷新书架</button></p>}
       {deletionCleanup && <p className="app-alert" role="status">「{deletionCleanup.name}」的删除结果或收尾待确认。<button type="button" className="text-action" disabled={busy || entering || coverBusy} onClick={() => void deleteWorld(deletionCleanup, true)}>重试清理</button></p>}
       {covers.error && <p className="app-alert" role="alert">{covers.error}</p>}
       {notice && <p className="app-notice" role="status">{notice}</p>}
       {modelOpen && <div className="archive-editor"><div className="archive-editor-heading"><h2>默认模型配置</h2><button type="button" className="text-action" onClick={() => { leaveEditor(); }}>收起</button></div><ModelSetup client={client} onDirtyChange={setModelDirty} /><p className="inline-hint">保存会重新连接核心；尚未单独设置的世界使用这里的默认配置。</p></div>}
+      {exampleOpen && <ExampleWorldPanel client={client} onCreated={exampleCreated} onBusy={exampleBusy} onClose={() => setExampleOpen(false)} />}
       <div ref={layout} className={`archive-layout ${selectionKey ? "has-selection" : ""}`}>
         <WorldShelf worlds={worlds} appearances={covers.appearances} selectedKey={selectionKey} initialWorldId={initialWorldId} loading={loading} disabled={busy || entering || coverBusy} vacatedIndex={vacatedIndex}
           onSelect={select} onCreate={selectBlank} onClose={closeSelection} onSettled={settled} />

@@ -400,6 +400,10 @@ async fn rollback_chat_model_setup(
 }
 
 #[tauri::command]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Tauri injects four independent managed states; preserve the IPC contract"
+)]
 async fn configure_chat_model(
     setup: llm_config::ChatModelSetup,
     mut secret: String,
@@ -506,6 +510,10 @@ struct ModelUpdateOutcome {
 }
 
 #[tauri::command]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Tauri injects four independent managed states; preserve the IPC contract"
+)]
 async fn repair_chat_model(
     setup: llm_config::ChatModelSetup,
     secret: String,
@@ -610,6 +618,10 @@ async fn repair_chat_model_with(
 }
 
 #[tauri::command]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Tauri injects four independent managed states; preserve the IPC contract"
+)]
 async fn update_chat_model(
     setup: llm_config::ChatModelSetup,
     secret: String,

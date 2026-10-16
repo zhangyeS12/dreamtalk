@@ -74,6 +74,7 @@ def create_app(
     chat_media=None,
     storage_metadata=None,
     storage_observer=None,
+    example_worlds=None,
 ) -> FastAPI:
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
@@ -112,6 +113,11 @@ def create_app(
             credentials.credentials.encode("utf-8"), session_token.encode("utf-8")
         ):
             raise HTTPException(401, "unauthorized", headers={"WWW-Authenticate": "Bearer"})
+
+    if example_worlds is not None:
+        from livingworld.adapters.http.example_worlds import example_world_router
+
+        app.include_router(example_world_router(example_worlds, authorize, storage_observer))
 
     if content_exports is not None and chat_exports is not None:
         from livingworld.adapters.http.file_exports import file_export_router

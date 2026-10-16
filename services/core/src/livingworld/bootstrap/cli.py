@@ -464,6 +464,26 @@ async def run(
         )
         await speech.start()
 
+        from livingworld.application.example_worlds import ExampleWorldService
+        from livingworld.infrastructure.example_templates import campus_template
+
+        onboarding = LocalPlayerOnboardingService(command_handler, player_event_feed)
+        activity_setup = CharacterActivitySetupService(
+            database.character_activity_directory(),
+            chat_conversations,
+            player_event_feed,
+            command_handler,
+        )
+        example_worlds = ExampleWorldService(
+            campus_template(),
+            database.example_world_store(),
+            world_settings,
+            world_content,
+            onboarding,
+            WorldLocationsService(database.local_location_directory(), command_handler),
+            activity_setup,
+        )
+
         app = create_app(
             status,
             shutdown,
@@ -476,7 +496,7 @@ async def run(
             player_event_feed,
             database.local_profile_store(),
             world_content,
-            LocalPlayerOnboardingService(command_handler, player_event_feed),
+            onboarding,
             chat_conversations,
             chat_messages,
             chat_reply,
@@ -484,6 +504,7 @@ async def run(
             content_builder,
             database.content_repository(),
             maintenance=maintenance,
+            example_worlds=example_worlds,
             storage_metadata=(lambda: metadata(config.data_dir)) if desktop else None,
             storage_observer=(lambda: observe_world_change(config.data_dir.parent))
             if desktop
@@ -505,12 +526,7 @@ async def run(
             world_story=world_story,
             offline_contact=offline_contact,
             proactive_contact=proactive_contact,
-            character_activity_setup=CharacterActivitySetupService(
-                database.character_activity_directory(),
-                chat_conversations,
-                player_event_feed,
-                command_handler,
-            ),
+            character_activity_setup=activity_setup,
             content_exports=WorldContentExportService(
                 world_content.store, database.content_repository(), JsonContentExporter()
             ),

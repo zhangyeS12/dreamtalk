@@ -848,13 +848,13 @@ pub async fn install_desktop_update(
     let restart_core = connection.is_some();
     let storage_evidence = if let Some(connection) = &connection {
         if let Err(error) = maintenance(connection, "prepare").await {
-            let _ = maintenance(&connection, "cancel").await;
+            let _ = maintenance(connection, "cancel").await;
             return Err(error);
         }
         let drain = async {
             let deadline = tokio::time::Instant::now() + Duration::from_secs(180);
             loop {
-                let status = maintenance(&connection, "status").await?;
+                let status = maintenance(connection, "status").await?;
                 if !status.preparing {
                     return Err("update_barrier_expired".to_owned());
                 }
@@ -869,20 +869,20 @@ pub async fn install_desktop_update(
         }
         .await;
         if let Err(error) = drain {
-            let _ = maintenance(&connection, "cancel").await;
+            let _ = maintenance(connection, "cancel").await;
             return Err(error);
         }
         progress(&app, "preparing", 0, None);
         let storage_evidence = match crate::save_safety::evidence(connection).await {
             Ok(value) => value,
             Err(error) => {
-                let _ = maintenance(&connection, "cancel").await;
+                let _ = maintenance(connection, "cancel").await;
                 return Err(error);
             }
         };
         // Refuse forced termination for upgrades. Existing shutdown behavior stays intact.
         if let Err(error) = host.stop_for_update(Duration::from_secs(30)).await {
-            let _ = maintenance(&connection, "cancel").await;
+            let _ = maintenance(connection, "cancel").await;
             return Err(error.to_owned());
         }
         storage_evidence

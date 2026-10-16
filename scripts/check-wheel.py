@@ -15,6 +15,7 @@ with zipfile.ZipFile(wheel) as package:
         "infrastructure/persistence/migrations/script.py.mako",
         "infrastructure/persistence/migrations/versions/0001_legacy_runtime_foundation.py",
         "infrastructure/persistence/migrations/versions/0002_world_domain_persistence.py",
+        "infrastructure/examples/campus.json",
     ]:
         assert f"livingworld/{resource}" in names, resource
     source = root / "services/core/src/livingworld/domain/api_contract.json"

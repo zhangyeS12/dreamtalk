@@ -580,7 +580,7 @@ mod tests {
         }});
         let bytes = serde_json::to_vec(&original).unwrap();
         assert!(scope_document(&bytes, Some(world)).is_err());
-        assert_eq!(scope_document(&bytes, Some(other)).unwrap().1, false);
+        assert!(!scope_document(&bytes, Some(other)).unwrap().1);
         assert_eq!(available_credential_references(&bytes), [REFERENCE]);
         let repaired = repair_scope(&bytes, &valid, Some(world)).unwrap();
         let repaired: serde_json::Value = serde_json::from_slice(&repaired).unwrap();

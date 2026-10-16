@@ -1,17 +1,28 @@
 name: dreamtalk continuous integration
-on: [push, pull_request]
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+env:
+  HF_HUB_OFFLINE: '1'
+  TRANSFORMERS_OFFLINE: '1'
 
 jobs:
   python:
+    timeout-minutes: 30
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
         python: ['3.12', '3.13']
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
         with:
           version: '0.11.32'
@@ -23,12 +34,14 @@ jobs:
       - run: uv build --wheel --out-dir artifacts/core
       - run: uv run --frozen python scripts/check-wheel.py
       - run: uv run --frozen python scripts/check-doc-links.py
+      - run: uv run --frozen python scripts/check-release-privacy.py --ref HEAD
 
   web:
+    timeout-minutes: 20
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: '24'
           cache: npm
@@ -46,10 +59,11 @@ jobs:
       - run: npm run test:web-smoke
 
   desktop-windows:
+    timeout-minutes: 60
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: '24'
           cache: npm
@@ -68,4 +82,25 @@ jobs:
       - run: npm run test:desktop
       - run: npm run build:desktop
       - run: npm run test:desktop-smoke
+      - name: Prepare the pinned semantic model required by the standalone payload
+        run: uv run --frozen python scripts/prepare-semantic-model.py
       - run: npm run build:portable
+
+  ci:
+    name: CI Gate
+    if: always()
+    needs: [python, web, desktop-windows]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require all checks, tests and builds to pass
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          node --input-type=module <<'JS'
+          const results = JSON.parse(process.env.RESULTS);
+          for (const [name, job] of Object.entries(results)) {
+            console.log(`${name}: ${job.result}`);
+            if (job.result !== 'success') process.exitCode = 1;
+          }
+          JS

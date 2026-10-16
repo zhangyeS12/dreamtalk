@@ -140,14 +140,11 @@ async fn health(secret: &str) -> Result<Option<bool>, String> {
 impl LocalSpeech {
     async fn ensure(&mut self, config: &LaunchConfig, root: PathBuf) -> Result<Status, String> {
         let secret = token(&root).await?;
-        match health(&secret).await? {
-            Some(ready) => {
-                return Ok(Status {
-                    model_root: Some(root.to_string_lossy().into()),
-                    state: if ready { "ready" } else { "legacy" },
-                })
-            }
-            None => {}
+        if let Some(ready) = health(&secret).await? {
+            return Ok(Status {
+                model_root: Some(root.to_string_lossy().into()),
+                state: if ready { "ready" } else { "legacy" },
+            });
         }
         if self
             .child

@@ -32,8 +32,10 @@ pub enum ExportRequest {
     },
 }
 
+type ExportQuery = (String, Vec<(String, String)>, &'static str);
+
 impl ExportRequest {
-    fn query(self) -> Result<(String, Vec<(String, String)>, &'static str), String> {
+    fn query(self) -> Result<ExportQuery, String> {
         fn digest(value: &str) -> bool {
             value.len() == 64
                 && value

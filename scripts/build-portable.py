@@ -35,6 +35,10 @@ def main() -> None:
     if os.name != "nt":
         raise SystemExit("portable_build_requires_windows")
     root = Path(__file__).resolve().parents[1]
+    if args.build_only:
+        subprocess.run(
+            [sys.executable, str(root / "scripts" / "check-release-ci.py")], check=True, cwd=root
+        )
     privacy = root / "scripts" / "check-release-privacy.py"
     subprocess.run([sys.executable, str(privacy)], check=True, cwd=root)
     artifacts = root / "artifacts"

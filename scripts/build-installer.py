@@ -93,6 +93,9 @@ def main():
         raise SystemExit("installer_build_parameters_invalid")
     root = Path(__file__).resolve().parents[1]
     subprocess.run(
+        [sys.executable, str(root / "scripts" / "check-release-ci.py")], check=True, cwd=root
+    )
+    subprocess.run(
         [sys.executable, str(root / "scripts" / "check-release-privacy.py")], check=True, cwd=root
     )
     artifacts = root / "artifacts"

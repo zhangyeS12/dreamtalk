@@ -5,7 +5,7 @@ from sqlalchemy import select
 from livingworld.application.world_settings import WorldListing
 from livingworld.domain.identifiers import WorldId
 from livingworld.infrastructure.persistence.deletion_models import WorldDeletionRecord
-from livingworld.infrastructure.persistence.models import WorldRecord
+from livingworld.infrastructure.persistence.models import ExampleWorldSetupRecord, WorldRecord
 
 
 class SqlAlchemyWorldDirectory:
@@ -14,7 +14,16 @@ class SqlAlchemyWorldDirectory:
 
     async def list_worlds(self) -> tuple[WorldListing, ...]:
         async with self._sessions() as session:
-            rows = (await session.scalars(select(WorldRecord).order_by(WorldRecord.name))).all()
+            pending = select(ExampleWorldSetupRecord.world_id).where(
+                ExampleWorldSetupRecord.state == "pending"
+            )
+            rows = (
+                await session.scalars(
+                    select(WorldRecord)
+                    .where(~WorldRecord.world_id.in_(pending))
+                    .order_by(WorldRecord.name)
+                )
+            ).all()
             return tuple(WorldListing(WorldId(row.world_id), row.name) for row in rows)
 
     async def deleted(self, world_id: WorldId) -> bool:

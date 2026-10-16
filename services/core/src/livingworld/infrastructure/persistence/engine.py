@@ -325,6 +325,13 @@ class Database:
             SystemWallClock(),
         )
 
+    def example_world_store(self):
+        from livingworld.infrastructure.persistence.example_worlds import (
+            SqlAlchemyExampleWorldStore,
+        )
+
+        return SqlAlchemyExampleWorldStore(self._sessions)
+
     def chat_conversation_store(self):
         from livingworld.infrastructure.persistence.chat_conversations import (
             SqlAlchemyChatConversationStore,

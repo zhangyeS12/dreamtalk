@@ -115,7 +115,8 @@ LOCAL_MODEL_LIMITS_REVISION = "0049_local_model_limits"
 STICKER_LIBRARY_FRESHNESS_REVISION = "0050_sticker_library_freshness"
 MEDIA_FREQUENCY_KIND_REVISION = "0051_media_frequency_kind"
 STICKER_DESCRIPTION_REVISION = "0052_sticker_entry_description"
-HEAD_REVISION = STICKER_DESCRIPTION_REVISION
+EXAMPLE_WORLD_REVISION = "0053_example_world_setup"
+HEAD_REVISION = EXAMPLE_WORLD_REVISION
 
 # One reviewed linear chain replaces repeated hand-maintained suffix sets.
 _SUPPORTED_REVISIONS = (
@@ -170,6 +171,7 @@ _SUPPORTED_REVISIONS = (
     LOCAL_MODEL_LIMITS_REVISION,
     STICKER_LIBRARY_FRESHNESS_REVISION,
     MEDIA_FREQUENCY_KIND_REVISION,
+    STICKER_DESCRIPTION_REVISION,
     HEAD_REVISION,
 )
 _REVISION_RANGES = {
@@ -389,6 +391,7 @@ def _current_revision(connection: Connection) -> str:
 
 def _validate_managed_state(connection: Connection, revision: str) -> None:
     # Additive authored/job tables do not change the older runtime shapes.
+    pre_example_revision = revision not in _REVISION_RANGES[EXAMPLE_WORLD_REVISION]
     pre_recall_revision = revision not in _REVISION_RANGES[RECALL_REVISION]
     pre_location_policy_revision = revision not in _REVISION_RANGES[LOCATION_REVISION]
     pre_mobility_revision = revision not in _REVISION_RANGES[MOBILITY_REVISION]
@@ -628,6 +631,8 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         expected -= BUILDER_JOB_TABLES
     if pre_common_lore_revision:
         expected -= WORLD_COMMON_LORE_TABLES
+    if pre_example_revision:
+        expected -= {"example_world_setups"}
     if tables != expected:
         _fail("alembic_schema_state_mismatch")
     _validate_auxiliary_objects(
@@ -641,6 +646,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         _validate_domain_shape(
             connection,
             revision,
+            pre_example_revision=pre_example_revision,
             pre_chat_revision=pre_chat_revision,
             pre_message_revision=pre_message_revision,
             pre_dispatch_revision=pre_dispatch_revision,
@@ -782,6 +788,7 @@ def _validate_domain_shape(
     pre_sticker_library_freshness_revision: bool = True,
     pre_media_frequency_kind_revision: bool = True,
     pre_sticker_description_revision: bool = True,
+    pre_example_revision: bool = True,
 ) -> None:
     """Detect partial/mismatched schemas; never infer a revision from them."""
 
@@ -807,6 +814,8 @@ def _validate_domain_shape(
         "ck_command_receipt_command_result",
     }
     for table in metadata.sorted_tables:
+        if pre_example_revision and table.name == "example_world_setups":
+            continue
         if pre_media_revision and table.name in MEDIA_TABLES:
             continue
         if pre_speech_revision and table.name in SPEECH_TABLES:

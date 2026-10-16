@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import struct
@@ -10,6 +11,9 @@ import subprocess
 from pathlib import Path, PurePosixPath
 
 ROOT = Path(__file__).resolve().parents[1]
+PUBLIC_EXAMPLE_SOURCE = "services/core/src/livingworld/infrastructure/examples/campus.json"
+PUBLIC_EXAMPLE_PACKAGE = "core/_internal/livingworld/infrastructure/examples/campus.json"
+PUBLIC_EXAMPLE_SHA256 = "f310356fd9f5c72262a8f2bbd78c95ff735358748b556558c5817bdc2d423274"
 TEXT_SUFFIXES = {
     ".py",
     ".rs",
@@ -112,6 +116,11 @@ def findings(name: str, data: bytes, *, source: bool) -> list[str]:
             controlled = source and name.startswith(
                 ("tests/fixtures/character_cards/", "tests/fixtures/lorebooks/")
             )
+            # Only this reviewed original template may ship as authored content.
+            # All credential/path/private-key checks above still apply. Modified
+            # bytes and copies at any other path remain blocked.
+            if name == (PUBLIC_EXAMPLE_SOURCE if source else PUBLIC_EXAMPLE_PACKAGE):
+                controlled = hashlib.sha256(data).hexdigest() == PUBLIC_EXAMPLE_SHA256
             entries = document.get("entries", [])
             if isinstance(entries, dict):
                 entries = list(entries.values())

@@ -103,7 +103,7 @@ export function SaveBackupPanel({ recovery = false, initial }: { recovery?: bool
   </section>;
 }
 
-export function SaveSafetyGate({ children }: { children: ReactNode }) {
+export function SaveSafetyGate({ children }: { children: (storageReady: boolean) => ReactNode }) {
   const [state, setState] = useState<Safety | null>(null);
   const [allowed, setAllowed] = useState(!isTauri());
   const [error, setError] = useState("");
@@ -119,6 +119,9 @@ export function SaveSafetyGate({ children }: { children: ReactNode }) {
     const timer = window.setInterval(() => void check(), 5000);
     return () => window.clearInterval(timer);
   }, [check, allowed]);
-  if (allowed) return children;
-  return <main className="product-shell"><div className="page-section"><Brand />{state?.recovery_required || error ? <SaveBackupPanel recovery initial={state ?? undefined} /> : <section className="settings-section"><h2>{state?.update_verifying ? "正在核对升级后的存档" : "正在确认存档"}</h2></section>}</div></main>;
+  if (allowed) return children(true);
+  // Reconcile the same startup component across pending -> allowed, retaining
+  // the animation, visible-time budget and native visibility listeners.
+  if (!state?.recovery_required && !error) return children(false);
+  return <main className="product-shell"><div className="page-section"><Brand /><SaveBackupPanel recovery initial={state ?? undefined} /></div></main>;
 }

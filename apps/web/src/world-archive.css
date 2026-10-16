@@ -11,6 +11,18 @@
 .archive-intro { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-bottom: 20px; }
 .archive-intro h1 { margin: 0 0 8px; font-size: 1.8rem; font-weight: 650; letter-spacing: -.025em; }
 .archive-intro p { margin: 0; color: var(--archive-muted); line-height: 1.65; font-size: .9rem; }
+.archive-intro-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 12px; }
+.example-world { margin-bottom: 24px; }
+.example-world-body { padding: 20px 26px 26px; max-width: 80ch; line-height: 1.65; }
+.example-world-body h3 { margin: 0 0 8px; }
+.example-character-list { margin: 20px 0; }
+.example-character-list > div { padding: 12px 0; border-bottom: 1px solid var(--line); }
+.example-character-list dt { font-weight: 650; }
+.example-character-list dt span { font-weight: 400; margin-left: 12px; color: var(--archive-muted); }
+.example-character-list dd { margin: 6px 0 0; }
+.example-lore-entry { padding: 10px 0; }
+.example-lore-entry label { display: flex; gap: 8px; align-items: center; font-weight: 600; }
+.example-lore-entry p { margin: 6px 0 0; }
 .archive-layout { position: relative; }
 .archive-shelf-section { min-width: 0; }
 .archive-shelf-heading { display: flex; justify-content: space-between; align-items: center; color: var(--archive-muted); font-size: .8rem; margin-bottom: 12px; }
