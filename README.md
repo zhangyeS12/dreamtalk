@@ -8,11 +8,11 @@ dreamtalk 是一款开源桌面应用。你可以创建自己的世界，导入�
 
 每个世界有自己的角色、地点、聊天和记忆。你可以在一个世界是璃月的旅人，在另一个世界是新艾利都的居民，随时回到书架换一本书。
 
-[下载 Windows 体验版](https://github.com/zhangyeS12/dreamtalk/releases/tag/v0.1.80) · [本次更新内容](docs/releases/v0.1.80.md) · [完整设置说明](docs/SETTINGS_HANDBOOK.md) · [反馈问题](https://github.com/zhangyeS12/dreamtalk/issues)
+[下载 Windows 体验版](https://github.com/zhangyeS12/dreamtalk/releases/tag/v0.1.81) · [本次更新内容](docs/releases/v0.1.81.md) · [完整设置说明](docs/SETTINGS_HANDBOOK.md) · [反馈问题](https://github.com/zhangyeS12/dreamtalk/issues)
 
 目前提供 **Windows 10 / 11 的 64 位体验版**。应用免费开源；聊天所用的模型服务需要你自己提供 API 密钥，服务商可能按使用量收费。当前版本仍在持续完善，欢迎反馈实际体验。
 
-0.1.80修复旧版升级启动与快照校验误报，启动失败页也可检查更新。消息和编辑即时保存，自动快照供找回历史内容，正常更新不要求手动恢复，见[数据与备份](docs/DATA_BACKUPS.md)。实际升级与恢复仍待用户验收。
+0.1.81新增可预览确认的高中校园示例，保留原开屏动画贯穿启动；修复完整快照恢复、异常模型设置和退出收尾，并补齐CI发布门禁。此前旧版升级启动与快照校验修复保持。消息和编辑即时保存，自动快照供找回历史内容，正常更新不要求手动恢复，见[数据与备份](docs/DATA_BACKUPS.md)。实际升级与恢复仍待用户验收。
 
 0.1.78新增整份存档备份／恢复、卸载保留及升级保护，修复云端图片密钥的完整调用链、图库说明串改和联网图片保存问题。此前配音、表情与图片能力保持：角色可使用公共／专属表情，用户有自己的表情库；支持按聊天环境配图、可选联网与图片分析。用户已确认角色发送和新增表情识别有效，使用方法见[表情与图片](docs/CHAT_MEDIA.md)。
 
@@ -22,11 +22,11 @@ dreamtalk 是一款开源桌面应用。你可以创建自己的世界，导入�
 
 ### 1. 安装
 
-推荐下载 [Windows 安装包](https://github.com/zhangyeS12/dreamtalk/releases/download/v0.1.80/dreamtalk_0.1.80_x64-setup.exe)，按提示安装。
+推荐下载 [Windows 安装包](https://github.com/zhangyeS12/dreamtalk/releases/download/v0.1.81/dreamtalk_0.1.81_x64-setup.exe)，按提示安装。
 
 本版提供[数据与备份](docs/DATA_BACKUPS.md)，新版卸载保留数据，安装／升级前先备份。旧版卸载器若仍出现“删除应用程序数据”，不要选择；重要备份建议另存其他磁盘。备份／恢复及升级故障场景仍待实际验收。
 
-也可以使用 [便携版压缩包](https://github.com/zhangyeS12/dreamtalk/releases/download/v0.1.80/dreamtalk-0.1.80-windows-x64.zip)：完整解压到一个固定目录，打开 dreamtalk 文件夹里的 dreamtalk-desktop.exe。不要直接在压缩包中运行，也不要只复制其中的程序文件。
+也可以使用 [便携版压缩包](https://github.com/zhangyeS12/dreamtalk/releases/download/v0.1.81/dreamtalk-0.1.81-windows-x64.zip)：完整解压到一个固定目录，打开 dreamtalk 文件夹里的 dreamtalk-desktop.exe。不要直接在压缩包中运行，也不要只复制其中的程序文件。
 
 下载页中的 **Source code** 是给开发者看的源码，请选择上面的安装包或便携包。若系统缺少网页显示组件，可安装 [Microsoft WebView2](https://developer.microsoft.com/microsoft-edge/webview2/)。首次安装可能提示未知发布者：目前已有应用更新签名，但尚无 Windows 发布者证书。
 
@@ -52,7 +52,7 @@ dreamtalk 是一款开源桌面应用。你可以创建自己的世界，导入�
 
 第一次使用可以先只开聊天。自动活动、主动联系和世界动态都需要另行开启，不必一次把所有开关打开。
 
-当前源码另提供[原创校园示例](docs/EXAMPLE_WORLD.md)：在书架预览并确认后，创建简单高中背景与三位同学，无需先寻找角色卡，不调用模型。公开0.1.80下载包尚不包含这个新入口。
+0.1.81提供[原创校园示例](docs/EXAMPLE_WORLD.md)：在书架预览并确认后，创建简单高中背景与三位同学，无需先寻找角色卡，不调用模型。世界书与三位角色均为原创简单设定，可继续自行编辑。
 
 ## 页面里有什么
 
