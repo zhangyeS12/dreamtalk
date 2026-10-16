@@ -60,9 +60,13 @@ try:
         def archive():
             page.get_by_role("button", name="世界书架", exact=True).click()
             page.get_by_role("heading", name="世界书架", exact=True).wait_for()
+            expect(
+                page.locator(".archive-intro").get_by_role("button", name="刷新书架", exact=True)
+            ).to_be_enabled()
 
         def enter_world(name):
             book = page.get_by_role("button", name=f"预览世界：{name}", exact=True)
+            expect(book).to_be_enabled()
             book.focus()
             book.press("Enter")
             page.get_by_role("button", name="进入世界 →", exact=True).click()
@@ -70,6 +74,8 @@ try:
 
         def create_world(name):
             blank = page.get_by_role("button", name="创建或导入一个新世界，空白书 1", exact=True)
+            # Keyboard focus/press does not wait for the loading guard to clear.
+            expect(blank).to_be_enabled()
             blank.focus()
             blank.press("Enter")
             page.get_by_role("button", name="创建世界", exact=True).click()
@@ -245,6 +251,7 @@ try:
         page.get_by_role("region", name="群聊").wait_for()
         archive()
         book = page.get_by_role("button", name="预览世界：world_profile_smoke", exact=True)
+        expect(book).to_be_enabled()
         book.focus()
         book.press("Enter")
         page.get_by_role("button", name="管理 / 导入世界书", exact=True).click()
