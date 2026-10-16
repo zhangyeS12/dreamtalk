@@ -8,8 +8,9 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use tokio::{
-    io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
+    io::{AsyncBufRead, AsyncBufReadExt, AsyncWriteExt, BufReader},
     process::{Child, Command},
+    sync::oneshot,
 };
 use uuid::Uuid;
 
@@ -30,6 +31,33 @@ pub struct ApiContract {
 
 pub fn contract() -> ApiContract {
     serde_json::from_str(CONTRACT).expect("packaged_system_contract_invalid")
+}
+
+async fn forward_core_output<R: AsyncBufRead + Unpin>(
+    reader: R,
+    credential_sync: oneshot::Sender<()>,
+) {
+    let mut credential_sync = Some(credential_sync);
+    let mut lines = reader.lines();
+    while let Ok(Some(line)) = lines.next_line().await {
+        // Forward only the exact structured schema, never arbitrary child output.
+        if let Ok(record) = serde_json::from_str::<serde_json::Value>(&line) {
+            if record.as_object().is_some_and(|object| {
+                object.keys().all(|key| {
+                    ["timestamp", "level", "component", "event", "trace_id"].contains(&key.as_str())
+                })
+            }) {
+                if record["component"] == "host_control"
+                    && record["event"] == "credential_sync_complete_accepted"
+                {
+                    if let Some(sender) = credential_sync.take() {
+                        let _ = sender.send(());
+                    }
+                }
+                println!("{record}");
+            }
+        }
+    }
 }
 
 pub fn event(name: &'static str) {
@@ -276,24 +304,12 @@ impl CoreSupervisor {
         command.creation_flags(0x08000000);
         let mut child = command.spawn().map_err(|_| "core_spawn_failed")?;
         let pid = child.id().ok_or("core_pid_missing")?;
-        if let Some(stdout) = child.stdout.take() {
-            tokio::spawn(async move {
-                let mut lines = BufReader::new(stdout).lines();
-                while let Ok(Some(line)) = lines.next_line().await {
-                    // Forward only the exact structured schema, never arbitrary child output.
-                    if let Ok(record) = serde_json::from_str::<serde_json::Value>(&line) {
-                        if record.as_object().is_some_and(|o| {
-                            o.keys().all(|key| {
-                                ["timestamp", "level", "component", "event", "trace_id"]
-                                    .contains(&key.as_str())
-                            })
-                        }) {
-                            println!("{record}");
-                        }
-                    }
-                }
-            });
-        }
+        let stdout = child.stdout.take().ok_or("core_stdout_missing")?;
+        let (credential_sync_tx, credential_sync_rx) = oneshot::channel();
+        tokio::spawn(forward_core_output(
+            BufReader::new(stdout),
+            credential_sync_tx,
+        ));
         self.child = Some(child);
         let deadline = tokio::time::Instant::now() + config.startup_timeout;
         loop {
@@ -346,6 +362,13 @@ impl CoreSupervisor {
                 self.authenticated_health().await?;
                 self.provision_credentials(&llm_configuration.credential_refs)
                     .await?;
+                // A pipe flush does not mean the Core applied every credential.
+                // Wait for its existing ordered sync acknowledgement before
+                // exposing Ready or validating a changed world's model status.
+                tokio::time::timeout_at(deadline, credential_sync_rx)
+                    .await
+                    .map_err(|_| "host_control_sync_timeout")?
+                    .map_err(|_| "host_control_sync_closed")?;
                 // Missing optional voice keys must not degrade text-model configuration.
                 if let Ok(references) = crate::speech_credentials::REGISTRY.references(config).await
                 {
@@ -611,5 +634,48 @@ impl CoreSupervisor {
             "supervisor_stopped_forced"
         });
         Ok(StopReport { graceful })
+    }
+}
+
+#[cfg(test)]
+mod sync_ack_tests {
+    use super::*;
+
+    #[test]
+    fn pipe_delivery_waits_for_core_credential_application_acknowledgement() {
+        tauri::async_runtime::block_on(async {
+            let (mut core, host) = tokio::io::duplex(2048);
+            let (sender, mut received) = oneshot::channel();
+            let forwarding = tokio::spawn(forward_core_output(BufReader::new(host), sender));
+            core.write_all(b"{\"component\":\"core\",\"event\":\"core_ready\"}\n")
+                .await
+                .unwrap();
+            core.flush().await.unwrap();
+            assert!(
+                tokio::time::timeout(Duration::from_millis(30), &mut received)
+                    .await
+                    .is_err()
+            );
+            core.write_all(b"{\"component\":\"host_control\",\"event\":\"credential_sync_complete_accepted\"}\n")
+                .await
+                .unwrap();
+            tokio::time::timeout(Duration::from_secs(5), received)
+                .await
+                .unwrap()
+                .unwrap();
+            drop(core);
+            forwarding.await.unwrap();
+        });
+    }
+
+    #[test]
+    fn unrelated_or_rejected_output_cannot_acknowledge_credential_sync() {
+        tauri::async_runtime::block_on(async {
+            let output = b"{\"component\":\"other\",\"event\":\"credential_sync_complete_accepted\"}\n\
+                {\"component\":\"host_control\",\"event\":\"credential_sync_complete_accepted\",\"unexpected\":true}\n";
+            let (sender, received) = oneshot::channel();
+            forward_core_output(&output[..], sender).await;
+            assert!(received.await.is_err());
+        });
     }
 }
