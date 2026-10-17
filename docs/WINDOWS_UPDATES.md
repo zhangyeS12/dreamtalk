@@ -1,8 +1,8 @@
 # Windows 应用更新
 
-本版更新为 [0.1.78](https://github.com/zhangyeS12/dreamtalk/releases/tag/v0.1.78)，继承 0.1.46 起的更新入口与完整安装包。0.1.48 修复了 0.1.46／0.1.47 的安装清单问题，历史证据见[修复记录](maintenance/2026-10-08-update-manifest-fix.md)。固定[更新频道](https://github.com/zhangyeS12/dreamtalk/releases/tag/update-preview)用于应用内检查；真实跨版升级仍由用户验收。
+本轮发行版本为 [0.1.82](https://github.com/zhangyeS12/dreamtalk/releases/tag/v0.1.82)，实际状态见[发行记录](maintenance/2026-10-18-release-0182.md)，继承 0.1.46 起的更新入口与完整安装包。0.1.48 修复了 0.1.46／0.1.47 的安装清单问题，历史证据见[修复记录](maintenance/2026-10-08-update-manifest-fix.md)。固定[更新频道](https://github.com/zhangyeS12/dreamtalk/releases/tag/update-preview)用于应用内检查；真实跨版升级仍由用户验收。
 
-**0.1.78增加存档保护与可靠更新。** 本轮补独立完整存档快照、卸载保留、真实存档核对、缺旧清单修复升级及未完成升级回退，见[存档](DATA_BACKUPS.md)和[原记录](maintenance/2026-10-14-save-safety.md)。2026-10-17当前源码五位置改动保留独立更新保护，不占用手动位置；尚未发行下载包。以下旧包行为按其版本区分，0.1.78源码能力不代表0.1.77下载包已经具备。
+**0.1.78增加存档保护与可靠更新。** 本轮补独立完整存档快照、卸载保留、真实存档核对、缺旧清单修复升级及未完成升级回退，见[存档](DATA_BACKUPS.md)和[原记录](maintenance/2026-10-14-save-safety.md)。2026-10-17当前源码五位置改动保留独立更新保护，不占用手动位置，纳入0.1.82发行范围。以下旧包行为按其版本区分，0.1.78源码能力不代表0.1.77下载包已经具备。
 
 ## 使用
 
@@ -59,7 +59,7 @@ pwsh -File scripts/updater-signing.ps1 -Mode Import -RecoveryFile E:\Backup\drea
 
 ## 发布流程
 
-只有获得对应版本 GitHub 发布授权后执行。2026-10-16用户已明确批准0.1.81完整Windows预发布、原频道更新和build-only构建，见[发行记录](maintenance/2026-10-16-release-0181.md)。2026-10-15用户已另明确授权0.1.80快照／更新修复与完整Windows发布，见[本轮记录](maintenance/2026-10-15-save-snapshot-update.md)。此前用户已明确授权v0.1.78存档保护与媒体修复发布，包括源码、完整Windows下载和既有更新频道；本轮证据见[发布记录](maintenance/2026-10-15-release-0178.md)，原0.1.76大更新记录保持。此前v0.1.53保留原发布；历史 v0.1.48 修复交付另见[修复记录](maintenance/2026-10-08-update-manifest-fix.md)。
+只有获得对应版本 GitHub 发布授权后执行。2026-10-18用户已明确批准0.1.82完整Windows预发布及原频道更新，仅build-only；工程端不运行安装器，真实更新由用户验收，见[记录](maintenance/2026-10-18-release-0182.md)。2026-10-16用户已明确批准0.1.81完整Windows预发布、原频道更新和build-only构建，见[发行记录](maintenance/2026-10-16-release-0181.md)。2026-10-15用户已另明确授权0.1.80快照／更新修复与完整Windows发布，见[本轮记录](maintenance/2026-10-15-save-snapshot-update.md)。此前用户已明确授权v0.1.78存档保护与媒体修复发布，包括源码、完整Windows下载和既有更新频道；本轮证据见[发布记录](maintenance/2026-10-15-release-0178.md)，原0.1.76大更新记录保持。此前v0.1.53保留原发布；历史 v0.1.48 修复交付另见[修复记录](maintenance/2026-10-08-update-manifest-fix.md)。
 
 1. 编译签名完整包，更新`docs/releases/v<version>.md`中的用户可读说明，检查产物清单和SHA256。
 2. 创建版本Release（如`v0.1.81`，当前仍预发布），上传安装器、`.sig`、便携ZIP、SHA256SUMS及说明。

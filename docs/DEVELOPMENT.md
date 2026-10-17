@@ -6,7 +6,7 @@
 
 ## 当前本地工作与交接
 
-当前源码Desktop0.1.81、迁移head0053_example_world_setup、配音revision8。公开0.1.81固定3b53933，见[发行记录](maintenance/2026-10-16-release-0181.md)。2026-10-17可靠性及五位置存档源码按用户本次授权同步，见[同步记录](maintenance/2026-10-17-source-sync.md)；尚未发行新安装包；存档本轮授权实现、必要编译及独立临时合成数据检查，见[存档记录](maintenance/2026-10-17-save-slots.md)。前轮具体隔离检查见[可靠性记录](maintenance/2026-10-17-reliability-hardening.md)，不复用为本轮打包、安装器或已安装应用运行许可。模型环境、权重、录音、存档、个人配置和私钥不随源码或安装包提供；日常不打包规则继续适用。
+当前源码Desktop0.1.82、迁移head0053_example_world_setup、配音revision8。公开0.1.81固定3b53933，见[发行记录](maintenance/2026-10-16-release-0181.md)。2026-10-17可靠性及五位置存档源码按用户本次授权同步，见[同步记录](maintenance/2026-10-17-source-sync.md)；用户随后批准[0.1.82完整发行](maintenance/2026-10-18-release-0182.md)，沿原签名／频道，仅build-only；存档实现轮授权实现、必要编译及独立临时合成数据检查，见[存档记录](maintenance/2026-10-17-save-slots.md)。前轮具体隔离检查见[可靠性记录](maintenance/2026-10-17-reliability-hardening.md)，不复用为本轮打包、安装器或已安装应用运行许可。模型环境、权重、录音、存档、个人配置和私钥不随源码或安装包提供；日常不打包规则继续适用。
 
 本机图片服务自动启动及两个本地模型不限次数的原实现见[记录](maintenance/2026-10-13-local-model-startup-and-limits.md)。免费云端最新版与付费配音API仍待确认。历史单次隔离检查和配音对照许可不复用；当前允许的启动／更新错误／配音及表情失败检查不包含外部模型。可选配音环境仍独立，不向Core加入Torch或CUDA。
 

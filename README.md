@@ -8,11 +8,11 @@ dreamtalk 是一款开源桌面应用。你可以创建自己的世界，导入�
 
 每个世界有自己的角色、地点、聊天和记忆。你可以在一个世界是璃月的旅人，在另一个世界是新艾利都的居民，随时回到书架换一本书。
 
-[下载 Windows 体验版](https://github.com/zhangyeS12/dreamtalk/releases/tag/v0.1.81) · [本次更新内容](docs/releases/v0.1.81.md) · [完整设置说明](docs/SETTINGS_HANDBOOK.md) · [反馈问题](https://github.com/zhangyeS12/dreamtalk/issues)
+[下载 Windows 体验版](https://github.com/zhangyeS12/dreamtalk/releases/tag/v0.1.82) · [本次更新内容](docs/releases/v0.1.82.md) · [完整设置说明](docs/SETTINGS_HANDBOOK.md) · [反馈问题](https://github.com/zhangyeS12/dreamtalk/issues)
 
 目前提供 **Windows 10 / 11 的 64 位体验版**。应用免费开源；聊天所用的模型服务需要你自己提供 API 密钥，服务商可能按使用量收费。当前版本仍在持续完善，欢迎反馈实际体验。
 
-0.1.81新增可预览确认的高中校园示例，保留原开屏动画贯穿启动；修复完整快照恢复、异常模型设置和退出收尾，并补齐CI发布门禁。此前旧版升级启动与快照校验修复保持。消息和编辑即时保存，正常更新不要求手动恢复，见[存档](docs/DATA_BACKUPS.md)。当前源码的新五位置界面尚未发行下载包，下载包仍采用原备份流程。实际升级与恢复仍待用户验收。
+0.1.82提供一个自动存档和四个手动位置，支持命名、时间、替换与导入；导入不会立即加载。加载会切换全部世界数据并覆盖自动档，可提前另存原自动档。完善启动失败、更新检查和媒体失败处理，移除普通清空入口。消息和编辑仍即时保存，正常更新不要求手动恢复，见[存档](docs/DATA_BACKUPS.md)。实际升级与恢复仍待用户验收。
 
 0.1.78新增整份存档备份／恢复、卸载保留及升级保护，修复云端图片密钥的完整调用链、图库说明串改和联网图片保存问题。此前配音、表情与图片能力保持：角色可使用公共／专属表情，用户有自己的表情库；支持按聊天环境配图、可选联网与图片分析。用户已确认角色发送和新增表情识别有效，使用方法见[表情与图片](docs/CHAT_MEDIA.md)。
 
@@ -22,11 +22,11 @@ dreamtalk 是一款开源桌面应用。你可以创建自己的世界，导入�
 
 ### 1. 安装
 
-推荐下载 [Windows 安装包](https://github.com/zhangyeS12/dreamtalk/releases/download/v0.1.81/dreamtalk_0.1.81_x64-setup.exe)，按提示安装。
+推荐下载 [Windows 安装包](https://github.com/zhangyeS12/dreamtalk/releases/download/v0.1.82/dreamtalk_0.1.82_x64-setup.exe)，按提示安装。
 
 本版提供[数据与备份](docs/DATA_BACKUPS.md)，新版卸载保留数据，安装／升级前先备份。旧版卸载器若仍出现“删除应用程序数据”，不要选择；重要备份建议另存其他磁盘。备份／恢复及升级故障场景仍待实际验收。
 
-也可以使用 [便携版压缩包](https://github.com/zhangyeS12/dreamtalk/releases/download/v0.1.81/dreamtalk-0.1.81-windows-x64.zip)：完整解压到一个固定目录，打开 dreamtalk 文件夹里的 dreamtalk-desktop.exe。不要直接在压缩包中运行，也不要只复制其中的程序文件。
+也可以使用 [便携版压缩包](https://github.com/zhangyeS12/dreamtalk/releases/download/v0.1.82/dreamtalk-0.1.82-windows-x64.zip)：完整解压到一个固定目录，打开 dreamtalk 文件夹里的 dreamtalk-desktop.exe。不要直接在压缩包中运行，也不要只复制其中的程序文件。
 
 下载页中的 **Source code** 是给开发者看的源码，请选择上面的安装包或便携包。若系统缺少网页显示组件，可安装 [Microsoft WebView2](https://developer.microsoft.com/microsoft-edge/webview2/)。首次安装可能提示未知发布者：目前已有应用更新签名，但尚无 Windows 发布者证书。
 

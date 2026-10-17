@@ -1,6 +1,6 @@
 # dreamtalk 工作交接
 
-更新日期：**2026-10-17**。源码Desktop **0.1.81**、API1、迁移head0053_example_world_setup、配音revision8。公开0.1.81固定3b53933，发行证据见[记录](docs/maintenance/2026-10-16-release-0181.md)。当前五个存档位置及前轮启动／更新／媒体修复按用户本次授权同步源码，见[同步记录](docs/maintenance/2026-10-17-source-sync.md)；尚未发行新安装包；五个存档位置见[本轮记录](docs/maintenance/2026-10-17-save-slots.md)，本轮独立本机EXE已编译，存档隔离检查见本轮记录；前轮检查见[记录](docs/maintenance/2026-10-17-reliability-hardening.md)。本轮仅追加源码提交和推送授权，没有打包或发布授权，真实Windows安装更新仍未验收。
+更新日期：**2026-10-18**。源码Desktop **0.1.82**、API1、迁移head0053_example_world_setup、配音revision8。公开0.1.81固定3b53933，发行证据见[记录](docs/maintenance/2026-10-16-release-0181.md)。当前五个存档位置及前轮启动／更新／媒体修复按用户本次授权同步源码，见[同步记录](docs/maintenance/2026-10-17-source-sync.md)；用户随后明确批准[0.1.82完整Windows发行](docs/maintenance/2026-10-18-release-0182.md)，发布状态以该记录和Release为准；五个存档位置见[本轮记录](docs/maintenance/2026-10-17-save-slots.md)，本轮独立本机EXE已编译，存档隔离检查见本轮记录；前轮检查见[记录](docs/maintenance/2026-10-17-reliability-hardening.md)。本轮另获0.1.82完整发布授权，仅build-only，不运行本机应用／安装器，真实Windows安装更新仍未验收。
 
 ## 1. 五分钟了解当前完成度
 
@@ -26,7 +26,7 @@
 | 项 | 当前事实与边界 |
 | --- | --- |
 | 正式仓库 | D:\LivingWorld，开发分支codex/world-archive；当前HEAD／main以Git实际状态核对。源码发布快进同步，不改写旧历史。 |
-| 版本／协议 | 当前源码Desktop0.1.81（预发布），Core／Web0.1.0，API1，配音revision8；既有标识app.livingworld.desktop保持。 |
+| 版本／协议 | 当前源码Desktop0.1.82（预发布）；本机直接EXE仍为0.1.81供用户自行升级，Core／Web0.1.0，API1，配音revision8；既有标识app.livingworld.desktop保持。 |
 | 迁移 | 源码head0053_example_world_setup，只增加可恢复示例创建回执；公开0.1.80仍为0052_sticker_entry_description。旧版本结构核验保持，没有运行真实存档迁移。 |
 | GitHub | 公开[v0.1.81](https://github.com/zhangyeS12/dreamtalk/releases/tag/v0.1.81)固定3b53933，完整安装／便携及原update-preview频道按发行记录核对。当前源码按用户授权同步本分支，见[记录](docs/maintenance/2026-10-17-source-sync.md)，旧附件／频道未改。历史0.1.80固定c7bcf3b。 |
 | 配音／图片模型 | 独立Git忽略环境和权重，不进入Core／安装包。登记路径并保存启用配置后随dreamtalk启动，模型按需加载；已有开机后台入口使登录后运行，不是关机期间运行。 |
@@ -109,7 +109,7 @@
 
 0. **配音按路线维护验收状态**：本地效果已有2026-10-13用户确认；免费云端最新版和付费API尚未测试、待确认。其他缓存／试听替换／服务修复场景仍由用户验收。前轮四次GPT对照许可已经用完，不自动新增模型或付费服务调用；见[当前手册](docs/CHARACTER_VOICES.md)。
 
-1. **优先验证启动与更新闭环**：当前本机入口及确定性失败处理修复见[记录](docs/maintenance/2026-10-17-reliability-hardening.md)，旧A-01～A-06见[原记录](docs/maintenance/2026-10-15-new-user-fixes.md)，不要重复登记为未修。真实Windows安装／应用内更新及存档连续性仍缺证据，应在获得对应具体许可的隔离Windows环境验证；不让用户处理文件、进程或日志，不复用真实存档诊断许可。当前源码推送已获授权，尚无新安装包发行授权；0.1.81的历史发行已完成。
+1. **优先验证启动与更新闭环**：当前本机入口及确定性失败处理修复见[记录](docs/maintenance/2026-10-17-reliability-hardening.md)，旧A-01～A-06见[原记录](docs/maintenance/2026-10-15-new-user-fixes.md)，不要重复登记为未修。真实Windows安装／应用内更新及存档连续性仍缺证据，应在获得对应具体许可的隔离Windows环境验证；不让用户处理文件、进程或日志，不复用真实存档诊断许可。当前0.1.82完整发行已获授权，见[记录](docs/maintenance/2026-10-18-release-0182.md)；0.1.81的历史发行已完成。
 2. **验收尚未确认的关键链路**（共同联系目前由用户先等待，不主动触发或排查）：记忆纠正/停用和旧事召回、活动真实终态/权限、动态池公共背景→生成→逐条发布→标记、在线单人/双人同事由→等待回复→原会话回复→合法下次机会、离线联动。主动联系失败先查保存状态/前提/终端原因，不靠反复开关或自动重放API排查。
 3. **只按证据修复**：记录现象、版本、受影响模块和可观察完成条件；新功能先调查成熟实现并确认新增范围。用户仍负责测试；未获新许可不运行自动测试、GUI smoke、真实存档/模型诊断。
 4. **新方向先讨论**：将4.2中的愿景与当前功能验收分开；未来发行仍须相应批准。已有记忆底座不需要重新搭建。
