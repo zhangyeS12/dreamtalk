@@ -7,6 +7,7 @@ pub mod local_images;
 pub mod local_speech;
 pub mod media_credentials;
 pub mod save_safety;
+pub mod save_slots;
 pub mod scoped_credentials;
 pub mod speech_credentials;
 pub mod supervisor;
@@ -231,7 +232,7 @@ async fn core_connection(
                 return Ok(connection);
             }
             if supervisor.state == supervisor::SupervisorState::Failed {
-                return Err("core_failed".to_owned());
+                return Err(supervisor.startup_error().to_owned());
             }
         }
         if tokio::time::Instant::now() >= deadline {
@@ -1005,7 +1006,10 @@ pub fn run() {
             save_safety::configure_save_backup_location,
             save_safety::export_save_backup,
             save_safety::import_save_backup,
-            save_safety::clear_saved_data
+            save_slots::save_slots_status,
+            save_slots::save_slots_startup_ready,
+            save_slots::choose_save_slots_folder,
+            save_slots::operate_save_slot
         ])
         .setup(|app| {
             let mut app_data = app.path().app_data_dir()?;
@@ -1016,6 +1020,7 @@ pub fn run() {
             }
             app.manage(background::BackgroundState::load(&app_data));
             app.manage(updater::UpdateState::load(&app_data));
+            app.manage(save_slots::SaveSlotState::default());
             background::install_tray(app)?;
             let executable_dir = std::env::current_exe()?
                 .parent()
@@ -1051,7 +1056,6 @@ pub fn run() {
             app.manage(local_speech::LocalSpeechState::default());
             app.manage(local_images::LocalImageState::default());
             let speech_app = app.handle().clone();
-            save_safety::start_automatic(speech_app.clone(), config.clone(), supervisor.clone());
             tauri::async_runtime::spawn(async move {
                 // A repaired patch can resume a known interrupted upgrade.
                 // Keep the maintenance hold and all checks; never replay work.

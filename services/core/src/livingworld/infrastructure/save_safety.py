@@ -371,7 +371,9 @@ def guard(
         and any(item["counts"] is None or item["counts"]["worlds"] for item in snapshots)
     ):
         problem = "save_previous_worlds_found"
-    if (app_data / "restore-in-progress.json").exists():
+    if (app_data / "save-slot-load.json").exists():
+        problem = "save_restore_interrupted"
+    elif (app_data / "restore-in-progress.json").exists():
         problem = "save_restore_interrupted"
     elif (app_data / "restore-hold.json").exists():
         problem = "save_restored_review_required"
@@ -418,9 +420,16 @@ def fingerprint(app_data: Path) -> str:
     return hashlib.sha256(json.dumps(sorted(values)).encode()).hexdigest()
 
 
-def create_snapshot(app_data: Path, reason: str, version: str, *, automatic=False) -> dict:
+def create_snapshot(
+    app_data: Path,
+    reason: str,
+    version: str,
+    *,
+    automatic=False,
+    workspace_root: Path | None = None,
+) -> dict:
     app_data = plain(app_data)
-    root = backup_root()
+    root = plain(workspace_root) if workspace_root is not None else backup_root()
     if root == app_data or root.is_relative_to(app_data) or app_data.is_relative_to(root):
         raise SaveSafetyError("save_backup_location_invalid")
     atomic_json(root / ".dreamtalk-backup-root.json", {"identity": IDENTITY})
@@ -472,7 +481,7 @@ def create_snapshot(app_data: Path, reason: str, version: str, *, automatic=Fals
             if time.monotonic() > deadline:
                 raise SaveSafetyError("save_backup_timeout")
         config = app_data / "config"
-        if config.is_dir():
+        if config.is_dir() and workspace_root is None:
             inventory(config)  # reject links before traversing user-owned config
             shutil.copytree(config, payload / "config")
         shutil.copy2(app_data / MARKER, payload / MARKER)
@@ -497,6 +506,8 @@ def create_snapshot(app_data: Path, reason: str, version: str, *, automatic=Fals
         published.parent.mkdir(parents=True, exist_ok=True)
         os.rename(folder, published)
         result = {"id": name, "counts": copied["counts"], "created_at": value["created_at"]}
+        if workspace_root is not None:
+            return result
         try:
             atomic_json(history, {"fingerprint": stamp, "created_at": value["created_at"]})
             protected = set()
@@ -555,16 +566,28 @@ def prune(root: Path, *, protected=()) -> None:
             shutil.rmtree(path)  # checked exact UUID child, never active data or backup root
 
 
-def restore(app_data: Path, snapshot_id: str, version: str) -> dict:
+def restore(
+    app_data: Path,
+    snapshot_id: str,
+    version: str,
+    *,
+    source_folder: Path | None = None,
+    preserve_config=False,
+    replace_accounting=False,
+    retain_before=True,
+    transaction_id: str | None = None,
+    after_install=None,
+) -> dict:
     app_data = plain(app_data)
-    value = verify_snapshot(locate(snapshot_id))
+    folder = plain(source_folder) if source_folder is not None else locate(snapshot_id)
+    value = verify_snapshot(folder)
     # Future/unknown schema must never be opened by an older application.
     from livingworld.infrastructure.persistence.migration import HEAD_REVISION
 
     if any(int(item[:4]) > int(HEAD_REVISION[:4]) for item in value["info"]["revisions"]):
         raise SaveSafetyError("save_newer_application_required")
     before = None
-    if (app_data / "data/runtime.sqlite3").is_file():
+    if retain_before and (app_data / "data/runtime.sqlite3").is_file():
         try:
             before = create_snapshot(app_data, "pre_restore", version)
         except (sqlite3.Error, SaveSafetyError) as error:
@@ -575,9 +598,10 @@ def restore(app_data: Path, snapshot_id: str, version: str) -> dict:
             opaque = backup_root() / "damaged-preserved" / str(uuid4())
             inventory(app_data / "data")
             shutil.copytree(app_data / "data", opaque)
-    incoming = app_data / f"restore-incoming-{uuid4()}"
-    preserved = app_data / f"restore-preserved-{uuid4()}"
-    payload = locate(snapshot_id) / "payload"
+    identity = str(UUID(transaction_id)) if transaction_id else str(uuid4())
+    incoming = app_data / f"restore-incoming-{identity}"
+    preserved = app_data / f"restore-preserved-{identity}"
+    payload = folder / "payload"
     shutil.copytree(payload, incoming)
     verify_payload(incoming, value["files"])
     # Installer snapshots may have a WAL; normalize only the working copy.
@@ -596,7 +620,11 @@ def restore(app_data: Path, snapshot_id: str, version: str) -> dict:
         for name in ("runtime.sqlite3-wal", "runtime.sqlite3-shm"):
             (incoming / "data" / name).unlink(missing_ok=True)
         os.replace(incoming / "data/normalized.sqlite3", incoming / "data/runtime.sqlite3")
-    preserve_accounting(app_data / "data/runtime.sqlite3", incoming / "data/runtime.sqlite3")
+    preserve_accounting(
+        app_data / "data/runtime.sqlite3",
+        incoming / "data/runtime.sqlite3",
+        replace_destination=replace_accounting,
+    )
     quarantine_restored_tasks(incoming / "data/runtime.sqlite3")
     (incoming / "config").mkdir(exist_ok=True)
     installed_files = inventory(incoming)
@@ -605,7 +633,7 @@ def restore(app_data: Path, snapshot_id: str, version: str) -> dict:
     atomic_json(journal, {"snapshot_id": snapshot_id, "preserved": str(preserved)})
     installed, moved = [], []
     try:
-        for name in ("data", "config", MARKER):
+        for name in ("data", MARKER) if preserve_config else ("data", "config", MARKER):
             source, target = incoming / name, app_data / name
             if not source.exists():
                 continue
@@ -622,6 +650,8 @@ def restore(app_data: Path, snapshot_id: str, version: str) -> dict:
         ):
             raise SaveSafetyError("save_restore_verification_failed")
         for name, expected in installed_files.items():
+            if preserve_config and name.startswith("config/"):
+                continue
             if digest(app_data / valid_relative(name)) != expected["sha256"]:
                 raise SaveSafetyError("save_restore_verification_failed")
         atomic_json(
@@ -639,6 +669,10 @@ def restore(app_data: Path, snapshot_id: str, version: str) -> dict:
             os.rename(preserved / name, app_data / name)
         journal.unlink(missing_ok=True)
         raise
+    # The slot coordinator owns the final catalog commit and its durable recovery.
+    # It must decide an uncertain commit before choosing the new or preserved store.
+    if after_install is not None:
+        after_install()
     return {
         "restored": True,
         "counts": actual["counts"],
@@ -647,23 +681,31 @@ def restore(app_data: Path, snapshot_id: str, version: str) -> dict:
     }
 
 
-def preserve_accounting(current: Path, restored: Path) -> None:
+def preserve_accounting(current: Path, restored: Path, *, replace_destination=False) -> None:
     """Story restoration must not roll back known costs, hard budgets or daily receipts."""
-    if not current.is_file():
+    if not current.is_file() and not replace_destination:
         return
     try:
-        source = sqlite3.connect(current.as_uri() + "?mode=ro", uri=True)
+        source = (
+            sqlite3.connect(current.as_uri() + "?mode=ro", uri=True) if current.is_file() else None
+        )
         destination = sqlite3.connect(restored)
         try:
             for table in ACCOUNTING:
-                old_columns = source.execute(f'PRAGMA table_info("{table}")').fetchall()
                 new_columns = destination.execute(f'PRAGMA table_info("{table}")').fetchall()
+                if source is None:
+                    if new_columns:
+                        destination.execute(f'DELETE FROM "{table}"')
+                    continue
+                old_columns = source.execute(f'PRAGMA table_info("{table}")').fetchall()
                 if not old_columns:
                     continue
                 if not new_columns or [item[1] for item in old_columns] != [
                     item[1] for item in new_columns
                 ]:
                     raise SaveSafetyError("save_financial_schema_incompatible")
+                if replace_destination:
+                    destination.execute(f'DELETE FROM "{table}"')
                 names = [item[1] for item in old_columns]
                 keys = [item[1] for item in old_columns if item[5]]
                 fields = ",".join(f'"{name}"' for name in names)
@@ -681,7 +723,8 @@ def preserve_accounting(current: Path, restored: Path) -> None:
                 )
             destination.commit()
         finally:
-            source.close()
+            if source is not None:
+                source.close()
             destination.close()
     except sqlite3.DatabaseError:
         # Do not silently discard newer known spending or hard-budget reservations.
@@ -988,8 +1031,8 @@ def adopt_legacy_update(app_data: Path, recovery: Path) -> dict:
     return {"id": name}
 
 
-def export_snapshot(snapshot_id: str, output: Path) -> dict:
-    folder = locate(snapshot_id)
+def export_snapshot(snapshot_id: str, output: Path, *, source_folder: Path | None = None) -> dict:
+    folder = plain(source_folder) if source_folder is not None else locate(snapshot_id)
     value = verify_snapshot(folder)
     plain(output)
     if output.exists() or output.suffix != ".dreamsave":
@@ -1063,7 +1106,11 @@ def run_request(request_path: Path) -> None:
         app_data = plain(Path(request["app_data"]))
         version = request.get("version", "")
         action = request["action"]
-        if action in ("status", "guard"):
+        if action.startswith("slots_"):
+            from livingworld.infrastructure.save_slots import run_request as slots_request
+
+            result = slots_request(request)
+        elif action in ("status", "guard"):
             result = guard(app_data, include_snapshots=action == "status")
         elif action == "backup":
             if (
@@ -1112,7 +1159,8 @@ def run_request(request_path: Path) -> None:
             result = adopt_legacy_update(app_data, Path(request["recovery"]))
         else:
             raise SaveSafetyError("save_action_invalid")
-        print(json.dumps({"ok": True, "result": result}, ensure_ascii=False))
+        # Private tool stdout is JSON, including on legacy Windows pipe encodings.
+        print(json.dumps({"ok": True, "result": result}, ensure_ascii=True))
     except Exception as error:
         code = str(error) if isinstance(error, SaveSafetyError) else "save_operation_failed"
         print(json.dumps({"ok": False, "error": code}))

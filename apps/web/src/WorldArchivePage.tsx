@@ -249,14 +249,15 @@ export function WorldArchivePage({ client, initialWorldId, onEnter, displayTime,
   };
   return <div className="product-shell archive-shell">
     <header className="archive-header"><Brand /><span className="archive-header-label">世界档案库</span><DesktopUpdateEntry />
-      <button type="button" className="text-action" onClick={() => setBackupsOpen(value => !value)}>数据与备份</button>
+      <button type="button" className="text-action" aria-expanded={backupsOpen} disabled={busy || entering || coverBusy} onClick={() => { if (backupsOpen || leaveEditor()) setBackupsOpen(value => !value); }}>存档</button>
       <button type="button" className="text-action" disabled={busy || entering || coverBusy} onClick={() => {
         if (modelOpen) { leaveEditor(); return; }
         if (leaveEditor()) { clearSelection(); setModelOpen(true); }
       }}>模型设置</button>
     </header>
     <main className="archive-main">
-      {backupsOpen && <div className="archive-editor"><SaveBackupPanel /></div>}
+      {backupsOpen && <div className="archive-editor"><button type="button" className="text-action" onClick={() => setBackupsOpen(false)}>← 返回书架</button><SaveBackupPanel /></div>}
+      <div hidden={backupsOpen}>
       <div className="archive-intro"><div><h1 ref={heading} tabIndex={-1}>世界书架</h1><p>挑一本书，走进其中的世界。</p></div>
         <div className="archive-intro-actions"><button type="button" className="secondary-button" disabled={loading || busy || entering || coverBusy} onClick={() => { if (leaveEditor()) setExampleOpen(current => !current); }}>体验校园示例</button>
           <button type="button" className="text-action" disabled={loading || busy || entering || coverBusy} onClick={refreshArchive}>{loading ? "正在读取…" : "刷新书架"}</button></div>
@@ -288,7 +289,7 @@ export function WorldArchivePage({ client, initialWorldId, onEnter, displayTime,
             <div className="archive-preview-actions"><button type="button" className="primary-button" disabled={busy || entering || coverBusy || loading} onClick={() => void enter()}>{entering ? "正在读取世界…" : "进入世界 →"}</button>
               <button type="button" className="secondary-button" disabled={busy || entering || coverBusy} onClick={() => { const shouldOpen = !managing; if (!leaveEditor()) return; setManaging(shouldOpen); }}>管理 / 导入世界书</button>
               <button type="button" className="text-action" disabled={busy || entering || coverBusy} onClick={() => { const opening = !coverOpen; if (leaveEditor()) setCoverOpen(opening); }}>编辑封面</button></div>
-            <div className="archive-delete-action"><button type="button" className="text-action destructive-action" disabled={busy || entering || coverBusy || loading || !!deletionCleanup} onClick={() => void deleteWorld(world)}>删除世界</button><small>永久清除本书内的世界和全部存档</small></div>
+            <div className="archive-delete-action"><button type="button" className="text-action destructive-action" disabled={busy || entering || coverBusy || loading || !!deletionCleanup} onClick={() => void deleteWorld(world)}>删除世界</button><small>永久清除本书当前的世界内容</small></div>
           </> : <p className="archive-description">这个世界暂时无法读取，请刷新书架。</p>}
         </section>}
       </div>
@@ -296,6 +297,7 @@ export function WorldArchivePage({ client, initialWorldId, onEnter, displayTime,
       {managing && world && previewReady && <div className="archive-editor"><div className="archive-editor-heading"><h2 ref={managerHeading} tabIndex={-1}>「{world.name}」的世界书</h2><button type="button" className="text-action" disabled={busy || entering || coverBusy} onClick={() => { if (leaveEditor()) heading.current?.focus(); }}>收起管理</button></div>
         <WorldImports key={`archive:${world.world_id}`} client={client} worldId={world.world_id} onlyKind="lorebook" onDirtyChange={setContentDirty} onSaved={contentChanged} />
       </div>}
+      </div>
     </main>
     <footer className="archive-footer"><span>世界档案 · 我的书架</span><span>世界书架只预览，后台功能遵循已有设置</span></footer>
   </div>;

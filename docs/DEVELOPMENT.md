@@ -6,13 +6,13 @@
 
 ## 当前本地工作与交接
 
-当前源码Desktop0.1.81、迁移head0053_example_world_setup、配音revision8。本轮已获完整Windows发布授权，沿原公钥及频道，仅build-only，见[发行记录](maintenance/2026-10-16-release-0181.md)。校园与CI实现及历史检查见[记录](maintenance/2026-10-16-ci-campus-example.md)。模型环境、配音／视觉权重、录音、存档、个人配置和私钥不随源码或安装包提供；日常不打包规则继续适用。
+当前源码Desktop0.1.81、迁移head0053_example_world_setup、配音revision8。公开0.1.81固定3b53933，见[发行记录](maintenance/2026-10-16-release-0181.md)。2026-10-17可靠性及五位置存档源码按用户本次授权同步，见[同步记录](maintenance/2026-10-17-source-sync.md)；尚未发行新安装包；存档本轮授权实现、必要编译及独立临时合成数据检查，见[存档记录](maintenance/2026-10-17-save-slots.md)。前轮具体隔离检查见[可靠性记录](maintenance/2026-10-17-reliability-hardening.md)，不复用为本轮打包、安装器或已安装应用运行许可。模型环境、权重、录音、存档、个人配置和私钥不随源码或安装包提供；日常不打包规则继续适用。
 
-本机图片服务自动启动及两个本地模型不限次数的原实现见[记录](maintenance/2026-10-13-local-model-startup-and-limits.md)。免费云端最新版与付费配音API仍待确认。历史单次隔离检查和配音对照许可不复用；用户已明确批准当前CI的具体隔离检查，范围与结果见[本轮记录](maintenance/2026-10-16-ci-campus-example.md)。可选配音环境仍独立，不向Core加入Torch或CUDA。
+本机图片服务自动启动及两个本地模型不限次数的原实现见[记录](maintenance/2026-10-13-local-model-startup-and-limits.md)。免费云端最新版与付费配音API仍待确认。历史单次隔离检查和配音对照许可不复用；当前允许的启动／更新错误／配音及表情失败检查不包含外部模型。可选配音环境仍独立，不向Core加入Torch或CUDA。
 
 ## 本地环境
 
-本轮公开体验入口为GitHub的完整0.1.81安装包，状态以对应Release为准；本机直接入口和产物哈希以[交接](../HANDOFF.md#2-仓库运行和版本现场)为准。源码开发入口为apps/desktop/src-tauri/target/debug/dreamtalk-desktop.exe，本轮已仅编译更新此EXE。原书架与开屏呈现保持；工程构建不启动已安装程序，也不操作真实存档。
+公开体验入口为GitHub的完整0.1.81安装包；本机直接入口和产物哈希以[交接](../HANDOFF.md#2-仓库运行和版本现场)为准。工程端用npm run build:desktop:local将内置界面EXE交付到artifacts/local-desktop，Cargo目标隔离在artifacts/local-desktop-build；桌面快捷方式不再指向共享target/debug。该源码入口沿用仓库开发依赖，不是供其他电脑使用的便携包。build:desktop仍供CI和原生检查使用。原书架与开屏保持；构建不启动程序，也不操作真实存档。
 
 需要 Node.js、Python / uv、Rust，以及 Windows 桌面构建工具。版本和依赖以根目录 package.json、pyproject.toml、锁文件、桌面 Cargo.toml 和构建脚本为准。源码下载不含个人密钥、存档或发布签名私钥。
 
@@ -27,6 +27,8 @@ npm run lint
 ## 验证边界
 
 当前用户负责运行测试与最终验收。未获得具体授权，不添加或运行自动化测试、浏览器 / 桌面 smoke、真实模型探测或用户存档迁移。保留已有测试和 CI，不弱化断言。允许源码、差异、格式、lint、类型、文档链接与必要编译核对。
+
+前轮可靠性与本轮存档各有独立的具体隔离检查例外，不能合并为后续许可。存档定向入口为scripts/check-save-slots.py，隔离LOCALAPPDATA／APPDATA、缓存及临时目录后运行对应Python与界面组件检查。获准运行原生桌面检查时用npm run test:desktop，由scripts/test-desktop.py同样隔离子进程环境；不能仅使用临时数据库而继承真实备份位置。数据库目录必须位于源码树之外。桌面smoke同样隔离这些位置；没有对应运行许可时不要执行上述命令。
 
 自2026-10-13起，除用户明确授权的GitHub发布外，不在本机打包；便携包、安装器、ZIP和 --build-only 打包均适用，日常开发完成不自动打包。必要编译或获准发布打包前检查脚本是否包含测试；发布便携版与安装器仍使用明确的 --build-only。编译／打包通过不代表聊天、升级、模型兼容或数据迁移已通过用户验收，发布打包例外也不授权运行测试或模型。
 
@@ -53,7 +55,7 @@ python scripts/check-release-privacy.py --ref HEAD
 python scripts/check-release-privacy.py --package artifacts/portable/本次构建名/dreamtalk
 ```
 
-第一个命令检查当前可提交文件，第二个检查真正准备发布的提交，第三个检查实际载荷目录。只报告文件名和问题类型，不输出密钥或正文；它检查已知路径、格式与密钥特征，不能替代人工核对任意格式的数据。历史提交和已发布附件不会因本地文档修改而被清除。用户本次已追加批准0.1.81完整发行与build-only打包；不重写Git历史或改变旧版本附件，不把发布授权扩大到真实存档或外部模型运行。
+第一个命令检查当前可提交文件，第二个检查真正准备发布的提交，第三个检查实际载荷目录。只报告文件名和问题类型，不输出密钥或正文；它检查已知路径、格式与密钥特征，不能替代人工核对任意格式的数据。历史提交和已发布附件不会因本地文档修改而被清除。0.1.81的历史发行授权已完成，不复用于当前未发布差异；不重写Git历史或改变旧版本附件。
 
 ## CI与发布构建
 

@@ -6,8 +6,8 @@ import "./startup.css";
 
 const MIN_VISIBLE_MS = 1500;
 
-export function StartupSplash({ ready, failed, onRetry, onComplete }: {
-  ready: boolean; failed: boolean; onRetry: () => void; onComplete: () => void;
+export function StartupSplash({ ready, failed, failureCode = "", onRetry, onComplete }: {
+  ready: boolean; failed: boolean; failureCode?: string; onRetry: () => void; onComplete: () => void;
 }) {
   const surface = useRef<HTMLDivElement>(null);
   const vortex = useRef<VortexController | null>(null);
@@ -117,6 +117,9 @@ export function StartupSplash({ ready, failed, onRetry, onComplete }: {
     <div className="startup-signature"><img src="/brand/dreamtalk-logo.png" alt="dreamtalk" width="230" height="198" draggable="false" /><span aria-hidden="true">dreamtalk</span><p>在万千星轨中，与你相遇。</p></div>
     <div className="startup-horizon" aria-hidden="true"><span />每一个世界，都有回响<span /></div>
     <p className="sr-only" role="status" aria-live="polite">{failed ? "启动暂时没有完成。" : ready ? "世界书架已准备好。" : "正在打开世界书架。"}</p>
-    {failed && <div className="startup-recovery" role="alert"><p>暂时无法打开世界书架</p><span>你的存档会保留。点击重试，程序会检查并恢复启动。</span><button type="button" onClick={onRetry}>重试启动</button></div>}
+    {failed && <div className="startup-recovery" role="alert"><p>{failureCode === "core_storage_version_unsupported" ? "当前版本无法读取这份存档" : "暂时无法打开世界书架"}</p><span>{failureCode === "core_storage_version_unsupported"
+      ? "请点击右下角检查更新。存档会保留，无需恢复旧备份。"
+      : failureCode === "core_storage_check_failed" ? "存档检查未通过，原文件会保留。请先检查应用更新。"
+        : "你的存档会保留。点击重试，程序会检查并恢复启动。"}</span><button type="button" onClick={onRetry}>重试启动</button></div>}
   </section>;
 }

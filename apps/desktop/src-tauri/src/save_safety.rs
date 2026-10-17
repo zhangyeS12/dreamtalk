@@ -1,8 +1,8 @@
 //! Whole-save operations use the Core's offline SQLite tool, never a model.
 use crate::{supervisor::LaunchConfig, updater, SharedSupervisor};
 use serde_json::{json, Value};
-use std::time::Duration;
-use tauri::{Manager, State};
+use std::{process::Stdio, time::Duration};
+use tauri::State;
 use tauri_plugin_dialog::DialogExt;
 use tokio::{io::AsyncWriteExt, process::Command};
 use uuid::Uuid;
@@ -49,7 +49,37 @@ pub(crate) async fn tool(
         .kill_on_drop(true);
     #[cfg(windows)]
     command.creation_flags(0x08000000);
-    let output = tokio::time::timeout(Duration::from_secs(240), command.output()).await;
+    command.stdout(Stdio::piped()).stderr(Stdio::piped());
+    let child = command.spawn().map_err(|_| "save_tool_unavailable")?;
+    let owned_pid = child.id();
+    let mut completion = Box::pin(child.wait_with_output());
+    let output = tokio::time::timeout(Duration::from_secs(240), &mut completion).await;
+    if output.is_err() {
+        // Keep the owned helper alive until its entire tree is stopped; a late
+        // restore must never race a newly restarted Core after a timeout.
+        #[cfg(windows)]
+        if let (Some(pid), Some(system_root)) = (owned_pid, std::env::var_os("SystemRoot")) {
+            let mut terminate =
+                Command::new(std::path::PathBuf::from(system_root).join("System32/taskkill.exe"));
+            let _ = terminate
+                .args(["/PID", &pid.to_string(), "/T", "/F"])
+                .creation_flags(0x08000000)
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()
+                .await;
+        }
+        #[cfg(not(windows))]
+        let _ = owned_pid;
+        let stopped = tokio::time::timeout(Duration::from_secs(10), completion).await;
+        let _ = tokio::fs::remove_file(&path).await;
+        return Err(if stopped.is_ok() {
+            "save_operation_timeout"
+        } else {
+            "save_tool_shutdown_unconfirmed"
+        }
+        .into());
+    }
     let _ = tokio::fs::remove_file(&path).await;
     let output = output
         .map_err(|_| "save_operation_timeout")?
@@ -518,20 +548,5 @@ pub async fn clear_saved_data(
 }
 
 pub fn start_automatic(app: tauri::AppHandle, config: LaunchConfig, supervisor: SharedSupervisor) {
-    tauri::async_runtime::spawn(async move {
-        tokio::time::sleep(Duration::from_secs(30)).await;
-        let mut interval = tokio::time::interval(Duration::from_secs(30 * 60));
-        loop {
-            interval.tick().await;
-            let updates = app.state::<updater::UpdateState>();
-            let Ok(_operation) = updates.operation.try_lock() else {
-                continue;
-            };
-            let outcome = backup(&app, &config, &supervisor, "automatic", true).await;
-            if let Err(error) = outcome {
-                use tauri::Emitter;
-                let _ = app.emit("save-backup-warning", error);
-            }
-        }
-    });
+    crate::save_slots::start(app, config, supervisor);
 }

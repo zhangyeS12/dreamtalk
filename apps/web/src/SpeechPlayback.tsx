@@ -264,6 +264,7 @@ export function SpeechProvider({ client, worldId, children }: { client: CoreClie
         } catch (failure) {
           if (generation === epoch.current && mounted.current) {
             let detail = failure instanceof Error && failure.message.startsWith("audio_playback_") ? playbackFailure(failure.message) : failure instanceof Error && failure.message === "speech_poll_timeout" ? errors.speech_timeout : speechFailure(failure);
+            if (item.mode === "regenerate") detail += " 原配音未替换。";
             if (item.mode === "preview") {
               detail = detail.replaceAll("播放配音", "试听新配音").replaceAll("消息旁", "消息下方");
               setReviewFeedback(current => ({ ...current, [item.message]: detail }));

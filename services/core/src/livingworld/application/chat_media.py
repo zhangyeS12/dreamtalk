@@ -247,7 +247,12 @@ class ChatMediaService:
 
     def _failed(self, event):
         if self.logger is not None:
-            self.logger.emit("chat_media", event, level="WARNING")
+            try:
+                self.logger.emit("chat_media", event, level="WARNING")
+            except OSError:
+                # Optional media must not turn a diagnostic disk failure into
+                # a failed text reply. Keep the original operation's outcome.
+                pass
 
     def reply_format_failure(self, reason):
         if reason in MEDIA_FORMAT_FAILURE_REASONS:

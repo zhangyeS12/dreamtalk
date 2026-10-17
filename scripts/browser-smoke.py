@@ -13,6 +13,7 @@ from pathlib import Path
 
 from playwright.sync_api import expect, sync_playwright
 from runtime_support import terminate_owned_tree
+from startup_browser_checks import check_startup_recovery
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--channel", default="msedge" if os.name == "nt" else None)
@@ -290,6 +291,7 @@ try:
         page.get_by_role("heading", name="计划触发器", exact=True).wait_for(timeout=20_000)
         if errors:
             raise RuntimeError("browser_page_error")
+        check_startup_recovery(browser, "http://127.0.0.1:5173/")
         browser.close()
     output, _ = process.communicate("stop\n", timeout=12)
     events = [json.loads(line)["event"] for line in output.splitlines() if line.startswith("{")]
@@ -303,6 +305,7 @@ try:
                 "product": "visible",
                 "inspector": "visible",
                 "profile_persistence_and_world_isolation": "passed",
+                "startup_failure_update_hit_testing_and_network_recovery": "passed",
                 "page_errors": 0,
             }
         )

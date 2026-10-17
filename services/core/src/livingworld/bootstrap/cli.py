@@ -104,6 +104,9 @@ async def run(
     )
 
     if desktop:
+        from livingworld.infrastructure.save_slots import recover as recover_save_slot
+
+        await asyncio.to_thread(recover_save_slot, config.data_dir.parent)
         if config.retry_update_verification:
             # Only the private desktop bootstrap may request this explicit retry.
             # Keep the failure marker until the host verifies the actual store.

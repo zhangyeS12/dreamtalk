@@ -1,0 +1,30 @@
+.save-slots { padding: 24px; color: var(--ink); }
+.save-slots-heading { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 16px; }
+.save-slots h2 { margin: 0 0 8px; font-size: 1.25rem; text-wrap: balance; }
+.save-slots-heading p { margin: 0; max-width: 66ch; color: var(--muted); font-size: .875rem; line-height: 1.6; }
+.save-slots-tools, .save-slot-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 16px; }
+.save-slots-warning { margin: 22px 0 14px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 8px; line-height: 1.7; font-size: .875rem; font-weight: 550; }
+.save-slots-directory { margin: 12px 0 20px; overflow-wrap: anywhere; color: var(--muted); font-size: .8125rem; }
+.save-slots-list { padding: 0; margin: 20px 0; list-style: none; }
+.save-slot { position: relative; padding: 22px 0 42px; border-top: 1px solid var(--line); }
+.save-slot:last-child { border-bottom: 1px solid var(--line); }
+.save-slot-body { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin-bottom: 14px; }
+.save-slot-kind { flex: 0 0 90px; font-size: .8125rem; font-weight: 600; color: var(--muted); }
+.save-slot-name { flex: 1 1 220px; max-width: 440px; }
+.save-slot-name input, .save-slot-path input { width: 100%; min-width: 0; padding: 9px 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); }
+.save-slot-name input { font-weight: 600; }
+.save-slot-body p { margin: 0; font-size: .8125rem; color: var(--muted); }
+.save-slot-body .save-slot-hint { flex-basis: 100%; line-height: 1.6; }
+.save-slot-time { position: absolute; right: 0; bottom: 14px; color: var(--muted); font-size: .75rem; font-variant-numeric: tabular-nums; }
+.save-slot-path { margin-top: 14px; font-size: .8125rem; }
+.save-slot-path summary { cursor: pointer; color: var(--muted); margin-bottom: 10px; }
+.save-slot-path .field { margin: 8px 0; max-width: 680px; }
+.save-slots button:disabled { opacity: .5; cursor: default; }
+.save-slots input::placeholder { color: var(--muted); opacity: 1; }
+@media (max-width: 640px) {
+  .save-slots { padding: 18px 14px; }
+  .save-slot-body { align-items: flex-start; }
+  .save-slot-kind { flex-basis: 100%; }
+  .save-slot-name { max-width: none; }
+  .save-slot-actions { align-items: flex-start; gap: 10px 12px; }
+}

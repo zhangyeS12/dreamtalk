@@ -3,6 +3,7 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { Brand } from "./Brand";
 import { DesktopUpdateEntry, useDesktopSaveBlock } from "./DesktopUpdates";
+import { SaveSlotsPanel } from "./SaveSlots";
 
 type Counts = { worlds: number; chat_messages: number; characters: number };
 type Snapshot = { id: string; created_at: string; reason: string; version: string; counts: Counts | null; bytes: number };
@@ -36,14 +37,16 @@ function message(error: unknown) {
 }
 
 export function SaveBackupPanel({ recovery = false, initial }: { recovery?: boolean; initial?: Safety }) {
+  return recovery ? <SaveRecoveryPanel recovery initial={initial} /> : <SaveSlotsPanel />;
+}
+
+function SaveRecoveryPanel({ recovery = false, initial }: { recovery?: boolean; initial?: Safety }) {
   const [status, setStatus] = useState<Safety | null>(initial ?? null);
   const [selected, setSelected] = useState(initial?.snapshots[0]?.id ?? "");
   const [confirmed, setConfirmed] = useState(false);
   const [working, setWorking] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const [erasure, setErasure] = useState("");
-  const [eraseBackups, setEraseBackups] = useState(false);
   const blockReason = useDesktopSaveBlock();
   const refresh = useCallback(async () => {
     const value = await invoke<Safety>("save_safety_status");
@@ -63,10 +66,7 @@ export function SaveBackupPanel({ recovery = false, initial }: { recovery?: bool
     try {
       const result = await invoke<{ retention_warning?: string } | null>(command, args);
       if (result !== null && success) setNotice(result.retention_warning ? `${success} 部分旧快照未能整理，现有副本仍保留。` : success);
-      if (command === "clear_saved_data") {
-        for (const store of [window.localStorage, window.sessionStorage]) for (const key of Object.keys(store)) if (key.startsWith("livingworld.") || key.startsWith("dreamtalk.")) store.removeItem(key);
-      }
-      if (["retry_save_start", "restore_save_backup", "resume_restored_save", "clear_saved_data"].includes(command)) window.location.reload();
+      if (["retry_save_start", "restore_save_backup", "resume_restored_save"].includes(command)) window.location.reload();
       else await refresh();
     } catch (error) { setError(message(error)); }
     finally { setWorking(false); }
@@ -82,10 +82,11 @@ export function SaveBackupPanel({ recovery = false, initial }: { recovery?: bool
     {notice && <p className="inline-hint" role="status">{notice}</p>}
     {status?.backup_problem && <p className="inline-hint" role="status">暂时无法读取备份目录，请检查备份位置或磁盘连接。当前存档读取不受此提示影响。</p>}
     {recovery && <DesktopUpdateEntry />}
-    {status?.credential_cleanup_incomplete && <p className="app-alert" role="alert">仍有已登记的旧API密钥等待清理。清理记录已保留；可在下方再次确认清空，以重试移除。</p>}
-    {status && <><p className="inline-hint">{status.current ? `当前存档：${status.current.counts.worlds} 个世界、${status.current.counts.chat_messages} 条消息。` : "当前存档暂未读取。"}有变化时每 {status.automatic_minutes} 分钟自动备份，保留近7日每日备份和最近3次升级前备份。</p>{status.backup_directory && <p className="inline-hint">备份位置：{status.backup_directory}</p>}</>}
+    {status?.credential_cleanup_incomplete && <p className="app-alert" role="alert">旧API配置的清理尚未完成，当前数据和处理记录仍保留。请先检查修复更新。</p>}
+    {status && <><p className="inline-hint">{status.current ? `当前存档：${status.current.counts.worlds} 个世界、${status.current.counts.chat_messages} 条消息。` : "当前存档暂未读取。"}下方保留独立的更新保护和历史恢复材料，不占用五个存档位置。</p>{status.backup_directory && <p className="inline-hint">恢复材料位置：{status.backup_directory}</p>}</>}
     {status?.can_retry_start && <div className="setting-row"><p className="inline-hint">重新检查会使用当前存档完成启动与升级核对，保留原数据和备份。核对通过后进入书架；不会恢复或重发旧生成任务。</p><button type="button" className="secondary-button" disabled={working || Boolean(blockReason)} onClick={() => void act("retry_save_start")}>{working ? "正在重新检查…" : "重新检查并启动"}</button></div>}
     {status?.problem === "save_restored_review_required" && <button type="button" className="secondary-button" disabled={working || !status.current} onClick={() => void act("resume_restored_save")}>确认并继续使用</button>}
+    {recovery && <SaveSlotsPanel recovery />}
     <details className="handbook-fold" open={recovery ? undefined : true}><summary><strong>历史快照与恢复</strong><span>需要找回以前的内容时展开；恢复会替换当前存档</span></summary>
     <div className="setting-row"><button type="button" className="secondary-button" disabled={working || recovery || !status} onClick={() => void act("create_save_backup", {}, "完整存档备份已保存并通过校验。")}>立即备份</button>
       <button type="button" className="secondary-button" disabled={working} onClick={() => void act("configure_save_backup_location", {}, "备份位置已更新，旧备份仍保留。")}>选择备份位置</button>
@@ -99,7 +100,6 @@ export function SaveBackupPanel({ recovery = false, initial }: { recovery?: bool
     {status?.can_rollback && <div className="setting-row"><p className="inline-hint">本次升级尚未完成存档核对，可以恢复匹配的旧程序与升级前存档。当前文件会另行保留；应用将关闭并重新打开。</p><button type="button" className="secondary-button" disabled={working} onClick={() => void act("rollback_desktop_update")}>回退本次未完成的升级</button></div>}
     </details>
     <p className="inline-hint">备份只在本机保存，不调用模型或自动上传。导出文件包含私人聊天和素材，请妥善保存；换机后需要重新填写API密钥。</p>
-    {!recovery && <details className="handbook-fold"><summary><strong>清空本机数据</strong><span>独立确认，卸载程序不会执行</span></summary><p className="app-alert">这会清空全部世界、聊天、素材、身份和配置，移除已登记的API密钥。无正文的费用、预算和调用回执保留，避免重置额度。你另存的导出文件不在清理范围内。</p><label className="field"><span>输入“删除全部数据”确认</span><input value={erasure} disabled={working} onChange={event => setErasure(event.target.value)} autoComplete="off" /></label><label className="field"><span><input type="checkbox" checked={eraseBackups} disabled={working} onChange={event => setEraseBackups(event.target.checked)} />同时删除该应用已登记的独立备份，无法通过应用恢复</span></label><button type="button" className="text-action destructive-action" disabled={working || erasure !== "删除全部数据" || Boolean(blockReason)} onClick={() => void act("clear_saved_data", { confirmation: erasure, includeBackups: eraseBackups })}>确认清空</button></details>}
   </section>;
 }
 

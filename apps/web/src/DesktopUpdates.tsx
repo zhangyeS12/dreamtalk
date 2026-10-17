@@ -14,7 +14,10 @@ const Context = createContext<Updates | null>(null);
 function updateError(error: unknown): string {
   const code = String(error);
   const errors: Record<string, string> = {
-    update_check_failed: "暂时无法读取更新。请检查网络，稍后重试。更新频道尚未发布时也会显示此提示。",
+    update_check_failed: "未能完成更新检查，暂时无法确认是否有新版本。当前程序和存档保持不变，可稍后重新检查。",
+    update_connection_failed: "暂时无法连接更新服务。程序已尝试重新连接，当前版本和存档保持不变。可稍后重新检查。",
+    update_channel_unavailable: "更新服务暂时不可用，未能确认最新版本。当前程序保持不变，可稍后重新检查。",
+    update_manifest_invalid: "更新信息未通过校验，已停止本次检查。当前程序和存档保持不变。",
     update_check_timeout: "检查更新超时，请稍后重试。",
     update_signing_not_configured: "此构建尚未配置发布签名，请使用正式安装包。",
     update_download_or_signature_failed: "下载或签名校验失败，当前版本保持可用。请重新检查更新。",
@@ -47,6 +50,7 @@ export function DesktopUpdateProvider({ ready, children }: { ready: boolean; chi
   const prompted = useRef(false);
   const acknowledged = useRef(false);
   const checkingLock = useRef(false);
+  const manualCheckRequested = useRef(false);
   const installLock = useRef(false);
   const live = useRef(true);
   const readyRef = useRef(ready);
@@ -63,21 +67,22 @@ export function DesktopUpdateProvider({ ready, children }: { ready: boolean; chi
     return result;
   }, []);
   const check = useCallback(async (manual: boolean) => {
-    if (!enabled || checkingLock.current || installLock.current) return;
+    if (!enabled || installLock.current) return;
+    if (manual) { manualCheckRequested.current = true; setError(""); setMessage(""); }
+    if (checkingLock.current) return;
     checkingLock.current = true;
     setChecking(true);
-    if (manual) { setError(""); setMessage(""); }
     try {
       await invoke<Release | null>("check_desktop_update");
       const result = await refreshStatus();
       if (!live.current) return;
-      if (manual && !result.release) setMessage("你正在使用最新版本。");
+      if (manualCheckRequested.current && !result.release) setMessage("你正在使用最新版本。");
       const visible = await getCurrentWindow().isVisible();
       if (result.release && readyRef.current && visible && !result.suppress_popup && !prompted.current) {
         if (await invoke<boolean>("claim_desktop_update_popup")) { prompted.current = true; setOpen(true); }
       }
-    } catch (failure) { if (live.current && manual) setError(updateError(failure)); }
-    finally { checkingLock.current = false; if (live.current) setChecking(false); }
+    } catch (failure) { if (live.current && manualCheckRequested.current) setError(updateError(failure)); }
+    finally { checkingLock.current = false; manualCheckRequested.current = false; if (live.current) setChecking(false); }
   }, [enabled, refreshStatus]);
   useEffect(() => {
     live.current = true;

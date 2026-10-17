@@ -13,6 +13,12 @@ binary = root / "apps/desktop/src-tauri/target/debug/dreamtalk-desktop.exe"
 environment = os.environ.copy()
 environment["LW_DESKTOP_SMOKE"] = "1"
 with tempfile.TemporaryDirectory(prefix="dreamtalk-desktop-smoke-") as app_data:
+    environment["LOCALAPPDATA"] = str(Path(app_data) / "local")
+    environment["APPDATA"] = str(Path(app_data) / "roaming")
+    environment["HF_HOME"] = str(Path(app_data) / "hf")
+    environment["XDG_CACHE_HOME"] = str(Path(app_data) / "cache")
+    environment["HF_HUB_OFFLINE"] = "1"
+    environment["TRANSFORMERS_OFFLINE"] = "1"
     environment["LW_DESKTOP_SMOKE_APP_DATA"] = app_data
     environment["WEBVIEW2_USER_DATA_FOLDER"] = str(Path(app_data) / "webview")
     try:

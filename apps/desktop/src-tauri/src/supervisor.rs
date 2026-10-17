@@ -38,8 +38,9 @@ pub fn contract() -> ApiContract {
 async fn forward_core_output<R: AsyncBufRead + Unpin>(
     reader: R,
     credential_sync: oneshot::Sender<()>,
-) {
+) -> Option<&'static str> {
     let mut credential_sync = Some(credential_sync);
+    let mut startup_failure = None;
     let mut lines = reader.lines();
     while let Ok(Some(line)) = lines.next_line().await {
         // Forward only the exact structured schema, never arbitrary child output.
@@ -49,6 +50,20 @@ async fn forward_core_output<R: AsyncBufRead + Unpin>(
                     ["timestamp", "level", "component", "event", "trace_id"].contains(&key.as_str())
                 })
             }) {
+                if record["component"] == "migration" && record["level"] == "ERROR" {
+                    startup_failure = match record["event"].as_str() {
+                        Some("alembic_revision_unsupported") => {
+                            Some("core_storage_version_unsupported")
+                        }
+                        Some(
+                            "alembic_schema_state_mismatch"
+                            | "alembic_cursor_corrupt"
+                            | "migration_schema_objects_mismatch"
+                            | "alembic_schema_shape_mismatch",
+                        ) => Some("core_storage_check_failed"),
+                        _ => startup_failure,
+                    };
+                }
                 if record["component"] == "host_control"
                     && record["event"] == "credential_sync_complete_accepted"
                 {
@@ -60,6 +75,7 @@ async fn forward_core_output<R: AsyncBufRead + Unpin>(
             }
         }
     }
+    startup_failure
 }
 
 pub fn event(name: &'static str) {
@@ -153,6 +169,7 @@ pub struct CoreSupervisor {
     runtime_dir: Option<PathBuf>,
     http: reqwest::Client,
     credentials: Arc<dyn CredentialStore>,
+    last_start_error: Option<&'static str>,
 }
 
 impl Default for CoreSupervisor {
@@ -179,6 +196,7 @@ impl CoreSupervisor {
                 .build()
                 .expect("http_client_invalid"),
             credentials,
+            last_start_error: None,
         }
     }
 
@@ -187,6 +205,10 @@ impl CoreSupervisor {
             return Err("core_not_ready");
         }
         self.session.clone().ok_or("core_session_missing")
+    }
+
+    pub fn startup_error(&self) -> &'static str {
+        self.last_start_error.unwrap_or("core_failed")
     }
 
     pub(crate) fn safely_stopped(&mut self) -> bool {
@@ -208,11 +230,13 @@ impl CoreSupervisor {
             return Err("core_already_started");
         }
         self.state = SupervisorState::Starting;
+        self.last_start_error = None;
         event("supervisor_starting");
         let result = self
             .spawn_and_discover(config, retry_update_verification)
             .await;
         if let Err(reason) = result {
+            self.last_start_error = Some(reason);
             // Every reason here is a fixed internal code, never an OS error or secret.
             event(reason);
             let _ = self.stop(Duration::ZERO).await;
@@ -308,7 +332,7 @@ impl CoreSupervisor {
         let pid = child.id().ok_or("core_pid_missing")?;
         let stdout = child.stdout.take().ok_or("core_stdout_missing")?;
         let (credential_sync_tx, credential_sync_rx) = oneshot::channel();
-        tokio::spawn(forward_core_output(
+        let forwarding = tokio::spawn(forward_core_output(
             BufReader::new(stdout),
             credential_sync_tx,
         ));
@@ -323,7 +347,12 @@ impl CoreSupervisor {
                 .map_err(|_| "core_wait_failed")?
                 .is_some()
             {
-                return Err("core_exited_before_ready");
+                // Read the owned child's remaining structured output before
+                // reporting its exit. Only fixed migration codes are retained.
+                return Err(match tokio::time::timeout_at(deadline, forwarding).await {
+                    Ok(Ok(Some(reason))) => reason,
+                    _ => "core_exited_before_ready",
+                });
             }
             if let Ok(bytes) = tokio::fs::read(runtime.join("ready.json")).await {
                 let ready: ReadyRecord =
@@ -642,6 +671,22 @@ impl CoreSupervisor {
 #[cfg(test)]
 mod sync_ack_tests {
     use super::*;
+
+    #[test]
+    fn startup_failure_is_preserved_only_for_allowlisted_migration_records() {
+        tauri::async_runtime::block_on(async {
+            let (sender, _) = oneshot::channel();
+            let valid = b"{\"component\":\"migration\",\"event\":\"alembic_revision_unsupported\",\"level\":\"ERROR\"}\n";
+            assert_eq!(
+                forward_core_output(&valid[..], sender).await,
+                Some("core_storage_version_unsupported")
+            );
+            let (sender, _) = oneshot::channel();
+            let rejected = b"{\"component\":\"other\",\"event\":\"alembic_revision_unsupported\",\"level\":\"ERROR\"}\n\
+                {\"component\":\"migration\",\"event\":\"alembic_revision_unsupported\",\"level\":\"ERROR\",\"secret\":\"synthetic\"}\n";
+            assert_eq!(forward_core_output(&rejected[..], sender).await, None);
+        });
+    }
 
     #[test]
     fn pipe_delivery_waits_for_core_credential_application_acknowledgement() {

@@ -26,6 +26,12 @@ it("enters Failed on discovery failure", async () => {
   await screen.findByText("启动暂时没有完成。");
 });
 
+it("explains an unsupported save without exposing arbitrary host errors", async () => {
+  render(<App discover={async () => { throw "core_storage_version_unsupported"; }} />);
+  await screen.findByText("当前版本无法读取这份存档");
+  expect(screen.getByText("请点击右下角检查更新。存档会保留，无需恢复旧备份。")).toBeTruthy();
+});
+
 it("enters Failed on authentication failure", async () => {
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("{}", { status: 401 })));
   render(<App discover={async () => ({ endpoint: "http://127.0.0.1:49154", token: "wrong", generation: "generation" })} />);

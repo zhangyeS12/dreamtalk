@@ -70,7 +70,8 @@
 .field textarea { resize: vertical; line-height: 1.65; }
 .field input::placeholder, .field textarea::placeholder { color: var(--muted); opacity: 1; }
 .save-backups .field input[type="checkbox"] { width: 18px; height: 18px; min-height: 0; margin-inline-end: 8px; padding: 0; vertical-align: middle; accent-color: var(--green); }
-.startup-update-entry { position: fixed; right: 24px; bottom: 24px; z-index: 20; }
+/* Startup failures must keep the updater above the full-screen splash (60). */
+.startup-update-entry { position: fixed; right: 24px; bottom: 24px; z-index: 70; }
 .startup-update-entry .desktop-update-entry { color: #edf0f8; background: #151b28; border: 1px solid #758199; border-radius: 6px; }
 .startup-update-entry .desktop-update-entry.has-update { color: #604913; background: #f2e5bb; border-color: #b7a572; }
 .profile-form { display: flex; flex-direction: column; gap: 18px; }

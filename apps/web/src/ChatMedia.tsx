@@ -73,6 +73,7 @@ export function StickerPicker({ client, worldId, selected, onSelect, disabled }:
   const [items, setItems] = useState<StickerEntry[]>([]);
   const [page, setPage] = useState(0), [more, setMore] = useState(false);
   const [query, setQuery] = useState("");
+  const [reload, setReload] = useState(0);
   const [loading, setLoading] = useState(false), [error, setError] = useState("");
   useEffect(() => {
     if (!open) return;
@@ -80,8 +81,16 @@ export function StickerPicker({ client, worldId, selected, onSelect, disabled }:
     setLoading(true); setError("");
     const timer = window.setTimeout(() => { void client.stickers(worldId, "personal", undefined, page * 100, query, controller.signal).then(result => { if (active) { setItems(result.items); setMore(result.has_more); } }).catch(failure => { if (active) setError(failureText(failure)); }).finally(() => { if (active) setLoading(false); }); }, 200);
     return () => { active = false; controller.abort(); window.clearTimeout(timer); };
-  }, [client, worldId, open, query, page]);
-  return <div className="sticker-picker"><div className="profile-actions"><button type="button" className="text-action" aria-expanded={open} disabled={disabled} onClick={() => setOpen(value => !value)}>表情</button>{selected && <><span>已选：{selected.description || "表情"}</span><button type="button" className="text-action" disabled={disabled} onClick={() => onSelect(null)}>取消选择</button></>}</div>{open && <div className="sticker-picker-body"><label className="field"><span>我的表情</span><input type="search" value={query} onChange={event => { setQuery(event.target.value); setPage(0); }} placeholder="搜索说明…" /></label>{error && <p className="app-alert" role="alert">{error}</p>}{loading ? <p role="status">正在读取…</p> : items.length ? <div className="sticker-grid">{items.map(entry => <button className="sticker-choice" type="button" key={entry.entry_id} disabled={disabled} aria-label={`选择${entry.description || "表情"}`} onClick={() => { onSelect(entry); setOpen(false); }}><MediaImage client={client} worldId={worldId} asset={entry.asset_id} description={entry.description} /><span>{entry.description || "未填写说明"}</span></button>)}</div> : <p className="inline-hint">没有找到表情。在通讯录的“表情包”中导入我的表情。</p>}<div className="profile-actions"><button type="button" disabled={page === 0 || loading} onClick={() => setPage(value => value - 1)}>上一页</button><span>第{page + 1}页</span><button type="button" disabled={!more || loading} onClick={() => setPage(value => value + 1)}>下一页</button></div></div>}</div>;
+  }, [client, worldId, open, query, page, reload]);
+  return <div className="sticker-picker">
+    <div className="profile-actions"><button type="button" className="text-action" aria-expanded={open} disabled={disabled} onClick={() => setOpen(value => !value)}>表情</button>{selected && <><span>已选：{selected.description || "表情"}</span><button type="button" className="text-action" disabled={disabled} onClick={() => onSelect(null)}>取消选择</button></>}</div>
+    {open && <div className="sticker-picker-body">
+      <label className="field"><span>我的表情</span><input type="search" value={query} onChange={event => { setQuery(event.target.value); setPage(0); }} placeholder="搜索说明…" /></label>
+      {error && <><p className="app-alert" role="alert">{error}</p><button type="button" disabled={disabled || loading} onClick={() => setReload(value => value + 1)}>重新读取表情</button></>}
+      {loading ? <p role="status">正在读取…</p> : items.length ? <div className="sticker-grid">{items.map(entry => <button className="sticker-choice" type="button" key={entry.entry_id} disabled={disabled} aria-label={`选择${entry.description || "表情"}`} onClick={() => { onSelect(entry); setOpen(false); }}><MediaImage client={client} worldId={worldId} asset={entry.asset_id} description={entry.description} /><span>{entry.description || "未填写说明"}</span></button>)}</div> : !error && <p className="inline-hint">没有找到表情。在通讯录的“表情包”中导入我的表情。</p>}
+      <div className="profile-actions"><button type="button" disabled={page === 0 || loading} onClick={() => setPage(value => value - 1)}>上一页</button><span>第{page + 1}页</span><button type="button" disabled={!more || loading} onClick={() => setPage(value => value + 1)}>下一页</button></div>
+    </div>}
+  </div>;
 }
 
 function StickerEditor({ client, worldId, entry, onChanged, disabled, onBusy, onDraft }: { client: CoreClient; worldId: string; entry: StickerEntry; onChanged: () => void; disabled: boolean; onBusy: (busy: boolean) => void; onDraft: (id: string, dirty: boolean) => void }) {

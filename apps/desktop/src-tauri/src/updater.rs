@@ -17,6 +17,129 @@ use uuid::Uuid;
 const IDENTITY: &str = "app.livingworld.desktop";
 const MAX_PACKAGE: u64 = 512 * 1024 * 1024;
 
+#[derive(Debug)]
+struct CheckFailure {
+    code: &'static str,
+    attempts: u8,
+}
+
+fn check_failure(error: &tauri_plugin_updater::Error) -> (&'static str, bool) {
+    use tauri_plugin_updater::Error;
+    match error {
+        Error::Reqwest(error) if error.is_timeout() => ("update_check_timeout", true),
+        Error::Reqwest(error) if error.is_connect() => ("update_connection_failed", true),
+        Error::Reqwest(error) if error.is_decode() => ("update_manifest_invalid", false),
+        Error::Network(_) => ("update_connection_failed", true),
+        Error::ReleaseNotFound => ("update_channel_unavailable", false),
+        Error::Serialization(_)
+        | Error::Semver(_)
+        | Error::UrlParse(_)
+        | Error::TargetNotFound(_)
+        | Error::TargetsNotFound(_) => ("update_manifest_invalid", false),
+        _ => ("update_check_failed", false),
+    }
+}
+
+async fn checked_update<F, Fut, T>(mut check: F) -> Result<(T, u8), CheckFailure>
+where
+    F: FnMut() -> Fut,
+    Fut: std::future::Future<Output = Result<T, tauri_plugin_updater::Error>>,
+{
+    // Metadata GET only: at most one retry, using the same endpoint, proxy and
+    // TLS policy. Both attempts share the original 30-second outer deadline.
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
+    for attempts in 1..=2 {
+        match tokio::time::timeout_at(deadline, check()).await {
+            Ok(Ok(value)) => return Ok((value, attempts)),
+            Ok(Err(error)) => {
+                let (code, retryable) = check_failure(&error);
+                if retryable && attempts == 1 && tokio::time::Instant::now() < deadline {
+                    continue;
+                }
+                return Err(CheckFailure { code, attempts });
+            }
+            Err(_) => {
+                return Err(CheckFailure {
+                    code: "update_check_timeout",
+                    attempts,
+                })
+            }
+        }
+    }
+    unreachable!()
+}
+
+fn record_check(directory: &Path, version: &str, result: &'static str, attempts: u8) {
+    // One bounded metadata receipt. No URLs, exception text, credentials or save contents.
+    let _ = atomic_json(
+        &directory.join("updates/check-result.json"),
+        &serde_json::json!({
+            "current_version": version, "result": result, "attempts": attempts,
+            "time_unix_ms": std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis()
+        }),
+    );
+}
+
+#[cfg(test)]
+mod check_tests {
+    use super::*;
+
+    #[test]
+    fn transient_connection_can_recover_but_invalid_feed_is_not_retried() {
+        tauri::async_runtime::block_on(async {
+            let mut calls = 0;
+            let result = checked_update(|| {
+                calls += 1;
+                std::future::ready(if calls == 1 {
+                    Err(tauri_plugin_updater::Error::Network(
+                        "synthetic detail must not be logged".into(),
+                    ))
+                } else {
+                    Ok(None::<()>)
+                })
+            })
+            .await
+            .unwrap();
+            assert_eq!(calls, 2);
+            assert_eq!(result, (None, 2));
+            let mut calls = 0;
+            let result = checked_update(|| {
+                calls += 1;
+                std::future::ready(Err::<(), _>(tauri_plugin_updater::Error::TargetNotFound(
+                    "synthetic".into(),
+                )))
+            })
+            .await
+            .unwrap_err();
+            assert_eq!(calls, 1);
+            assert_eq!(result.code, "update_manifest_invalid");
+        });
+    }
+
+    #[test]
+    fn failed_connections_remain_errors_and_receipt_contains_no_exception_text() {
+        tauri::async_runtime::block_on(async {
+            let result = checked_update(|| {
+                std::future::ready(Err::<(), _>(tauri_plugin_updater::Error::Network(
+                    "synthetic-private-exception".into(),
+                )))
+            })
+            .await
+            .unwrap_err();
+            assert_eq!(result.attempts, 2);
+            assert_eq!(result.code, "update_connection_failed");
+            let directory = tempfile::tempdir().unwrap();
+            record_check(directory.path(), "0.1.81", result.code, result.attempts);
+            let text = std::fs::read_to_string(directory.path().join("updates/check-result.json"))
+                .unwrap();
+            assert!(!text.contains("synthetic-private-exception"));
+            let record: serde_json::Value = serde_json::from_str(&text).unwrap();
+            assert_eq!(record["result"], "update_connection_failed");
+            assert_eq!(record["attempts"], 2);
+        });
+    }
+}
+
 #[derive(Clone, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct Preferences {
@@ -180,10 +303,14 @@ pub async fn check_desktop_update(
         .restart_after_install(false)
         .build()
         .map_err(|_| "update_configuration_invalid")?;
-    let result = tokio::time::timeout(Duration::from_secs(30), updater.check())
-        .await
-        .map_err(|_| "update_check_timeout")?
-        .map_err(|_| "update_check_failed")?;
+    let version = app.package_info().version.to_string();
+    let (result, attempts) = match checked_update(|| updater.check()).await {
+        Ok(value) => value,
+        Err(failure) => {
+            record_check(&state.directory, &version, failure.code, failure.attempts);
+            return Err(failure.code.to_owned());
+        }
+    };
     if let Some(update) = result.as_ref() {
         // Keep downloads within this project's GitHub release namespace. The plugin
         // enforces HTTPS and verifies the installer against the embedded public key.
@@ -198,10 +325,26 @@ pub async fn check_desktop_update(
             || !url.username().is_empty()
             || url.password().is_some()
         {
+            record_check(
+                &state.directory,
+                &version,
+                "update_download_source_invalid",
+                attempts,
+            );
             return Err("update_download_source_invalid".to_owned());
         }
     }
     let info = result.as_ref().map(release);
+    record_check(
+        &state.directory,
+        &version,
+        if info.is_some() {
+            "available"
+        } else {
+            "current"
+        },
+        attempts,
+    );
     *state.pending.lock().await = result;
     Ok(info)
 }
