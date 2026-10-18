@@ -19,7 +19,7 @@
 
 | 主题 | 证据入口 |
 | --- | --- |
-| 最新发行、CI、签名与频道 | [发行记录](../maintenance/2026-10-18-release-0182.md)；更早发行按maintenance中的release文件日期检索 |
+| 发行、CI、签名与频道 | 当前入口见[状态清单](../PROJECT_STATUS.md)，历次发行按maintenance中的release文件日期检索 |
 | 五位置存档 | [批准方案](../proposals/2026-10-17-save-slots.md)、[实现与隔离检查](../maintenance/2026-10-17-save-slots.md) |
 | 启动／更新／媒体可靠性 | [可靠性修复](../maintenance/2026-10-17-reliability-hardening.md)、[本机入口修复](../maintenance/2026-10-16-local-entry-repair.md)、[旧版启动更新](../maintenance/2026-10-16-old-version-startup-update.md) |
 | 存档升级与新用户问题 | [新用户审查](../maintenance/2026-10-15-new-user-audit.md)、[修复](../maintenance/2026-10-15-new-user-fixes.md)、[启动结构修复](../maintenance/2026-10-15-save-start-fix.md)、[快照更新](../maintenance/2026-10-15-save-snapshot-update.md) |
