@@ -19,6 +19,7 @@ from livingworld.application.llm import (
     TextContent,
 )
 from livingworld.application.shared_activities import SharedActivityKernel
+from livingworld.application.update_maintenance import UpdateMaintenance
 from livingworld.application.world_model_config import model_for_world
 from livingworld.domain.actions import (
     ActionKind,
@@ -240,7 +241,7 @@ class DirectorService:
     ):
         self.store, self.players, self.configured = store, players, configured
         self.actions, self.wake_signal = actions, wake_signal
-        self.maintenance = None
+        self.maintenance: UpdateMaintenance | None = None
         self._jobs = {}
         self._worlds = set()
         self._credentials_ready = credentials_ready

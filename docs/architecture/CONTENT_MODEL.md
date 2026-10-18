@@ -11,7 +11,7 @@ LoreCollection != WorldContent != Runtime World != WorldTruth
 Prompt-like imported text == untrusted authored data
 ```
 
-实现：[models.py](../../services/core/src/livingworld/domain/content/models.py)、[identifiers.py](../../services/core/src/livingworld/domain/content/identifiers.py)、[serialization.py](../../services/core/src/livingworld/domain/content/serialization.py)。导入边界见 [IMPORT_MODEL.md](IMPORT_MODEL.md)，Stage 2 不变量见 [STAGE_2_ACCEPTANCE.md](STAGE_2_ACCEPTANCE.md)。
+实现：[models.py](../../services/core/src/livingworld/domain/content/models.py)、[identifiers.py](../../services/core/src/livingworld/domain/content/identifiers.py)、[serialization.py](../../services/core/src/livingworld/domain/content/serialization.py)。导入边界见 [IMPORT_MODEL.md](IMPORT_MODEL.md)，Stage 2 不变量见 [STAGE_2_ACCEPTANCE.md](https://github.com/zhangyeS12/dreamtalk/blob/485b512a5dac8da7077326d1cd3daea5eb3304c8/docs/architecture/STAGE_2_ACCEPTANCE.md)。
 
 ## 1. 内容与运行实例
 

@@ -4,12 +4,21 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException
-from pydantic import BaseModel, ConfigDict, Field
 
-from livingworld.application.chat_conversations import (
+from livingworld.adapters.http import contracts as wire
+from livingworld.adapters.http.contracts import (
     ChatConversation,
-    ChatConversationService,
+    CreateGroupRequest,
     GroupChatConversation,
+)
+from livingworld.application.chat_conversations import (
+    ChatConversation as ChatConversationValue,
+)
+from livingworld.application.chat_conversations import (
+    ChatConversationService,
+)
+from livingworld.application.chat_conversations import (
+    GroupChatConversation as GroupChatConversationValue,
 )
 from livingworld.application.errors import (
     ChatTurnUnavailableError,
@@ -20,7 +29,7 @@ from livingworld.domain.contracts import API_PROTOCOL, RequestId
 from livingworld.domain.identifiers import WorldId
 
 
-def _view(conversation: ChatConversation) -> dict:
+def _view(conversation: ChatConversationValue) -> ChatConversation:
     return {
         "conversation_id": str(conversation.conversation_id.value),
         "player_id": str(conversation.player_id.value),
@@ -32,13 +41,7 @@ def _view(conversation: ChatConversation) -> dict:
     }
 
 
-class CreateGroupRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    import_ids: list[UUID] = Field(min_length=2)
-
-
-def _group_view(group: GroupChatConversation) -> dict:
+def _group_view(group: GroupChatConversationValue) -> GroupChatConversation:
     return {
         "conversation_id": str(group.conversation_id.value),
         "player_id": str(group.player_id.value),
@@ -62,11 +65,11 @@ def chat_conversation_router(service: ChatConversationService, authorize) -> API
     )
 
     @router.get("")
-    async def list_conversations(world_id: UUID) -> list[dict]:
+    async def list_conversations(world_id: UUID) -> list[ChatConversation]:
         return [_view(item) for item in await service.list_for_world(WorldId(world_id))]
 
     @router.get("/groups")
-    async def list_groups(world_id: UUID) -> list[dict]:
+    async def list_groups(world_id: UUID) -> list[GroupChatConversation]:
         groups = await service.list_groups_for_world(WorldId(world_id))
         return [_group_view(item) for item in groups]
 
@@ -75,7 +78,7 @@ def chat_conversation_router(service: ChatConversationService, authorize) -> API
         world_id: UUID,
         body: CreateGroupRequest,
         x_request_id: Annotated[str | None, Header()] = None,
-    ) -> dict:
+    ) -> GroupChatConversation:
         try:
             request_id = RequestId.parse(x_request_id or "")
         except ValueError:
@@ -93,7 +96,7 @@ def chat_conversation_router(service: ChatConversationService, authorize) -> API
         except ValueError:
             raise HTTPException(422, "group_members_invalid") from None
 
-    @router.delete("/groups/{conversation_id}")
+    @router.delete("/groups/{conversation_id}", response_model=wire.DissolveGroupResult)
     async def dissolve_group(world_id: UUID, conversation_id: UUID) -> dict:
         try:
             await service.dissolve_group(WorldId(world_id), conversation_id)
@@ -104,7 +107,7 @@ def chat_conversation_router(service: ChatConversationService, authorize) -> API
             raise HTTPException(409, str(error)) from None
 
     @router.post("/direct/{import_id}")
-    async def open_direct(world_id: UUID, import_id: UUID) -> dict:
+    async def open_direct(world_id: UUID, import_id: UUID) -> ChatConversation:
         try:
             return _view(await service.open_direct(WorldId(world_id), import_id))
         except EntityNotFoundError as error:

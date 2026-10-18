@@ -1,6 +1,6 @@
 # C-003D：Knowledge Access Isolation
 
-状态：已实现 Python 内部端口、SQL 权限隔离与显式获知事务，C-003E2 增加独立主观信念形成入口；C-007A 在独立 owner-bound Memory 能力中复用同一 permission-first 原则。没有业务 HTTP API、RAG、Director、Agent 或自动推理。
+本文维护owner绑定、SQL权限隔离与显式获知事务。它是业务API、检索及角色输入共同依赖的底层契约；当前功能与验收见[状态清单](../PROJECT_STATUS.md)。
 
 ## 1. 能力绑定与信任边界
 
@@ -103,6 +103,6 @@ principal authorization
 
 [知识集成测试](../../tests/application/test_knowledge_access.py) 保留秘密、私有 canary、SQL WHERE/绑定参数、拒绝 ID 无领域 materialization、角色转述、玩家知识、跨世界与回滚回归。旧隔离/映射测试的私有与矛盾 fixture 不作为 Stage 2 最终验收创建路径。
 
-[信念形成测试](../../tests/application/test_belief_formation.py) 覆盖无源/无 Truth 根、矛盾命题、false belief 转述、optional 私有 source/provenance、完整 metadata 回放、无 Observation、重启幂等与故障回滚。[Stage 2 验收](STAGE_2_ACCEPTANCE.md) 只用受支持命令创建秘密及矛盾信念，证明 replay 前后 owner/world 隔离。[Observation 迁移测试](../../tests/persistence/test_observation_migration.py) 验证旧语义与确定性；[映射测试](../../tests/persistence/test_mapping.py) 验证同坐标不同 occurrence 与 typed ID round-trip。
+[信念形成测试](../../tests/application/test_belief_formation.py) 覆盖无源/无 Truth 根、矛盾命题、false belief 转述、optional 私有 source/provenance、完整 metadata 回放、无 Observation、重启幂等与故障回滚。[Stage 2 验收](https://github.com/zhangyeS12/dreamtalk/blob/485b512a5dac8da7077326d1cd3daea5eb3304c8/docs/architecture/STAGE_2_ACCEPTANCE.md) 只用受支持命令创建秘密及矛盾信念，证明 replay 前后 owner/world 隔离。[Observation 迁移测试](../../tests/persistence/test_observation_migration.py) 验证旧语义与确定性；[映射测试](../../tests/persistence/test_mapping.py) 验证同坐标不同 occurrence 与 typed ID round-trip。
 
 [Memory application tests](../../tests/application/test_episodic_memory.py) 证明 same-owner evidence、另一 Character/Player/cross-world rejection、SQL owner predicate、无 global list、私有 payload 不进入 receipt/log、stable pagination、replay/content isolation 与事务回滚。

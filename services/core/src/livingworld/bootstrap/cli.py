@@ -11,7 +11,8 @@ from uuid import uuid4
 
 import uvicorn
 
-from livingworld.adapters.http.app import create_app
+from livingworld.adapters.http.app import create_product_app
+from livingworld.adapters.http.services import HttpServices
 from livingworld.application.chat_context import DirectChatContextBuilder
 from livingworld.application.chat_conversations import ChatConversationService
 from livingworld.application.chat_messages import ChatMessageService
@@ -431,7 +432,7 @@ async def run(
             # a BufferedReader lock held by the control thread.
             control_loop = asyncio.get_running_loop()
             control_listener = HostControlListener(
-                sys.stdin.buffer.raw,
+                getattr(sys.stdin.buffer, "raw", sys.stdin.buffer),
                 llm_session.credentials,
                 logger,
                 on_credentials_changed=lambda: control_loop.call_soon_threadsafe(
@@ -487,63 +488,65 @@ async def run(
             activity_setup,
         )
 
-        app = create_app(
-            status,
-            shutdown,
-            session,
-            None,
-            logger,
-            config.allowed_origins,
-            developer_inspector,
-            world_settings,
-            player_event_feed,
-            database.local_profile_store(),
-            world_content,
-            onboarding,
-            chat_conversations,
-            chat_messages,
-            chat_reply,
-            group_chat_reply,
-            content_builder,
-            database.content_repository(),
-            maintenance=maintenance,
-            example_worlds=example_worlds,
-            storage_metadata=(lambda: metadata(config.data_dir)) if desktop else None,
-            storage_observer=(lambda: observe_world_change(config.data_dir.parent))
-            if desktop
-            else None,
-            speech=speech,
-            chat_media=chat_media,
-            world_deletion=WorldDeletionService(
-                database.world_deletion_store(),
-                simulation_runtime,
-                maintenance,
-                world_content,
-                database.content_asset_store(),
-                long_memory.store.ranker,
-            ),
-            chat_recall=earlier_chat_recall,
-            conversation_memory=conversation_memory,
-            long_chat_memory=long_memory,
-            director=director,
-            world_story=world_story,
-            offline_contact=offline_contact,
-            proactive_contact=proactive_contact,
-            character_activity_setup=activity_setup,
-            content_exports=WorldContentExportService(
-                world_content.store, database.content_repository(), JsonContentExporter()
-            ),
-            chat_exports=ChatExportService(
-                database.chat_export_store(), player_event_feed, wall_clock
-            ),
-            world_covers=WorldCoverService(
-                database.world_cover_repository(),
-                database.content_asset_store(),
-                PillowCoverImageProcessor(),
-            ),
-            factions=database.faction_store(),
-            world_locations=WorldLocationsService(
-                database.local_location_directory(), command_handler
+        app = create_product_app(
+            status=status,
+            shutdown=shutdown,
+            session_token=session,
+            initialize=None,
+            logger=logger,
+            allowed_origins=config.allowed_origins,
+            services=HttpServices(
+                developer_inspector=developer_inspector,
+                world_settings=world_settings,
+                player_event_feed=player_event_feed,
+                local_profiles=database.local_profile_store(),
+                world_content=world_content,
+                player_onboarding=onboarding,
+                chat_conversations=chat_conversations,
+                chat_messages=chat_messages,
+                chat_reply=chat_reply,
+                group_chat_reply=group_chat_reply,
+                content_builder=content_builder,
+                content_repository=database.content_repository(),
+                chat_recall=earlier_chat_recall,
+                conversation_memory=conversation_memory,
+                long_chat_memory=long_memory,
+                director=director,
+                world_story=world_story,
+                offline_contact=offline_contact,
+                proactive_contact=proactive_contact,
+                world_locations=WorldLocationsService(
+                    database.local_location_directory(), command_handler
+                ),
+                character_activity_setup=activity_setup,
+                world_covers=WorldCoverService(
+                    database.world_cover_repository(),
+                    database.content_asset_store(),
+                    PillowCoverImageProcessor(),
+                ),
+                factions=database.faction_store(),
+                maintenance=maintenance,
+                world_deletion=WorldDeletionService(
+                    database.world_deletion_store(),
+                    simulation_runtime,
+                    maintenance,
+                    world_content,
+                    database.content_asset_store(),
+                    long_memory.store.ranker,
+                ),
+                content_exports=WorldContentExportService(
+                    world_content.store, database.content_repository(), JsonContentExporter()
+                ),
+                chat_exports=ChatExportService(
+                    database.chat_export_store(), player_event_feed, wall_clock
+                ),
+                speech=speech,
+                chat_media=chat_media,
+                storage_metadata=(lambda: metadata(config.data_dir)) if desktop else None,
+                storage_observer=(lambda: observe_world_change(config.data_dir.parent))
+                if desktop
+                else None,
+                example_worlds=example_worlds,
             ),
         )
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

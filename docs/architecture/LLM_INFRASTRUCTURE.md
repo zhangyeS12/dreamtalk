@@ -1,6 +1,6 @@
 # Provider-Neutral LLM Infrastructure — C-005A through C-005E5
 
-状态：Stage 4 已完成并冻结。C-005A 至 E4 建立 provider-neutral contracts、四种协议 adapter、structured/streaming、retry、accounting/pricing、budget 与 routing；C-005E5 增加严格非秘密配置、OS-native desktop credential host、私有 sidecar control protocol 和单一生产 composition root。验证使用离线 fake/MockTransport；没有真实付费 API。见 [生产组装](LLM_PRODUCTION_COMPOSITION.md)、[Stage 4 验收](STAGE4_ACCEPTANCE.md) 和 [LLM_ACCOUNTING.md](LLM_ACCOUNTING.md)。
+状态：Stage 4 已完成并冻结。C-005A 至 E4 建立 provider-neutral contracts、四种协议 adapter、structured/streaming、retry、accounting/pricing、budget 与 routing；C-005E5 增加严格非秘密配置、OS-native desktop credential host、私有 sidecar control protocol 和单一生产 composition root。验证使用离线 fake/MockTransport；没有真实付费 API。见 [生产组装](LLM_PRODUCTION_COMPOSITION.md)、[Stage 4 验收](https://github.com/zhangyeS12/dreamtalk/blob/485b512a5dac8da7077326d1cd3daea5eb3304c8/docs/architecture/STAGE4_ACCEPTANCE.md) 和 [LLM_ACCOUNTING.md](LLM_ACCOUNTING.md)。
 
 生产代码仍保持 `application → ModelGateway port ← infrastructure adapters`。SecretRef 可以序列化，SecretValue 只能在 adapter request 时短暂 reveal。Tauri/keyring 不进入 application；Python session provider 不知道 OS credential API。启动不发 provider 请求，缺 key 不阻止 Core boot。
 
@@ -93,7 +93,7 @@ Provider configuration 不进入 CharacterDefinition、WorldContent、WorldEvent
 
 Fake 可返回 JSON-looking text，却不 validate schema/instance、tokenize、执行 stop/sampling、模拟真实 output budget、翻译 roles 或证明任何 provider capability。Catalog 是显式 immutable snapshot，未知 identity 没有猜测。它们服务未来 application tests，无 API key、network、SDK、world/content repository、pricing 或 usage persistence。
 
-测试：[test_llm_contracts.py](../../tests/application/test_llm_contracts.py)、[architecture tests](../../tests/core/test_architecture.py)。覆盖请求 round-trip/immutability、raw vs validated claim、unknown usage、refusal vs failures、fake determinism/stream order/cancellation、explicit capabilities、credential repr/JSON/metadata/config isolation，以及实际 `.lwcontent` bytes/member canary 排除。完整 Stage 0–3 Python 回归继续执行。
+测试：[test_llm_contracts.py](../../tests/application/test_llm_contracts.py)、[architecture tests](../../tests/core/test_architecture.py)。覆盖请求 round-trip/immutability、raw vs validated claim、unknown usage、refusal vs failures、fake determinism/stream order/cancellation、explicit capabilities、credential repr/JSON/metadata/config isolation，以及实际 `.lwcontent` bytes/member canary 排除。此处为历史检查范围，不构成当前运行授权。
 
 ## 7. C-005B Chat Completions adapter
 
@@ -101,7 +101,7 @@ Fake 可返回 JSON-looking text，却不 validate schema/instance、tokenize、
 
 校验最小 success schema，选择第一项 choice，实际 reported model 保留配置 ProviderId；InvocationId 仍为本地身份。Refusal 是成功响应；usage 缺失保持未知，advanced token counts 只取 allowlist，不计算 price。HTTP/credential errors 转为既有 LLMError，原 exceptions 不保留 context/cause，正常日志只记录固定 category 与本地 trace，finally 清除 wire Authorization。详见 [契约证据、映射与限制](OPENAI_COMPATIBLE_ADAPTER.md) 和 [离线测试](../../tests/core/test_openai_compatible.py)。
 
-本 adapter 未配置为 production default；真实网络兼容性未实测。后续章节记录已完成的 Anthropic、Gemini 与 OpenAI Responses native adapters；structured streaming、repair、production catalog、incomplete reconciliation、keychain、Prompt/context assembly、Director/Character Agent/Memory/AI Builder、tool execution 和最终 UI 均未实现。相关边界：[SYSTEM_OVERVIEW.md](SYSTEM_OVERVIEW.md)、[STAGE_2_ACCEPTANCE.md](STAGE_2_ACCEPTANCE.md)、[STAGE_3_ACCEPTANCE.md](STAGE_3_ACCEPTANCE.md)。
+本段描述最初协议子集；后续生产组装、凭据、上下文及应用UI已经接入，详见[生产组装](LLM_PRODUCTION_COMPOSITION.md)和[状态清单](../PROJECT_STATUS.md)。历史协议验收入口：[SYSTEM_OVERVIEW.md](SYSTEM_OVERVIEW.md)、[STAGE_2_ACCEPTANCE.md](https://github.com/zhangyeS12/dreamtalk/blob/485b512a5dac8da7077326d1cd3daea5eb3304c8/docs/architecture/STAGE_2_ACCEPTANCE.md)、[STAGE_3_ACCEPTANCE.md](https://github.com/zhangyeS12/dreamtalk/blob/485b512a5dac8da7077326d1cd3daea5eb3304c8/docs/architecture/STAGE_3_ACCEPTANCE.md)。
 
 ## 8. C-005C1 结构化结果与安全失败计量
 

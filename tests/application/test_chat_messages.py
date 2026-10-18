@@ -9,6 +9,7 @@ import pytest
 from card_fixtures import card_document, json_bytes
 from fastapi.testclient import TestClient
 from livingworld.adapters.http.app import create_app
+from livingworld.adapters.http.services import HttpServices
 from livingworld.application.chat_context import recent_chat_transcript
 from livingworld.application.chat_conversations import ChatConversationService
 from livingworld.application.chat_messages import ChatMessageService
@@ -205,12 +206,12 @@ def test_transcript_pages_are_bounded_stable_and_owner_scoped(tmp_path, total):
 
     conversation, first = asyncio.run(setup())
     app = create_app(
-        RuntimeStatus("test", "generation"),
-        ShutdownRequests(),
-        "secret",
-        lambda: None,
-        StructuredLogger(io.StringIO()),
-        chat_messages=messages,
+        status=RuntimeStatus("test", "generation"),
+        shutdown=ShutdownRequests(),
+        session_token="secret",
+        initialize=lambda: None,
+        logger=StructuredLogger(io.StringIO()),
+        services=HttpServices(chat_messages=messages),
     )
     path = (
         f"/api/v1/worlds/{world.value}/conversations/"
@@ -320,12 +321,12 @@ def test_chat_transcript_http_is_authenticated_and_bound_to_selected_world_playe
 
     asyncio.run(setup())
     app = create_app(
-        RuntimeStatus("test", "generation"),
-        ShutdownRequests(),
-        "secret",
-        lambda: None,
-        StructuredLogger(io.StringIO()),
-        chat_messages=messages,
+        status=RuntimeStatus("test", "generation"),
+        shutdown=ShutdownRequests(),
+        session_token="secret",
+        initialize=lambda: None,
+        logger=StructuredLogger(io.StringIO()),
+        services=HttpServices(chat_messages=messages),
     )
     path = f"/api/v1/worlds/{worlds[0].value}/conversations/{uuid4()}/messages"
     try:

@@ -5,6 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
+from livingworld.adapters.http import contracts as wire
 from livingworld.application.errors import EntityNotFoundError
 from livingworld.application.proactive_contact import ProactiveContactError
 from livingworld.domain.identifiers import WorldId
@@ -40,11 +41,11 @@ def proactive_contact_router(service, authorize, logger):
             logger.emit("proactive_contact", "proactive_request_failed", level="ERROR")
             raise HTTPException(503, "proactive_request_failed") from None
 
-    @router.get("/proactive-contact")
+    @router.get("/proactive-contact", response_model=wire.ProactiveContactStatus)
     async def snapshot(world_id: UUID):
         return await execute(service.snapshot(WorldId(world_id)))
 
-    @router.post("/proactive-contact")
+    @router.post("/proactive-contact", response_model=wire.ProactiveContactStatus)
     async def configure(world_id: UUID, body: SettingsRequest):
         return await execute(
             service.configure(
@@ -57,11 +58,13 @@ def proactive_contact_router(service, authorize, logger):
             )
         )
 
-    @router.get("/chat-unread")
+    @router.get("/chat-unread", response_model=wire.ChatUnreadStatus)
     async def unread(world_id: UUID):
         return await execute(service.unread_snapshot(WorldId(world_id)))
 
-    @router.post("/conversations/{conversation_id}/read")
+    @router.post(
+        "/conversations/{conversation_id}/read", response_model=wire.MarkConversationReadResult
+    )
     async def mark_read(world_id: UUID, conversation_id: UUID, body: ReadRequest):
         await execute(service.mark_read(WorldId(world_id), conversation_id, body.position))
         return {"read": True}

@@ -73,13 +73,13 @@ export function ProactiveContactSettings({ client, worldId, playerId }: { client
     : status?.state === "attention" ? "本次任务已停止，不会自动重试模型调用。"
     : status?.enabled ? "已开启；达到间隔并有真实活动理由时才联系。" : "尚未开启在线主动联系。";
   return <section className="settings-section" aria-label="在线主动联系">
-    <h3>角色主动联系</h3><p>角色休息或自由活动时，可以主动邀你加入。两名角色必须正在一起参加同一次共同休闲，才能在同一个群聊共同邀请；同阵营直接成员无需为确认相识而先碰面。</p>
+    <h3>角色主动联系</h3><p>角色休息或自由活动时，可以主动邀你加入。两名角色正在一起参加同一次共同休闲时，会各发一条共同邀请：有仅含这两位角色的群聊就发到群里，否则分别私聊你。同阵营直接成员无需为确认相识而先碰面。</p>
     <p role="status">{label}</p>
     <div className="inline-form"><label>最短联系间隔（世界分钟）<input type="number" min={15} max={1440} step={1} value={minutes} disabled={busy} onChange={event => setMinutes(event.target.value)} /></label>
       <button type="button" className="secondary-button" disabled={!status || busy || (!status.enabled && !status.model_available)} onClick={() => status?.enabled ? void save(false) : status?.consented ? void save(true) : setConsenting(true)}>{status?.enabled ? "关闭主动联系" : "开启主动联系"}</button>
       <button type="button" className="secondary-button" disabled={!status?.enabled || busy || Number(minutes) === status.interval_minutes} onClick={() => void save(true)}>保存间隔</button>
       <button type="button" className="text-action" disabled={busy} onClick={() => { setError(""); setNotice(""); setRefresh(n => n + 1); }}>刷新状态</button></div>
-    <p className="inline-hint">默认360分钟，首次开启从此刻计时，每批日常最多一次。忙碌、暂停或没有有效活动时跳过。打开会话只清除红点；只有在收到联系的会话里发送回复才解除等待。在线与离线联系共用这个限制。</p>
+    <p className="inline-hint">默认360分钟，首次开启从此刻计时，每批日常最多一次。忙碌、暂停或没有有效活动时跳过。打开会话只清除红点；在收到联系的会话里发送回复才解除等待。同一次共同邀请若分成两条私聊，回复其中任意一条即可；另一条的未读红点仍需打开查看。在线与离线联系共用这个限制。</p>
     <p className="inline-hint">依赖已开启的世界自动活动；多人还需开启相遇和共同休闲。程序完全退出或电脑关机后停止。后台生成使用当前模型、遵守已有任务预算，可能产生费用。</p>
     {consenting && <div className="inline-notice"><p>同意此世界使用已确认角色资料、实际活动与公共背景生成主动消息。私聊正文、摘要、私人记忆和隐藏世界书不发送。双人消息一次生成，同一件事共同发出邀请。</p><button type="button" className="primary-button" disabled={busy || !status || !status.model_available} onClick={() => void save(true, true)}>同意后台模型用量并开启</button><button type="button" className="text-action" disabled={busy} onClick={() => setConsenting(false)}>暂不开启</button></div>}
     {status?.error && <p className="app-alert">{status.error === "proactive_context_changed" ? "活动、资料或玩家状态已变化，迟到邀请已取消。" : status.error === "proactive_input_unavailable" ? "角色活动或获准资料暂不可用，请检查后关闭再开启。" : "本次生成未完成或被中断，可能已有用量。检查后可关闭再开启；不会重放原任务。"}</p>}

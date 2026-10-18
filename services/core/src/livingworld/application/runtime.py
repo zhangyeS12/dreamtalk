@@ -1,8 +1,12 @@
 import asyncio
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import Literal, cast
 
 from livingworld.domain.contracts import RequestId
+from livingworld.domain.identifiers import WorldId
+
+type LLMRuntimeStatus = Literal["ready", "partially_configured", "unconfigured", "degraded"]
 
 _LLM_STATUS_VALUES = frozenset({"ready", "partially_configured", "unconfigured", "degraded"})
 
@@ -13,22 +17,26 @@ class RuntimeStatus:
     generation: str
     ready: bool = False
     llm_health: Callable[[], str] = lambda: "unconfigured"
-    world_llm_health: Callable | None = None
+    world_llm_health: Callable[[WorldId], str] | None = None
 
-    def llm_status_for_world(self, world) -> str:
+    def llm_status_for_world(self, world: WorldId) -> LLMRuntimeStatus:
         if self.world_llm_health is None:
             return self.llm_status
         try:
             value = self.world_llm_health(world)
-            return value if value in _LLM_STATUS_VALUES else "degraded"
+            return cast(LLMRuntimeStatus, value) if value in _LLM_STATUS_VALUES else "degraded"
         except Exception:
             return "degraded"
 
     @property
-    def llm_status(self) -> str:
+    def llm_status(self) -> LLMRuntimeStatus:
         try:
             value = self.llm_health()
-            return value if type(value) is str and value in _LLM_STATUS_VALUES else "degraded"
+            return (
+                cast(LLMRuntimeStatus, value)
+                if type(value) is str and value in _LLM_STATUS_VALUES
+                else "degraded"
+            )
         except Exception:
             return "degraded"
 

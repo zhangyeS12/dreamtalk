@@ -5,6 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
+from livingworld.adapters.http import contracts as wire
 from livingworld.application.director import DirectorError
 from livingworld.application.errors import EntityNotFoundError
 from livingworld.domain.identifiers import WorldId
@@ -46,11 +47,11 @@ def director_router(service, authorize):
         except Exception:
             raise HTTPException(500, "director_request_failed") from None
 
-    @router.get("")
+    @router.get("", response_model=wire.DirectorStatus)
     async def snapshot(world_id: UUID):
         return await execute(service.snapshot(WorldId(world_id)))
 
-    @router.post("")
+    @router.post("", response_model=wire.DirectorStatus)
     async def configure(world_id: UUID, body: DirectorSettingRequest):
         return await execute(
             service.configure(
@@ -62,7 +63,7 @@ def director_router(service, authorize):
             )
         )
 
-    @router.post("/encounters")
+    @router.post("/encounters", response_model=wire.DirectorStatus)
     async def configure_encounters(world_id: UUID, body: EncounterSettingRequest):
         return await execute(
             service.configure_encounters(
@@ -73,13 +74,13 @@ def director_router(service, authorize):
             )
         )
 
-    @router.post("/batch-size")
+    @router.post("/batch-size", response_model=wire.DirectorStatus)
     async def configure_batch_size(world_id: UUID, body: BatchSizeRequest):
         return await execute(
             service.configure_batch_size(WorldId(world_id), body.batch_size, body.expected_revision)
         )
 
-    @router.post("/shared-activities")
+    @router.post("/shared-activities", response_model=wire.DirectorStatus)
     async def configure_shared_activities(world_id: UUID, body: EncounterSettingRequest):
         return await execute(
             service.configure_shared_activities(

@@ -1,6 +1,6 @@
 # 知识模型
 
-状态：保留 Stage 0 语义；C-003A/B 建立领域与独立存储，C-003D 实现绑定主体的 SQL 隔离读取、内部 AssertWorldTruth/AcquireKnowledge 命令与独立 ObservationId；C-006B 复用 event-target Observation 记录事件发生时的感知访问。未实现自动传播、推理、Memory 或语义检索。访问与事务细节见 [KNOWLEDGE_ACCESS_MODEL.md](KNOWLEDGE_ACCESS_MODEL.md) 与 [SCENES_AND_PERCEPTION.md](SCENES_AND_PERCEPTION.md)。依据 [PRODUCT_SPEC.md](../product/PRODUCT_SPEC.md) 的 FR-03、FR-04、FR-05、FR-07、FR-17 至 FR-20、FR-22、FR-23，以及已接受的 [Architecture Review 001](ARCHITECTURE_REVIEW_001.md)。
+本文维护事实、信念与玩家知识的语义边界；访问实现见[权限模型](KNOWLEDGE_ACCESS_MODEL.md)和[场景感知](SCENES_AND_PERCEPTION.md)。当前记忆／检索等应用能力统一见[状态清单](../PROJECT_STATUS.md)，不从早期阶段说明推断缺失。
 
 ## 1. 三种不同的语义
 
@@ -70,7 +70,7 @@ FormCharacterBelief 是可信内部 application command，复用 KnowledgeAssert
 
 AcquireKnowledge 不变：既有源 → 显式渠道 Observation → 接收方派生 assertion，复制 source proposition。false belief 因而可被转述，但不会变成 Truth。Stage 2 的矛盾验收使用 AssertWorldTruth `door=locked` 与 FormCharacterBelief `Alice: door=unlocked`，重建前后各 reader 返回自身 scope/owner 的命题，不覆盖或自动调和。历史 stale Truth 不是这一路径的替代。
 
-仅明确 canonical 主观入口；自动 inference、误导检测、belief revision/reconciliation、Observation→Belief 推断和后续产品呈现均未实现。测试和完整验收见 [STAGE_2_ACCEPTANCE.md](STAGE_2_ACCEPTANCE.md)。
+仅明确 canonical 主观入口；自动 inference、误导检测、belief revision/reconciliation、Observation→Belief 推断和后续产品呈现均未实现。测试和完整验收见 [STAGE_2_ACCEPTANCE.md](https://github.com/zhangyeS12/dreamtalk/blob/485b512a5dac8da7077326d1cd3daea5eb3304c8/docs/architecture/STAGE_2_ACCEPTANCE.md)。
 
 1. 世界真实事实、Character Knowledge 和 Player Knowledge 分离（FR-04）。
 2. 后台发生但玩家不知道的事件不能直接展示给玩家（FR-05）。
@@ -105,19 +105,9 @@ AcquireKnowledge 不变：既有源 → 显式渠道 Observation → 接收方�
 - **Checkpoint / Timeline**：知识所属的时间线和恢复范围需要明确；不能在尚未确认继承规则时，假设另一条分支的知识已在当前分支成立。
 - **Developer Mode**：FR-23 要求决策 Trace；开发者查看能力如何与玩家身份和剧情信息隔离仍待确认，不能据此放宽普通玩家的展示限制。
 
-## 5. 待确认事项
+## 5. 产品边界入口
 
-| 问题 | 需要明确的边界 |
-| --- | --- |
-| 玩家何时算“知道” | 在场、收到、阅读、转述等情境如何处理 |
-| 传闻、谎言和误认 | 错误 CharacterBelief 已允许；获得、转述、来源及呈现政策仍待明确 |
-| 知识修正与遗忘 | 新证据、错误消息、记忆变化是否及如何影响已知内容 |
-| 初始知识 | World / Character Draft 与导入内容如何分配给各拥有者 |
-| 跨分支知识 | Checkpoint 恢复、Timeline Branch 和玩家产品外记忆的边界 |
-| 开发者权限 | Trace 可见范围是否会影响玩家视角与后续体验 |
-
-本任务不为以上问题作默认产品决定。
-
+获知、转述、修正与开发者权限沿[现行产品约定](../../PRODUCT.md)及对应模块契约；未冻结方向见[状态清单](../PROJECT_STATUS.md#尚未实现)。不另外维护早期开放问题表。
 
 ## 2026-09-29 亲历事件的只读展示与聊天输入
 

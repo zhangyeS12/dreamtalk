@@ -1,89 +1,56 @@
 # 系统概览
 
-状态（2026-10-07）：职责划分源于 Stage 0，后续用户批准见根 AGENTS；当前完成度以[状态清单](../PROJECT_STATUS.md)为准。Core 已接入业务 HTTP API、角色聊天、有限 Director 日常/相遇/共同休闲、卡/书研究生成及桌面 UI。自动 Observation→EpisodicMemory、完整离线演化、广泛剧情/关系/知识传播仍未实现。下文阶段记录不代表当前功能缺失；实现、构建与用户验收分开。
+本页说明当前冻结架构与阅读路径，不维护阶段进度。实现／验收看[状态清单](../PROJECT_STATUS.md)，现行用户行为看[PRODUCT](../../PRODUCT.md)，源码调用链看[HANDOFF](../../HANDOFF.md#3-各部分怎样实现从哪里接手)。早期阶段中的“未实现／待选择”不能作为当前待办。
 
-## 1. 系统目标与边界
-
-dreamtalk 的核心是持续存在、由事件推动的多角色世界（FR-01）。玩家对话是其中一种互动，而不是整个世界的全部状态。
-
-| 概念职责 | 负责什么 | 边界 |
-| --- | --- | --- |
-| 世界运行 | WorldClock、WorldState、地点、已发生事件与世界事实的概念一致性 | 玩家同时只能处于一个物理地点；事实不等于所有参与者都知道 |
-| Director | 时间、地点、世界事件、角色活动、相遇、关系变化、宏观剧情调度 | 改变世界，但不能直接替 Character Agent 编写最终对玩家台词 |
-| Character Agent | 自己拥有的记忆、人格表达和与玩家对话 | 可使用的知识与记忆不自动覆盖世界全部真实事实 |
-| 规划与候选事件处理 | 批量 World Plan、Planning Window、Event Reservoir；传统程序激活、延期或取消候选事件 | 候选尚未激活时不构成世界事实；禁止为每个普通小事件单独调用 LLM |
-| 知识与记忆 | 区分 WorldTruth、Character Knowledge、Player Knowledge，以及各自拥有的记忆 | 后台发生但玩家不知道的事件不能直接展示给玩家 |
-| 主动联系 | 按 Busy / Available 状态与统一目的组织 Outreach Episode | 同一理由最多主动发送一次；未回复不能持续催促 |
-| 内容构建与导入 | 带来源的 Character Draft / World Draft；Character Card V2/V3、PNG/JSON、Lorebook 导入需求 | 自动生成内容必须经过 Draft → Preview → Commit |
-| 时间线与恢复 | Checkpoint 与 Timeline Branch | 分支、恢复和跨分支信息语义仍待确认 |
-| 产品交互与调试 | 非技术用户体验、Director 风格面板、Advanced/Developer Settings、Developer Mode Trace | 普通玩家不能看到关系数值；开发者可见范围仍需进一步定义 |
-| LLM 使用治理 | Provider 与模型概念、Token / Latency / Cost 记录、预算与模型路由 | 成本治理不能绕过已冻结产品规则；具体机制尚未选择 |
-
-以上是职责划分，不表示这些职责一定要做成独立进程或服务。
-
-## 2. 规划、事实与表达
+## 组成与权威边界
 
 ```mermaid
-flowchart TD
-    D[Director 批量规划] --> P[World Plan / Planning Window]
-    P --> R[Event Reservoir 中的 CandidateEvent]
-    R --> E[传统程序评估]
-    E --> A[激活]
-    E --> H[延期或取消]
-    A --> W[WorldEvent / 世界事实变化]
-    W --> K[按拥有者区分知识]
-    K --> C[Character Agent 结合自身记忆与人格]
-    C --> M[角色最终对玩家台词]
-    K --> V[按 Player Knowledge 判定可展示内容]
+flowchart LR
+    UI[React / TypeScript / Vite] --> API[版本化 HTTP / WebSocket]
+    API --> APP[Python FastAPI / Application]
+    APP --> K[Domain / Deterministic Kernel]
+    K --> DB[SQLite WAL / FTS5 / Alembic]
+    APP --> G[ModelGateway / Adapter]
+    T[Tauri v2 Host] --> APP
+    T --> OS[OS集成 / 凭据 / 更新 / 子进程监督]
 ```
 
-图中箭头表示概念依赖，不表示每个事件都要调用 Agent、产生消息或立刻展示给玩家。Director 可安排联系目的和参与者，最终角色台词由 Character Agent 负责。
+| 组成 | 职责 | 必须守住的边界 |
+| --- | --- | --- |
+| UI／API client | 用户交互、草稿／预览、有限窗口与实时事件 | 不直接写数据库或把隐藏状态展示成全知消息 |
+| Tauri宿主 | Core监督、安全凭据管道、本地模型服务、文件／系统操作和更新 | 保持应用标识／存档位置；未知任务不重放、未知进程不关闭 |
+| Application／Director | 编排一次性任务、批量提案、预算／路由与获准输入 | 不直接把LLM结果变权威事实，失败不静默重复付费请求 |
+| Character Agent | 基于本人权限、人格与记忆表达 | 不接收全部世界秘密，不伪造活动／关系成果 |
+| Domain／Kernel | 验证命令、计划与revision，原子提交canonical事件／投影／回执 | CAS、幂等、知识来源和旧事件重放兼容 |
+| Persistence | SQLite WAL、FTS5、资产／来源索引、Alembic迁移 | Alembic为唯一迁移authority；聊天／内容与canonical事件不是同一种数据 |
 
-Planning Window 耗尽或大量计划失效才触发 Replan（FR-15）；上述条件的判定标准待确认。一次普通候选事件延期或取消不能被自行解释为逐事件调用 LLM 的授权。
+知识权限先于检索和提示组装；WorldTruth、CharacterBelief、PlayerKnowledge分开。Player只有一个位置；通信不等于现场观察。持久创作预览确认与校验后直接发送的运行台词分开。详细批准阈值及费用边界在[产品约定](../../PRODUCT.md)，不在概览复制。
 
-## 3. 核心边界
+## 组合与协调的源码边界
 
-- **事实边界**：World Plan 是计划，CandidateEvent 是可能性，WorldEvent 是已激活的真实发生事件。详见 [EVENT_MODEL.md](EVENT_MODEL.md)。
-- **知识边界**：世界中发生的事情，不自动成为所有角色或玩家已知的信息。详见 [KNOWLEDGE_MODEL.md](KNOWLEDGE_MODEL.md)。
-- **表达边界**：Director 调度世界与主动联系，Character Agent 负责自己的表达。详见 [DIRECTOR_MODEL.md](DIRECTOR_MODEL.md)。
-- **记忆边界**：记忆属于具体拥有者；记忆的主观内容不自动改写世界真实事实。详见 [MEMORY_MODEL.md](MEMORY_MODEL.md)。
-- **位置边界**：对话或收到消息不意味着玩家发生物理移动。玩家任意时刻只能存在于一个物理地点（FR-06）；移动过程的建模待确认。
-- **生成内容边界**：Draft、Preview 与 Commit 必须区分。候选事件的“激活”和生成内容的“Commit”不是同一个概念。
-- **部分已定适用范围**：Character Agent 的运行时聊天台词经系统校验后直接发送，无需逐条人工预览；自动生成的持久创作内容仍须 Draft → Preview → Commit。World Plan、事件生成与记忆摘要的具体边界及流程衔接待确认（产品问题 P-16）。
-
-## 角色扮演聊天边界
-
-聊天是主要交互体验。Conversation 与 Message 记录交互历史，不等于 WorldEvent、WorldTruth 或 Knowledge。聊天页的世界事件入口只展示当前本地 Player 已获知的事件，并用于提供话题。导入的角色卡只是当前世界的联系人；首次打开其聊天时才创建或复用对应的运行时 Character。跨地点私聊和群聊不改变玩家位置。详细交互与轮次规则见 [CHAT_MODEL.md](CHAT_MODEL.md)。
-
-群聊由独立的 Chat Turn Scheduler 逐个选择发言角色；它不取代 Director 的批量世界规划职责，也不提交世界事实或编写角色最终台词。一个玩家消息启动一轮有总 Token 硬上限的群聊；上限包含输入、输出、选人和所有物理重试/路由回退。每次模型物理调用前若无法可信预留输入用量及输出额度，则不得启动调用。
-
-## 4. 文档导航与变更纪律
-
-| 文档 | 用途 |
+| 入口 | 当前职责与接续规则 |
 | --- | --- |
-| [PRODUCT_SPEC.md](../product/PRODUCT_SPEC.md) | 冻结规则原文与范围 |
-| [PRODUCT_PRINCIPLES.md](../product/PRODUCT_PRINCIPLES.md) | 规则的设计含义 |
-| [USER_FLOWS.md](../product/USER_FLOWS.md) | 产品流程与已确认切片；当前实现见状态清单 |
-| [DOMAIN_MODEL.md](DOMAIN_MODEL.md) | 概念对象及职责；不设计数据库字段 |
-| [DIRECTOR_MODEL.md](DIRECTOR_MODEL.md) | 世界调度、规划和主动联系边界 |
-| [EVENT_MODEL.md](EVENT_MODEL.md) | 候选事件与真实事件的区别 |
-| [KNOWLEDGE_MODEL.md](KNOWLEDGE_MODEL.md) | 事实、知识归属与展示边界 |
-| [MEMORY_MODEL.md](MEMORY_MODEL.md) | 记忆归属与其他概念的区别 |
-| [ADR/README.md](ADR/README.md) | 后续架构决策的记录方法 |
-| [research/README.md](../research/README.md) | 待研究问题与证据记录要求 |
+| adapters/http/app.py、services.py | 工厂接收类型化 HttpServices；生产 cli 只调用 create_product_app，在监听和 ready 前拒绝缺少的必需服务。开发者视图、宿主存储回调及未配置模型时的回复生成服务允许缺省，聊天读取／发送服务仍必需；精简 create_app 用于明确的局部嵌入。路由依赖在模块顶部导入。 |
+| application/command_handler.py | 负责幂等恢复、事务、统一事件／回执／提交；command_locations、command_participants、command_relationships、command_knowledge 负责各命令校验和投影写入，返回 CommandMutation。它们不能自行 commit 或另开事务。 |
+| infrastructure/llm/adapter_support.py | 共享非负整数计数校验、诊断标识脱敏和失败封装。payload、缓存计数和推理 Token 关系留在协议适配器；硬预留与结算仍由 application/llm_execution.py 统一负责。 |
+| adapters/http/wire_contracts、contracts.py | 按业务模块维护 JSON 响应，兼容 facade 导出；实际 HTTP 请求模型静态生成 TypeScript 类型。客户端 JSON 读写与流式进度统一使用生成契约，二进制及宿主协议独立。详见[开发说明](../DEVELOPMENT.md#类型与业务契约)。 |
+| ProductApp.tsx | 组合页面；导航、草稿保护、会话目录、身份、事件、世界时钟及操作反馈由各自 useWorkspace／useWorld hooks 管理；useDesktopPresence 管理宿主租约。世界／玩家切换清除事件草稿、取消读取并拒绝迟到结果；私聊／群聊选择互斥，不自动重放生成。 |
+| updater.rs、updater/check.rs、updater/package.rs | 更新协调入口、有限频道检查、包完整性与受控文件操作分开；签名、持久交接和回滚顺序保持。 |
+| save_safety.py、save_database.py、save_errors.py | 快照／恢复目录协调与数据库账本保护、任务隔离、连续性核对分开；动态标识符集中检查并引用，值仍参数绑定。旧公开入口保留，未更改存档格式／迁移。 |
 
-冻结规则以产品规格原文为准；文档中的解释不能覆盖规则。未定事项保留“待确认”标记，架构候选方案在研究后通过 ADR 记录；未获确认的方案不能写成已接受的架构决定。
+这些拆分沿既有架构，没有新增运行框架；静态／隔离回归与真实用户升级的证据分别登记在状态清单。
 
-## 5. 下一步需要澄清的架构输入
+## 按任务选读
 
-必要主动联系的定义；同一理由的身份与跨时间线作用域；多角色一次主动联系的消息计数；Planning Window 耗尽与大量计划失效的判定；事实冲突处理；Checkpoint 恢复与分支信息继承；知识和记忆修正；导入兼容边界；预算触顶后的行为。WorldClock 的 realtime monotonic、offline UTC bridge、pause 与 bounded trigger catch-up 已由 C-006D 冻结；Timeline 分支时间仍待定义。
+| 任务 | 技术契约 |
+| --- | --- |
+| 命令、存储与回放 | [领域](DOMAIN_MODEL.md)、[命令](COMMAND_MODEL.md)、[事件](EVENT_MODEL.md)、[持久化](PERSISTENCE_MODEL.md)、[重放](REPLAY_MODEL.md) |
+| 知识与记忆 | [知识](KNOWLEDGE_MODEL.md)、[访问控制](KNOWLEDGE_ACCESS_MODEL.md)、[亲历](EPISODIC_MEMORY.md)、[记忆模型](MEMORY_MODEL.md) |
+| 资料与格式 | [内容](CONTENT_MODEL.md)、[导入](IMPORT_MODEL.md)、[导出](EXPORT_MODEL.md)、[原生内容包](NATIVE_CONTENT_PACKAGE.md) |
+| 聊天与规划 | [聊天](CHAT_MODEL.md)、[Director](DIRECTOR_MODEL.md)、[动作解析](ACTION_RESOLUTION.md)、[时间恢复](CLOCK_RECONCILIATION.md) |
+| LLM接入与计费 | [生产组装](LLM_PRODUCTION_COMPOSITION.md)、[基础设施](LLM_INFRASTRUCTURE.md)、[路由](LLM_ROUTING.md)、[账本](LLM_ACCOUNTING.md) |
+| 决策与历史 | [ADR](ADR/README.md)、[研究](../research/README.md)、[历史阶段证据](../history/README.md) |
 
-这些问题的具体决策均未在 C-001 中作出。研究清单见 [research/README.md](../research/README.md)。
+PostgreSQL／pgvector是未来服务端方向，MySQL／Qdrant为后续可评估方案；当前没有因此引入新服务。Redis只在真实分布式需求出现时评估。本地检索复用jieba、FTS5、FastEmbed／BGE、NumPy与DiskCache；模型环境和权重独立，不进入Core依赖和安装载荷。
 
-## 6. C-005A LLM 契约边界
-
-应用只依赖 dreamtalk-owned ModelGateway.generate/stream 与 typed request/response，provider adapter 属于 infrastructure。Provider != Model != Purpose；能力显式查询，不解析 model-name 猜行为。LLM contract 不授予 world/content/knowledge mutation capability，既有 Kernel 提交路径与先权限后检索的边界不变。
-
-结构化生成是独立 request/validated-result 概念，raw JSON-looking text 不等于验证结果；C-005C 才实现验证/重试。流为 provider-neutral typed async events，取消使用标准 asyncio。Refusal 是成功 round-trip 的独立结果，usage 是 factual token data，price/cost 是 C-005D 的配置政策。凭据只通过 SecretRef/CredentialProvider seam 引用，不写入 prompt、normal logs、canonical 项目数据或 `.lwcontent`。
-
-当前已接入 OpenAI-compatible、Anthropic Messages、Gemini Interactions、OpenAI Responses 四类 adapter，含普通/流式、结构化处理、提示组装、路由、硬额度与使用账本。C-005B 的离线 fixtures 仅是该阶段证据，不代表当前模型兼容或运行验收。详见 [LLM_INFRASTRUCTURE.md](LLM_INFRASTRUCTURE.md) 和 [OPENAI_COMPATIBLE_ADAPTER.md](OPENAI_COMPATIBLE_ADAPTER.md)。
+改动框架、数据库、Kernel authority或知识隔离须用户决定；普通实现选择采用满足已确认需求的简单方案。研究／历史验收报告用于追溯证据，不能给未批准方向授予实现或运行权限。

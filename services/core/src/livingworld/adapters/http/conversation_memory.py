@@ -6,6 +6,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
+from livingworld.adapters.http import contracts as wire
 from livingworld.application.conversation_memory import ConversationMemoryError
 from livingworld.application.errors import EntityNotFoundError
 from livingworld.domain.identifiers import ConversationId, WorldId
@@ -48,11 +49,11 @@ def conversation_memory_router(service, authorize):
         except Exception:
             raise HTTPException(500, "memory_request_failed") from None
 
-    @router.get("")
+    @router.get("", response_model=wire.ConversationMemorySnapshot)
     async def snapshot(world_id: UUID, conversation_id: UUID):
         return await execute(service.snapshot(identity(world_id, conversation_id)))
 
-    @router.post("/drafts")
+    @router.post("/drafts", response_model=wire.ConversationMemoryDraft)
     async def generate(
         world_id: UUID,
         conversation_id: UUID,
@@ -65,25 +66,27 @@ def conversation_memory_router(service, authorize):
             )
         )
 
-    @router.post("/preview")
+    @router.post("/preview", response_model=wire.ConversationMemoryDraft)
     async def preview(world_id: UUID, conversation_id: UUID, body: PreviewMemoryRequest):
         return await execute(
             service.preview(identity(world_id, conversation_id), body.draft_id, body.content)
         )
 
-    @router.post("/commit")
+    @router.post("/commit", response_model=wire.ConversationMemoryRevision)
     async def commit(world_id: UUID, conversation_id: UUID, body: CommitMemoryRequest):
         return await execute(
             service.commit(identity(world_id, conversation_id), body.draft_id, body.reviewed_hash)
         )
 
-    @router.get("/revisions/{revision}")
+    @router.get("/revisions/{revision}", response_model=wire.ConversationMemorySources)
     async def revision(world_id: UUID, conversation_id: UUID, revision: int):
         if not 1 <= revision <= 2147483647:
             raise HTTPException(422, "memory_revision_invalid")
         return await execute(service.revision(identity(world_id, conversation_id), revision))
 
-    @router.get("/drafts/{draft_id}/sources")
+    @router.get(
+        "/drafts/{draft_id}/sources", response_model=wire.ConversationMemoryDraftSourcesResult
+    )
     async def sources(world_id: UUID, conversation_id: UUID, draft_id: UUID):
         return await execute(service.sources(identity(world_id, conversation_id), draft_id))
 

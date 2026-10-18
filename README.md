@@ -8,11 +8,11 @@ dreamtalk 是一款开源桌面应用。你可以创建自己的世界，导入�
 
 每个世界有自己的角色、地点、聊天和记忆。你可以在一个世界是璃月的旅人，在另一个世界是新艾利都的居民，随时回到书架换一本书。
 
-[下载 Windows 体验版](https://github.com/zhangyeS12/dreamtalk/releases/tag/v0.1.82) · [本次更新内容](docs/releases/v0.1.82.md) · [完整设置说明](docs/SETTINGS_HANDBOOK.md) · [反馈问题](https://github.com/zhangyeS12/dreamtalk/issues)
+[下载 Windows 体验版](https://github.com/zhangyeS12/dreamtalk/releases/tag/v0.1.83) · [本次更新内容](docs/releases/v0.1.83.md) · [完整设置说明](docs/SETTINGS_HANDBOOK.md) · [反馈问题](https://github.com/zhangyeS12/dreamtalk/issues)
 
 目前提供 **Windows 10 / 11 的 64 位体验版**。应用免费开源；聊天所用的模型服务需要你自己提供 API 密钥，服务商可能按使用量收费。当前版本仍在持续完善，欢迎反馈实际体验。
 
-0.1.82提供一个自动存档和四个手动位置，支持命名、时间、替换与导入；导入不会立即加载。加载会切换全部世界数据并覆盖自动档，可提前另存原自动档。完善启动失败、更新检查和媒体失败处理，移除普通清空入口。消息和编辑仍即时保存，正常更新不要求手动恢复，见[存档](docs/DATA_BACKUPS.md)。实际升级与恢复仍待用户验收。
+0.1.83新增双人共同邀请的双私聊／两人群投递与统一回复门禁，整理世界、身份、事件草稿及异步操作状态，统一业务接口校验并扩展关键代码类型门禁。保留一自动四手动存档，导入不加载，正常更新不要求手动恢复，见[存档](docs/DATA_BACKUPS.md)。实际升级与恢复仍待用户验收。
 
 0.1.78新增整份存档备份／恢复、卸载保留及升级保护，修复云端图片密钥的完整调用链、图库说明串改和联网图片保存问题。此前配音、表情与图片能力保持：角色可使用公共／专属表情，用户有自己的表情库；支持按聊天环境配图、可选联网与图片分析。用户已确认角色发送和新增表情识别有效，使用方法见[表情与图片](docs/CHAT_MEDIA.md)。
 
@@ -22,11 +22,11 @@ dreamtalk 是一款开源桌面应用。你可以创建自己的世界，导入�
 
 ### 1. 安装
 
-推荐下载 [Windows 安装包](https://github.com/zhangyeS12/dreamtalk/releases/download/v0.1.82/dreamtalk_0.1.82_x64-setup.exe)，按提示安装。
+推荐下载 [Windows 安装包](https://github.com/zhangyeS12/dreamtalk/releases/download/v0.1.83/dreamtalk_0.1.83_x64-setup.exe)，按提示安装。
 
 本版提供[数据与备份](docs/DATA_BACKUPS.md)，新版卸载保留数据，安装／升级前先备份。旧版卸载器若仍出现“删除应用程序数据”，不要选择；重要备份建议另存其他磁盘。备份／恢复及升级故障场景仍待实际验收。
 
-也可以使用 [便携版压缩包](https://github.com/zhangyeS12/dreamtalk/releases/download/v0.1.82/dreamtalk-0.1.82-windows-x64.zip)：完整解压到一个固定目录，打开 dreamtalk 文件夹里的 dreamtalk-desktop.exe。不要直接在压缩包中运行，也不要只复制其中的程序文件。
+也可以使用 [便携版压缩包](https://github.com/zhangyeS12/dreamtalk/releases/download/v0.1.83/dreamtalk-0.1.83-windows-x64.zip)：完整解压到一个固定目录，打开 dreamtalk 文件夹里的 dreamtalk-desktop.exe。不要直接在压缩包中运行，也不要只复制其中的程序文件。
 
 下载页中的 **Source code** 是给开发者看的源码，请选择上面的安装包或便携包。若系统缺少网页显示组件，可安装 [Microsoft WebView2](https://developer.microsoft.com/microsoft-edge/webview2/)。首次安装可能提示未知发布者：目前已有应用更新签名，但尚无 Windows 发布者证书。
 
@@ -202,7 +202,7 @@ dreamtalk 是一款开源桌面应用。你可以创建自己的世界，导入�
 | 离线联系 | 恢复使用后，根据离线时长最多补一条问候或邀请；只能指定一个世界，换世界开启会替换原目标 |
 | 离线时长阈值 | 默认 6 个真实小时，可调整为 1～168 小时；首次开启不会立即生成 |
 
-多人主动联系必须围绕同一件真实共同活动。收到任何主动联系后，**需要在收到消息的原会话回复**，才允许下一次；只读消息、开关或重启都不会解除等待。线上和离线共用这个规则。
+多人主动联系必须围绕同一件真实共同活动。收到联系后，**需要在收到消息的会话回复**，才允许下一次；只读消息、开关或重启都不会解除等待。线上和离线共用这个规则。双人邀请“有恰好两位角色的群则投群，否则分别私聊，任一私聊回复回应整次邀请”的新增规则及交付状态见[主动联系说明](docs/PROACTIVE_CONTACT.md)。
 
 完全退出期间不会在后台生成台词；离线消息是在恢复时处理的，不代表关机期间模拟了完整生活。
 
@@ -243,7 +243,7 @@ dreamtalk 是一款开源桌面应用。你可以创建自己的世界，导入�
 | 删除地点 | 地点编辑中删除；不能删除家、有子地点、玩家当前位置或现有角色初始 / 当前位置，需先调整 |
 | 删除整个世界 | 书架选中书，在编辑封面下方点击“删除世界”，再次确认；世界书、角色、阵营、地点、所有聊天和记忆全部清除，书位恢复空白，无法撤销 |
 
-**资料和聊天导出不是完整世界备份。** 当前没有聊天文件导入或整个运行世界的一键备份恢复。导出 JSON 的补充字段在其他应用中可能不完整，请阅读转换提示。分享世界书前也请检查隐藏条目是否适合公开。
+**资料和聊天导出不包含完整运行状态。** 如需保护或切换整份本机数据，请使用书架的[存档入口](docs/DATA_BACKUPS.md)；当前没有聊天文件导入或单世界时间线分支恢复。导出 JSON 的补充字段在其他应用中可能不完整，请阅读转换提示。分享世界书前也请检查隐藏条目是否适合公开。
 
 ## 更新应用
 
@@ -275,7 +275,7 @@ dreamtalk 是一款开源桌面应用。你可以创建自己的世界，导入�
 
 通过 [GitHub Issues](https://github.com/zhangyeS12/dreamtalk/issues) 反馈时，请提供版本、操作步骤、预期与实际表现。请先遮住 API 密钥和私人聊天。新版本的实际使用和升级仍需要用户验收，构建成功不等于所有场景都已通过。
 
-dreamtalk 使用 [Apache-2.0 开源许可证](LICENSE)。想参与开发可查看[开发说明](docs/DEVELOPMENT.md)；项目实现和验收范围另见[状态清单](docs/PROJECT_STATUS.md)。
+dreamtalk 使用 [Apache-2.0 开源许可证](LICENSE)。文档按任务从[导航](docs/README.md)选读；参与开发见[开发说明](docs/DEVELOPMENT.md)，项目实现和验收范围统一见[状态清单](docs/PROJECT_STATUS.md)。
 
 ## Code signing policy
 

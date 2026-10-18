@@ -7,6 +7,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
+from livingworld.adapters.http import contracts as wire
 from livingworld.application.character_activity_setup import CharacterActivitySetupService
 from livingworld.application.errors import (
     CharacterActivitySetupError,
@@ -43,7 +44,9 @@ def character_activity_setup_router(
 ) -> APIRouter:
     router = APIRouter(prefix=f"/api/v{API_PROTOCOL}", dependencies=[Depends(authorize)])
 
-    @router.get("/worlds/{world_id}/activity-characters")
+    @router.get(
+        "/worlds/{world_id}/activity-characters", response_model=wire.ActivityCharacterDirectory
+    )
     async def list_characters(world_id: UUID) -> dict:
         try:
             player, characters = await service.list_characters(WorldId(world_id))
@@ -70,7 +73,10 @@ def character_activity_setup_router(
         except CharacterActivitySetupError as error:
             raise HTTPException(409, str(error)) from None
 
-    @router.post("/worlds/{world_id}/activity-characters/{character_id}/initial-location")
+    @router.post(
+        "/worlds/{world_id}/activity-characters/{character_id}/initial-location",
+        response_model=wire.InitializeCharacterActivityResult,
+    )
     async def initialize(
         world_id: UUID,
         character_id: UUID,
@@ -101,7 +107,10 @@ def character_activity_setup_router(
         except (WorldCatchingUpError, WorldRuntimeUnavailableError):
             raise HTTPException(503, "world_runtime_unavailable") from None
 
-    @router.put("/worlds/{world_id}/activity-characters/{character_id}/location-policy")
+    @router.put(
+        "/worlds/{world_id}/activity-characters/{character_id}/location-policy",
+        response_model=wire.InitializeCharacterActivityResult,
+    )
     async def configure(
         world_id: UUID,
         character_id: UUID,
@@ -136,7 +145,10 @@ def character_activity_setup_router(
         except (WorldCatchingUpError, WorldRuntimeUnavailableError):
             raise HTTPException(503, "world_runtime_unavailable") from None
 
-    @router.put("/worlds/{world_id}/activity-cards/{import_id}/location-policy")
+    @router.put(
+        "/worlds/{world_id}/activity-cards/{import_id}/location-policy",
+        response_model=wire.InitializeCharacterActivityResult,
+    )
     async def configure_card(
         world_id: UUID,
         import_id: UUID,
@@ -172,7 +184,10 @@ def character_activity_setup_router(
         except (WorldCatchingUpError, WorldRuntimeUnavailableError):
             raise HTTPException(503, "world_runtime_unavailable") from None
 
-    @router.post("/worlds/{world_id}/activity-cards/{import_id}/initial-location")
+    @router.post(
+        "/worlds/{world_id}/activity-cards/{import_id}/initial-location",
+        response_model=wire.InitializeCharacterActivityResult,
+    )
     async def initialize_card(world_id: UUID, import_id: UUID, body: CardInitialRequest):
         world = WorldId(world_id)
         try:

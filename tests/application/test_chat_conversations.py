@@ -3,6 +3,7 @@ from uuid import uuid4
 
 import pytest
 from card_fixtures import card_document, json_bytes
+from livingworld.adapters.http.services import HttpServices
 from livingworld.application.chat_conversations import ChatConversationService
 from livingworld.application.command_handler import CommandHandler
 from livingworld.application.commands import CreateWorld
@@ -139,13 +140,15 @@ def test_chat_http_requires_session_and_selected_player(tmp_path):
 
     card = asyncio.run(setup())
     app = create_app(
-        RuntimeStatus("test", "generation"),
-        ShutdownRequests(),
-        "secret",
-        lambda: None,
-        StructuredLogger(io.StringIO()),
-        chat_conversations=ChatConversationService(
-            db.chat_conversation_store(), imports, players, handler
+        status=RuntimeStatus("test", "generation"),
+        shutdown=ShutdownRequests(),
+        session_token="secret",
+        initialize=lambda: None,
+        logger=StructuredLogger(io.StringIO()),
+        services=HttpServices(
+            chat_conversations=ChatConversationService(
+                db.chat_conversation_store(), imports, players, handler
+            )
         ),
     )
     path = f"/api/v1/worlds/{world.value}/conversations"

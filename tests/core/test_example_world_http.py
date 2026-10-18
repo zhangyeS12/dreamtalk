@@ -3,6 +3,7 @@ from uuid import uuid4
 
 from fastapi.testclient import TestClient
 from livingworld.adapters.http.app import create_app
+from livingworld.adapters.http.services import HttpServices
 from livingworld.application.errors import IdempotencyConflictError
 from livingworld.application.runtime import RuntimeStatus, ShutdownRequests
 from livingworld.domain.identifiers import WorldId
@@ -15,7 +16,16 @@ def test_example_confirmation_requires_authentication_identity_and_review():
         failure = None
 
         async def catalog(self):
-            return {"id": "campus-v1", "reviewed_hash": "a" * 64}
+            return {
+                "id": "campus-v1",
+                "reviewed_hash": "a" * 64,
+                "name": "Synthetic",
+                "description": "",
+                "locations": [],
+                "entries": [],
+                "characters": [],
+                "pending": [],
+            }
 
         async def create(self, *args):
             self.calls.append(args)
@@ -25,12 +35,12 @@ def test_example_confirmation_requires_authentication_identity_and_review():
 
     service = Examples()
     app = create_app(
-        RuntimeStatus("test", "generation"),
-        ShutdownRequests(),
-        "synthetic-session-secret",
-        lambda: None,
-        StructuredLogger(io.StringIO()),
-        example_worlds=service,
+        status=RuntimeStatus("test", "generation"),
+        shutdown=ShutdownRequests(),
+        session_token="synthetic-session-secret",
+        initialize=lambda: None,
+        logger=StructuredLogger(io.StringIO()),
+        services=HttpServices(example_worlds=service),
     )
     url = "/api/v1/world-examples"
     body = {"confirmed": True, "reviewed_hash": "a" * 64, "public_entries": ["school"]}

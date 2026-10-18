@@ -5,6 +5,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
+from livingworld.adapters.http import contracts as wire
 from livingworld.application.errors import IdempotencyConflictError
 from livingworld.domain.contracts import API_PROTOCOL, RequestId
 
@@ -21,11 +22,11 @@ def example_world_router(service, authorize, storage_observer=None):
         prefix=f"/api/v{API_PROTOCOL}/world-examples", dependencies=[Depends(authorize)]
     )
 
-    @router.get("")
+    @router.get("", response_model=wire.ExampleWorldTemplate)
     async def catalog():
         return await service.catalog()
 
-    @router.post("/{template_id}", status_code=201)
+    @router.post("/{template_id}", status_code=201, response_model=wire.CreateWorldResult)
     async def create(
         template_id: str,
         body: ExampleConfirmation,

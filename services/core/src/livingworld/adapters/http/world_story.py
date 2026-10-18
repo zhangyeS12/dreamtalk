@@ -5,6 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
+from livingworld.adapters.http import contracts as wire
 from livingworld.application.errors import EntityNotFoundError
 from livingworld.application.world_story import WorldStoryError
 from livingworld.domain.identifiers import WorldId
@@ -46,17 +47,17 @@ def world_story_router(service, authorize):
         except Exception:
             raise HTTPException(500, "news_request_failed") from None
 
-    @router.get("")
+    @router.get("", response_model=wire.WorldStoryEntries)
     async def entries(world_id: UUID, before: str | None = None):
         if before is not None and len(before) > 100:
             raise HTTPException(400, "story_cursor_invalid")
         return await execute(service.entries(WorldId(world_id), before))
 
-    @router.get("/settings")
+    @router.get("/settings", response_model=wire.WorldNewsStatus)
     async def snapshot(world_id: UUID):
         return await execute(service.snapshot(WorldId(world_id)))
 
-    @router.post("/settings")
+    @router.post("/settings", response_model=wire.WorldNewsStatus)
     async def configure(world_id: UUID, body: NewsSettingRequest):
         return await execute(
             service.configure(
@@ -68,13 +69,13 @@ def world_story_router(service, authorize):
             )
         )
 
-    @router.post("/news/{entry_id}/mark")
+    @router.post("/news/{entry_id}/mark", response_model=wire.WorldNewsStatus)
     async def mark(world_id: UUID, entry_id: UUID, body: NewsMarkRequest):
         return await execute(
             service.mark(WorldId(world_id), entry_id, body.state, body.expected_revision)
         )
 
-    @router.post("/chat/{entry_id}")
+    @router.post("/chat/{entry_id}", response_model=wire.EditStickerResult)
     async def correct(world_id: UUID, entry_id: UUID, body: StoryCorrectionRequest):
         return await execute(
             service.correct(

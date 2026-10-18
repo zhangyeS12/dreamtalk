@@ -5,6 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 
+from livingworld.adapters.http import contracts as wire
 from livingworld.application.errors import EntityNotFoundError
 from livingworld.application.long_chat_memory import LongMemoryError
 from livingworld.domain.identifiers import CharacterId, ConversationId, WorldId
@@ -49,7 +50,7 @@ def long_chat_memory_router(service, authorize):
         except Exception:
             raise HTTPException(500, "long_memory_request_failed") from None
 
-    @router.get("")
+    @router.get("", response_model=wire.LongChatMemorySnapshot)
     async def snapshot(
         world_id: UUID,
         conversation_id: UUID,
@@ -61,7 +62,7 @@ def long_chat_memory_router(service, authorize):
             service.snapshot(*ids(world_id, conversation_id, character_id), before, query)
         )
 
-    @router.post("/settings")
+    @router.post("/settings", response_model=wire.LongChatMemorySnapshot)
     async def configure(
         world_id: UUID, conversation_id: UUID, character_id: UUID, body: CaptureRequest
     ):
@@ -72,7 +73,7 @@ def long_chat_memory_router(service, authorize):
         )
         return await execute(service.snapshot(*ids(world_id, conversation_id, character_id)))
 
-    @router.post("/{entry_id}")
+    @router.post("/{entry_id}", response_model=wire.LongChatMemorySnapshot)
     async def mark(
         world_id: UUID, conversation_id: UUID, character_id: UUID, entry_id: UUID, body: MarkRequest
     ):

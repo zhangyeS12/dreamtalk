@@ -9,6 +9,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
+from livingworld.adapters.http import contracts as wire
 from livingworld.application.developer_inspector import DeveloperInspectorService
 from livingworld.domain.identifiers import CharacterId, LocationId, ObservationId, PlayerId, WorldId
 
@@ -46,15 +47,15 @@ def developer_router(
     def world(value: UUID) -> WorldId:
         return WorldId(value)
 
-    @router.get("/worlds")
+    @router.get("/worlds", response_model=list[wire.WorldSummary])
     async def worlds() -> list[dict[str, object]]:
         return await service.list_worlds()
 
-    @router.post("/demo-world")
+    @router.post("/demo-world", response_model=wire.CreateWorldResult)
     async def create_demo_world() -> dict[str, str]:
         return {"world_id": str((await service.create_demo_world()).value)}
 
-    @router.get("/worlds/{world_id}/snapshot")
+    @router.get("/worlds/{world_id}/snapshot", response_model=wire.InspectorSnapshot)
     async def snapshot(world_id: UUID, owner_character_id: UUID | None = None) -> dict[str, object]:
         identity = world(world_id)
         owner = CharacterId(identity, owner_character_id) if owner_character_id else None
@@ -63,22 +64,22 @@ def developer_router(
         except ValueError as error:
             raise HTTPException(404, str(error)) from None
 
-    @router.post("/worlds/{world_id}/clock/pause")
+    @router.post("/worlds/{world_id}/clock/pause", response_model=wire.PauseProductWorldResult)
     async def pause(world_id: UUID) -> dict[str, bool]:
         await service.pause(world(world_id))
         return {"ok": True}
 
-    @router.post("/worlds/{world_id}/clock/resume")
+    @router.post("/worlds/{world_id}/clock/resume", response_model=wire.PauseProductWorldResult)
     async def resume(world_id: UUID) -> dict[str, bool]:
         await service.resume(world(world_id))
         return {"ok": True}
 
-    @router.post("/worlds/{world_id}/clock/scale")
+    @router.post("/worlds/{world_id}/clock/scale", response_model=wire.PauseProductWorldResult)
     async def scale(world_id: UUID, body: ClockScaleRequest) -> dict[str, bool]:
         await service.change_scale(world(world_id), body.scale)
         return {"ok": True}
 
-    @router.post("/worlds/{world_id}/triggers")
+    @router.post("/worlds/{world_id}/triggers", response_model=wire.ScheduleTriggerResult)
     async def trigger(world_id: UUID, body: TriggerRequest) -> dict[str, str]:
         identity = world(world_id)
         result = await service.schedule_trigger(
@@ -88,7 +89,7 @@ def developer_router(
         )
         return {"trigger_id": str(result.value)}
 
-    @router.post("/worlds/{world_id}/move-player")
+    @router.post("/worlds/{world_id}/move-player", response_model=wire.PauseProductWorldResult)
     async def move(world_id: UUID, body: MovePlayerRequest) -> dict[str, bool]:
         identity = world(world_id)
         await service.move_player(
@@ -98,7 +99,7 @@ def developer_router(
         )
         return {"ok": True}
 
-    @router.post("/worlds/{world_id}/memories")
+    @router.post("/worlds/{world_id}/memories", response_model=wire.RecordMemoryResult)
     async def memory(world_id: UUID, body: RecordMemoryRequest) -> dict[str, str]:
         identity = world(world_id)
         result = await service.record_memory(

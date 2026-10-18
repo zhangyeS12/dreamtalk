@@ -3,48 +3,38 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from decimal import Decimal
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException
-from pydantic import BaseModel, ConfigDict, Field
 
+from livingworld.adapters.http import contracts as wire
+from livingworld.adapters.http.contracts import (
+    ClockScaleRequest,
+    CreateWorldRequest,
+    DeleteWorldRequest,
+    WorldSettings,
+)
 from livingworld.application.errors import (
     EntityAlreadyExistsError,
     EntityNotFoundError,
     IdempotencyConflictError,
     WorldRuntimeUnavailableError,
 )
-from livingworld.application.world_settings import WorldSettings, WorldSettingsService
+from livingworld.application.world_settings import WorldSettings as WorldSettingsValue
+from livingworld.application.world_settings import WorldSettingsService
 from livingworld.domain.contracts import API_PROTOCOL, RequestId
 from livingworld.domain.errors import DomainInvariantError
 from livingworld.domain.identifiers import WorldId
+from livingworld.domain.world import ClockState
 
 
-class StrictModel(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-
-class CreateWorldRequest(StrictModel):
-    name: str = Field(min_length=1, max_length=120)
-
-
-class ClockScaleRequest(StrictModel):
-    scale: Decimal = Field(gt=0, le=1000)
-
-
-class DeleteWorldRequest(StrictModel):
-    confirmed: bool
-    expected_name: str = Field(min_length=1, max_length=120)
-
-
-def _response(item: WorldSettings) -> dict[str, str]:
+def _response(item: WorldSettingsValue) -> WorldSettings:
     return {
         "world_id": str(item.world_id.value),
         "name": item.name,
         "world_time": str(item.world_time.microseconds),
-        "clock_state": item.clock_state,
+        "clock_state": ClockState(item.clock_state),
         "time_scale": str(item.time_scale),
         "runtime_state": item.runtime_state,
     }
@@ -59,10 +49,10 @@ def world_router(
     router = APIRouter(prefix=f"/api/v{API_PROTOCOL}", dependencies=[Depends(authorize)])
 
     @router.get("/worlds")
-    async def list_worlds() -> list[dict[str, str]]:
+    async def list_worlds() -> list[WorldSettings]:
         return [_response(item) for item in await service.list_worlds()]
 
-    @router.delete("/worlds/{world_id}")
+    @router.delete("/worlds/{world_id}", response_model=wire.DeleteWorldResult)
     async def delete_world(world_id: UUID, body: DeleteWorldRequest) -> dict:
         if not body.confirmed:
             raise HTTPException(422, "world_delete_confirmation_required")
@@ -86,7 +76,7 @@ def world_router(
             raise HTTPException(503, "world_deletion_unavailable")
         return {"deleted": await deletion.store.deleted(WorldId(world_id))}
 
-    @router.post("/worlds", status_code=201)
+    @router.post("/worlds", status_code=201, response_model=wire.CreateWorldResult)
     async def create_world(
         body: CreateWorldRequest,
         x_request_id: Annotated[str | None, Header()] = None,
@@ -107,7 +97,7 @@ def world_router(
             await asyncio.to_thread(storage_observer)
         return {"world_id": str(world_id.value)}
 
-    @router.post("/worlds/{world_id}/clock/pause")
+    @router.post("/worlds/{world_id}/clock/pause", response_model=wire.PauseProductWorldResult)
     async def pause_world(world_id: UUID) -> dict[str, bool]:
         try:
             await service.pause(WorldId(world_id))
@@ -117,7 +107,7 @@ def world_router(
             raise HTTPException(503, "world_runtime_unavailable") from None
         return {"ok": True}
 
-    @router.post("/worlds/{world_id}/clock/resume")
+    @router.post("/worlds/{world_id}/clock/resume", response_model=wire.PauseProductWorldResult)
     async def resume_world(world_id: UUID) -> dict[str, bool]:
         try:
             await service.resume(WorldId(world_id))
@@ -127,7 +117,7 @@ def world_router(
             raise HTTPException(503, "world_runtime_unavailable") from None
         return {"ok": True}
 
-    @router.post("/worlds/{world_id}/clock/scale")
+    @router.post("/worlds/{world_id}/clock/scale", response_model=wire.PauseProductWorldResult)
     async def change_scale(world_id: UUID, body: ClockScaleRequest) -> dict[str, bool]:
         try:
             await service.change_scale(WorldId(world_id), body.scale)

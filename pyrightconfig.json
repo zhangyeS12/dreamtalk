@@ -1,0 +1,35 @@
+{
+  "include": [
+    "services/core/src/livingworld/application/command_handler.py",
+    "services/core/src/livingworld/application/command_mutation.py",
+    "services/core/src/livingworld/application/command_support.py",
+    "services/core/src/livingworld/application/command_locations.py",
+    "services/core/src/livingworld/application/command_participants.py",
+    "services/core/src/livingworld/application/command_relationships.py",
+    "services/core/src/livingworld/application/command_knowledge.py",
+    "services/core/src/livingworld/infrastructure/llm/adapter_support.py",
+    "services/core/src/livingworld/application/runtime.py",
+    "services/core/src/livingworld/infrastructure/save_database.py",
+    "services/core/src/livingworld/infrastructure/save_errors.py",
+    "scripts/generate-api-contracts.py",
+    "services/core/src/livingworld/application/llm_execution.py",
+    "services/core/src/livingworld/application/llm_accounting.py",
+    "services/core/src/livingworld/infrastructure/save_safety.py",
+    "services/core/src/livingworld/infrastructure/save_slots.py",
+    "services/core/src/livingworld/infrastructure/persistence/contact_gate.py",
+    "services/core/src/livingworld/infrastructure/persistence/proactive_contact.py",
+    "services/core/src/livingworld/bootstrap/cli.py",
+    "services/core/src/livingworld/bootstrap/llm_runtime.py",
+    "services/core/src/livingworld/adapters/http",
+    "services/core/src/livingworld/infrastructure/persistence/mapping.py",
+    "services/core/src/livingworld/application/world_model_config.py"
+  ],
+  "extraPaths": [
+    "services/core/src"
+  ],
+  "venvPath": ".",
+  "venv": ".venv",
+  "pythonVersion": "3.12",
+  "typeCheckingMode": "standard",
+  "reportUnnecessaryTypeIgnoreComment": "error"
+}

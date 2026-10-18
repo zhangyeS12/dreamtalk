@@ -3,6 +3,7 @@ from uuid import uuid4
 
 from fastapi.testclient import TestClient
 from livingworld.adapters.http.app import create_app
+from livingworld.adapters.http.services import HttpServices
 from livingworld.application.player_event_feed import (
     KnownWorldEvent,
     LocalPlayerPresence,
@@ -52,12 +53,12 @@ def test_known_event_http_requires_auth_and_returns_only_safe_display_fields():
     world = WorldId(uuid4())
     feed = FakeFeed(world)
     app = create_app(
-        RuntimeStatus("test", "generation"),
-        ShutdownRequests(),
-        "session-secret",
-        lambda: None,
-        StructuredLogger(io.StringIO()),
-        player_event_feed=PlayerEventFeedService(feed),
+        status=RuntimeStatus("test", "generation"),
+        shutdown=ShutdownRequests(),
+        session_token="session-secret",
+        initialize=lambda: None,
+        logger=StructuredLogger(io.StringIO()),
+        services=HttpServices(player_event_feed=PlayerEventFeedService(feed)),
     )
     path = f"/api/v{API_PROTOCOL}/worlds/{world.value}"
     with TestClient(app, base_url="http://127.0.0.1") as client:
@@ -114,13 +115,14 @@ def test_start_at_home_requires_auth_and_returns_bound_player():
             return Revision(1)
 
     app = create_app(
-        RuntimeStatus("test", "generation"),
-        ShutdownRequests(),
-        "session-secret",
-        lambda: None,
-        StructuredLogger(io.StringIO()),
-        player_event_feed=PlayerEventFeedService(feed),
-        player_onboarding=FakeOnboarding(),
+        status=RuntimeStatus("test", "generation"),
+        shutdown=ShutdownRequests(),
+        session_token="session-secret",
+        initialize=lambda: None,
+        logger=StructuredLogger(io.StringIO()),
+        services=HttpServices(
+            player_event_feed=PlayerEventFeedService(feed), player_onboarding=FakeOnboarding()
+        ),
     )
     path = f"/api/v{API_PROTOCOL}/worlds/{world.value}/me/start"
     with TestClient(app, base_url="http://127.0.0.1") as client:

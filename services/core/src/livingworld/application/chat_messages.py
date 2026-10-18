@@ -6,7 +6,10 @@ import hashlib
 import json
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
+
+if TYPE_CHECKING:
+    from livingworld.application.chat_media import ChatMediaService
 
 from livingworld.application.errors import EntityNotFoundError
 from livingworld.application.player_event_feed import PlayerEventFeedService
@@ -201,7 +204,7 @@ class ChatMessageService:
     def __init__(self, store: ChatMessageStore, players: PlayerEventFeedService) -> None:
         self._store = store
         self._players = players
-        self.media = None
+        self.media: ChatMediaService | None = None
 
     async def _player(self, conversation_id: ConversationId) -> PlayerId:
         player = await self._players.selected_player(conversation_id.world_id)

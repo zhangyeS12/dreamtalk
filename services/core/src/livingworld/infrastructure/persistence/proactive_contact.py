@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from uuid import UUID, uuid4, uuid5
 
 from sqlalchemy import func, select, update
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from livingworld.application.errors import EntityNotFoundError
 from livingworld.application.lore_activation import select_common_background
@@ -67,10 +68,10 @@ def _json(data):
 
 
 class SqlAlchemyProactiveContactStore:
-    def __init__(self, sessions, director, offline):
+    def __init__(self, sessions: async_sessionmaker[AsyncSession], director, offline):
         self.sessions, self.director, self.offline = sessions, director, offline
 
-    async def _owner(self, session, world, player):
+    async def _owner(self, session: AsyncSession, world: WorldId, player: PlayerId | None) -> Clock:
         binding = await session.get(Binding, world.value)
         clock = await session.get(Clock, world.value)
         if not binding or player is None or binding.player_id != player.value or not clock:
@@ -147,7 +148,7 @@ class SqlAlchemyProactiveContactStore:
             )
             await session.commit()
 
-    async def _source(self, session, cfg, kind, identity):
+    async def _source(self, session: AsyncSession, cfg: Settings, kind, identity):
         """Current approved activity and presence, not a future plan or same-place guess."""
         now = datetime.now(UTC)
         world = WorldId(cfg.world_id)
@@ -181,6 +182,9 @@ class SqlAlchemyProactiveContactStore:
         ):
             return None
         if kind == "shared":
+            assert isinstance(row, Shared)
+            if row.started_at is None or row.planned_end is None:
+                return None
             shared_cfg = await session.get(SharedSettings, cfg.world_id)
             encounter_cfg = await session.get(EncounterSettings, cfg.world_id)
             if not (
@@ -204,6 +208,7 @@ class SqlAlchemyProactiveContactStore:
             revisions = (row.first_revision, row.second_revision)
             activity = "rest" if row.activity == "shared_rest" else "leisure"
         else:
+            assert isinstance(row, Routine)
             identities, routines, revisions, activity = (
                 (row.character_id,),
                 [row],
@@ -256,6 +261,8 @@ class SqlAlchemyProactiveContactStore:
             if "accepted_import_id" not in persona:
                 return None
             named = await session.get(CharacterRecord, (cfg.world_id, character))
+            if named is None:
+                return None
             characters.append(
                 {
                     "character_id": str(character),
@@ -335,10 +342,11 @@ class SqlAlchemyProactiveContactStore:
                 ]
                 # Prefer shared activity, then deterministic per-plan ordering.
                 # This avoids fixed ID order; it does not guarantee character rotation.
+                plan_id = director.plan_id
                 choices.sort(
                     key=lambda pair: (
                         pair[0] != "shared",
-                        hashlib.sha256(f"{director.plan_id}:{pair[1]}".encode()).digest(),
+                        hashlib.sha256(f"{plan_id}:{pair[1]}".encode()).digest(),
                     )
                 )
                 for kind, identity in choices:
@@ -359,6 +367,10 @@ class SqlAlchemyProactiveContactStore:
                         if data is None:
                             continue
                         serialized = _json(data)
+                        if len(data["characters"]) == 2:
+                            # Reserve the exact receipt shape before the paid call; only IDs
+                            # are added on delivery, never either private conversation's text.
+                            _json({**data, "private_delivery_turn_ids": ["0" * 32] * 2})
                     except Exception:
                         cfg.state, cfg.error = "attention", "proactive_input_unavailable"
                         break
@@ -397,21 +409,20 @@ class SqlAlchemyProactiveContactStore:
                 if episode
                 else None
             )
-            valid = bool(
-                episode
-                and episode.state == "writing"
-                and cfg
-                and cfg.enabled
-                and cfg.revision == episode.generation
-            )
-            if valid:
-                valid = not await contact_blocked(
-                    session, episode.world_id, episode.player_id, exclude_online=episode.episode_id
-                )
-            if valid:
-                current = await self._source(session, cfg, episode.source_kind, episode.source_id)
-                valid = current is not None and _json(current) == episode.input_json
-            if not valid:
+            if (
+                episode is None
+                or episode.state != "writing"
+                or cfg is None
+                or not cfg.enabled
+                or cfg.revision != episode.generation
+            ):
+                raise ProactiveContactError("proactive_context_changed")
+            if await contact_blocked(
+                session, episode.world_id, episode.player_id, exclude_online=episode.episode_id
+            ):
+                raise ProactiveContactError("proactive_context_changed")
+            current = await self._source(session, cfg, episode.source_kind, episode.source_id)
+            if current is None or _json(current) != episode.input_json:
                 raise ProactiveContactError("proactive_context_changed")
             data = json.loads(episode.input_json)
             characters = data["characters"]
@@ -420,123 +431,109 @@ class SqlAlchemyProactiveContactStore:
                 conversation = UUID(characters[0]["conversation_id"])
             else:
                 expected = {UUID(c["character_id"]) for c in characters}
-                groups = (
-                    await session.scalars(
-                        select(Conversation)
-                        .where(
-                            Conversation.world_id == episode.world_id,
-                            Conversation.player_id == episode.player_id,
-                            Conversation.kind == "group",
-                            Conversation.conversation_id.not_in(
-                                select(GroupDissolutionRecord.conversation_id).where(
-                                    GroupDissolutionRecord.world_id == episode.world_id
-                                )
-                            ),
-                        )
-                        .order_by(Conversation.conversation_id)
-                        .limit(513)
+                pair_groups = (
+                    select(Participant.conversation_id)
+                    .where(Participant.world_id == episode.world_id)
+                    .group_by(Participant.conversation_id)
+                    .having(
+                        func.count() == 2,
+                        func.count().filter(Participant.character_id.in_(expected)) == 2,
                     )
-                ).all()
-                if len(groups) > 512:
-                    raise ProactiveContactError("proactive_input_capacity")
-                conversation = None
-                for group in groups:
-                    members = set(
-                        (
-                            await session.scalars(
-                                select(Participant.character_id).where(
-                                    Participant.world_id == episode.world_id,
-                                    Participant.conversation_id == group.conversation_id,
-                                )
+                )
+                conversation = await session.scalar(
+                    select(Conversation.conversation_id)
+                    .where(
+                        Conversation.world_id == episode.world_id,
+                        Conversation.player_id == episode.player_id,
+                        Conversation.kind == "group",
+                        Conversation.conversation_id.in_(pair_groups),
+                        Conversation.conversation_id.not_in(
+                            select(GroupDissolutionRecord.conversation_id).where(
+                                GroupDissolutionRecord.world_id == episode.world_id
                             )
-                        ).all()
+                        ),
                     )
-                    if members == expected:
-                        conversation = group.conversation_id
-                        break
-                if conversation is None:
-                    conversation = uuid5(
-                        episode.world_id,
-                        "proactive-group:"
-                        + str(episode.player_id)
-                        + ":"
-                        + ":".join(sorted(str(i) for i in expected))
-                        + ":"
-                        + str(episode.episode_id),
-                    )
-                    session.add(
-                        Conversation(
-                            world_id=episode.world_id,
-                            conversation_id=conversation,
-                            player_id=episode.player_id,
-                            kind="group",
-                            created_at_utc=now,
+                    .order_by(Conversation.conversation_id)
+                    .limit(1)
+                )
+
+            # No matching two-character group: deliver to both existing private chats.
+            # Every destination keeps its own turn, transcript positions and read mark.
+            deliveries = (
+                [(conversation, characters)]
+                if conversation is not None
+                else [(UUID(c["conversation_id"]), [c]) for c in characters]
+            )
+            turn_ids = []
+            fingerprint = hashlib.sha256(episode.input_json.encode()).hexdigest()
+            clock = await session.get(Clock, episode.world_id)
+            assert clock is not None  # A valid claimed episode retains its world clock.
+            learned_at = to_domain(clock).effective_time(now).microseconds
+            for ordinal, (destination, speakers) in enumerate(deliveries):
+                turn_id = uuid5(
+                    episode.episode_id,
+                    "outreach-turn" if ordinal == 0 else "outreach-turn:" + destination.hex,
+                )
+                turn_ids.append(turn_id.hex)
+                position = (
+                    await session.scalar(
+                        select(func.max(Message.position)).where(
+                            Message.world_id == episode.world_id,
+                            Message.conversation_id == destination,
                         )
                     )
-                    await session.flush()
-                    for c in characters:
-                        session.add(
-                            Participant(
-                                world_id=episode.world_id,
-                                conversation_id=conversation,
-                                character_id=UUID(c["character_id"]),
-                                root_import_id=UUID(c["root_import_id"]),
-                            )
-                        )
-            position = (
-                await session.scalar(
-                    select(func.max(Message.position)).where(
-                        Message.world_id == episode.world_id,
-                        Message.conversation_id == conversation,
+                    or 0
+                )
+                session.add(
+                    Turn(
+                        world_id=episode.world_id,
+                        turn_id=turn_id,
+                        conversation_id=destination,
+                        request_id=episode.episode_id
+                        if ordinal == 0
+                        else uuid5(episode.episode_id, "outreach-request:" + destination.hex),
+                        fingerprint=fingerprint,
+                        token_ceiling=bound,
+                        kind="outreach",
+                        status="pending",
+                        created_at_utc=now,
                     )
                 )
-                or 0
-            )
-            turn_id = uuid5(episode.episode_id, "outreach-turn")
-            session.add(
-                Turn(
-                    world_id=episode.world_id,
-                    turn_id=turn_id,
-                    conversation_id=conversation,
-                    request_id=episode.episode_id,
-                    fingerprint=hashlib.sha256(episode.input_json.encode()).hexdigest(),
-                    token_ceiling=bound,
-                    kind="outreach",
-                    status="pending",
-                    created_at_utc=now,
-                )
-            )
-            await session.flush()
-            session.add(
-                Dispatch(
-                    world_id=episode.world_id,
-                    turn_id=turn_id,
-                    claimed_at_utc=episode.created_at_utc,
-                    completed_at_utc=now,
-                )
-            )
-            for index, c in enumerate(characters, 1):
-                message = Message(
-                    world_id=episode.world_id,
-                    message_id=uuid5(episode.episode_id, c["character_id"]),
-                    conversation_id=conversation,
-                    turn_id=turn_id,
-                    position=position + index,
-                    sender_character_id=UUID(c["character_id"]),
-                    text=replies[c["character_id"]],
-                    created_at_utc=now,
-                )
-                session.add(message)
                 await session.flush()
-                clock = await session.get(Clock, episode.world_id)
-                await record_contact_invitation(
-                    session,
-                    message,
-                    PlayerId(WorldId(episode.world_id), episode.player_id),
-                    c["name"],
-                    to_domain(clock).effective_time(now).microseconds,
+                session.add(
+                    Dispatch(
+                        world_id=episode.world_id,
+                        turn_id=turn_id,
+                        claimed_at_utc=episode.created_at_utc,
+                        completed_at_utc=now,
+                    )
                 )
-            episode.state, episode.conversation_id = "delivered", conversation
+                for index, c in enumerate(speakers, 1):
+                    message = Message(
+                        world_id=episode.world_id,
+                        message_id=uuid5(episode.episode_id, c["character_id"]),
+                        conversation_id=destination,
+                        turn_id=turn_id,
+                        position=position + index,
+                        sender_character_id=UUID(c["character_id"]),
+                        text=replies[c["character_id"]],
+                        created_at_utc=now,
+                    )
+                    session.add(message)
+                    await session.flush()
+                    await record_contact_invitation(
+                        session,
+                        message,
+                        PlayerId(WorldId(episode.world_id), episode.player_id),
+                        c["name"],
+                        learned_at,
+                    )
+            if len(deliveries) == 2:
+                # Explicit correlation lets either private reply acknowledge this one
+                # episode without copying replies or treating unrelated contacts as answered.
+                episode.input_json = _json({**data, "private_delivery_turn_ids": turn_ids})
+            episode.state, episode.conversation_id = "delivered", deliveries[0][0]
+            assert cfg is not None  # The guards above checked the durable settings row.
             cfg.state, cfg.error = "idle", None
             await session.commit()
 

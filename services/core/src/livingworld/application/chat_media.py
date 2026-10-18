@@ -7,6 +7,7 @@ from uuid import UUID, uuid4
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from livingworld.application.llm import MessageRole, TextContent
+from livingworld.application.update_maintenance import UpdateMaintenance
 
 
 class MediaError(ValueError):
@@ -242,7 +243,7 @@ def prompt_text(message):
 class ChatMediaService:
     def __init__(self, store, providers, logger=None):
         self.store, self.providers = store, providers
-        self.maintenance = None
+        self.maintenance: UpdateMaintenance | None = None
         self.logger = logger
 
     def _failed(self, event):

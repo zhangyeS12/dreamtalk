@@ -6,6 +6,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, ConfigDict, Field
 
+from livingworld.adapters.http import contracts as wire
 from livingworld.application.errors import EntityNotFoundError
 from livingworld.application.world_covers import MAX_IMAGE_BYTES, CoverCrop, CoverError
 from livingworld.domain.contracts import API_PROTOCOL
@@ -50,15 +51,15 @@ def create_world_cover_router(service, authorize):
         except CoverError as error:
             raise HTTPException(422, detail=str(error)) from error
 
-    @router.get("/world-covers")
+    @router.get("/world-covers", response_model=list[wire.WorldCover])
     async def list_covers():
         return await call(service.list_covers())
 
-    @router.get("/worlds/{world_id}/cover")
+    @router.get("/worlds/{world_id}/cover", response_model=wire.WorldCover)
     async def load(world_id: UUID):
         return await call(service.load(WorldId(world_id)))
 
-    @router.put("/worlds/{world_id}/cover")
+    @router.put("/worlds/{world_id}/cover", response_model=wire.WorldCover)
     async def save(world_id: UUID, body: CoverWrite):
         if body.mode == "text" and not body.title.strip():
             raise HTTPException(422, detail="cover_title_required")
@@ -77,7 +78,7 @@ def create_world_cover_router(service, authorize):
             )
         )
 
-    @router.post("/worlds/{world_id}/cover/images")
+    @router.post("/worlds/{world_id}/cover/images", response_model=wire.CoverImage)
     async def upload(world_id: UUID, request: Request):
         if request.headers.get("content-type", "").split(";", 1)[0] not in {
             "image/jpeg",

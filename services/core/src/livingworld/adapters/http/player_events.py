@@ -4,28 +4,22 @@ from collections.abc import Callable
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException
-from pydantic import BaseModel, ConfigDict, Field
 
+from livingworld.adapters.http import contracts as wire
+from livingworld.adapters.http.contracts import (
+    AvailabilityRequest,
+    BindPlayerRequest,
+    KnownWorldEvent,
+    SelectablePlayer,
+    SelectedPlayerState,
+)
 from livingworld.application.errors import EntityNotFoundError
 from livingworld.application.player_event_feed import PlayerEventFeedService
 from livingworld.application.player_onboarding import LocalPlayerOnboardingService
 from livingworld.domain.contracts import API_PROTOCOL, RequestId
 from livingworld.domain.errors import ConcurrencyConflictError, DomainInvariantError
 from livingworld.domain.identifiers import PlayerId, WorldId
-from livingworld.domain.participants import PlayerAvailability
 from livingworld.domain.values import Revision
-
-
-class BindPlayerRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    player_id: UUID
-
-
-class AvailabilityRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    availability: PlayerAvailability
-    expected_presence_revision: int = Field(ge=0, strict=True)
-
 
 _EVENT_TITLES = {
     "PlayerMoved": "有人移动了位置",
@@ -49,7 +43,7 @@ def player_events_router(
     router = APIRouter(prefix=f"/api/v{API_PROTOCOL}", dependencies=[Depends(authorize)])
 
     @router.get("/worlds/{world_id}/players")
-    async def list_players(world_id: UUID) -> list[dict[str, str]]:
+    async def list_players(world_id: UUID) -> list[SelectablePlayer]:
         identity = WorldId(world_id)
         return [
             {"player_id": str(player.player_id.value), "name": player.name}
@@ -57,7 +51,7 @@ def player_events_router(
         ]
 
     @router.get("/worlds/{world_id}/me/player")
-    async def selected_player(world_id: UUID) -> dict[str, str | int | None]:
+    async def selected_player(world_id: UUID) -> SelectedPlayerState:
         identity = WorldId(world_id)
         presence = await service.selected_presence(identity)
         player = (
@@ -65,11 +59,11 @@ def player_events_router(
         )
         return {
             "player_id": str(player.value) if player is not None else None,
-            "availability": presence.availability.value if presence is not None else None,
+            "availability": presence.availability if presence is not None else None,
             "presence_revision": presence.revision.value if presence is not None else None,
         }
 
-    @router.post("/worlds/{world_id}/me/player")
+    @router.post("/worlds/{world_id}/me/player", response_model=wire.BindPlayerResult)
     async def bind_player(world_id: UUID, body: BindPlayerRequest) -> dict[str, str]:
         player = PlayerId(WorldId(world_id), body.player_id)
         try:
@@ -80,7 +74,7 @@ def player_events_router(
 
     if onboarding is not None:
 
-        @router.post("/worlds/{world_id}/me/start")
+        @router.post("/worlds/{world_id}/me/start", response_model=wire.BindPlayerResult)
         async def start_at_home(world_id: UUID) -> dict[str, str]:
             try:
                 player = await onboarding.start_at_home(WorldId(world_id))
@@ -88,7 +82,9 @@ def player_events_router(
                 raise HTTPException(404, "world_not_found") from None
             return {"player_id": str(player.value)}
 
-        @router.post("/worlds/{world_id}/me/availability")
+        @router.post(
+            "/worlds/{world_id}/me/availability", response_model=wire.SetPlayerAvailabilityResult
+        )
         async def set_availability(
             world_id: UUID,
             body: AvailabilityRequest,
@@ -114,7 +110,7 @@ def player_events_router(
             return {"availability": body.availability.value, "presence_revision": revision.value}
 
     @router.get("/worlds/{world_id}/known-events")
-    async def known_events(world_id: UUID) -> list[dict[str, str | int | None]]:
+    async def known_events(world_id: UUID) -> list[KnownWorldEvent]:
         return [
             {
                 "event_id": str(event.event_id.value),

@@ -1,7 +1,8 @@
 # OpenAI Native Responses Adapter
 
-Status: C-005E4 implemented and verified with offline contract fixtures. No production default
-wiring or paid API call is part of this baseline.
+Scope: Responses protocol mapping. The C-005E4 evidence used offline contract fixtures;
+current production wiring is documented in [composition](LLM_PRODUCTION_COMPOSITION.md),
+and model compatibility and acceptance in [project status](../PROJECT_STATUS.md).
 
 ## Protocol boundary
 

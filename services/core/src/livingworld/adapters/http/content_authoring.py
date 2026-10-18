@@ -5,6 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 
+from livingworld.adapters.http import contracts as wire
 from livingworld.adapters.http.world_content import _view
 from livingworld.application.content import ContentConflictError
 from livingworld.application.content_authoring import EditorDraft, authored_graph, editable
@@ -38,7 +39,7 @@ def content_authoring_router(service, repository, builder, authorize, logger=Non
         dependencies=[Depends(authorize)],
     )
 
-    @router.get("/{import_id}")
+    @router.get("/{import_id}", response_model=wire.ContentEditorResult)
     async def read_editor(world_id: UUID, import_id: UUID):
         try:
             item = await service.current(WorldId(world_id), import_id)
@@ -60,7 +61,7 @@ def content_authoring_router(service, repository, builder, authorize, logger=Non
         except ValueError:
             raise HTTPException(422, "editor_content_limits_exceeded") from None
 
-    @router.post("/preview")
+    @router.post("/preview", response_model=wire.WorldContentItem)
     async def preview_editor(world_id: UUID, body: DraftReview):
         try:
             identity = WorldId(world_id)
@@ -104,7 +105,7 @@ def content_authoring_router(service, repository, builder, authorize, logger=Non
                 logger.emit("content_editor", "preview_failed", level="ERROR")
             raise HTTPException(500, "editor_preview_failed") from None
 
-    @router.post("/research")
+    @router.post("/research", response_model=wire.ContentBuilderJob)
     async def research(world_id: UUID, body: ResearchRequest, request: Request):
         try:
             request_id = UUID(request.headers.get("X-Request-Id", ""))
@@ -119,7 +120,7 @@ def content_authoring_router(service, repository, builder, authorize, logger=Non
         except BuilderError as error:
             raise HTTPException(409, str(error)) from None
 
-    @router.get("/research/{request_id}")
+    @router.get("/research/{request_id}", response_model=wire.ContentBuilderJob)
     async def research_status(world_id: UUID, request_id: UUID):
         try:
             return await builder.status(WorldId(world_id), request_id)

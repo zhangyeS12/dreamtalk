@@ -1,6 +1,6 @@
 """Saved replies release the gate; retired conversations cannot await a reply."""
 
-from sqlalchemy import exists, func, select
+from sqlalchemy import and_, exists, func, select
 from sqlalchemy.orm import aliased
 
 from livingworld.infrastructure.persistence.authored_lifecycle import removed_character_roots
@@ -14,11 +14,63 @@ from livingworld.infrastructure.persistence.offline_contact_models import (
 from livingworld.infrastructure.persistence.proactive_models import ProactiveEpisodeRecord as Online
 
 
+def _private_episode_answered(delivered, world, player):
+    """Only a saved reply to one of this episode's two explicit deliveries counts."""
+    episode = aliased(Online)
+    turn, invitation, reply = aliased(Turn), aliased(Message), aliased(Message)
+    path = "$.private_delivery_turn_ids"
+    turns = (
+        func.json_extract(episode.input_json, path + "[0]"),
+        func.json_extract(episode.input_json, path + "[1]"),
+    )
+    return exists(
+        select(episode.episode_id)
+        .join(
+            turn,
+            and_(
+                turn.world_id == episode.world_id,
+                turn.turn_id.in_(turns),
+                turn.kind == "outreach",
+            ),
+        )
+        .join(
+            invitation,
+            and_(
+                invitation.world_id == turn.world_id,
+                invitation.turn_id == turn.turn_id,
+                invitation.conversation_id == turn.conversation_id,
+                invitation.sender_character_id.is_not(None),
+            ),
+        )
+        .join(
+            reply,
+            and_(
+                reply.world_id == invitation.world_id,
+                reply.conversation_id == invitation.conversation_id,
+                reply.sender_player_id == player,
+                reply.position > invitation.position,
+            ),
+        )
+        .where(
+            episode.world_id == world,
+            episode.player_id == player,
+            episode.state == "delivered",
+            episode.source_kind == "shared",
+            func.json_type(episode.input_json, path) == "array",
+            func.json_array_length(episode.input_json, path) == 2,
+            delivered.c.turn_id.in_(turns),
+        )
+        .correlate(delivered)
+    )
+
+
 async def waiting_conversation(session, world, player):
     reply = aliased(Message)
-    # Joint contact is one turn with two messages. The reply must follow both.
+    # A group reply follows both messages; a split invitation accepts either private reply.
     delivered = (
-        select(Message.conversation_id, func.max(Message.position).label("position"))
+        select(
+            Message.conversation_id, Message.turn_id, func.max(Message.position).label("position")
+        )
         .join(Turn, (Turn.world_id == Message.world_id) & (Turn.turn_id == Message.turn_id))
         .join(
             Conversation,
@@ -50,6 +102,7 @@ async def waiting_conversation(session, world, player):
                     reply.position > delivered.c.position,
                 )
             ),
+            ~_private_episode_answered(delivered, world, player),
         )
         .order_by(delivered.c.conversation_id)
         .limit(1)

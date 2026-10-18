@@ -1,5 +1,6 @@
+import asyncio
 import secrets
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from typing import Annotated
 from uuid import UUID
@@ -7,33 +8,42 @@ from uuid import UUID
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from pydantic import BaseModel, ConfigDict
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from livingworld.application.chat_conversations import ChatConversationService
-from livingworld.application.chat_messages import ChatMessageService
-from livingworld.application.chat_recall import EarlierChatRecall
-from livingworld.application.chat_reply import DirectChatReplyService
-from livingworld.application.developer_inspector import DeveloperInspectorService
-from livingworld.application.group_chat_reply import GroupChatReplyService
-from livingworld.application.local_profile import LocalProfileStore
-from livingworld.application.player_event_feed import PlayerEventFeedService
-from livingworld.application.player_onboarding import LocalPlayerOnboardingService
+from livingworld.adapters.http.character_activity_setup import character_activity_setup_router
+from livingworld.adapters.http.chat_conversations import chat_conversation_router
+from livingworld.adapters.http.chat_media import chat_media_router, media_error_handler
+from livingworld.adapters.http.chat_messages import chat_message_router
+from livingworld.adapters.http.content_authoring import content_authoring_router
+from livingworld.adapters.http.contracts import CoreHealth as HealthResponse
+from livingworld.adapters.http.conversation_memory import conversation_memory_router
+from livingworld.adapters.http.developer import developer_router
+from livingworld.adapters.http.director import director_router
+from livingworld.adapters.http.example_worlds import example_world_router
+from livingworld.adapters.http.factions import faction_router
+from livingworld.adapters.http.file_exports import file_export_router
+from livingworld.adapters.http.long_chat_memory import long_chat_memory_router
+from livingworld.adapters.http.offline_contact import (
+    offline_contact_router,
+    session_visibility_router,
+)
+from livingworld.adapters.http.player_events import player_events_router
+from livingworld.adapters.http.proactive_contact import proactive_contact_router
+from livingworld.adapters.http.profiles import profile_router
+from livingworld.adapters.http.services import HttpServices
+from livingworld.adapters.http.speech import speech_router
+from livingworld.adapters.http.update_maintenance import UpdateMaintenanceMiddleware
+from livingworld.adapters.http.world_content import world_content_router
+from livingworld.adapters.http.world_covers import create_world_cover_router
+from livingworld.adapters.http.world_locations import world_locations_router
+from livingworld.adapters.http.world_story import world_story_router
+from livingworld.adapters.http.worlds import world_router
+from livingworld.application.chat_media import MediaError
 from livingworld.application.runtime import RuntimeStatus, ShutdownRequests
-from livingworld.application.world_content import WorldContentService
-from livingworld.application.world_settings import WorldSettingsService
+from livingworld.application.speech_contracts import SpeechError
 from livingworld.domain.contracts import API_PROTOCOL, LOOPBACK_HOST, RequestId
 from livingworld.domain.identifiers import WorldId
 from livingworld.infrastructure.logging import StructuredLogger
-
-
-class HealthResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    ready: bool
-    core_version: str
-    api_protocol: int
-    generation: str
-    llm_status: str
 
 
 def create_app(
@@ -43,42 +53,14 @@ def create_app(
     initialize: Callable[[], None] | None,
     logger: StructuredLogger,
     allowed_origins: list[str] | None = None,
-    developer_inspector: DeveloperInspectorService | None = None,
-    world_settings: WorldSettingsService | None = None,
-    player_event_feed: PlayerEventFeedService | None = None,
-    local_profiles: LocalProfileStore | None = None,
-    world_content: WorldContentService | None = None,
-    player_onboarding: LocalPlayerOnboardingService | None = None,
-    chat_conversations: ChatConversationService | None = None,
-    chat_messages: ChatMessageService | None = None,
-    chat_reply: DirectChatReplyService | None = None,
-    group_chat_reply: GroupChatReplyService | None = None,
-    content_builder=None,
-    content_repository=None,
-    chat_recall: EarlierChatRecall | None = None,
-    conversation_memory=None,
-    long_chat_memory=None,
-    director=None,
-    world_story=None,
-    offline_contact=None,
-    proactive_contact=None,
-    world_locations=None,
-    character_activity_setup=None,
-    world_covers=None,
-    factions=None,
-    maintenance=None,
-    world_deletion=None,
-    content_exports=None,
-    chat_exports=None,
-    speech=None,
-    chat_media=None,
-    storage_metadata=None,
-    storage_observer=None,
-    example_worlds=None,
+    *,
+    services: HttpServices | None = None,
 ) -> FastAPI:
+    """Build an HTTP embedding; production must use create_product_app."""
+    services = services or HttpServices()
+
     @asynccontextmanager
-    async def lifespan(_app: FastAPI):
-        import asyncio
+    async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
         if initialize is not None:
             await asyncio.to_thread(initialize)
@@ -90,8 +72,6 @@ def create_app(
             status.ready = False
             logger.emit("core", "runtime_stopped")
 
-    from livingworld.adapters.http.world_covers import create_world_cover_router
-
     app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=[LOOPBACK_HOST])
     app.add_middleware(
@@ -100,10 +80,9 @@ def create_app(
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
         allow_headers=["Authorization", "X-Request-Id", "X-Media-Description"],
     )
+    maintenance = services.maintenance
     if maintenance is not None:
-        from livingworld.adapters.http.update_maintenance import UpdateMaintenanceMiddleware
-
-        app.add_middleware(UpdateMaintenanceMiddleware, maintenance=maintenance)
+        app.add_middleware(UpdateMaintenanceMiddleware, maintenance=services.maintenance)
     bearer = HTTPBearer(auto_error=False)
 
     def authorize(
@@ -114,104 +93,90 @@ def create_app(
         ):
             raise HTTPException(401, "unauthorized", headers={"WWW-Authenticate": "Bearer"})
 
-    if example_worlds is not None:
-        from livingworld.adapters.http.example_worlds import example_world_router
-
-        app.include_router(example_world_router(example_worlds, authorize, storage_observer))
-
-    if content_exports is not None and chat_exports is not None:
-        from livingworld.adapters.http.file_exports import file_export_router
-
-        app.include_router(file_export_router(content_exports, chat_exports, authorize))
-
-    if developer_inspector is not None:
-        from livingworld.adapters.http.developer import developer_router
-
-        app.include_router(developer_router(developer_inspector, authorize))
-
-    if character_activity_setup is not None:
-        from livingworld.adapters.http.character_activity_setup import (
-            character_activity_setup_router,
-        )
-
-        app.include_router(character_activity_setup_router(character_activity_setup, authorize))
-
-    if world_locations is not None:
-        from livingworld.adapters.http.world_locations import world_locations_router
-
-        app.include_router(world_locations_router(world_locations, authorize))
-
-    if world_settings is not None:
-        from livingworld.adapters.http.worlds import world_router
-
+    if services.example_worlds is not None:
         app.include_router(
-            world_router(world_settings, authorize, world_deletion, storage_observer)
+            example_world_router(services.example_worlds, authorize, services.storage_observer)
         )
 
-    if player_event_feed is not None:
-        from livingworld.adapters.http.player_events import player_events_router
+    if services.content_exports is not None and services.chat_exports is not None:
+        app.include_router(
+            file_export_router(services.content_exports, services.chat_exports, authorize)
+        )
 
-        app.include_router(player_events_router(player_event_feed, authorize, player_onboarding))
+    if services.developer_inspector is not None:
+        app.include_router(developer_router(services.developer_inspector, authorize))
 
-    if local_profiles is not None:
-        from livingworld.adapters.http.profiles import profile_router
+    if services.character_activity_setup is not None:
+        app.include_router(
+            character_activity_setup_router(services.character_activity_setup, authorize)
+        )
 
-        app.include_router(profile_router(local_profiles, authorize))
+    if services.world_locations is not None:
+        app.include_router(world_locations_router(services.world_locations, authorize))
 
-    if world_content is not None:
-        from livingworld.adapters.http.world_content import world_content_router
+    if services.world_settings is not None:
+        app.include_router(
+            world_router(
+                services.world_settings,
+                authorize,
+                services.world_deletion,
+                services.storage_observer,
+            )
+        )
 
-        app.include_router(world_content_router(world_content, authorize, character_activity_setup))
-        if content_builder is not None and content_repository is not None:
-            from livingworld.adapters.http.content_authoring import content_authoring_router
+    if services.player_event_feed is not None:
+        app.include_router(
+            player_events_router(services.player_event_feed, authorize, services.player_onboarding)
+        )
 
+    if services.local_profiles is not None:
+        app.include_router(profile_router(services.local_profiles, authorize))
+
+    if services.world_content is not None:
+        app.include_router(
+            world_content_router(
+                services.world_content, authorize, services.character_activity_setup
+            )
+        )
+        if services.content_builder is not None and services.content_repository is not None:
             app.include_router(
                 content_authoring_router(
-                    world_content, content_repository, content_builder, authorize, logger
+                    services.world_content,
+                    services.content_repository,
+                    services.content_builder,
+                    authorize,
+                    logger,
                 )
             )
 
-    if chat_conversations is not None:
-        from livingworld.adapters.http.chat_conversations import chat_conversation_router
+    if services.chat_conversations is not None:
+        app.include_router(chat_conversation_router(services.chat_conversations, authorize))
 
-        app.include_router(chat_conversation_router(chat_conversations, authorize))
-
-    if chat_messages is not None:
-        from livingworld.adapters.http.chat_messages import chat_message_router
-
+    if services.chat_messages is not None:
         app.include_router(
-            chat_message_router(chat_messages, authorize, chat_reply, group_chat_reply, chat_recall)
+            chat_message_router(
+                services.chat_messages,
+                authorize,
+                services.chat_reply,
+                services.group_chat_reply,
+                services.chat_recall,
+            )
         )
 
-    if proactive_contact is not None:
-        from livingworld.adapters.http.proactive_contact import proactive_contact_router
+    if services.proactive_contact is not None:
+        app.include_router(proactive_contact_router(services.proactive_contact, authorize, logger))
+    if services.offline_contact is not None:
+        app.include_router(offline_contact_router(services.offline_contact, authorize, logger))
+        app.include_router(session_visibility_router(services.offline_contact, authorize))
 
-        app.include_router(proactive_contact_router(proactive_contact, authorize, logger))
-    if offline_contact is not None:
-        from livingworld.adapters.http.offline_contact import (
-            offline_contact_router,
-            session_visibility_router,
-        )
-
-        app.include_router(offline_contact_router(offline_contact, authorize, logger))
-        app.include_router(session_visibility_router(offline_contact, authorize))
-
-    if long_chat_memory is not None:
-        from livingworld.adapters.http.long_chat_memory import long_chat_memory_router
-
-        app.include_router(long_chat_memory_router(long_chat_memory, authorize))
-    if world_story is not None:
-        from livingworld.adapters.http.world_story import world_story_router
-
-        app.include_router(world_story_router(world_story, authorize))
-    if director is not None:
-        from livingworld.adapters.http.director import director_router
-
-        app.include_router(director_router(director, authorize))
-    if conversation_memory is not None:
-        from livingworld.adapters.http.conversation_memory import conversation_memory_router
-
-        app.include_router(conversation_memory_router(conversation_memory, authorize))
+    if services.long_chat_memory is not None:
+        app.include_router(long_chat_memory_router(services.long_chat_memory, authorize))
+    if services.world_story is not None:
+        app.include_router(world_story_router(services.world_story, authorize))
+    if services.director is not None:
+        app.include_router(director_router(services.director, authorize))
+    if services.conversation_memory is not None:
+        app.include_router(conversation_memory_router(services.conversation_memory, authorize))
 
     @app.get("/system/live")
     async def live() -> dict[str, bool]:
@@ -231,6 +196,7 @@ def create_app(
             ),
         )
 
+    maintenance = services.maintenance
     if maintenance is not None:
 
         @app.post("/system/update/prepare", dependencies=[Depends(authorize)])
@@ -249,11 +215,11 @@ def create_app(
         async def verified_update():
             return maintenance.verified()
 
+    storage_metadata = services.storage_metadata
     if storage_metadata is not None:
 
         @app.get("/system/storage", dependencies=[Depends(authorize)])
         async def storage_evidence():
-            import asyncio
 
             try:
                 return await asyncio.to_thread(storage_metadata)
@@ -270,27 +236,22 @@ def create_app(
         logger.emit("http", "shutdown_requested", trace_id=str(request_id))
         return result
 
-    if world_covers is not None:
-        app.include_router(create_world_cover_router(world_covers, authorize))
-    if factions is not None:
-        from livingworld.adapters.http.factions import faction_router
-
-        app.include_router(faction_router(factions, authorize))
+    if services.world_covers is not None:
+        app.include_router(create_world_cover_router(services.world_covers, authorize))
+    if services.factions is not None:
+        app.include_router(faction_router(services.factions, authorize))
+    chat_media = services.chat_media
     if chat_media is not None:
-        from livingworld.adapters.http.chat_media import chat_media_router, media_error_handler
-        from livingworld.application.chat_media import MediaError
-
         app.add_exception_handler(MediaError, media_error_handler)
-        app.include_router(chat_media_router(chat_media, authorize))
+        app.include_router(chat_media_router(services.chat_media, authorize))
 
         @app.get("/system/media/local-demand", dependencies=[Depends(authorize)])
         async def local_media_demand():
             return {"enabled": await chat_media.store.local_requested()}
 
+    speech = services.speech
     if speech is not None:
-        from livingworld.adapters.http.speech import speech_router
-
-        app.include_router(speech_router(speech, authorize))
+        app.include_router(speech_router(services.speech, authorize))
 
         @app.get("/system/speech/local-demand", dependencies=[Depends(authorize)])
         async def local_speech_demand():
@@ -298,7 +259,6 @@ def create_app(
 
         @app.post("/system/speech/local-repair", dependencies=[Depends(authorize)])
         async def begin_local_speech_repair():
-            from livingworld.application.speech_contracts import SpeechError
 
             try:
                 return await speech.begin_local_repair()
@@ -310,3 +270,20 @@ def create_app(
             return await speech.end_local_repair(str(lease))
 
     return app
+
+
+def create_product_app(
+    status: RuntimeStatus,
+    shutdown: ShutdownRequests,
+    session_token: str,
+    initialize: Callable[[], None] | None,
+    logger: StructuredLogger,
+    allowed_origins: list[str] | None = None,
+    *,
+    services: HttpServices,
+) -> FastAPI:
+    """Reject incomplete product wiring before the server can report ready."""
+    services.require_product()
+    return create_app(
+        status, shutdown, session_token, initialize, logger, allowed_origins, services=services
+    )

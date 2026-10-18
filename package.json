@@ -4,8 +4,14 @@
   "private": true,
   "license": "Apache-2.0",
   "type": "module",
-  "workspaces": ["apps/web", "apps/desktop", "packages/api-client"],
-  "engines": { "node": ">=24.0.0" },
+  "workspaces": [
+    "apps/web",
+    "apps/desktop",
+    "packages/api-client"
+  ],
+  "engines": {
+    "node": ">=24.0.0"
+  },
   "scripts": {
     "dev:web": "node scripts/dev-web.mjs",
     "dev:ui": "npm run dev --workspace @dreamtalk/web -- --host 127.0.0.1 --port 1420 --strictPort",
@@ -22,17 +28,21 @@
     "build:core": "uv build --wheel --out-dir artifacts/core",
     "test:desktop": "uv run --frozen python scripts/test-desktop.py",
     "test:desktop-smoke": "uv run python scripts/desktop-smoke.py",
-    "test:llm-live": "uv run python scripts/live-llm-smoke.py"
+    "test:llm-live": "uv run python scripts/live-llm-smoke.py",
+    "typecheck:core": "pyright --project pyrightconfig.json",
+    "generate:contracts": "uv run --frozen python scripts/generate-api-contracts.py",
+    "check:contracts": "uv run --frozen python scripts/generate-api-contracts.py --check"
   },
   "devDependencies": {
-    "vite": "^8.3.0",
     "@eslint/js": "^10.0.0",
+    "@testing-library/react": "^16.0.0",
     "eslint": "^10.0.0",
     "globals": "^17.0.0",
+    "jsdom": "^30.0.0",
+    "pyright": "1.1.414",
     "typescript": "~5.9.0",
     "typescript-eslint": "^8.0.0",
-    "vitest": "^5.0.0",
-    "jsdom": "^30.0.0",
-    "@testing-library/react": "^16.0.0"
+    "vite": "^8.3.0",
+    "vitest": "^5.0.0"
   }
 }

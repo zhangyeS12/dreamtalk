@@ -30,6 +30,7 @@ jobs:
       - run: uv sync --frozen
       - run: uv run --frozen ruff check .
       - run: uv run --frozen ruff format --check .
+      - run: uv run --frozen python scripts/generate-api-contracts.py --check
       - run: uv run --frozen pytest
       - run: uv build --wheel --out-dir artifacts/core
       - run: uv run --frozen python scripts/check-wheel.py
@@ -55,6 +56,7 @@ jobs:
           version: '0.11.32'
           python-version: '3.13'
       - run: uv sync --frozen --group browser-test
+      - run: npm run typecheck:core
       - run: uv run --frozen --group browser-test playwright install --with-deps chromium
       - run: npm run test:web-smoke
 

@@ -9,6 +9,7 @@ from livingworld.application.commands import ConfigureLocation, CreateLocation
 from livingworld.domain.contracts import RequestId
 from livingworld.domain.errors import DomainInvariantError
 from livingworld.domain.identifiers import CharacterId, LocationId, PlayerId, WorldId
+from livingworld.domain.participants import CharacterState
 from livingworld.domain.values import Revision
 
 if TYPE_CHECKING:
@@ -49,7 +50,7 @@ class LocalLocation:
 
 class LocalLocationDirectory(Protocol):
     async def list_locations(self, world_id: WorldId) -> tuple[LocalLocation, ...]: ...
-    async def remove_location(self, location_id: LocationId, expected_revision: int) -> None: ...
+    async def remove_location(self, location_id: LocationId, expected_revision: int, /) -> None: ...
 
 
 class LocalLocationCatalog(Protocol):
@@ -59,7 +60,7 @@ class LocalLocationCatalog(Protocol):
         self, character_id: CharacterId, location_id: LocationId, player_id: PlayerId
     ) -> None: ...
     async def check_options(self, location_id, parent_id, hidden, allowed_characters) -> None: ...
-    async def check_edit(self, location_id, name, parent_id=None) -> None: ...
+    async def check_edit(self, location_id, name, parent_id=None, /) -> None: ...
     async def configure(
         self, location_id, name, parent_id, hidden, allowed_characters, is_region=False
     ) -> None: ...
@@ -69,7 +70,13 @@ class LocalLocationCatalog(Protocol):
     async def configure_character(
         self, character_id, location_id, locked, residency="strong", now=None
     ) -> None: ...
-    async def config_destination(self, character_id, root, locked, before): ...
+    async def config_destination(
+        self,
+        character_id: CharacterId,
+        root: LocationId,
+        locked: bool,
+        before: CharacterState | None,
+    ) -> LocationId: ...
 
 
 class WorldLocationsService:

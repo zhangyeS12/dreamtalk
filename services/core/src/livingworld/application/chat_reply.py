@@ -48,7 +48,7 @@ from livingworld.application.llm_budget import (
 )
 from livingworld.application.llm_chat_turn_budget import ChatTurnTokenBudget, TurnTokenBudgetError
 from livingworld.application.llm_execution import ExecutionDeadlineError
-from livingworld.application.llm_routing import ModelSelection, RoutingError
+from livingworld.application.llm_routing import ModelSelection, RoutePlan, RoutingError
 from livingworld.domain.identifiers import CharacterId
 
 
@@ -91,7 +91,9 @@ async def claimed_reply_execution(messages, sent):
 
 
 class ChatGateway(Protocol):
-    def plan(self, request: LLMRequest, *, selection: ModelSelection | None = None): ...
+    def plan(
+        self, request: LLMRequest, *, selection: ModelSelection | None = None
+    ) -> RoutePlan: ...
 
     async def generate(
         self,

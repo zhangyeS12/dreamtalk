@@ -1,155 +1,36 @@
-# Director Model
+# Director与世界活动契约
 
-> 当前状态（2026-10-07）：默认关闭的有限 Director 日常、相遇、共同休闲及真实开始/结束/中断已接入；在线/离线主动联系与同事由双人首版也已有独立应用接线。共同联系由用户验收，用户尚未收到共同消息，当前先等待，不据此判定故障或触发生成。完整剧情/关系演化、任意多人 Episode 与离线重建仍未实现。下文 Stage 0 阈值/确认及历史版本段落由后续批准方案覆盖；当前完成度见[状态清单](../PROJECT_STATUS.md)。
-
-当前窗口6小时 WorldTime；到窗口结束，或原批候选至少2条且达到50%因状态前提失效，才准许新的批量规划。每批独立有限预算，所有供应商复用既有网关；用户首次开启后无需逐批预览。新批原子替换旧的 pending，已开始活动的占用先到期。普通 UI 只显示安全运行状态。输入只含同世界必要位置/revision及已接受角色卡的description/personality/background；没有读取世界书暗线、私聊或私人记忆，公共世界书背景已按用户具体授权接入planner：只读本世界当前accepted、逐条公开且enabled的条目，复用常驻/字面关键词/次级条件/排序和16条、12KiB背景上限；quiet后台类型匹配角色名及各自当前地点名。开启任务和接纳返回计划前检查公开范围及当前版本，变化后停需处理，不自动付费重试。私聊、记忆、隐藏条目或整本source_book均不进入规划。
-
-2026-09-29 日常首版只提交 `CharacterRoutineStarted`（后续已增加真实终态，见生命周期说明）：休息/工作/自由活动的开始与可选地点变化。计划 duration 用于防重叠占用，到期只释放操作性占用，不宣称完成了工作、取得物品或改变关系。晚到但仍在计划时段的候选按当前真实 WorldTime 开始；已经结束的未执行候选标 expired，不补造离线亲历或过去成果。完整离线活动重建尚待后续，旧窗口以外没有伪造的未规划生活。
-
-规则来源：[PRODUCT_SPEC.md](../product/PRODUCT_SPEC.md) 中的 FR-01 至 FR-24。相关概念见 [DOMAIN_MODEL.md](DOMAIN_MODEL.md)，候选事件与事实边界见 [EVENT_MODEL.md](EVENT_MODEL.md)。
+本页维护规划／执行的技术边界。批准阈值统一见[产品约定](../../PRODUCT.md#世界运行相遇与联系)及[日常方案](../proposals/2026-09-29-director-runtime.md)，用户操作见[日常手册](../DIRECTOR_ACTIVITIES.md)，实现／验收统一见[状态清单](../PROJECT_STATUS.md)。旧阶段的“未接入／待定义”不继续作为当前说明；整理前全文可从[固定Git版本](https://github.com/zhangyeS12/dreamtalk/blob/485b512a5dac8da7077326d1cd3daea5eb3304c8/docs/architecture/DIRECTOR_MODEL.md)追溯。
 
 ## 1. 职责与边界
 
-dreamtalk 是持久化、事件驱动的多角色 AI 世界（FR-01）。Director 负责世界层面的调度与变化；Character Agent 主要负责自己拥有的记忆、人格表达和与玩家对话（FR-02、FR-03）。
-
-| 主体 | 负责 | 边界 |
+| 主体 | 职责 | 不可跨越的边界 |
 | --- | --- | --- |
-| Director | 时间、地点、世界事件、角色活动、角色相遇、关系变化和宏观剧情调度 | **Director 改变世界，但不能直接替 Character Agent 编写最终对玩家台词。** |
-| Character Agent | 自己拥有的记忆、人格表达和与玩家对话 | 可用内容受 Character Knowledge 与记忆归属约束；不能因为 Director 知道某个事实就自动知道它。 |
-| 传统程序 | 对 Event Reservoir 中的候选事件执行激活、延期或取消 | 必须遵守冻结规则；候选计划不能直接被当成已发生事实。 |
+| Director | 按已有角色、获准背景与本地路线批量提出有限日常／相遇／共同休闲候选 | 不直接改权威状态、不写角色最终台词，不把计划当已发生事实 |
+| Kernel与调度 | 验证同意／绑定／plan／revision、时段、地点、占用和幂等，激活／延期／取消候选，提交真实事件和观察 | 不用未执行候选补造历史；不把到期释放占用当工作成果 |
+| Character Agent | 在本人身份和知识权限内表达，读取自己的获准活动／经历 | 不读其他角色私密观察，不因Director知道就自动知情 |
 
-上述主体是责任划分，不表示已经确定进程、服务、模块、模型调用接口或部署方式。
+Player始终只有一个物理位置，通信不移动参与者。WorldTruth、信念与玩家知识分离，普通UI只显示安全状态与已获知事件；不暴露后台候选、关系数值或全知计划。
 
-Director 可以确定联系目的、参与角色及世界情境。角色最终向玩家表达什么，应由对应 Character Agent 在其知识与记忆边界内完成。世界事件的调度和对话台词的生成是不同责任。
+## 2. 规划输入与接纳
 
-## 2. 世界一致性与信息边界
+- 输入只含同世界必要地点／revision、已接受角色卡和当前 accepted、enabled、逐条公共授权的世界书背景；沿常驻／字面关键词／次级条件／排序，有界十六条／12 KiB。后台匹配角色及其当前地点名称，不发送私聊、私人记忆、隐藏条目或整本source_book。
+- 本地规则先确定合法路线，模型只安排本批地点上的日常。角色和地点总量不等于每批模型输入量；移动、隐藏祖先、锁定和远行门禁见[地点手册](../ACTIVITY_LOCATIONS.md)。
+- 开启及接纳返回计划前核对公开范围和版本；变化后停止并标明需处理，不自动付费重试。新批原子替换旧pending；已开始活动依真实生命周期结束／中断，不因新计划抹除。
+- 候选激活后才可成为WorldEvent。晚到但仍在有效时段者按当前WorldTime开始，时段已过者expired，不补演。暂停／撤回同意阻止新执行，关闭后的迟到结果不激活；在途已接纳调用仍可能收费。
 
-- 世界真实事实、Character Knowledge 和 Player Knowledge 分离（FR-04）。Director 的世界层面判断不能使任何角色或玩家自动获得相应知识。
-- 后台发生但玩家不知道的事件不能直接展示给玩家（FR-05）。事件是否发生和玩家是否获知必须分别判断，详见 [KNOWLEDGE_MODEL.md](KNOWLEDGE_MODEL.md)。
-- 玩家任意时刻只能存在于一个物理地点（FR-06）。场景安排、相遇与主动联系都必须保持这一约束；远程联系本身不代表玩家同时出现在另一个地点。
-- 关系存在于后台，不能向普通玩家展示数值（FR-07）。Director 负责关系变化的世界层面调度，角色表达受其人格、记忆与知识约束。
-- 世界支持 Checkpoint 与 Timeline Branch（FR-22）。分支上的计划、事实、知识与记忆如何继承或失效，仍需进一步定义；本阶段不规定存储或恢复机制。
+## 3. 生命周期与社交
 
-## 3. 批量规划与 Event Reservoir
+日常已有真实开始、结束和中断；事件只认证相应行为发生，不能证明任务、物品或关系成果。相遇须双方实际同LocationId、合法活动及授权；持续同场去重、冷却和数量限制沿当前产品契约，父子包含不等于同场。
 
-Director 使用批量 **World Plan + Event Reservoir**。禁止为每个普通小事件单独调用 LLM（FR-13）。
+共同休闲复用已有同场／相识依据和日常，不另开逐活动模型调用。Kernel检查presence revisions、当前计划、同意、既有相识、滚动限制与连续性，原子提交开始／结束／中断及获准观察。离线连续性未知不能倒填完成。[相遇方案](../proposals/2026-10-03-character-encounters.md)／[共同休闲方案](../proposals/2026-10-04-shared-activities.md)
 
-### 3.1 概念分工
+在线／离线主动联系是独立应用流程：合法理由、持久claim、跨角色未回复门禁和成本治理共同生效。双人联系只能来自同一次真实共同休闲；有仅含两位角色的可用群则投群，否则分别私聊，任一私聊回复回应整次邀请。普通群聊selector独立，不替Director规划。用户决定先等待共同联系时，不触发生成或改公平权重。[在线方案](../proposals/2026-10-04-proactive-contact.md)／[离线方案](../proposals/2026-09-29-offline-contact.md)
 
-| 概念 | 在规划中的作用 | 不代表什么 |
-| --- | --- | --- |
-| World Plan | 一批世界调度安排与候选事件的规划上下文 | 不代表其中的事件已经发生，也不保证每个候选都会发生。 |
-| Planning Window | 用于约束批量规划的覆盖窗口 | 不预设固定时长、事件数量或计费额度。 |
-| Event Reservoir | 承载待处理 CandidateEvent 的候选集合 | 不是已发生 WorldEvent 的事实记录。 |
-| CandidateEvent | 可以由传统程序激活、延期或取消的候选事件 | 在激活前不是世界事实。 |
-| WorldEvent | 已实际发生的世界事件；来自候选时必须经过激活 | 不自动成为玩家或所有角色知道的内容。 |
+## 4. 角色活动进入聊天
 
-### 3.2 执行与重新规划
+活动输入来自同世界、当前发言角色获准的witnessed／event_occurrence观察，以及受支持事件中的主体／地点引用。actor与witness、subject_kind／subject_id及稳定角色ID必须对应；同名、改名、卡片惯常行为、公共背景或他人台词不能替代本人行动证据。
 
-概念过程如下，具体状态表示及执行方式尚未设计：
+当前判断复核活动、revision、地点和WorldTime；暂停、已终止、状态变化或无来源不能伪造进度，已有获准终态优先。本人活动与亲历召回采用各自有界窗口，详见[自身状态](../EXPERIENCE_STATE_RECALL.md)和[亲历召回](../EXPERIENCE_RECALL.md)。群聊发言者可读本人输入，selector不读取这些私人观察；对话提到活动不使玩家自动成为目击者。
 
-1. Director 以批量 World Plan 组织规划窗口内的安排与候选事件。
-2. 传统程序处理 Event Reservoir，对候选事件执行激活、延期或取消（FR-14）。
-3. 候选事件只有被激活后才成为 WorldEvent；未激活的候选不能提前改变世界事实。
-4. **Planning Window 耗尽或大量计划失效才触发 Replan**（FR-15）。单个普通小事件的处理不能自行变成一次独立的 LLM 规划调用。
-
-FR-15 给出了 Replan 的触发边界，但尚未定义“耗尽”和“大量失效”的判定。本阶段不设数值阈值，也不增加其他触发例外。首次规划如何开始、重新规划如何衔接仍有效候选，属于后续待确认事项。
-
-自动生成的持久创作内容必须经过 Draft → Preview → Commit（FR-19）。Character Agent 的运行时聊天台词经系统校验后直接发送给玩家，无需逐条人工预览。运行时 World Plan、事件生成及记忆摘要的具体边界和流程仍见产品问题 P-16；批量规划要求不构成对 FR-19 的豁免。
-
-### 3.3 概念例子
-
-批量计划中包含“某角色下午可能到广场散步”。该安排只是 CandidateEvent；时间或情境变化可以使它延期或取消。只有激活后，“角色已到广场”才成为世界事实。玩家是否知道该事实仍由独立的知识边界决定。此例不预设激活算法或具体条件。
-
-## 4. 玩家状态与主动联系
-
-玩家具有 Busy / Available 状态（FR-08）。
-
-| 玩家状态 | Director 的主动联系权限 |
-| --- | --- |
-| Busy | 不得发起非必要主动联系（FR-09）。何为“必要”尚待产品确认，本文不自行列出例外。 |
-| Available | 可以安排一个角色或一组角色主动联系（FR-10）；仍受理由去重、统一目的和知识边界约束。 |
-
-所有主动联系必须遵守：
-
-- 同一个主动联系理由最多主动发送一次；玩家未回复不能持续催促（FR-11）。不能将未回复本身当作不断重发同一理由的依据。
-- 多角色主动联系必须围绕一个统一目的，形成 **Outreach Episode**（FR-12）。参与人数增加不能消除同一理由最多主动发送一次的限制。
-- Director 负责目的、参与者与世界调度；各 Character Agent 负责各自最终对玩家台词。
-- 主动联系不得直接泄露后台未知事件，也不得使玩家拥有多个物理地点。
-
-Outreach Episode 是围绕统一目的组织的联系单元，不等同于任意多人聊天、单条 Message 或所有 Conversation 的总称。一次主动联系中多人发言怎样计数，以及后续正常对话与重复主动联系如何区分，尚未冻结。
-
-## 5. 风格、可观察性与资源责任
-
-### DirectorProfile
-
-Director 有用户可配置风格面板（FR-16），DirectorProfile 承载这种风格配置的概念。配置项、默认值与生效范围仍待定义；风格选择必须遵守已冻结的时间地点、知识、主动联系和规划约束。
-
-### 决策 Trace
-
-Developer Mode 能查看 Director、Agent、Memory、LLM 使用等决策 Trace（FR-23）。Director 的规划、候选处理、主动联系与 Replan 判断属于需要可解释的决策范围。Trace 的内容粒度、保留策略和访问边界仍待设计；开发者查看 Trace 不等于玩家在世界内获得知识。
-
-### LLM 使用与预算
-
-产品必须记录 Token、Latency 和 Cost，并支持预算与模型路由（FR-24）。Director 的 LLM 使用需要纳入统一记录与预算约束。LLMProvider、ModelProfile 和 LLMUsage 是相关概念，本阶段不选择供应商、模型或价格，也不定义预算耗尽时的行为。
-
-面向普通用户的配置应符合非技术用户定位，高级模型参数隐藏到 Advanced/Developer Settings（FR-21）。这里仅说明产品边界，不设计或实现 UI。
-
-## 6. 待确认的产品定义
-
-以下是冻结规则尚未回答的问题，不构成新增规则：
-
-| 问题 | 需要澄清的范围 |
-| --- | --- |
-| Busy 的“必要联系” | 判断依据、判断主体、可否配置，以及如何避免将普通联系误判为必要。 |
-| 玩家状态变化 | Busy / Available 的默认状态、切换方式，以及发送前发生状态变化时的处理。 |
-| 同一主动联系理由 | 理由的身份与等价标准；限制在世界、玩家、Timeline 或其他范围内如何适用。 |
-| 多角色联系的“一次” | Episode 内多角色发言如何计数；首次发送、用户回复后的正常对话与重复主动联系如何区分。 |
-| Planning Window 耗尽 | 窗口按世界时间、计划覆盖还是其他语义判断；不在此处指定。 |
-| 大量计划失效 | 失效原因、统计范围和触发 Replan 的阈值。 |
-| 规划衔接 | 首次规划入口、Replan 时仍有效候选如何处理，以及候选冲突如何裁决。 |
-| 地点与活动 | 物理移动、在途状态、相遇与远程联系的详细语义。 |
-| Director 风格 | 可配置维度、默认风格，以及变更对现有计划的影响。 |
-| Checkpoint 与分支 | 计划、联系去重、关系、知识和记忆的继承范围，以及恢复与回滚语义。 |
-| Trace 与预算 | Trace 的访问边界和保留范围；Token、Latency、Cost 的统计口径、预算范围与路由约束。 |
-
-
-## 2026-09-29 亲历事件切片时的历史状态（由顶部当前说明替代）
-
-Director 仍未接入运行时。独立群聊 selector、聊天回忆、可确认会话摘要以及本轮的 owner-scoped 亲历事件上下文，均不是 WorldPlan/EventReservoir。会话摘要已按后续用户确认实现，不能因此推定运行世界计划也免于预览确认。P-05/P-16/P-17 中计划窗口、失效门槛、候选消费与确认边界仍需要形成具体契约后再实现；本轮没有隐式决定默认时长、阈值或新增自动模型触发。
-
-## 单角色离线联系（2026-09-29）
-
-每次真实离线恢复由一个有限批量输入选择最多一名角色和自然问候/邀请目的，Director不编写最终台词。Character通过已有受控网关生成，材料限离线前接受的persona和公开世界书；不读取私聊正文或私人记忆。系统reason由World/Player/最近玩家互动标识组成，跨角色一次；未回复上次主动私聊不再发起问候。每次恢复先持久claim，失败/中断/不联系不自动付费重试。与6小时WorldPlan续批、普通玩家发消息轮次分开；不生成过去活动事实、关系或多人Episode。具体边界见[操作说明](../OFFLINE_MESSAGES.md)。
-
-## 角色自身活动进入聊天（2026-10-01）
-
-私聊和群聊回复现在读取当前发言角色自己的最新真实活动开始，并结合现有有效WorldTime与自身状态快照区分：原定活动时段内、原定时段已过、自身状态已变化。来源必须是同世界、该角色自己的witnessed/event_occurrence观察，且事件主体是自己；从Kernel已提交的CharacterRoutineStarted v1取白名单标量，不读取Director输入、未来候选或其他角色状态。缺少来源不猜测活动。角色自己的最新开始独立读取，不会因12条近期观察全部被其他亲历事件占满而丢失。
-
-当前活动判断要求自身revision与地点仍对应这次开始，并且当前WorldTime早于事件中的planned_until。结束时段只释放占用，不表示完成了任务、取得成果或改变关系；状态变化后不把旧开始当现在。经过时间是世界分钟，不转换成现实日期；暂停世界不按现实时间产生进度。
-
-这段最多2KiB的临时情境只提供给该角色的回复，私聊放在当前问题前，群聊附在该发言者的资料中；群聊选人不读它。没有新的模型任务、UI全知活动面板、自动Memory/Knowledge写入或迁移。对话可以自然提及自己实际开始过的活动，但消息本身不把玩家标成目击者。现有亲历事件输入和“聊聊这件事”入口继续复用。
-
-只做静态检查和编译打包，实际模型是否自然、准确使用这些信息仍由用户体验验收。见[调查与实现边界](../research/2026-10-01-activity-chat-context-reuse.md)。
-
-## 活动回答的主体对应（2026-10-01，桌面0.1.4）
-
-用户明确要求回答对应角色自身活动。本轮在现有已授权事件投影中增加内部subject身份；角色上下文标识实际主体subject_kind/subject_id，以及actor（本人行动）或witness（目击他人）。缺少可信标记时不能认定是自己的经历。角色名称相同、角色卡改名也不改变对应的主体ID。玩家事件HTTP仍手动返回原白名单字段，不新增内部身份字段或改变知情范围。
-
-自身快照增加speaker_character_id、actor_character_id和受限RoutineActivity枚举，另复核事件subject等于当前发言者；缺少对应身份或合法活动类型时仅保留时钟，不把事件交作本人活动。已有阶段/revision/地点/时间判定继续保留。本人活动上限2KiB、观察上限12条/8KiB均包括新字段的实际序列化字节。
-
-私聊角色资料也提供稳定ID；私聊/群聊共用同一段活动约束：近况以自身记录为依据，休息/工作/自由活动不能任意互换，不从角色卡惯常行为、公共背景或别人台词补造本人的任务、同行者、成果或地点。角色仍可自然表达感受与想法；世界暂停、时段已过、状态改变、无记录不能伪造进度。群聊selector不读取这些私人观察。
-
-本轮加强的是受控输入的身份与活动类型对应和共用回复规则，既有回复校验仍只验证调用/完成/字节/预算等完整性。没有新增自然语言语义裁判或宣称完全消除幻觉，没有固定话术替换台词或按关键词拒绝回复。无新依赖、表/迁移、后台任务、额外模型调用。实际角色是否准确使用资料由用户体验验收。见[复用调查](../research/2026-10-01-activity-identity-reuse.md)。
-
-## 桌面0.1.25实际接入边界
-
-用户已批准[短暂相遇首版](../proposals/2026-10-03-character-encounters.md)。默认关闭、独立授权revision的相遇候选随原日常批次可选产生，不逐相遇调用API、不触发额外即时规划。Kernel复核双方真实地点、active rest/leisure、presence revision、当前计划/绑定/同意、五分钟有效窗口和六小时pair冷却后，原子生成CharactersMet v1、获准观察、候选结果和幂等回执。普通玩家不获全知计划，聊天只有owner获准事件投影。迁移0033只加两表，旧表形状保持；暂停/关闭/错过不补演，不改变玩家位置、关系或任务成果。旧日常结束/中断已在0.1.7接入，本页较早“到期只释放占用”是首版历史描述。见[当前使用说明](../CHARACTER_ENCOUNTERS.md)。
-
-## 桌面0.1.26用户批准的相遇节奏
-
-每批可选0～2条普通问候，Kernel也限制同plan_id已成功数；每角色滚动24小时WorldTime最多一个首次实际记录的见面对象，曾成功问候的旧对象不花新增额度。原6小时pair冷却之外，持续同一地点停留只记一次普通问候；账本中一方实际离开才可再考虑。只取消不合格相遇，不补选、不计日常半批失效；旧事实和CharactersMet v1重放保持。聊天明确问候阶段及无关系效果，不新增正式介绍/任务/关系动作。没有新表/迁移/依赖或私人历史给Director。规则与复用依据见[调查](../research/2026-10-04-encounter-pacing-reuse.md)及[使用说明](../CHARACTER_ENCOUNTERS.md)。
-
-## Approved shared leisure (0.1.27)
-
-The [approved concrete proposal](../proposals/2026-10-04-shared-activities.md) permits optional joint_activities in the existing batch, independent default-off consent and strict shared rest/leisure lifecycle. Typed proposal validation precedes admission; the Kernel checks actual prior greetings, active routines, presence revisions, consent/binding/current plan, rolling limits and ledger continuity, then atomically records v1 start/ended/interrupted events and authorized observations with receipts. No additional history export, per-activity model invocation, Player movement or relationship/task-result mutation. See [product guide](../SHARED_LEISURE.md).
+上下文约束不等于自然语言语义裁判，也不能保证完全消除幻觉。没有因此增加后台模型调用或自动Observation→Memory／Truth写入。完整离线重建、广泛剧情／关系演化与未冻结的Director风格不由本契约推导实现。

@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Protocol
 from uuid import uuid4
 
 from livingworld.application.chat_context import DirectChatContextBuilder
@@ -47,6 +48,10 @@ class InvocationFactory:
         return InvocationId(uuid4())
 
 
+class ClosableGateway(Protocol):
+    async def aclose(self) -> None: ...
+
+
 @dataclass(slots=True)
 class ProductionLLMRuntime:
     """Owns adapter clients; callers receive only the governed routed gateway."""
@@ -56,7 +61,7 @@ class ProductionLLMRuntime:
     gateway: RoutedModelGateway
     registry: ModelRegistry
     invocation_factory: InvocationFactory = field(default_factory=InvocationFactory)
-    _owned_gateways: tuple[object, ...] = field(default=(), repr=False)
+    _owned_gateways: tuple[ClosableGateway, ...] = field(default=(), repr=False)
     token_bounder: PreflightUsageBounder | None = field(default=None, repr=False)
 
     @property
@@ -121,12 +126,22 @@ def configure_direct_chat_reply(
     messages: ChatMessageService,
     context: DirectChatContextBuilder,
     journal=None,
-) -> DirectChatReplyService | None:
+) -> DirectChatReplyService | WorldModelValue[DirectChatReplyService | None] | None:
     """Use the explicit BALANCED route, or the sole eligible configured model."""
     if session.world_runtimes:
         return _scoped_value(
-            session, lambda scoped: configure_direct_chat_reply(scoped, messages, context, journal)
+            session, lambda scoped: _single_direct_chat_reply(scoped, messages, context, journal)
         )
+    return _single_direct_chat_reply(session, messages, context, journal)
+
+
+def _single_direct_chat_reply(
+    session: ProductionLLMSession,
+    messages: ChatMessageService,
+    context: DirectChatContextBuilder,
+    journal=None,
+) -> DirectChatReplyService | None:
+    """Use the explicit BALANCED route, or the sole eligible configured model."""
     configured = _chat_reply_configuration(session)
     if configured is None:
         return None
@@ -141,12 +156,22 @@ def configure_group_chat_reply(
     context: GroupChatContextBuilder,
     journal=None,
     logger=None,
-) -> GroupChatReplyService | None:
+) -> GroupChatReplyService | WorldModelValue[GroupChatReplyService | None] | None:
     if session.world_runtimes:
         return _scoped_value(
             session,
-            lambda scoped: configure_group_chat_reply(scoped, messages, context, journal, logger),
+            lambda scoped: _single_group_chat_reply(scoped, messages, context, journal, logger),
         )
+    return _single_group_chat_reply(session, messages, context, journal, logger)
+
+
+def _single_group_chat_reply(
+    session: ProductionLLMSession,
+    messages: ChatMessageService,
+    context: GroupChatContextBuilder,
+    journal=None,
+    logger=None,
+) -> GroupChatReplyService | None:
     configured = _chat_reply_configuration(session)
     if configured is None:
         return None
@@ -270,7 +295,11 @@ def _chat_reply_configuration(session: ProductionLLMSession, purpose="character_
         )
     ):
         return None
-    primary = entries[0]
+    # Lookup and capacity were checked above; retain the narrowing in callbacks.
+    checked = tuple(entry for entry in entries if entry is not None)
+    primary = checked[0]
+    assert primary.limits is not None
+    entries = checked
 
     def available() -> bool:
         # The route may explicitly permit skipping candidates without a key.
@@ -293,15 +322,18 @@ def _chat_reply_configuration(session: ProductionLLMSession, purpose="character_
         runtime.gateway,
         runtime.token_bounder or runtime.registry.usage_bounder(),
         primary.model,
-        min(entry.limits.max_output_tokens for entry in entries),
+        min(entry.limits.max_output_tokens for entry in entries if entry.limits is not None),
         available,
         selection,
         max(
             (
                 entry.limits.max_billable_input_tokens
                 for entry in entries
-                if not isinstance(runtime.token_bounder, ProviderRequestUsageBounder)
-                or not runtime.token_bounder.supports_request_bound(entry.model)
+                if entry.limits is not None
+                and (
+                    not isinstance(runtime.token_bounder, ProviderRequestUsageBounder)
+                    or not runtime.token_bounder.supports_request_bound(entry.model)
+                )
             ),
             default=None,
         ),

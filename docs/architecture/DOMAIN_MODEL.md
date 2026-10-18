@@ -14,7 +14,7 @@ CharacterDefinitionId / WorldContentId / LoreEntryId / ContentAssetId / RawImpor
 
 ## C-003E2 已确认的边界
 
-Stage 2 建立 canonical ledger、内部回放及资源级乐观并发；当时未接入的 Director、聊天/API 和确定性模拟已由后续切片实现，当前范围以顶部说明及状态清单为准。验收见 [STAGE_2_ACCEPTANCE.md](STAGE_2_ACCEPTANCE.md)。
+Stage 2 建立 canonical ledger、内部回放及资源级乐观并发；当时未接入的 Director、聊天/API 和确定性模拟已由后续切片实现，当前范围以顶部说明及状态清单为准。验收见 [STAGE_2_ACCEPTANCE.md](https://github.com/zhangyeS12/dreamtalk/blob/485b512a5dac8da7077326d1cd3daea5eb3304c8/docs/architecture/STAGE_2_ACCEPTANCE.md)。
 
 - mutable projection 各自由 Revision 保护，Presence / CharacterState / 有向 Relationship 独立，无全局 World revision；期待不存在用 None，不等同 Revision(0)。CAS 在基础设施实现，领域继续不知道 SQLAlchemy 或数据库。
 - 现有 ConcurrencyConflictError 增加可选内部 resource kind、typed identity、expected/actual Revision 信息；Revision.advance 的既有调用仍有效。

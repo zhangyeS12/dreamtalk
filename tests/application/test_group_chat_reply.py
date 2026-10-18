@@ -8,6 +8,7 @@ import pytest
 from card_fixtures import card_document, json_bytes
 from fastapi.testclient import TestClient
 from livingworld.adapters.http.app import create_app
+from livingworld.adapters.http.services import HttpServices
 from livingworld.application.chat_conversations import ChatConversationService
 from livingworld.application.chat_messages import ChatMessageService
 from livingworld.application.chat_reply import ChatReplyBudgetError, ChatReplyValidationError
@@ -136,13 +137,14 @@ def test_group_http_send_reply_and_retry_keep_one_durable_turn(tmp_path):
     db, group, messages, context = asyncio.run(_environment(tmp_path))
     provider = ScriptedProvider(("乙的回复", "STOP"))
     app = create_app(
-        RuntimeStatus("test", "generation"),
-        ShutdownRequests(),
-        "secret",
-        lambda: None,
-        StructuredLogger(io.StringIO()),
-        chat_messages=messages,
-        group_chat_reply=_service(messages, context, provider),
+        status=RuntimeStatus("test", "generation"),
+        shutdown=ShutdownRequests(),
+        session_token="secret",
+        initialize=lambda: None,
+        logger=StructuredLogger(io.StringIO()),
+        services=HttpServices(
+            chat_messages=messages, group_chat_reply=_service(messages, context, provider)
+        ),
     )
     base = f"/api/v1/worlds/{group.conversation_id.world_id.value}/conversations"
     path = f"{base}/{group.conversation_id.value}"

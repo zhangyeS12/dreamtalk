@@ -3,7 +3,7 @@
 import asyncio
 import math
 import random
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import aclosing
 from dataclasses import dataclass
 from datetime import datetime
@@ -330,6 +330,8 @@ class ExecutingModelGateway:
     def _accounting_report(self, start, event="accounting_persistence_incomplete"):
         # A diagnostics consumer must be non-raising. Its failure may not replace
         # a completed provider outcome or trigger another provider attempt.
+        if self._accounting_diagnostics is None:
+            return
         try:
             self._accounting_diagnostics(
                 AccountingDiagnostic(start.invocation_id, start.attempt_ordinal, event)
@@ -357,6 +359,7 @@ class ExecutingModelGateway:
         if self._accounting is None:
             execution.ordinal = ordinal
             return None
+        assert self._wall_clock is not None  # Validated with accounting in __init__.
         record = AttemptStart(
             request.invocation_id, ordinal, request.purpose, request.model, self._wall_clock()
         )
@@ -399,6 +402,7 @@ class ExecutingModelGateway:
         self._settle_turn_tokens(execution, completed.usage if completed is not None else None)
         if start is None:
             return True
+        assert self._wall_clock is not None and self._accounting is not None
         failed = False
         try:
             if completed is not None:
@@ -454,6 +458,7 @@ class ExecutingModelGateway:
             and not force
         ):
             return
+        assert self._accounting is not None
         failed = False
         try:
             await self._accounting.complete_invocation(start.invocation_id, outcome)
@@ -555,6 +560,7 @@ class ExecutingModelGateway:
             attempt = await self._begin_attempt(request, ordinal, execution)
             tick = self._clock()
             failure = None
+            result: LLMResponse | None = None
             try:
                 result = await self._gateway.generate(request)
             except LLMError as error:
@@ -574,6 +580,7 @@ class ExecutingModelGateway:
                     await self._complete_invocation(attempt, outcome, execution)
                 raise
             if failure is None:
+                assert result is not None
                 if await self._finish_attempt(
                     attempt,
                     tick,
@@ -609,7 +616,7 @@ class ExecutingModelGateway:
         *,
         turn_budget: ChatTurnTokenBudget | None = None,
         _execution: _InvocationExecution | None = None,
-    ) -> AsyncIterator[LLMStreamEvent]:
+    ) -> AsyncGenerator[LLMStreamEvent, None]:
         execution = self._execution(request, _execution, turn_budget)
         stream_started = False
         for candidate_attempt in range(1, self._policy.max_attempts + 1):

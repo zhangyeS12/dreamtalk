@@ -16,7 +16,8 @@ from livingworld.application.llm import (
     StructuredOutputRequest,
     TextContent,
 )
-from livingworld.application.world_model_config import model_for_world
+from livingworld.application.update_maintenance import UpdateMaintenance
+from livingworld.application.world_model_config import WorldModelValue, model_for_world
 from livingworld.domain.contracts import RequestId
 from livingworld.domain.events import WorldEvent
 from livingworld.domain.identifiers import EventId
@@ -104,13 +105,13 @@ class WorldStoryService:
         kernel,
         wake_signal,
         credentials_ready=lambda: True,
-        json_output=False,
+        json_output: bool | WorldModelValue[bool] = False,
     ):
         self.store, self.players, self.configured = store, players, configured
         self.kernel, self.wake_signal = kernel, wake_signal
         self._credentials_ready = credentials_ready
         self._json_output = json_output
-        self.maintenance = None
+        self.maintenance: UpdateMaintenance | None = None
         self._jobs, self._worlds = {}, set()
         self._closing = False
 

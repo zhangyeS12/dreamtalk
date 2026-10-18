@@ -8,6 +8,7 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, ConfigDict, Field
 
+from livingworld.adapters.http import contracts as wire
 from livingworld.application.errors import EntityNotFoundError
 from livingworld.application.llm_config import CredentialUnavailableError
 from livingworld.application.speech_contracts import (
@@ -76,22 +77,22 @@ def speech_router(service, authorize):
                 status = 404
             raise HTTPException(status, detail=code) from error
 
-    @router.get("/speech")
+    @router.get("/speech", response_model=wire.SpeechStatus)
     async def status(world_id: UUID):
         return await call(service.status(world_id))
 
-    @router.put("/speech")
+    @router.put("/speech", response_model=wire.SpeechStatus)
     async def save(world_id: UUID, body: SettingsWrite):
         return await call(service.save_settings(world_id, body.settings, body.expected_revision))
 
-    @router.get("/speech/pricing")
+    @router.get("/speech/pricing", response_model=wire.SpeechPricing)
     async def pricing(world_id: UUID):
         settings, _ = await call(service.store.settings(world_id))
         if settings.provider != "compshare":
             raise HTTPException(422, detail="speech_cloud_required")
         return await call(service.providers.pricing(settings))
 
-    @router.get("/voices")
+    @router.get("/voices", response_model=wire.VoiceCardPage)
     async def library(world_id: UUID, offset: int = 0):
         if offset < 0 or offset > 1000000:
             raise HTTPException(422, detail="voice_page_invalid")
@@ -119,7 +120,7 @@ def speech_router(service, authorize):
                 422, detail=str(error) if isinstance(error, SpeechError) else "voice_card_invalid"
             ) from error
 
-    @router.post("/voices/preview")
+    @router.post("/voices/preview", response_model=wire.VoiceCardPreview)
     async def preview(
         world_id: UUID, request: Request, audio_format: str = "card", name: str = "音色卡"
     ):
@@ -128,7 +129,7 @@ def speech_router(service, authorize):
         )
         return {"manifest": manifest.model_dump(), "duration_ms": duration}
 
-    @router.post("/voices")
+    @router.post("/voices", response_model=wire.VoiceCard)
     async def import_voice(
         world_id: UUID, request: Request, audio_format: str = "card", name: str = "音色卡"
     ):
@@ -160,25 +161,27 @@ def speech_router(service, authorize):
             headers={"Cache-Control": "no-store"},
         )
 
-    @router.delete("/voices/{card_id}")
+    @router.delete("/voices/{card_id}", response_model=wire.RemoveVoiceCardResult)
     async def remove(world_id: UUID, card_id: UUID):
         if service.busy:
             raise HTTPException(409, detail="speech_busy")
         await call(service.store.remove_card(world_id, card_id))
         return {"deleted": True}
 
-    @router.get("/character-voices/{root}")
+    @router.get("/character-voices/{root}", response_model=wire.VoiceBindingResult)
     async def binding(world_id: UUID, root: UUID):
         return {"card_id": await call(service.store.binding(world_id, root))}
 
-    @router.put("/character-voices/{root}")
+    @router.put("/character-voices/{root}", response_model=wire.VoiceBindingResult)
     async def bind(world_id: UUID, root: UUID, body: BindingWrite):
         if service.busy:
             raise HTTPException(409, detail="speech_busy")
         await call(service.store.bind(world_id, root, body.card_id))
         return {"card_id": body.card_id}
 
-    @router.post("/conversations/{conversation}/messages/{message}/speech")
+    @router.post(
+        "/conversations/{conversation}/messages/{message}/speech", response_model=wire.SpeechJob
+    )
     async def generate(
         world_id: UUID, conversation: UUID, message: UUID, body: GenerationRequest | None = None
     ):
@@ -199,7 +202,10 @@ def speech_router(service, authorize):
             headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"},
         )
 
-    @router.post("/conversations/{conversation}/messages/{message}/speech/regenerate")
+    @router.post(
+        "/conversations/{conversation}/messages/{message}/speech/regenerate",
+        response_model=wire.SpeechJob,
+    )
     async def regenerate(
         world_id: UUID, conversation: UUID, message: UUID, body: GenerationRequest
     ):
@@ -207,19 +213,22 @@ def speech_router(service, authorize):
             service.generate(world_id, conversation, message, body.request_id, regenerate=True)
         )
 
-    @router.post("/conversations/{conversation}/speech/previews/query")
+    @router.post(
+        "/conversations/{conversation}/speech/previews/query",
+        response_model=wire.SpeechPreviewsResult,
+    )
     async def previews(world_id: UUID, conversation: UUID, body: PreviewQuery):
         return await call(service.reviews(world_id, conversation, body.message_ids))
 
-    @router.post("/speech/previews/{identity}/completed")
+    @router.post("/speech/previews/{identity}/completed", response_model=wire.SpeechJob)
     async def completed(world_id: UUID, identity: UUID):
         return await call(service.preview_completed(world_id, identity))
 
-    @router.post("/speech/previews/{identity}/decision")
+    @router.post("/speech/previews/{identity}/decision", response_model=wire.SpeechJob)
     async def decision(world_id: UUID, identity: UUID, body: PreviewDecision):
         return await call(service.decide(world_id, identity, body.decision == "replace"))
 
-    @router.get("/speech/jobs/{identity}")
+    @router.get("/speech/jobs/{identity}", response_model=wire.SpeechJob)
     async def job(world_id: UUID, identity: UUID):
         return await call(service.job_status(world_id, identity))
 

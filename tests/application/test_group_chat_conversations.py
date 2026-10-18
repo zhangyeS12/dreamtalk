@@ -7,6 +7,7 @@ from uuid import uuid4
 
 import pytest
 from card_fixtures import card_document, json_bytes
+from livingworld.adapters.http.services import HttpServices
 from livingworld.application.chat_conversations import ChatConversationService
 from livingworld.application.chat_messages import ChatMessageService
 from livingworld.application.command_handler import CommandHandler
@@ -189,15 +190,17 @@ def test_group_api_requires_auth_and_rejects_undispatched_messages(tmp_path):
 
     ids = asyncio.run(setup())
     app = create_app(
-        RuntimeStatus("test", "generation"),
-        ShutdownRequests(),
-        "secret",
-        lambda: None,
-        StructuredLogger(io.StringIO()),
-        chat_conversations=ChatConversationService(
-            db.chat_conversation_store(), imports, players, handler
+        status=RuntimeStatus("test", "generation"),
+        shutdown=ShutdownRequests(),
+        session_token="secret",
+        initialize=lambda: None,
+        logger=StructuredLogger(io.StringIO()),
+        services=HttpServices(
+            chat_conversations=ChatConversationService(
+                db.chat_conversation_store(), imports, players, handler
+            ),
+            chat_messages=ChatMessageService(db.chat_message_store(), players),
         ),
-        chat_messages=ChatMessageService(db.chat_message_store(), players),
     )
     path = f"/api/v1/worlds/{world.value}/conversations"
     with TestClient(app, base_url="http://127.0.0.1") as client:

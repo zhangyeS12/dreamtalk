@@ -3,6 +3,7 @@ from uuid import uuid4
 
 from fastapi.testclient import TestClient
 from livingworld.adapters.http.app import create_app
+from livingworld.adapters.http.services import HttpServices
 from livingworld.application.local_profile import LocalProfile
 from livingworld.application.runtime import RuntimeStatus, ShutdownRequests
 from livingworld.domain.contracts import API_PROTOCOL
@@ -32,12 +33,12 @@ class Profiles:
 def test_profile_http_auth_validation_conflict_and_scope():
     logs = io.StringIO()
     app = create_app(
-        RuntimeStatus("test", "generation"),
-        ShutdownRequests(),
-        "secret",
-        lambda: None,
-        StructuredLogger(logs),
-        local_profiles=Profiles(),
+        status=RuntimeStatus("test", "generation"),
+        shutdown=ShutdownRequests(),
+        session_token="secret",
+        initialize=lambda: None,
+        logger=StructuredLogger(logs),
+        services=HttpServices(local_profiles=Profiles()),
     )
     root = f"/api/v{API_PROTOCOL}"
     headers = {"Authorization": "Bearer secret"}

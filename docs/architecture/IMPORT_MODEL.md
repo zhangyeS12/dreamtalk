@@ -77,9 +77,9 @@ ImportPreview.lorebooks 提供源条目数、canonical 条目数、collection ID
 
 ## 7. 保留事项
 
-Character Card 字段映射、兼容 namespaces 和 parser 资源限制已在 C-004B 定义。产品界面的重复导入选择/来源冲突展示、AI Research → Evidence → Claim → Conflict 流程、runtime 初始知识分配、实例定义版本绑定、`.lworld` runtime container 均未实现；当前内容资产 store 与原生冲突 API 已在 C-004D2 实现。它们不影响当前内容库与 runtime 状态分离的已验证边界。
+Character Card字段映射、兼容namespaces和资源限制沿既有契约。当前导入选择、Builder草稿／来源流程与验收见[状态清单](../PROJECT_STATUS.md)；内容定义与运行状态保持分离，不将导入视为自动知识分配或完整运行世界恢复。
 
-测试见 [test_content_boundary.py](../../tests/application/test_content_boundary.py)、[test_content.py](../../tests/domain/test_content.py) 与 [test_content_persistence.py](../../tests/persistence/test_content_persistence.py)。冻结产品规则见 [PRODUCT_SPEC.md](../product/PRODUCT_SPEC.md)，Stage 2 回归见 [STAGE_2_ACCEPTANCE.md](STAGE_2_ACCEPTANCE.md)。
+测试见 [test_content_boundary.py](../../tests/application/test_content_boundary.py)、[test_content.py](../../tests/domain/test_content.py) 与 [test_content_persistence.py](../../tests/persistence/test_content_persistence.py)。冻结产品规则见 [PRODUCT_SPEC.md](../product/PRODUCT_SPEC.md)，Stage 2 回归见 [STAGE_2_ACCEPTANCE.md](https://github.com/zhangyeS12/dreamtalk/blob/485b512a5dac8da7077326d1cd3daea5eb3304c8/docs/architecture/STAGE_2_ACCEPTANCE.md)。
 
 ## 8. Native `.lwcontent` import
 
@@ -87,4 +87,4 @@ Character Card 字段映射、兼容 namespaces 和 parser 资源限制已在 C-
 
 NEW/IDENTICAL/LOCAL_MODIFIED/INCOMING_DIFFERENT/DIVERGED/DIFFERENT_NO_BASELINE 使用 persisted accepted hash 作三方证据；不同成员必须 KEEP_LOCAL 或 REPLACE_WITH_INCOMING，不 merge、不 IMPORT_AS_COPY。baseline 不参加 canonical hash、不导出。NEW/REPLACE/明确接受 IDENTICAL 在对应 DB transaction 建立/刷新 baseline，KEEP 不变。
 
-native snapshot acceptance 与普通 next-revision edit 分开。canonical graph/bindings/baseline 同一 DB transaction；物化 hash blobs 在此之前，失败 DB 可留不可达 orphan，不能声称 FS+SQLite ACID。legacy unbound dependencies 明确 compatibility error，不造集合。解析和 Preview 不写 DB/asset。详见 [STAGE_3_ACCEPTANCE.md](STAGE_3_ACCEPTANCE.md)。
+native snapshot acceptance 与普通 next-revision edit 分开。canonical graph/bindings/baseline 同一 DB transaction；物化 hash blobs 在此之前，失败 DB 可留不可达 orphan，不能声称 FS+SQLite ACID。legacy unbound dependencies 明确 compatibility error，不造集合。解析和 Preview 不写 DB/asset。详见 [STAGE_3_ACCEPTANCE.md](https://github.com/zhangyeS12/dreamtalk/blob/485b512a5dac8da7077326d1cd3daea5eb3304c8/docs/architecture/STAGE_3_ACCEPTANCE.md)。

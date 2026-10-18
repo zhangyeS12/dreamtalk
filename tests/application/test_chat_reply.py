@@ -12,6 +12,7 @@ import pytest
 from card_fixtures import card_document, json_bytes
 from fastapi.testclient import TestClient
 from livingworld.adapters.http.app import create_app
+from livingworld.adapters.http.services import HttpServices
 from livingworld.application.chat_context import DirectChatContext, DirectChatContextBuilder
 from livingworld.application.chat_conversations import ChatConversationService
 from livingworld.application.chat_messages import (
@@ -554,13 +555,12 @@ def test_direct_reply_persists_once_without_creating_world_facts(tmp_path):
                 RequestId(uuid4()), conversation.conversation_id, "从页面发起", 50000
             )
             app = create_app(
-                RuntimeStatus("test", "generation"),
-                ShutdownRequests(),
-                "secret",
-                lambda: None,
-                StructuredLogger(io.StringIO()),
-                chat_messages=messages,
-                chat_reply=service,
+                status=RuntimeStatus("test", "generation"),
+                shutdown=ShutdownRequests(),
+                session_token="secret",
+                initialize=lambda: None,
+                logger=StructuredLogger(io.StringIO()),
+                services=HttpServices(chat_messages=messages, chat_reply=service),
             )
             path = (
                 f"/api/v1/worlds/{world.value}/conversations/"

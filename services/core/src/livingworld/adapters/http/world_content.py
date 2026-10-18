@@ -5,6 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 
+from livingworld.adapters.http import contracts as wire
 from livingworld.application.content import ContentConflictError
 from livingworld.application.content_builder import research_view
 from livingworld.application.errors import EntityNotFoundError
@@ -76,10 +77,17 @@ def _view(item: AcceptedWorldContent, common_ids: set[tuple[UUID, UUID]] | None 
                 "keywords": list(root.keywords),
                 "secondary_keywords": list(root.secondary_keywords),
                 "activation_summary": lore_activation_summary(
-                    root, collection_by_id.get(root.collection_id)
+                    root,
+                    collection_by_id.get(root.collection_id)
+                    if root.collection_id is not None
+                    else None,
                 ),
                 "planning_activation_summary": lore_activation_summary(
-                    root, collection_by_id.get(root.collection_id), generation_kind="quiet"
+                    root,
+                    collection_by_id.get(root.collection_id)
+                    if root.collection_id is not None
+                    else None,
+                    generation_kind="quiet",
                 ),
                 "content": root.content,
                 "enabled": root.enabled,
@@ -97,7 +105,7 @@ def world_content_router(service: WorldContentService, authorize, activities=Non
         dependencies=[Depends(authorize)],
     )
 
-    @router.get("")
+    @router.get("", response_model=list[wire.WorldContentItem])
     async def list_imports(world_id: UUID) -> list[dict]:
         try:
             identity = WorldId(world_id)
@@ -109,7 +117,7 @@ def world_content_router(service: WorldContentService, authorize, activities=Non
         except EntityNotFoundError:
             raise HTTPException(404, "world_not_found") from None
 
-    @router.post("/preview")
+    @router.post("/preview", response_model=wire.WorldContentItem)
     async def preview(
         world_id: UUID,
         kind: ImportKind,
@@ -139,7 +147,7 @@ def world_content_router(service: WorldContentService, authorize, activities=Non
         except ContentConflictError:
             raise HTTPException(409, "replacement_target_conflict") from None
 
-    @router.post("/{import_id}/commit")
+    @router.post("/{import_id}/commit", response_model=wire.WorldContentItem)
     async def commit(world_id: UUID, import_id: UUID, body: Confirmation) -> dict:
         try:
             identity = WorldId(world_id)
@@ -178,12 +186,12 @@ def world_content_router(service: WorldContentService, authorize, activities=Non
         except ContentConflictError:
             raise HTTPException(409, "import_confirmation_conflict") from None
 
-    @router.post("/{import_id}/discard")
+    @router.post("/{import_id}/discard", response_model=wire.DiscardWorldContentResult)
     async def discard(world_id: UUID, import_id: UUID) -> dict:
         service.discard(WorldId(world_id), import_id)
         return {"discarded": True}
 
-    @router.delete("/{import_id}")
+    @router.delete("/{import_id}", response_model=wire.RemoveStickerResult)
     async def remove_character(world_id: UUID, import_id: UUID) -> dict:
         try:
             await service.store.remove_character(WorldId(world_id), import_id)
@@ -203,7 +211,7 @@ def world_content_router(service: WorldContentService, authorize, activities=Non
                 else "character_card_changed",
             ) from None
 
-    @router.put("/{import_id}/entries/{entry_id}/common")
+    @router.put("/{import_id}/entries/{entry_id}/common", response_model=wire.SetCommonLoreResult)
     async def set_common_lore(
         world_id: UUID, import_id: UUID, entry_id: UUID, body: LoreExposure
     ) -> dict:

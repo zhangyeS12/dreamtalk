@@ -1,7 +1,7 @@
 """Deterministic test adapter; no provider translation, validation, prices or persistence."""
 
 import asyncio
-from collections.abc import AsyncIterator, Mapping
+from collections.abc import AsyncGenerator, Mapping
 from types import MappingProxyType
 
 from livingworld.application.llm import (
@@ -87,7 +87,7 @@ class FakeModelGateway:
             raise LLMError(LLMFailure(self._error, request.invocation_id))
         return self._response(request)
 
-    async def stream(self, request: LLMRequest) -> AsyncIterator[LLMStreamEvent]:
+    async def stream(self, request: LLMRequest) -> AsyncGenerator[LLMStreamEvent, None]:
         try:
             self._request(request, streaming=True)
         except LLMError as error:

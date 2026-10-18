@@ -110,7 +110,7 @@ accepted action 在同一个 UoW 中按固定 event ordinal 分配 canonical led
 
 ## C-003E1 Canonical Ledger Position
 
-C-003E2 再次审计 PlayerMoved、CharacterPlaced、RelationshipChanged：此前 fold 提供 previous revision，现有 resulting revision 与前态字段足以验证转换，保留 v1 不改写历史。随后加入信念和 PlayerAvailabilityChanged 后，当前目录共 13 类 v1。并发 loser 不进入 ledger，winner 重建结果等于已提交状态；完整验收见 [STAGE_2_ACCEPTANCE.md](STAGE_2_ACCEPTANCE.md)。CAS 或 INSERT 冲突时，事件、分配游标、投影和成功 receipt 同事务完整回滚，不发“attempted but conflicted” canonical event。
+C-003E2 再次审计 PlayerMoved、CharacterPlaced、RelationshipChanged：此前 fold 提供 previous revision，现有 resulting revision 与前态字段足以验证转换，保留 v1 不改写历史。该阶段加入信念和PlayerAvailabilityChanged后的目录含十三类v1；后续事件以源码注册为准。并发 loser 不进入 ledger，winner 重建结果等于已提交状态；完整验收见 [STAGE_2_ACCEPTANCE.md](https://github.com/zhangyeS12/dreamtalk/blob/485b512a5dac8da7077326d1cd3daea5eb3304c8/docs/architecture/STAGE_2_ACCEPTANCE.md)。CAS 或 INSERT 冲突时，事件、分配游标、投影和成功 receipt 同事务完整回滚，不发“attempted but conflicted” canonical event。
 
 `ledger_position != WorldTime != created_at != event_id`。
 
@@ -122,7 +122,7 @@ C-003E2 再次审计 PlayerMoved、CharacterPlaced、RelationshipChanged：此�
 - 旧历史经核验普通 SQLite rowid 与追加路径后，每世界 `_rowid_ ASC` 一次性回填 1..N。**legacy migration order != future canonical replay semantics**；未知旧顺序明确失败，无 timestamp/UUID fallback。
 - 原 UPDATE/DELETE/REPLACE 保护覆盖位置；重建从不修改事件或解除触发器，也不产生回执。
 
-13 类已发出的 v1 payload 均已在实现前逐项核验，可以从 ledger 恢复已有 Stage 2 状态，不依赖当前投影。知识命令产生的 assertion-target Observation 身份、owner/source/provenance、值与时间直接来自 payload，ObservationId 保留，不重新生成。C-006B event-target Observation 不是从事件 payload 重建的投影，而是原子提交并原样保留的发生时授权记录。按 `(event_type, payload_version)` 显式分发，未知类型/版本、非法 payload、顺序或约束失败会完整回滚。审计目录和重建边界见 [REPLAY_MODEL.md](REPLAY_MODEL.md)，迁移与原子分配见 [PERSISTENCE_MODEL.md](PERSISTENCE_MODEL.md)。
+该阶段十三类已发出的v1 payload均已在实现前逐项核验，可以从 ledger 恢复已有 Stage 2 状态，不依赖当前投影。知识命令产生的 assertion-target Observation 身份、owner/source/provenance、值与时间直接来自 payload，ObservationId 保留，不重新生成。C-006B event-target Observation 不是从事件 payload 重建的投影，而是原子提交并原样保留的发生时授权记录。按 `(event_type, payload_version)` 显式分发，未知类型/版本、非法 payload、顺序或约束失败会完整回滚。审计目录和重建边界见 [REPLAY_MODEL.md](REPLAY_MODEL.md)，迁移与原子分配见 [PERSISTENCE_MODEL.md](PERSISTENCE_MODEL.md)。
 
 ## 2. 候选的语义生命周期
 
@@ -186,7 +186,7 @@ C-003E2 再次审计 PlayerMoved、CharacterPlaced、RelationshipChanged：此�
 - Developer Mode 能查看 Director、Agent、Memory、LLM 使用等决策 Trace（FR-23）。候选激活、延期、取消与 Replan 的依据属于需要说明的决策范围；Trace 的具体内容和保留方式未确定。
 - 产品必须记录 Token、Latency 和 Cost，并支持预算与模型路由（FR-24）。候选执行与 LLM 调用是不同概念，不能将每个普通小事件处理都推导成一次 LLM 调用。
 
-持久化方向见 [Architecture Review 001](ARCHITECTURE_REVIEW_001.md)，存储细节见 [PERSISTENCE_MODEL.md](PERSISTENCE_MODEL.md)，事务见 [COMMAND_MODEL.md](COMMAND_MODEL.md)，内部投影回放见 [REPLAY_MODEL.md](REPLAY_MODEL.md)。事件总线、队列与候选执行未实现。
+持久化方向见 [Architecture Review 001](https://github.com/zhangyeS12/dreamtalk/blob/485b512a5dac8da7077326d1cd3daea5eb3304c8/docs/architecture/ARCHITECTURE_REVIEW_001.md)，存储细节见 [PERSISTENCE_MODEL.md](PERSISTENCE_MODEL.md)，事务见 [COMMAND_MODEL.md](COMMAND_MODEL.md)，内部投影回放见 [REPLAY_MODEL.md](REPLAY_MODEL.md)。候选执行等后续应用能力与验收统一见[状态清单](../PROJECT_STATUS.md)。
 
 ## 7. 待确认的产品定义
 
@@ -209,11 +209,11 @@ C-003E2 再次审计 PlayerMoved、CharacterPlaced、RelationshipChanged：此�
 
 上方 Stage 0 概念范围不是当前代码的完整能力清单。ActionResolution 已有确定性 PlayerMoved 与原子 event-time Observation；scheduler/activation 与 Scene 的实现见各自架构文档。本轮只新增已授权观察的有限中文展示和角色回复输入，沿用现有时间线及聊天话题入口，没有提交新事件或消费 Activation/CandidateEvent。PlayerPlaced/CharacterPlaced 的详情模板只有存在合法亲历记录时才使用；setup 不自动创建这种记录。
 
-WorldPlan、EventReservoir、候选批量消费、自动角色活动与 Outreach 尚未实现。事件展示不意味着这些能力已经完成，也不改变窗口/失效/重规划和主动联系计数待确认的规则。
+事件展示、日常候选与主动联系是不同应用流程，各自授权、输入和验收见[现行产品约定](../../PRODUCT.md)及[状态清单](../PROJECT_STATUS.md)。
 
 ## 当前日常候选（2026-09-29）
 
-早期“Director/候选未实现”的状态只指当时切片。当前新增独立 operational director_plans/director_candidates 和 `CharacterRoutineStarted` v1，经已批准权限的 typed Kernel action 变成真实事件。未来候选不会进入普通事件 UI 或角色亲历；开始事件不证明任务成果或完成。本轮仍没有相遇剧情、主动联系或关系变化消费者。
+早期“Director/候选未实现”的状态只指当时切片。当前新增独立 operational director_plans/director_candidates 和 `CharacterRoutineStarted` v1，经已批准权限的 typed Kernel action 变成真实事件。未来候选不会进入普通事件 UI 或角色亲历；开始事件不证明任务成果或完成。后续相遇和联系已有独立流程，不能由本阶段记录推断当前缺失。
 
 ## 离线消息与事实时间
 

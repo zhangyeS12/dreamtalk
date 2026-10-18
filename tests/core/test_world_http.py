@@ -4,6 +4,7 @@ from uuid import uuid4
 
 from fastapi.testclient import TestClient
 from livingworld.adapters.http.app import create_app
+from livingworld.adapters.http.services import HttpServices
 from livingworld.application.runtime import RuntimeStatus, ShutdownRequests
 from livingworld.application.world_settings import WorldSettings
 from livingworld.domain.contracts import API_PROTOCOL
@@ -40,12 +41,12 @@ class FakeWorldSettings:
 def test_world_api_is_authenticated_and_requires_request_identity():
     service = FakeWorldSettings()
     app = create_app(
-        RuntimeStatus("test", "generation"),
-        ShutdownRequests(),
-        "session-secret",
-        lambda: None,
-        StructuredLogger(io.StringIO()),
-        world_settings=service,
+        status=RuntimeStatus("test", "generation"),
+        shutdown=ShutdownRequests(),
+        session_token="session-secret",
+        initialize=lambda: None,
+        logger=StructuredLogger(io.StringIO()),
+        services=HttpServices(world_settings=service),
     )
     prefix = f"/api/v{API_PROTOCOL}"
     with TestClient(app, base_url="http://127.0.0.1") as client:

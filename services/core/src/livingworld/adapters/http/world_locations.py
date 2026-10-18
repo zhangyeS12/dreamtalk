@@ -6,6 +6,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
+from livingworld.adapters.http import contracts as wire
 from livingworld.application.errors import (
     EntityAlreadyExistsError,
     EntityNotFoundError,
@@ -59,7 +60,7 @@ def world_locations_router(
 ) -> APIRouter:
     router = APIRouter(prefix=f"/api/v{API_PROTOCOL}", dependencies=[Depends(authorize)])
 
-    @router.get("/worlds/{world_id}/activity-locations")
+    @router.get("/worlds/{world_id}/activity-locations", response_model=list[wire.ActivityLocation])
     async def list_locations(world_id: UUID) -> list[dict]:
         try:
             return [_response(item) for item in await service.list_locations(WorldId(world_id))]
@@ -68,7 +69,11 @@ def world_locations_router(
         except LocationCatalogError as error:
             raise HTTPException(409, str(error)) from None
 
-    @router.post("/worlds/{world_id}/activity-locations", status_code=201)
+    @router.post(
+        "/worlds/{world_id}/activity-locations",
+        status_code=201,
+        response_model=wire.ActivityLocation,
+    )
     async def create_location(
         world_id: UUID,
         body: CreateLocationRequest,
@@ -107,7 +112,9 @@ def world_locations_router(
         except DomainInvariantError:
             raise HTTPException(422, "invalid_location_name") from None
 
-    @router.put("/worlds/{world_id}/activity-locations/{location_id}")
+    @router.put(
+        "/worlds/{world_id}/activity-locations/{location_id}", response_model=wire.ActivityLocation
+    )
     async def edit_location(
         world_id: UUID,
         location_id: UUID,
@@ -148,7 +155,10 @@ def world_locations_router(
         except DomainInvariantError:
             raise HTTPException(422, "invalid_location_name") from None
 
-    @router.delete("/worlds/{world_id}/activity-locations/{location_id}")
+    @router.delete(
+        "/worlds/{world_id}/activity-locations/{location_id}",
+        response_model=wire.RemoveStickerResult,
+    )
     async def remove_location(world_id: UUID, location_id: UUID, body: RemoveLocationRequest):
         try:
             await service.remove(LocationId(WorldId(world_id), location_id), body.expected_revision)

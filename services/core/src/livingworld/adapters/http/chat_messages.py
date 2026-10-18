@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 from starlette.responses import StreamingResponse
 
+from livingworld.adapters.http import contracts as wire
 from livingworld.application.chat_messages import (
     ChatMessage,
     ChatMessageService,
@@ -36,7 +37,7 @@ from livingworld.application.errors import (
     IdempotencyConflictError,
 )
 from livingworld.application.group_chat_reply import GroupChatReplyService
-from livingworld.application.world_model_config import model_for_world
+from livingworld.application.world_model_config import WorldModelValue, model_for_world
 from livingworld.domain.contracts import API_PROTOCOL, RequestId
 from livingworld.domain.identifiers import ChatTurnId, ConversationId, MessageId, PlayerId, WorldId
 
@@ -125,7 +126,9 @@ class ChatStreamResponse(StreamingResponse):
             # ASGI 2.4 send failures need explicit closure as well. Shield cleanup
             # from the disconnect scope so governed execution can settle once.
             with CancelScope(shield=True):
-                await self.body_iterator.aclose()
+                close = getattr(self.body_iterator, "aclose", None)
+                if close is not None:
+                    await close()
 
 
 def _validation_failure_code(error: ChatReplyValidationError) -> str:
@@ -171,7 +174,7 @@ def _stream_response(current, reply_service) -> ChatStreamResponse:
         turn_id = str(current.sent.turn_id.value)
 
         async def progress(event: ChatProgress):
-            frame = {"turn_id": turn_id, "kind": event.kind}
+            frame: dict[str, object] = {"turn_id": turn_id, "kind": event.kind}
             if event.kind in {"replying", "delta"} and event.speaker is not None:
                 frame["speaker_id"] = str(event.speaker.value)
             if event.kind == "delta":
@@ -234,8 +237,12 @@ def _stream_response(current, reply_service) -> ChatStreamResponse:
 def chat_message_router(
     service: ChatMessageService,
     authorize,
-    reply_service: DirectChatReplyService | None = None,
-    group_reply_service: GroupChatReplyService | None = None,
+    reply_service: DirectChatReplyService
+    | WorldModelValue[DirectChatReplyService | None]
+    | None = None,
+    group_reply_service: GroupChatReplyService
+    | WorldModelValue[GroupChatReplyService | None]
+    | None = None,
     chat_recall: EarlierChatRecall | None = None,
 ) -> APIRouter:
     router = APIRouter(
@@ -243,15 +250,15 @@ def chat_message_router(
         dependencies=[Depends(authorize)],
     )
 
-    @router.get("/reply-availability")
+    @router.get("/reply-availability", response_model=wire.ChatReplyAvailability)
     async def reply_availability(world_id: UUID) -> dict:
         return _reply_availability(model_for_world(reply_service, WorldId(world_id)))
 
-    @router.get("/group-reply-availability")
+    @router.get("/group-reply-availability", response_model=wire.ChatReplyAvailability)
     async def group_reply_availability(world_id: UUID) -> dict:
         return _reply_availability(model_for_world(group_reply_service, WorldId(world_id)))
 
-    @router.get("/{conversation_id}/messages")
+    @router.get("/{conversation_id}/messages", response_model=list[wire.ChatMessage])
     async def list_messages(world_id: UUID, conversation_id: UUID) -> list[dict]:
         try:
             messages = await service.list_messages(
@@ -263,7 +270,7 @@ def chat_message_router(
             raise HTTPException(404, "conversation_not_found") from None
         return [_view(message) for message in messages]
 
-    @router.get("/{conversation_id}/messages/page")
+    @router.get("/{conversation_id}/messages/page", response_model=wire.ChatMessagePage)
     async def page_messages(
         world_id: UUID,
         conversation_id: UUID,
@@ -283,7 +290,9 @@ def chat_message_router(
             "next_before_position": page.next_before_position,
         }
 
-    @router.get("/{conversation_id}/messages/{message_id}/source")
+    @router.get(
+        "/{conversation_id}/messages/{message_id}/source", response_model=wire.ChatMessagePage
+    )
     async def message_source(world_id: UUID, conversation_id: UUID, message_id: UUID) -> dict:
         try:
             page = await service.message_source(
@@ -299,7 +308,7 @@ def chat_message_router(
             "next_before_position": None,
         }
 
-    @router.post("/{conversation_id}/messages/search")
+    @router.post("/{conversation_id}/messages/search", response_model=wire.ChatHistoryMatches)
     async def search_history(
         world_id: UUID, conversation_id: UUID, body: ChatHistorySearchRequest
     ) -> dict:
@@ -322,7 +331,9 @@ def chat_message_router(
             "next_before_position": result.next_before_position,
         }
 
-    @router.post("/{conversation_id}/messages", status_code=202)
+    @router.post(
+        "/{conversation_id}/messages", status_code=202, response_model=wire.PendingPlayerSend
+    )
     async def send_player_message(
         world_id: UUID,
         conversation_id: UUID,
@@ -363,7 +374,9 @@ def chat_message_router(
             "message": _view(sent.message),
         }
 
-    @router.post("/{conversation_id}/group-messages", status_code=202)
+    @router.post(
+        "/{conversation_id}/group-messages", status_code=202, response_model=wire.PendingPlayerSend
+    )
     async def send_group_message(
         world_id: UUID,
         conversation_id: UUID,
@@ -404,7 +417,7 @@ def chat_message_router(
             "message": _view(sent.message),
         }
 
-    @router.get("/{conversation_id}/group-turns/{turn_id}")
+    @router.get("/{conversation_id}/group-turns/{turn_id}", response_model=wire.GroupTurnView)
     async def get_group_turn(world_id: UUID, conversation_id: UUID, turn_id: UUID) -> dict:
         try:
             turn = await service.group_turn(
@@ -417,7 +430,9 @@ def chat_message_router(
             raise HTTPException(409, "group_turn_required") from None
         return _group_turn_view(turn)
 
-    @router.post("/{conversation_id}/group-turns/{turn_id}/reply")
+    @router.post(
+        "/{conversation_id}/group-turns/{turn_id}/reply", response_model=wire.GroupTurnView
+    )
     async def generate_group_reply(world_id: UUID, conversation_id: UUID, turn_id: UUID) -> dict:
         configured_reply = model_for_world(group_reply_service, WorldId(world_id))
         if configured_reply is None:
@@ -452,7 +467,7 @@ def chat_message_router(
         except ChatReplyGenerationError as error:
             raise HTTPException(502, generation_failure_code(error)) from None
 
-    @router.get("/{conversation_id}/turns/{turn_id}")
+    @router.get("/{conversation_id}/turns/{turn_id}", response_model=wire.DirectTurnView)
     async def get_turn(world_id: UUID, conversation_id: UUID, turn_id: UUID) -> dict:
         try:
             turn = await service.direct_turn(
@@ -465,7 +480,7 @@ def chat_message_router(
             raise HTTPException(409, "direct_turn_required") from None
         return _turn_view(turn)
 
-    @router.post("/{conversation_id}/turns/{turn_id}/reply")
+    @router.post("/{conversation_id}/turns/{turn_id}/reply", response_model=wire.DirectTurnView)
     async def generate_reply(world_id: UUID, conversation_id: UUID, turn_id: UUID) -> dict:
         configured_reply = model_for_world(reply_service, WorldId(world_id))
         if configured_reply is None:
@@ -537,7 +552,9 @@ def chat_message_router(
             raise HTTPException(409, "chat_turn_already_claimed")
         return _stream_response(current, configured_reply)
 
-    @router.get("/{conversation_id}/context-reports/{turn_id}")
+    @router.get(
+        "/{conversation_id}/context-reports/{turn_id}", response_model=wire.ChatContextReports
+    )
     async def context_reports(world_id: UUID, conversation_id: UUID, turn_id: UUID):
         world = WorldId(world_id)
         try:
@@ -547,7 +564,9 @@ def chat_message_router(
         except EntityNotFoundError:
             raise HTTPException(404, detail="chat_turn_not_found") from None
 
-    @router.get("/{conversation_id}/reply-recovery/{source_turn_id}")
+    @router.get(
+        "/{conversation_id}/reply-recovery/{source_turn_id}", response_model=wire.ReplyRecoveryView
+    )
     async def get_reply_recovery(world_id: UUID, conversation_id: UUID, source_turn_id: UUID):
         try:
             return await service.reply_recovery(
@@ -557,7 +576,11 @@ def chat_message_router(
         except EntityNotFoundError:
             raise HTTPException(404, "chat_turn_not_found") from None
 
-    @router.post("/{conversation_id}/reply-recovery/{source_turn_id}", status_code=201)
+    @router.post(
+        "/{conversation_id}/reply-recovery/{source_turn_id}",
+        status_code=201,
+        response_model=wire.CreateReplyRecoveryResult,
+    )
     async def create_reply_recovery(
         world_id: UUID,
         conversation_id: UUID,

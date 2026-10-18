@@ -8,6 +8,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Header, Query, Request, Response
 from pydantic import BaseModel, ConfigDict, Field
 
+from livingworld.adapters.http import contracts as wire
 from livingworld.application.chat_media import MediaError, MediaSettings
 from livingworld.domain.contracts import API_PROTOCOL
 from livingworld.infrastructure.media_providers import (
@@ -28,11 +29,11 @@ def chat_media_router(service, authorize):
         dependencies=[Depends(authorize)],
     )
 
-    @router.get("/settings")
+    @router.get("/settings", response_model=wire.ChatMediaSettings)
     async def settings(world_id: UUID):
         return (await service.store.settings(world_id)).model_dump()
 
-    @router.put("/settings")
+    @router.put("/settings", response_model=wire.ChatMediaSettings)
     async def save_settings(world_id: UUID, body: MediaSettings):
         validate_caption_endpoint(body)
         await service.providers.wait_for_credential(world_id, body)
@@ -44,11 +45,11 @@ def chat_media_router(service, authorize):
             raise MediaError("media_caption_consent_required")
         return (await service.store.save_settings(world_id, body)).model_dump()
 
-    @router.get("/usage")
+    @router.get("/usage", response_model=wire.MediaUsageResult)
     async def usage(world_id: UUID):
         return await service.store.usage(world_id)
 
-    @router.get("/stickers")
+    @router.get("/stickers", response_model=wire.StickersResult)
     async def stickers(
         world_id: UUID,
         library: Literal["personal", "public", "character"],
@@ -58,7 +59,7 @@ def chat_media_router(service, authorize):
     ):
         return await service.store.entries(world_id, library, root, offset, query)
 
-    @router.post("/stickers", status_code=201)
+    @router.post("/stickers", status_code=201, response_model=wire.StickerEntry)
     async def import_sticker(
         world_id: UUID,
         request: Request,
@@ -87,12 +88,12 @@ def chat_media_router(service, authorize):
                 result["caption_state"] = "failed"
         return result
 
-    @router.patch("/stickers/{entry_id}")
+    @router.patch("/stickers/{entry_id}", response_model=wire.EditStickerResult)
     async def edit_sticker(world_id: UUID, entry_id: UUID, body: StickerEdit):
         await service.store.edit_entry(world_id, entry_id, body.description)
         return {"saved": True}
 
-    @router.delete("/stickers/{entry_id}")
+    @router.delete("/stickers/{entry_id}", response_model=wire.RemoveStickerResult)
     async def remove_sticker(world_id: UUID, entry_id: UUID):
         await service.store.edit_entry(world_id, entry_id, remove=True)
         return {"removed": True}
@@ -106,7 +107,7 @@ def chat_media_router(service, authorize):
             headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"},
         )
 
-    @router.post("/assets/{asset_id}/caption")
+    @router.post("/assets/{asset_id}/caption", response_model=wire.CaptionMediaResult)
     async def caption(world_id: UUID, asset_id: UUID, entry_id: UUID | None = None):
         return {
             "description": await service.caption(world_id, asset_id, retry=True, entry_id=entry_id)

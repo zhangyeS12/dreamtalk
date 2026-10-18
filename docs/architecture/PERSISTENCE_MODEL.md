@@ -1,6 +1,6 @@
 # SQLite Persistence, Canonical Ledger & Resource CAS
 
-状态（2026-10-07）：SQLite/Alembic、幂等、知识隔离、canonical ledger/投影重建、资源 CAS、调度/Scene/Observation/EpisodicMemory 及后续 authored/operational 表已实现。长期聊天记忆与本地语义+词法检索、有限 Character/Director 应用接线已有代码；自动知识传播、Reflection、runtime 备份/分支仍未实现。当前能力/验收见[状态清单](../PROJECT_STATUS.md)，下文历史迁移结论只对应其阶段。
+本文维护SQLite／Alembic、canonical ledger、投影、CAS及后续表的存储契约。下文旧迁移编号对应各自阶段；当前迁移head与验收统一见[状态清单](../PROJECT_STATUS.md)。整份存档保护与世界时间线分支是不同能力。
 
 ## C-004A / C-004C1 独立内容库
 
@@ -63,7 +63,7 @@ native 导入保留原 typed IDs、任意合法 nonnegative imported ContentRevi
 
 [FileContentAssetStore](../../services/core/src/livingworld/infrastructure/packages/asset_store.py) 在既有 Database.data_dir 下独立 hash-keyed 文件。先验证/写 staging/发布 immutable blobs，再做 DB transaction；失败 DB 可留不可达 orphan，future GC deferred。只有 committed DB refs 使 blob 语义可达。FS+SQLite **不是单一 ACID transaction**；资产缺失/损坏明确拒绝，不 silent repair。
 
-0008 compatibility detector 仅依据 Alembic cursor 校验历史 0007/当前 0008 的 exact tables/columns/FK/checks，未知/partial state fail closed；DDL failure 连同两表与 cursor 回滚。WorldContent 的空 lore_collection_ids 采用 additive canonical legacy encoding，不需要重写 rows/hash 或新增 JSON字段列。测试见 [package persistence](../../tests/persistence/test_package_persistence.py) 与 [Stage 3](STAGE_3_ACCEPTANCE.md)。
+0008 compatibility detector 仅依据 Alembic cursor 校验历史 0007/当前 0008 的 exact tables/columns/FK/checks，未知/partial state fail closed；DDL failure 连同两表与 cursor 回滚。WorldContent 的空 lore_collection_ids 采用 additive canonical legacy encoding，不需要重写 rows/hash 或新增 JSON字段列。测试见 [package persistence](../../tests/persistence/test_package_persistence.py) 与 [Stage 3](https://github.com/zhangyeS12/dreamtalk/blob/485b512a5dac8da7077326d1cd3daea5eb3304c8/docs/architecture/STAGE_3_ACCEPTANCE.md)。
 
 ## 1. 边界与生命周期
 

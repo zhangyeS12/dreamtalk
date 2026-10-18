@@ -81,4 +81,4 @@ JSON object keys 排序、紧凑编码，作者数组保持顺序，无 NaN/Infi
 
 ## 9. Native export 与外部 JSON export 分离
 
-`.lwcontent` 使用显式 selected roots、canonical dependency closure、shared typed references、已拥有本地 hash blobs 和 registered authored source artifacts；不访问任意 resource URI/路径、不下载远端资产。返回 bytes 与 semantic package metadata，不写用户 save path。Manifest bindings 必须来自 canonical graph，不另建 package-only binding truth。`.lworld` 为未来 runtime-world/state package，不能由内容 exporter 生成。原生 SHA-256 integrity 不代表 publisher authentication；资产/内容提交语义及完整回归见 [STAGE_3_ACCEPTANCE.md](STAGE_3_ACCEPTANCE.md)。
+`.lwcontent` 使用显式 selected roots、canonical dependency closure、shared typed references、已拥有本地 hash blobs 和 registered authored source artifacts；不访问任意 resource URI/路径、不下载远端资产。返回 bytes 与 semantic package metadata，不写用户 save path。Manifest bindings 必须来自 canonical graph，不另建 package-only binding truth。`.lworld` 为未来 runtime-world/state package，不能由内容 exporter 生成。原生 SHA-256 integrity 不代表 publisher authentication；资产/内容提交语义及完整回归见 [STAGE_3_ACCEPTANCE.md](https://github.com/zhangyeS12/dreamtalk/blob/485b512a5dac8da7077326d1cd3daea5eb3304c8/docs/architecture/STAGE_3_ACCEPTANCE.md)。

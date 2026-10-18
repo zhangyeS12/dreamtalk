@@ -47,6 +47,7 @@ describe("CoreClient", () => {
     expect(fetcher.mock.calls[0][1].headers.Authorization).toBe("Bearer memory-session");
     expect(fetcher.mock.calls[0][1].headers["X-Request-Id"]).toBe(requestId);
     expect(JSON.parse(fetcher.mock.calls[0][1].body)).toEqual({ name: "我的世界" });
+    fetcher.mockImplementationOnce(async () => new Response("[]"));
     await client.listProductWorlds();
     expect(fetcher.mock.calls[1][0].toString()).toBe(`${connection.endpoint}/api/v${API_PROTOCOL}/worlds`);
   });
@@ -75,12 +76,24 @@ describe("CoreClient", () => {
     expect(fetcher.mock.calls[0][0].toString()).toBe(`${connection.endpoint}/api/v${API_PROTOCOL}/worlds/world/conversations/groups`);
     expect(fetcher.mock.calls[0][1].headers["X-Request-Id"]).toBe(id);
     expect(JSON.parse(fetcher.mock.calls[0][1].body)).toEqual({ import_ids: ["card-a", "card-b"] });
+    fetcher.mockImplementationOnce(async () => new Response(JSON.stringify([group])));
     await client.groupConversations("world");
     expect(fetcher.mock.calls[1][0].toString()).toBe(`${connection.endpoint}/api/v${API_PROTOCOL}/worlds/world/conversations/groups`);
     expect(fetcher.mock.calls[1][1].headers.Authorization).toBe("Bearer memory-session");
   });
+  it("rejects malformed product responses before exposing them to the workspace", async () => {
+    const fetcher = vi.fn().mockImplementation(async () => new Response(JSON.stringify([
+      { conversation_id: "group", player_id: "player", kind: "group", participants: [{ character_name: "Missing stable identity" }] },
+    ])));
+    await expect(new CoreClient(connection, fetcher).groupConversations("world"))
+      .rejects.toMatchObject({ status: 502, code: "core_contract_mismatch" });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
   it("sends a player message with a stable request identity and resolved token ceiling", async () => {
-    const pending = { status: "pending", turn_id: "turn", token_ceiling: 50_000, message: {} };
+    const pending = { status: "pending", turn_id: "turn", token_ceiling: 50_000, message: {
+      message_id: "message", turn_id: "turn", conversation_id: "chat", position: 1,
+      sender_kind: "player", sender_id: "player", text: "你好", created_at_utc: "2026-10-18T00:00:00Z",
+    } };
     const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify(pending), { status: 202 }));
     const id = "0f6d14aa-1363-4451-a1bf-9ed40a9cbb95";
     expect(await new CoreClient(connection, fetcher).sendPlayerMessage("world", "chat", "你好", 50_000, id)).toEqual(pending);
@@ -90,7 +103,12 @@ describe("CoreClient", () => {
     expect(JSON.parse(fetcher.mock.calls[0][1].body)).toEqual({ text: "你好", token_ceiling: 50_000 });
   });
   it("uses distinct authenticated group send and turn routes", async () => {
-    const fetcher = vi.fn().mockImplementation(async () => new Response(JSON.stringify({ turn_id: "turn", state: "completed" })));
+    const message = { message_id: "message", turn_id: "turn", conversation_id: "group", position: 1,
+      sender_kind: "player", sender_id: "player", text: "@角色乙 你好", created_at_utc: "2026-10-18T00:00:00Z" };
+    const pending = { status: "pending", turn_id: "turn", token_ceiling: 500, message };
+    const turn = { turn_id: "turn", state: "completed", token_ceiling: 500, player_message: message, replies: [] };
+    const fetcher = vi.fn().mockImplementation(async () => new Response(JSON.stringify(turn)))
+      .mockImplementationOnce(async () => new Response(JSON.stringify(pending), { status: 202 }));
     const client = new CoreClient(connection, fetcher);
     const id = "0f6d14aa-1363-4451-a1bf-9ed40a9cbb95";
     await client.sendGroupMessage("world", "group", "@角色乙 你好", 500, id);

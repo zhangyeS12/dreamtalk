@@ -3,6 +3,7 @@
 from collections.abc import Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
+from typing import cast
 from uuid import UUID
 
 from livingworld.domain.identifiers import WorldId
@@ -18,11 +19,14 @@ class WorldModelValue[T]:
 
     def for_world(self, world: WorldId | UUID | None) -> T:
         identity = WorldId(world) if isinstance(world, UUID) else world
-        return self.worlds.get(identity, self.default)
+        return self.default if identity is None else self.worlds.get(identity, self.default)
 
 
 def model_for_world[T](value: T | WorldModelValue[T], world: WorldId | UUID | None) -> T:
-    return value.for_world(world) if isinstance(value, WorldModelValue) else value
+    if isinstance(value, WorldModelValue):
+        # Runtime isinstance erases the wrapper's type parameter; selection returns its T.
+        return cast(T, value.for_world(world))
+    return value
 
 
 def any_model_available(value) -> bool:

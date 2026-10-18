@@ -1,6 +1,6 @@
 # Evidence-Backed Episodic Memory
 
-状态：C-007A 已建立 Stage 6 的第一条 Character-owned episodic memory 写入与读取路径。它只记录经授权 Observation 支撑的不可变主观回忆；没有 Reflection、consolidation、forgetting、embedding、semantic retrieval、LLM、Director、Character Agent 或 UI。
+本文维护Observation支撑的不可变主观亲历记忆契约；它与聊天长期记忆、摘要及检索是不同模型，见[记忆模型](MEMORY_MODEL.md)。当前应用能力与验收统一见[状态清单](../PROJECT_STATUS.md)。
 
 ## 1. 语义边界
 
@@ -75,7 +75,7 @@ Projection replay 只重建既有 replay-owned projections，不删除或重新�
 
 C-007A 采用 episodic record、explicit evidence、temporal coordinates、optional salience 和多来源 provenance 这些基础概念，但不复制任何外部项目的固定评分公式。未来 retrieval quality、temporal updates、abstention 和 evidence-aware ranking 必须单独设计并验证。
 
-延后：Reflection、consolidation、forgetting、correction、memory update/delete、embedding/FTS/vector/RAG、automatic Observation→Memory、Conversation/Message ingestion、LLM summarization、checkpoint/branch inheritance、Developer UI、Director/Agent consumption。任何未来派生步骤都不得把 evidence 错当作真值证明，也不得绕过 owner-first permission filtering。
+本层不自动进行Observation→Memory、Reflection、consolidation或遗忘，不实现世界分支继承。其他应用层已有的摘要、纠正、检索与角色输入不能混记为本层缺失；参见后文模型区别及[状态清单](../PROJECT_STATUS.md)。任何派生步骤都不得把evidence当真值证明或绕过owner-first过滤。
 
 验证见 [domain tests](../../tests/domain/test_memory.py)、[application tests](../../tests/application/test_episodic_memory.py) 和 [migration tests](../../tests/persistence/test_memory_migration.py)。
 

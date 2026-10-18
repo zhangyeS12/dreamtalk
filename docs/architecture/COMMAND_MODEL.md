@@ -1,6 +1,6 @@
 # Command Transaction, Idempotency & Concurrency（C-003C～C-003E2）
 
-状态：Stage 2 命令事务、持久化幂等、主体知识隔离、canonical ledger、回放及资源级乐观并发已实现。C-006B 复用同一事务/receipt/CAS 约定建立 action resolution 和 Scene lifecycle；C-006D 为外部 time-sensitive mutation 增加 catch-up barrier，并从共享 monotonic WorldTimeSource 捕获发生时间。业务 HTTP API、Director、Agent 与自动知识传播未实现。系统 API 与桌面协议不变。综合验证见 [STAGE_2_ACCEPTANCE.md](STAGE_2_ACCEPTANCE.md)、[ACTION_RESOLUTION.md](ACTION_RESOLUTION.md) 与 [CLOCK_RECONCILIATION.md](CLOCK_RECONCILIATION.md)。
+本文维护命令事务、幂等、CAS与时间屏障契约；动作结算见[ACTION_RESOLUTION](ACTION_RESOLUTION.md)，时间见[CLOCK_RECONCILIATION](CLOCK_RECONCILIATION.md)。阶段进度与项目验收统一见[状态清单](../PROJECT_STATUS.md)。
 
 ## 1. 唯一生产变更入口
 

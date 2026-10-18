@@ -3,9 +3,23 @@
 from collections.abc import Awaitable, Callable
 from dataclasses import replace
 from datetime import datetime
-from uuid import uuid4, uuid5
 
 from livingworld.application.action_resolution import ActionResolutionService
+from livingworld.application.command_knowledge import (
+    acquire_knowledge,
+    assert_world_truth,
+    form_character_belief,
+)
+from livingworld.application.command_locations import configure_location, create_location
+from livingworld.application.command_mutation import MutationContext
+from livingworld.application.command_participants import (
+    create_character,
+    create_player,
+    place_character,
+    set_player_availability,
+)
+from livingworld.application.command_relationships import change_relationship
+from livingworld.application.command_support import EVENT_PAYLOAD_VERSION, event_identity
 from livingworld.application.commands import (
     AcquireKnowledge,
     AssertWorldTruth,
@@ -26,7 +40,7 @@ from livingworld.application.errors import (
     EntityNotFoundError,
     IdempotencyConflictError,
 )
-from livingworld.application.fingerprints import command_fingerprint, decimal_input, id_input
+from livingworld.application.fingerprints import command_fingerprint
 from livingworld.application.idempotency import run_with_receipt_recovery
 from livingworld.application.ports import (
     TemporalMutationBarrier,
@@ -35,8 +49,7 @@ from livingworld.application.ports import (
     WorldRuntimeRegistrar,
     WorldTimeSource,
 )
-from livingworld.application.results import CommandResult, EntityReference, RelationshipReference
-from livingworld.application.routine_lifecycle import settle_routines
+from livingworld.application.results import CommandResult, EntityReference
 from livingworld.domain.actions import (
     ActionKind,
     ActionProposal,
@@ -50,75 +63,11 @@ from livingworld.domain.commands import CommandReceipt
 from livingworld.domain.errors import ConcurrencyConflictError, DomainInvariantError
 from livingworld.domain.events import WorldEvent
 from livingworld.domain.identifiers import (
-    CharacterId,
     CorrelationId,
-    EventId,
-    LocationId,
     ObservationId,
 )
-from livingworld.domain.knowledge import (
-    KnowledgeAssertion,
-    KnowledgeScope,
-    Observation,
-    ObservationBasis,
-    ObservationChannel,
-)
-from livingworld.domain.participants import Character, CharacterState, Player, PlayerPresence
-from livingworld.domain.relationships import Relationship, RelationshipMetrics
-from livingworld.domain.values import Revision, WorldTime, same_world, utc_timestamp
-from livingworld.domain.world import Location, World, WorldClock
-
-EVENT_PAYLOAD_VERSION = 1
-
-
-def event_identity(command: WorldCommand, ordinal: int) -> EventId:
-    return EventId(
-        command.world_id,
-        uuid5(command.request_id.value, f"livingworld:{command.world_id.value}:{ordinal}"),
-    )
-
-
-def assertion_payload(assertion: KnowledgeAssertion) -> dict:
-    return {
-        "assertion_id": str(assertion.assertion_id.value),
-        "scope": assertion.scope.value,
-        "owner": id_input(assertion.owner) if assertion.owner is not None else None,
-        "subject": assertion.subject,
-        "predicate": assertion.predicate,
-        "value": assertion.value,
-        "epistemic_status": assertion.epistemic_status,
-        "confidence": decimal_input(assertion.confidence),
-        "valid_from": assertion.valid_from.microseconds,
-        "valid_to": assertion.valid_to.microseconds if assertion.valid_to is not None else None,
-        "source_assertion_id": str(assertion.source_assertion_id.value)
-        if assertion.source_assertion_id is not None
-        else None,
-        "provenance_event_id": str(assertion.provenance_event_id.value)
-        if assertion.provenance_event_id is not None
-        else None,
-        "revision": assertion.revision.value,
-    }
-
-
-def metrics_payload(metrics: RelationshipMetrics) -> dict[str, int]:
-    return {
-        "affinity": metrics.affinity,
-        "trust": metrics.trust,
-        "familiarity": metrics.familiarity,
-    }
-
-
-def expect_revision(
-    kind: str, identity: object, actual: Revision | None, expected: Revision | None
-) -> None:
-    if actual != expected:
-        raise ConcurrencyConflictError(
-            f"{kind} does not match expected existence/revision",
-            resource_kind=kind,
-            resource_identity=identity,
-            expected_revision=expected,
-            actual_revision=actual,
-        )
+from livingworld.domain.values import Revision, WorldTime, utc_timestamp
+from livingworld.domain.world import World, WorldClock
 
 
 class CommandHandler:
@@ -273,13 +222,6 @@ class CommandHandler:
             logical_time = self._world_time_source.read(world.clock)
             return await self._mutate(uow, command, fingerprint, now, world, logical_time)
 
-    async def _location(self, uow: UnitOfWork, world: World, identity: LocationId) -> Location:
-        same_world(world.world_id, identity)
-        location = await uow.locations.get(identity)
-        if location is None:
-            raise EntityNotFoundError("Location does not exist")
-        return location
-
     async def _mutate(
         self,
         uow: UnitOfWork,
@@ -289,482 +231,28 @@ class CommandHandler:
         world: World,
         logical_time: WorldTime,
     ) -> CommandResult:
-        observation_id = None
+        context = MutationContext(uow, world, now, logical_time)
         match command:
             case CreateLocation():
-                location = Location(world.world_id, command.location_id, command.name)
-                if await uow.locations.get(location.location_id) is not None:
-                    raise EntityAlreadyExistsError("Location already exists")
-                if command.list_locally:
-                    await uow.local_locations.check_new(
-                        command.world_id, command.name, command.parent_id
-                    )
-                    await uow.local_locations.check_options(
-                        command.location_id,
-                        command.parent_id,
-                        command.hidden,
-                        command.allowed_characters,
-                    )
-                events = [
-                    (
-                        "LocationCreated",
-                        {
-                            "location_id": str(location.location_id.value),
-                            "name": location.name,
-                            "revision": 0,
-                        },
-                    )
-                ]
-                reference, revision = location.location_id, location.revision
-
-                async def apply() -> None:
-                    await uow.locations.add(location)
-                    if command.list_locally:
-                        await uow.local_locations.add(
-                            location.location_id, command.name, command.parent_id
-                        )
-                        await uow.local_locations.configure(
-                            location.location_id,
-                            command.name,
-                            command.parent_id,
-                            command.hidden,
-                            command.allowed_characters,
-                            command.is_region,
-                        )
-
+                mutation = await create_location(context, command)
             case ConfigureLocation():
-                before = await self._location(uow, world, command.location_id)
-                expect_revision(
-                    "Location", command.location_id, before.revision, command.expected_revision
-                )
-                await uow.local_locations.check_edit(
-                    command.location_id, command.name, command.parent_id
-                )
-                await uow.local_locations.check_options(
-                    command.location_id,
-                    command.parent_id,
-                    command.hidden,
-                    command.allowed_characters,
-                )
-                after = replace(
-                    before,
-                    name=command.name,
-                    revision=before.revision.advance(command.expected_revision),
-                )
-                events = [
-                    (
-                        "LocationUpdated",
-                        {
-                            "location_id": str(after.location_id.value),
-                            "before_name": before.name,
-                            "name": after.name,
-                            "revision": after.revision.value,
-                        },
-                    )
-                ]
-                reference, revision = after.location_id, after.revision
-
-                async def apply() -> None:
-                    await uow.locations.replace(after, command.expected_revision)
-                    await uow.local_locations.configure(
-                        after.location_id,
-                        command.name,
-                        command.parent_id,
-                        command.hidden,
-                        command.allowed_characters,
-                        command.is_region,
-                    )
-
+                mutation = await configure_location(context, command)
             case CreatePlayer():
-                player = Player(world.world_id, command.player_id, command.name)
-                await self._location(uow, world, command.initial_location_id)
-                presence = PlayerPresence(
-                    world.world_id,
-                    player.player_id,
-                    command.initial_location_id,
-                    command.activity_state,
-                    command.availability_state,
-                )
-                if await uow.players.get(player.player_id) is not None:
-                    raise EntityAlreadyExistsError("Player already exists")
-                events = [
-                    (
-                        "PlayerCreated",
-                        {
-                            "player_id": str(player.player_id.value),
-                            "name": player.name,
-                            "revision": 0,
-                        },
-                    ),
-                    (
-                        "PlayerPlaced",
-                        {
-                            "player_id": str(player.player_id.value),
-                            "location_id": str(presence.location_id.value),
-                            "activity": presence.activity.value,
-                            "availability": presence.availability.value,
-                            "revision": 0,
-                        },
-                    ),
-                ]
-                reference, revision = player.player_id, presence.revision
-
-                async def apply() -> None:
-                    await uow.players.add(player, presence)
-
+                mutation = await create_player(context, command)
             case SetPlayerAvailability():
-                player = await uow.players.get(command.player_id)
-                before = await uow.players.presence(command.player_id)
-                if player is None or before is None:
-                    raise EntityNotFoundError("Player does not exist")
-                expect_revision(
-                    "PlayerPresence",
-                    command.player_id,
-                    before.revision,
-                    command.expected_presence_revision,
-                )
-                if before.availability is command.availability_state:
-                    raise DomainInvariantError("Player availability is already set")
-                after = before.with_availability(
-                    command.availability_state,
-                    expected_revision=command.expected_presence_revision,
-                )
-                events = [
-                    (
-                        "PlayerAvailabilityChanged",
-                        {
-                            "player_id": str(after.player_id.value),
-                            "before_availability": before.availability.value,
-                            "availability": after.availability.value,
-                            "revision": after.revision.value,
-                        },
-                    )
-                ]
-                reference, revision = after.player_id, after.revision
-
-                async def apply() -> None:
-                    await uow.players.replace_presence(after, command.expected_presence_revision)
-
+                mutation = await set_player_availability(context, command)
             case CreateCharacter():
-                character = Character(world.world_id, command.character_id, command.name)
-                if await uow.characters.get(character.character_id) is not None:
-                    raise EntityAlreadyExistsError("Character already exists")
-                events = [
-                    (
-                        "CharacterCreated",
-                        {
-                            "character_id": str(character.character_id.value),
-                            "name": character.name,
-                            "revision": 0,
-                        },
-                    )
-                ]
-                reference, revision = character.character_id, character.revision
-
-                async def apply() -> None:
-                    await uow.characters.add(character)
-
+                mutation = await create_character(context, command)
             case PlaceCharacter():
-                same_world(world.world_id, command.character_id, command.location_id)
-                if command.activity_player_id is not None:
-                    if command.activity_configure:
-                        await uow.local_locations.check_character_config(
-                            command.character_id,
-                            command.location_id,
-                            command.activity_player_id,
-                            command.expected_location_policy_revision,
-                        )
-                    else:
-                        await uow.local_locations.check_initial_activity(
-                            command.character_id, command.location_id, command.activity_player_id
-                        )
-                if await uow.characters.get(command.character_id) is None:
-                    raise EntityNotFoundError("Character does not exist")
-                await self._location(uow, world, command.location_id)
-                before = await uow.characters.state(command.character_id)
-                expect_revision(
-                    "CharacterState",
-                    command.character_id,
-                    before.revision if before else None,
-                    command.expected_state_revision,
-                )
-                destination = command.location_id
-                if command.activity_configure:
-                    destination = await uow.local_locations.config_destination(
-                        command.character_id, command.location_id, command.activity_locked, before
-                    )
-                    if before and destination == before.location_id:
-
-                        async def apply_config() -> None:
-                            await uow.local_locations.configure_character(
-                                command.character_id,
-                                command.location_id,
-                                command.activity_locked,
-                                command.activity_residency,
-                                logical_time.microseconds,
-                            )
-
-                        return await self._finish(
-                            uow,
-                            command,
-                            fingerprint,
-                            now,
-                            logical_time,
-                            [
-                                (
-                                    "CharacterLocationConfigured",
-                                    {
-                                        "character_id": str(command.character_id.value),
-                                        "initial_location_id": str(command.location_id.value),
-                                        "locked": command.activity_locked,
-                                        "revision": before.revision.value,
-                                    },
-                                )
-                            ],
-                            command.character_id,
-                            before.revision,
-                            apply_config,
-                        )
-                if before is not None:
-                    await settle_routines(
-                        uow,
-                        world.world_id,
-                        logical_time,
-                        now,
-                        character=command.character_id,
-                        interrupt=True,
-                    )
-                revision = (
-                    before.revision.advance(command.expected_state_revision)
-                    if before
-                    else Revision()
-                )
-                state = CharacterState(world.world_id, command.character_id, destination, revision)
-                events = [
-                    (
-                        "CharacterPlaced",
-                        {
-                            "character_id": str(state.character_id.value),
-                            "before_location_id": (
-                                str(before.location_id.value) if before else None
-                            ),
-                            "location_id": str(state.location_id.value),
-                            "revision": revision.value,
-                        },
-                    )
-                ]
-                reference = state.character_id
-
-                async def apply() -> None:
-                    await uow.characters.put_state(state, command.expected_state_revision)
-                    if command.activity_player_id is not None:
-                        await uow.local_locations.configure_character(
-                            command.character_id,
-                            command.location_id,
-                            command.activity_locked,
-                            command.activity_residency,
-                            logical_time.microseconds,
-                        )
-                        await uow.observations.add(
-                            Observation(
-                                world.world_id,
-                                state.character_id,
-                                event_identity(command, 0),
-                                ObservationChannel.WITNESSED,
-                                logical_time,
-                                now,
-                                observation_id=ObservationId(world.world_id, uuid4()),
-                                basis=ObservationBasis.EVENT_OCCURRENCE,
-                            )
-                        )
-                    if before is not None and before.location_id != state.location_id:
-                        await uow.scenes.leave_active_for_principal(
-                            state.character_id, logical_time
-                        )
-
+                mutation = await place_character(context, command)
             case ChangeRelationship():
-                same_world(world.world_id, command.source_id, command.target_id)
-                for identity in (command.source_id, command.target_id):
-                    participant = (
-                        await uow.characters.get(identity)
-                        if isinstance(identity, CharacterId)
-                        else await uow.players.get(identity)
-                    )
-                    if participant is None:
-                        raise EntityNotFoundError("Relationship participant does not exist")
-                before = await uow.relationships.get(command.source_id, command.target_id)
-                expect_revision(
-                    "Relationship",
-                    RelationshipReference(command.source_id, command.target_id),
-                    before.revision if before else None,
-                    command.expected_relationship_revision,
-                )
-                initial = before or Relationship(
-                    world.world_id, command.source_id, command.target_id
-                )
-                after = initial.change(
-                    command.affinity_delta,
-                    command.trust_delta,
-                    command.familiarity_delta,
-                    expected_revision=(
-                        command.expected_relationship_revision if before else initial.revision
-                    ),
-                )
-                events = [
-                    (
-                        "RelationshipChanged",
-                        {
-                            "source": id_input(after.source_id),
-                            "target": id_input(after.target_id),
-                            "source_character_id": (
-                                str(after.source_id.value)
-                                if isinstance(after.source_id, CharacterId)
-                                else None
-                            ),
-                            "target_character_id": (
-                                str(after.target_id.value)
-                                if isinstance(after.target_id, CharacterId)
-                                else None
-                            ),
-                            "edge_existed": before is not None,
-                            "before": metrics_payload(initial.metrics),
-                            "delta": {
-                                "affinity": command.affinity_delta,
-                                "trust": command.trust_delta,
-                                "familiarity": command.familiarity_delta,
-                            },
-                            "after": metrics_payload(after.metrics),
-                            "revision": after.revision.value,
-                        },
-                    )
-                ]
-                reference = RelationshipReference(after.source_id, after.target_id)
-                revision = after.revision
-
-                async def apply() -> None:
-                    await uow.relationships.put(after, command.expected_relationship_revision)
-
+                mutation = await change_relationship(context, command)
             case FormCharacterBelief():
-                if await uow.characters.get(command.character_id) is None:
-                    raise EntityNotFoundError("Belief owner does not exist")
-                if await uow.knowledge.get(command.assertion_id) is not None:
-                    raise EntityAlreadyExistsError("KnowledgeAssertion already exists")
-                if (
-                    command.source_assertion_id is not None
-                    and await uow.knowledge.get(command.source_assertion_id) is None
-                ):
-                    raise EntityNotFoundError("Source KnowledgeAssertion does not exist")
-                if (
-                    command.provenance_event_id is not None
-                    and not await uow.event_references.exists(command.provenance_event_id)
-                ):
-                    raise EntityNotFoundError("Provenance WorldEvent does not exist")
-                assertion = KnowledgeAssertion(
-                    command.assertion_id,
-                    world.world_id,
-                    KnowledgeScope.CHARACTER_BELIEF,
-                    command.character_id,
-                    command.subject,
-                    command.predicate,
-                    command.value,
-                    command.epistemic_status,
-                    command.confidence,
-                    command.valid_from,
-                    command.valid_to,
-                    provenance_event_id=command.provenance_event_id,
-                    source_assertion_id=command.source_assertion_id,
-                )
-                events = [("CharacterBeliefFormed", assertion_payload(assertion))]
-                reference, revision = assertion.assertion_id, assertion.revision
-
-                async def apply() -> None:
-                    await uow.knowledge.add(assertion)
-
+                mutation = await form_character_belief(context, command)
             case AssertWorldTruth():
-                if await uow.knowledge.get(command.assertion_id) is not None:
-                    raise EntityAlreadyExistsError("KnowledgeAssertion already exists")
-                assertion = KnowledgeAssertion(
-                    command.assertion_id,
-                    world.world_id,
-                    KnowledgeScope.TRUTH,
-                    None,
-                    command.subject,
-                    command.predicate,
-                    command.value,
-                    command.epistemic_status,
-                    command.confidence,
-                    command.valid_from if command.valid_from is not None else logical_time,
-                    command.valid_to,
-                    provenance_event_id=event_identity(command, 0),
-                )
-                events = [("WorldTruthAsserted", assertion_payload(assertion))]
-                reference, revision = assertion.assertion_id, assertion.revision
-
-                async def apply() -> None:
-                    await uow.knowledge.add(assertion)
-
+                mutation = await assert_world_truth(context, command)
             case AcquireKnowledge():
-                if command.channel is ObservationChannel.INFERRED:
-                    raise DomainInvariantError(
-                        "Inferred acquisition requires a future explicit reasoning policy"
-                    )
-                participant = (
-                    await uow.characters.get(command.receiver_id)
-                    if isinstance(command.receiver_id, CharacterId)
-                    else await uow.players.get(command.receiver_id)
-                )
-                if participant is None:
-                    raise EntityNotFoundError("Knowledge receiver does not exist")
-                source = await uow.knowledge.get(command.source_assertion_id)
-                if source is None:
-                    raise EntityNotFoundError("Source KnowledgeAssertion does not exist")
-                if await uow.knowledge.get(command.assertion_id) is not None:
-                    raise EntityAlreadyExistsError("KnowledgeAssertion already exists")
-                # Occurrence identity is independent of RequestId and all semantic coordinates.
-                observation_id = ObservationId(world.world_id, uuid4())
-                observation = Observation(
-                    world.world_id,
-                    command.receiver_id,
-                    source.assertion_id,
-                    command.channel,
-                    logical_time,
-                    now,
-                    observation_id=observation_id,
-                )
-                assertion = KnowledgeAssertion(
-                    command.assertion_id,
-                    world.world_id,
-                    KnowledgeScope.CHARACTER_BELIEF
-                    if isinstance(command.receiver_id, CharacterId)
-                    else KnowledgeScope.PLAYER_KNOWLEDGE,
-                    command.receiver_id,
-                    source.subject,
-                    source.predicate,
-                    source.value,
-                    command.epistemic_status,
-                    command.confidence,
-                    logical_time,
-                    provenance_event_id=event_identity(command, 1),
-                    source_assertion_id=source.assertion_id,
-                )
-                observation_payload = {
-                    "observation_id": str(observation_id.value),
-                    "receiver": id_input(command.receiver_id),
-                    "source_assertion_id": str(source.assertion_id.value),
-                    "channel": command.channel.value,
-                    "observed_at": observation.observed_at.microseconds,
-                    "created_at": now.isoformat(),
-                }
-                events = [
-                    ("ObservationRecorded", observation_payload),
-                    ("KnowledgeAcquired", assertion_payload(assertion) | observation_payload),
-                ]
-                reference, revision = assertion.assertion_id, assertion.revision
-
-                async def apply() -> None:
-                    await uow.observations.add(observation)
-                    await uow.knowledge.add(assertion)
-
+                mutation = await acquire_knowledge(context, command)
             case _:
                 raise TypeError("Unsupported command type")
         return await self._finish(
@@ -773,11 +261,11 @@ class CommandHandler:
             fingerprint,
             now,
             logical_time,
-            events,
-            reference,
-            revision,
-            apply,
-            observation_id,
+            mutation.events,
+            mutation.reference,
+            mutation.revision,
+            mutation.apply,
+            mutation.observation_id,
         )
 
     async def _finish(

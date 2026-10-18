@@ -46,6 +46,6 @@
 
 ## 为什么要确认这一轮
 
-[AGENTS.md](../../AGENTS.md) §14/18/22要求未定产品、权限及费用规则不被默认实现；[DIRECTOR_MODEL.md](../architecture/DIRECTOR_MODEL.md) §3.2明确没有“耗尽/大量失效”的阈值，运行时计划确认边界未定；[ACTION_RESOLUTION.md](../architecture/ACTION_RESOLUTION.md) §3目前不授予 Director 角色行动权限。本提案不改变 Kernel/知识/聊天规则，只将这些依赖列成一次可审阅产品选择。
+[提案时工程规则](https://github.com/zhangyeS12/dreamtalk/blob/485b512a5dac8da7077326d1cd3daea5eb3304c8/AGENTS.md) §14/18/22要求未定产品、权限及费用规则不被默认实现；[提案时Director说明](https://github.com/zhangyeS12/dreamtalk/blob/485b512a5dac8da7077326d1cd3daea5eb3304c8/docs/architecture/DIRECTOR_MODEL.md) §3.2记录早期尚无“耗尽/大量失效”的阈值，运行时计划确认边界未定；[ACTION_RESOLUTION.md](../architecture/ACTION_RESOLUTION.md) §3目前不授予 Director 角色行动权限。本提案不改变 Kernel/知识/聊天规则，只将这些依赖列成一次可审阅产品选择。
 
 测试与运行验收仍由用户负责；工程端继续只进行源码/lint/type/编译打包。上一轮验收没有列出分项，不扩大解释为全产品、所有权限隔离或完整世界活动已验证。

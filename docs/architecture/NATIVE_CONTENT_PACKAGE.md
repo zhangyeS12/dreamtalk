@@ -133,4 +133,4 @@ SHA-256 是完整性校验，**不是 publisher authentication**。可重算 has
 
 Alembic [0008](../../services/core/src/livingworld/infrastructure/persistence/migrations/versions/0008_native_content_packages.py) 只增加两个本地表，不存 ZIP structure，不改旧 canonical JSON/hash/rows、runtime schema、ledger/audit。详见 [PERSISTENCE_MODEL.md](PERSISTENCE_MODEL.md)。没有新依赖、GUI smoke 或 network download。
 
-C-004D2 当时尚未接入内容运行实例化、activation、prompt assembly、Memory/RAG、Director/Agent/LLM/Builder 与最终 UI；这些阶段状态不是当前项目待办，后续实现见[状态清单](../PROJECT_STATUS.md)。automatic Lore→Truth/Belief、runtime checkpoint/branch、`.lworld`、backup、cloud/marketplace 仍未实现或未批准。总验收见 [STAGE_3_ACCEPTANCE.md](STAGE_3_ACCEPTANCE.md)。
+C-004D2 当时尚未接入内容运行实例化、activation、prompt assembly、Memory/RAG、Director/Agent/LLM/Builder 与最终 UI；这些阶段状态不是当前项目待办，后续实现见[状态清单](../PROJECT_STATUS.md)。本内容包不自动写Truth／Belief，不承载runtime分支；整份本机存档走独立[存档流程](../DATA_BACKUPS.md)。总验收见 [STAGE_3_ACCEPTANCE.md](https://github.com/zhangyeS12/dreamtalk/blob/485b512a5dac8da7077326d1cd3daea5eb3304c8/docs/architecture/STAGE_3_ACCEPTANCE.md)。

@@ -3,7 +3,7 @@
 Status: approved product and architecture decisions; implementation is incremental.
 
 Related concepts: [Conversation and Message](DOMAIN_MODEL.md#21-conversation),
-[system responsibilities](SYSTEM_OVERVIEW.md#角色扮演聊天边界), and
+[system responsibilities](SYSTEM_OVERVIEW.md#组成与权威边界), and
 [confirmed product decisions](../product/PRODUCT_SPEC.md#已确认的产品补充决策).
 
 ## Purpose

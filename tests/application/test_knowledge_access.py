@@ -637,10 +637,10 @@ def test_rolled_back_observation_has_no_durable_identity_and_retry_generates_new
             command = acquire(environment, source)
             first_id, retry_id = uuid4(), uuid4()
             generations = iter((first_id, retry_id))
-            from livingworld.application import command_handler
+            from livingworld.application import command_knowledge
 
             with monkeypatch.context() as patch:
-                patch.setattr(command_handler, "uuid4", lambda: next(generations))
+                patch.setattr(command_knowledge, "uuid4", lambda: next(generations))
                 original = unit_of_work.ObservationAppender.add
 
                 async def fail(self, observation):

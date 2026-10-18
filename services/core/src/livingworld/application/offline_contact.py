@@ -18,6 +18,7 @@ from livingworld.application.llm import (
     MessageRole,
     TextContent,
 )
+from livingworld.application.update_maintenance import UpdateMaintenance
 from livingworld.application.world_model_config import model_for_world
 
 
@@ -34,7 +35,7 @@ class ContactPlan(BaseModel):
 
 class OfflineContactService:
     def __init__(self, store, players, planner, dialogue, credentials_ready=lambda: True):
-        self.maintenance = None
+        self.maintenance: UpdateMaintenance | None = None
         self.store, self.players = store, players
         self.planner, self.dialogue = planner, dialogue
         self._credentials_ready = credentials_ready

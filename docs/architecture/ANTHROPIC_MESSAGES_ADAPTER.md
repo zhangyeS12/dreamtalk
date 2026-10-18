@@ -1,6 +1,6 @@
 # Anthropic Native Messages Adapter — C-005E2
 
-状态：dreamtalk 已实现可注入、默认未启用的 Anthropic 原生 Messages adapter。实现直接使用 `httpx` 和 `POST /v1/messages`，测试全部使用离线 `MockTransport` 与受控 fixtures；没有 Anthropic SDK、真实 API key、付费调用、在线 model discovery 或 production default wiring。
+本文维护基于httpx的Anthropic原生Messages协议映射。协议层证据使用离线MockTransport／fixtures；生产接入见[组装](LLM_PRODUCTION_COMPOSITION.md)，具体模型兼容与验收见[状态清单](../PROJECT_STATUS.md)。
 
 ```text
 AdapterKind.ANTHROPIC != AdapterKind.OPENAI_COMPATIBLE
@@ -124,4 +124,4 @@ Anthropic 没有独立 ledger 路径。现有 `ExecutingModelGateway` 依次执�
 
 canary 检查显式遍历安全对象和 operational storage，API key、prompt、visible response、thinking text、raw SSE/error、private world/path 均不进入正常 logs、routing/budget/accounting diagnostics 或 facts。OpenAI-compatible `[DONE]` tests 与 Stage 0–4 regression 独立继续运行。
 
-未实现 Anthropic SDK、beta API、server-side fallback、tool loop、web search/fetch、thinking controls、prompt caching request generation、files、batch、token counting、model discovery、Gemini、OpenAI Responses 或真实 provider integration test。停止于 C-005E2。
+未实现 Anthropic SDK、beta API、server-side fallback、tool loop、web search/fetch、thinking controls、prompt caching request generation、files、batch、token counting、model discovery或真实provider integration test。本段描述该adapter范围；其他协议与生产接入见[组装](LLM_PRODUCTION_COMPOSITION.md)。

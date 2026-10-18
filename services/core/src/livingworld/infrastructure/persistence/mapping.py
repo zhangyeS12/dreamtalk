@@ -1,5 +1,7 @@
 """Explicit conversion between framework-free domain values and ORM records."""
 
+from collections.abc import Mapping
+from typing import cast, overload
 from uuid import UUID
 
 from livingworld.domain.commands import CommandReceipt
@@ -35,7 +37,7 @@ from livingworld.domain.participants import (
 )
 from livingworld.domain.relationships import Relationship, RelationshipMetrics
 from livingworld.domain.scenes import Scene, SceneParticipant, SceneStatus
-from livingworld.domain.values import Revision
+from livingworld.domain.values import JsonValue, Revision
 from livingworld.domain.world import ClockState, Location, LocationConnection, World, WorldClock
 from livingworld.infrastructure.persistence.errors import PersistenceDataError
 from livingworld.infrastructure.persistence.models import (
@@ -102,7 +104,9 @@ def _target_parts(
     raise PersistenceDataError("target_id_type_unsupported")
 
 
-def _target(world: WorldId, kind: str, value: UUID) -> EventId | KnowledgeAssertionId:
+def _target(world: WorldId, kind: str, value: UUID | None) -> EventId | KnowledgeAssertionId:
+    if value is None:
+        raise PersistenceDataError("stored_target_id_missing")
     if kind == "event":
         return EventId(world, value)
     if kind == "assertion":
@@ -305,9 +309,38 @@ def to_record(entity: DomainObject) -> Base:
     raise TypeError(f"No persistence mapping for {type(entity).__name__}")
 
 
+@overload
+def to_domain(record: WorldClockRecord) -> WorldClock: ...
+
+
+@overload
+def to_domain(record: Base) -> DomainObject: ...
+
+
 def to_domain(record: Base) -> DomainObject:
     """Map one loaded ORM record to a newly validated domain value."""
 
+    if not isinstance(
+        record,
+        (
+            WorldRecord,
+            WorldClockRecord,
+            LocationRecord,
+            LocationConnectionRecord,
+            PlayerRecord,
+            PlayerPresenceRecord,
+            CharacterRecord,
+            CharacterStateRecord,
+            SceneRecord,
+            SceneParticipantRecord,
+            RelationshipRecord,
+            WorldEventRecord,
+            KnowledgeAssertionRecord,
+            ObservationRecord,
+            CommandReceiptRecord,
+        ),
+    ):
+        raise PersistenceDataError("record_type_unsupported")
     world = WorldId(record.world_id)
     if isinstance(record, WorldRecord):
         return World(world, record.name, to_domain(record.clock), Revision(record.revision))
@@ -395,7 +428,8 @@ def to_domain(record: Base) -> DomainObject:
             world,
             record.event_type,
             record.occurred_at,
-            record.payload,
+            # ORM JSON is object-typed; the domain constructor validates and freezes it.
+            cast(Mapping[str, JsonValue], record.payload),
             record.payload_version,
             record.created_at,
             cause,
@@ -416,7 +450,7 @@ def to_domain(record: Base) -> DomainObject:
             owner,
             record.subject,
             record.predicate,
-            record.value,
+            cast(JsonValue, record.value),
             record.epistemic_status,
             record.confidence,
             record.valid_from,

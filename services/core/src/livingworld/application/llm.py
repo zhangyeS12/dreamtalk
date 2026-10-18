@@ -1,6 +1,6 @@
 """LivingWorld-owned text generation contracts. No providers, IO or world capabilities."""
 
-from collections.abc import AsyncIterator, Mapping
+from collections.abc import AsyncGenerator, Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
 from math import isfinite
@@ -744,4 +744,4 @@ class ModelGateway(Protocol):
     """Cancellation propagates via asyncio; stream returns an async iterator directly."""
 
     async def generate(self, request: LLMRequest) -> LLMResponse: ...
-    def stream(self, request: LLMRequest) -> AsyncIterator[LLMStreamEvent]: ...
+    def stream(self, request: LLMRequest) -> AsyncGenerator[LLMStreamEvent, None]: ...

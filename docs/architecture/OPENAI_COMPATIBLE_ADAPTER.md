@@ -1,6 +1,6 @@
 # OpenAI-Compatible Chat Adapter — C-005B / C-005C1 / C-005C2 / C-005D1 / C-005D2A
 
-状态：已实现 infrastructure adapter，使用受控官方契约形状的离线 fixtures 验证。没有真实 API key、真实提供方调用或 production default wiring；fixture 通过不等于所有模型/兼容服务器已经实测。
+本文维护Chat Completions兼容协议映射；历史离线fixtures不代表所有模型／服务器实测。生产接入见[组装](LLM_PRODUCTION_COMPOSITION.md)，当前兼容与验收见[状态清单](../PROJECT_STATUS.md)。
 
 ```text
 ModelGateway.generate → preflight → CredentialProvider.resolve
@@ -110,7 +110,7 @@ Selected provider_request_id 优先 x-request-id，其次 body.id；允许最多
 
 Native发送schema_name及面向strict子集的wire副本，原始schema仍作为本地校验authority。0.1.42补齐closed object／全部required、移除wire中的default／方言声明，字符串长度限制保留说明与本地验证；不注入消息、不修改原schema，不实现完整schema编译器。两种transport均要求显式`type: object`，native拒绝root anyOf；更宽的union/$ref-only/array/scalar root在凭据/HTTP前按UNSUPPORTED_CAPABILITY拒绝，动态map等不支持的native副本按INVALID_REQUEST拒绝。通用本地validator不受这些wire限制；提供方400/422仍归类INVALID_REQUEST。见[适配记录](../maintenance/2026-10-08-provider-compatibility.md)。
 
-先检查 schema/dialect/local refs，再一次 HTTP 生成，再依次处理 refusal/filter → length → strict parse → schema validation。Refusal/filter 返回 LLMResponse，无 claim；length 返回 OUTPUT_TRUNCATED，哪怕文本恰好是合法 JSON。Parse/schema/empty failure 使用 STRUCTURED_OUTPUT_FAILED + typed reason，保留不含 response 的 attempt accounting summary。成功仅在本地验证后保留 raw text + validated claim。自动重试、repair、prompt 修改和价格均未实现。
+先检查 schema/dialect/local refs，再一次 HTTP 生成，再依次处理 refusal/filter → length → strict parse → schema validation。Refusal/filter 返回 LLMResponse，无 claim；length 返回 OUTPUT_TRUNCATED，哪怕文本恰好是合法 JSON。Parse/schema/empty failure 使用 STRUCTURED_OUTPUT_FAILED + typed reason，保留不含 response 的 attempt accounting summary。成功仅在本地验证后保留 raw text + validated claim。本段是C-005C1单次协议处理边界；后续受控retry、账本和价格政策见[生产组装](LLM_PRODUCTION_COMPOSITION.md)，不从此处推断项目未接线。
 
 官方证据、精确 dialect/format/$ref policy 和受控结构化 fixtures 见 [STRUCTURED_GENERATION.md](STRUCTURED_GENERATION.md)。C-005B 的纯文本回归仍执行。
 

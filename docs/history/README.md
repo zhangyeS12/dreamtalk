@@ -1,45 +1,28 @@
-# 交接与规则历史
+# 历史证据索引
 
-当前接续入口为根 [AGENTS.md](../../AGENTS.md)、[HANDOFF.md](../../HANDOFF.md) 与 [当前状态清单](../PROJECT_STATUS.md)；本目录保留完整历史，不能从旧“下一步/未完成”推断新需求或授权。
+当前工作只从[工程规则](../../AGENTS.md)、[交接](../../HANDOFF.md)和[状态清单](../PROJECT_STATUS.md)进入。历史记录保留原日期／范围；当时的“下一步”“本轮授权”和“未实现”均不是当前指令。
 
-## 2026-10-04 文档收敛前快照
+## 重复全文与早期阶段报告
 
-基线 `1221c18a019874b1bc5de2deeeed8043d75f666c`，桌面 0.1.28。原根文件以 `.txt` 原字节保留，避免归档被误当活动 AGENTS 或相对 Markdown 链接被新目录重新解释。
+文档去重时移除工作树内的重复全文快照和过期阶段汇总，原文仍在Git中。以下链接固定在整理前提交 `485b512a5dac8da7077326d1cd3daea5eb3304c8`，不依赖以后分支变化；离线也可用 `git show 485b512:原路径` 查阅，不改写历史。
 
-- [AGENTS 全文](2026-10-04/AGENTS.before-consolidation.txt)：当时持续规则及追加批准记录。
-- [HANDOFF 全文](2026-10-04/HANDOFF.before-consolidation.txt)：完整切片日志、历史构建结果/哈希和早期现场。
-- [归档 SHA256](2026-10-04/manifest.sha256)：供核对原样保留；不是应用运行验收。
+| 历史材料 | 固定原文 |
+| --- | --- |
+| 早期规则与交接全文 | [AGENTS快照](https://github.com/zhangyeS12/dreamtalk/blob/485b512a5dac8da7077326d1cd3daea5eb3304c8/docs/history/2026-10-04/AGENTS.before-consolidation.txt)、[HANDOFF快照](https://github.com/zhangyeS12/dreamtalk/blob/485b512a5dac8da7077326d1cd3daea5eb3304c8/docs/history/2026-10-04/HANDOFF.before-consolidation.txt)、[原校验摘要](https://github.com/zhangyeS12/dreamtalk/blob/485b512a5dac8da7077326d1cd3daea5eb3304c8/docs/history/2026-10-04/manifest.sha256) |
+| 原Architecture Review与代码审计 | [Review 001](https://github.com/zhangyeS12/dreamtalk/blob/485b512a5dac8da7077326d1cd3daea5eb3304c8/docs/architecture/ARCHITECTURE_REVIEW_001.md)、[旧代码审计](https://github.com/zhangyeS12/dreamtalk/blob/485b512a5dac8da7077326d1cd3daea5eb3304c8/docs/architecture/CODEBASE_AUDIT.md) |
+| 阶段验收汇总 | [Stage 2](https://github.com/zhangyeS12/dreamtalk/blob/485b512a5dac8da7077326d1cd3daea5eb3304c8/docs/architecture/STAGE_2_ACCEPTANCE.md)、[Stage 3](https://github.com/zhangyeS12/dreamtalk/blob/485b512a5dac8da7077326d1cd3daea5eb3304c8/docs/architecture/STAGE_3_ACCEPTANCE.md)、[Stage 4](https://github.com/zhangyeS12/dreamtalk/blob/485b512a5dac8da7077326d1cd3daea5eb3304c8/docs/architecture/STAGE4_ACCEPTANCE.md)、[Stage 5](https://github.com/zhangyeS12/dreamtalk/blob/485b512a5dac8da7077326d1cd3daea5eb3304c8/docs/architecture/STAGE5_ACCEPTANCE.md) |
+| 本次整理前的活动入口 | [AGENTS](https://github.com/zhangyeS12/dreamtalk/blob/485b512a5dac8da7077326d1cd3daea5eb3304c8/AGENTS.md)、[HANDOFF](https://github.com/zhangyeS12/dreamtalk/blob/485b512a5dac8da7077326d1cd3daea5eb3304c8/HANDOFF.md)、[状态清单](https://github.com/zhangyeS12/dreamtalk/blob/485b512a5dac8da7077326d1cd3daea5eb3304c8/docs/PROJECT_STATUS.md) |
 
-“长期记忆、语义检索、流式、Director 未实现”等早期状态已由后续代码替代。具体冲突与当前边界见当前交接，不按时间混合执行。
+模块技术契约仍保留在architecture目录。阶段报告中的历史检查仅证明当时范围；测试命令和阶段停止点不作当前执行指令。
 
-## 2026-10-15 新用户审查与修复
+## 按问题查原始记录
 
-在用户具体隔离授权下完成[审查](../maintenance/2026-10-15-new-user-audit.md)，随后按“修复问题”实施存档恢复、配置修复、启动重试、错误指引和回归维护，见[证据与限制](../maintenance/2026-10-15-new-user-fixes.md)。用户随后要求同步GitHub源码，本轮不创建安装包／Release，不复用为真实存档／安装升级或模型授权。
+| 主题 | 证据入口 |
+| --- | --- |
+| 最新发行、CI、签名与频道 | [发行记录](../maintenance/2026-10-18-release-0182.md)；更早发行按maintenance中的release文件日期检索 |
+| 五位置存档 | [批准方案](../proposals/2026-10-17-save-slots.md)、[实现与隔离检查](../maintenance/2026-10-17-save-slots.md) |
+| 启动／更新／媒体可靠性 | [可靠性修复](../maintenance/2026-10-17-reliability-hardening.md)、[本机入口修复](../maintenance/2026-10-16-local-entry-repair.md)、[旧版启动更新](../maintenance/2026-10-16-old-version-startup-update.md) |
+| 存档升级与新用户问题 | [新用户审查](../maintenance/2026-10-15-new-user-audit.md)、[修复](../maintenance/2026-10-15-new-user-fixes.md)、[启动结构修复](../maintenance/2026-10-15-save-start-fix.md)、[快照更新](../maintenance/2026-10-15-save-snapshot-update.md) |
+| 媒体与配音 | [媒体修复](../maintenance/2026-10-15-media-contract-reliability.md)、[本地候选修复](../maintenance/2026-10-13-speech-candidate-sampling-fix.md)、[配音部署](../maintenance/2026-10-12-local-speech-deployment.md) |
 
-## 2026-10-15 快照与升级简化
-
-用户进一步批准优化并发布0.1.80。清单内摘要全部匹配，额外SQLite临时索引及空WAL导致误报；本轮修复封存快照读取、启动与更新交接，详见[记录](../maintenance/2026-10-15-save-snapshot-update.md)。完整0.1.80预发布与原频道已公开，发行源码c7bcf3b，见[发行记录](../maintenance/2026-10-15-release-0180.md)。仅build-only，真实升级由用户验收。
-
-## 2026-10-15 存档保护与媒体修复发布
-
-用户随后明确要求推送并发布新版，已完成v0.1.78完整源码、Windows安装／便携与原更新频道发布，发行源码e4b7164。静态载荷、更新签名和匿名完整下载核对见[发布记录](../maintenance/2026-10-15-release-0178.md)；不扩大为真实升级、模型或存档验收。以下实施阶段的未发布记录保留原边界。
-
-随后用户实际升级失败，限定只读元数据诊断确认migration阶段alembic_schema_shape_mismatch；0.1.79修复模型与迁移的字段顺序，并提供显式重新检查入口，详见[启动修复](../maintenance/2026-10-15-save-start-fix.md)。本轮仅源码／必要直接EXE编译，未打包或发布，未操作真实存档。
-
-## 2026-10-15 媒体审查修复
-
-用户在只读讨论后批准修复凭据链路、说明隔离、图片生命周期及搜索边界，群聊先补诊断。Desktop0.1.78、0052源码／必要编译，未发布、未运行测试或真实存档，见[本轮记录](../maintenance/2026-10-15-media-contract-reliability.md)。
-
-## 2026-10-14 当前文档收敛
-
-随后用户明确批准存档保护与可靠更新，本轮0.1.78仅源码/必要编译，未发布，见[记录](../maintenance/2026-10-14-save-safety.md)。此前实际本机恢复的路径/元数据属于私人诊断材料，不写入公开文档，不作为本轮运行验证许可。
-
-0.1.77审查修复收敛了根交接和当前范围提醒中的重复历史段落，完整原文仍可按[收敛前Git快照](https://github.com/zhangyeS12/dreamtalk/tree/f1964d150d6702f4273bdf23d1ae181ee3156582)读取。0.1.76及此前维护／发布记录保留当时结果，不改旧标签或附件。当前工作见[审查修复记录](../maintenance/2026-10-14-review-fixes-release.md)。
-
-## 2026-10-17 五个存档位置
-
-用户确认一自动四手动、每启动一次、导入不加载、加载覆盖自动档及移除清空入口后授权实现；原更新保护独立保留。见[批准方案](../proposals/2026-10-17-save-slots.md)和[实现记录](../maintenance/2026-10-17-save-slots.md)，不复用前轮测试或发布许可。随后用户明确要求推送GitHub，源码范围及边界见[同步记录](../maintenance/2026-10-17-source-sync.md)，不包含新安装包发行。
-
-## 2026-10-18 0.1.82发行
-
-用户另明确批准0.1.82完整Windows更新，供其从0.1.81体验应用内升级。沿原签名及频道，仅build-only，不运行本机应用或安装器；见[发行记录](../maintenance/2026-10-18-release-0182.md)。
+维护记录保留必要诊断与授权证据，不再逐条抄进本索引。其他记录用文件名日期／主题检索；研究输入见[研究索引](../research/README.md)。没有新增用户反馈时，不从历史构建成功推断当前验收通过。

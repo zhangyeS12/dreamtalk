@@ -130,7 +130,7 @@ it("shows the player-scoped world-event thread in chronological order", async ()
   await waitFor(() => expect(client.selectedPlayer).toHaveBeenCalledWith("world-a"));
   fireEvent.click(screen.getByRole("button", { name: "世界事件你已获知的事件置顶" }));
   const timeline = await screen.findByRole("region", { name: "世界事件时间线" });
-  await waitFor(() => expect(knownEvents).toHaveBeenCalledWith("world-a"));
+  await waitFor(() => expect(knownEvents).toHaveBeenCalledWith("world-a", expect.any(AbortSignal)));
   await screen.findByText("有人移动了位置");
   expect(timeline.querySelectorAll("li")).toHaveLength(2);
   expect(timeline.querySelectorAll("li")[0]?.textContent).toContain("第 1 天 · 00:01");
@@ -206,12 +206,12 @@ it("does not display a late event response after switching worlds", async () => 
   await renderProduct(client);
   await waitFor(() => expect(client.selectedPlayer).toHaveBeenCalledWith("world-a"));
   fireEvent.click(screen.getByRole("button", { name: "世界事件你已获知的事件置顶" }));
-  await waitFor(() => expect(knownEvents).toHaveBeenCalledWith("world-a"));
+  await waitFor(() => expect(knownEvents).toHaveBeenCalledWith("world-a", expect.any(AbortSignal)));
   await switchBook("world-b");
   await waitFor(() => expect(client.selectedPlayer).toHaveBeenCalledWith("world-b"));
   fireEvent.click(screen.getByRole("button", { name: "聊天" }));
   fireEvent.click(screen.getByRole("button", { name: "世界事件你已获知的事件置顶" }));
-  await waitFor(() => expect(knownEvents).toHaveBeenCalledWith("world-b"));
+  await waitFor(() => expect(knownEvents).toHaveBeenCalledWith("world-b", expect.any(AbortSignal)));
   await act(async () => { completeOldRequest([{ event_id: "old", title: "旧世界私有事件", occurred_at: "0", observed_at: "0", ledger_position: 1 }]); });
   expect(screen.queryByText("旧世界私有事件")).toBeNull();
   expect(screen.getByText("我亲历的活动记录（0）")).toBeTruthy();

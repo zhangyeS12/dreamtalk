@@ -3,7 +3,7 @@
 状态：已接受  
 日期：2026-09-27  
 确认：产品负责人明确表示不再要求独立实现，应选择效果和维护成本更好的方案。  
-替代：[Architecture Review 001](../ARCHITECTURE_REVIEW_001.md) 的决策 15 中“必须独立实现、不复用 SillyTavern 源码”的实施限制。已完成的格式 adapter 不因此自动替换。
+替代：[Architecture Review 001](https://github.com/zhangyeS12/dreamtalk/blob/485b512a5dac8da7077326d1cd3daea5eb3304c8/docs/architecture/ARCHITECTURE_REVIEW_001.md) 的决策 15 中“必须独立实现、不复用 SillyTavern 源码”的实施限制。已完成的格式 adapter 不因此自动替换。
 
 ## 背景
 

@@ -4,6 +4,7 @@ from uuid import uuid4
 
 import pytest
 from card_fixtures import card_document, json_bytes
+from livingworld.adapters.http.services import HttpServices
 from livingworld.application.command_handler import CommandHandler
 from livingworld.application.commands import CreateWorld
 from livingworld.application.content import ContentConflictError
@@ -187,13 +188,13 @@ def test_world_content_http_auth_preview_commit_and_read(tmp_path):
     asyncio.run(setup())
     logs = io.StringIO()
     app = create_app(
-        RuntimeStatus("test", "generation"),
-        ShutdownRequests(),
-        "secret",
-        lambda: None,
-        StructuredLogger(logs),
+        status=RuntimeStatus("test", "generation"),
+        shutdown=ShutdownRequests(),
+        session_token="secret",
+        initialize=lambda: None,
+        logger=StructuredLogger(logs),
         allowed_origins=["http://127.0.0.1:5173"],
-        world_content=database.world_content_service(),
+        services=HttpServices(world_content=database.world_content_service()),
     )
     path = f"/api/v1/worlds/{world.value}/content"
     headers = {"Authorization": "Bearer secret", "Origin": "http://127.0.0.1:5173"}

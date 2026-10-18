@@ -1,7 +1,8 @@
 # Gemini Native Interactions Adapter
 
-Status: **C-005E3 implemented; offline contract validation only**
-Research snapshot: **2026-09-19**
+Scope: Gemini Interactions protocol mapping; the original research and offline fixtures are
+dated **2026-09-19**. Current wiring is in [composition](LLM_PRODUCTION_COMPOSITION.md),
+and model compatibility and acceptance in [project status](../PROJECT_STATUS.md).
 
 ## 1. 作用域与官方 wire contract
 

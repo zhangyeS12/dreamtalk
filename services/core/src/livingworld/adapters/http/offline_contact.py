@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.exc import DBAPIError, IntegrityError, StatementError
 
+from livingworld.adapters.http import contracts as wire
 from livingworld.application.errors import EntityNotFoundError
 from livingworld.application.offline_contact import OfflineContactError
 from livingworld.domain.identifiers import WorldId
@@ -60,11 +61,11 @@ def offline_contact_router(service, authorize, logger=None):
                 logger.emit("offline_contact", code, level="ERROR")
             raise HTTPException(503 if code.startswith("offline_storage_") else 500, code) from None
 
-    @router.get("")
+    @router.get("", response_model=wire.OfflineContactStatus)
     async def snapshot(world_id: UUID):
         return await execute(service.snapshot(WorldId(world_id)))
 
-    @router.post("")
+    @router.post("", response_model=wire.OfflineContactStatus)
     async def configure(world_id: UUID, body: OfflineSettingRequest):
         return await execute(
             service.configure(
@@ -76,7 +77,7 @@ def offline_contact_router(service, authorize, logger=None):
             )
         )
 
-    @router.post("/messages/{message_id}/read")
+    @router.post("/messages/{message_id}/read", response_model=wire.MarkConversationReadResult)
     async def mark_read(world_id: UUID, message_id: UUID):
         await execute(service.mark_read(WorldId(world_id), message_id))
         return {"read": True}

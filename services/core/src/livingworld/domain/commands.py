@@ -1,4 +1,4 @@
-"""A future idempotency receipt contract; no handler, store or duplicate execution."""
+"""Idempotency receipts for committed commands, replay and duplicate-execution protection."""
 
 from dataclasses import dataclass
 from datetime import datetime

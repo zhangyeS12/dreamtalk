@@ -4,7 +4,7 @@ import asyncio
 import hashlib
 import json
 import re
-from collections.abc import AsyncIterator, Mapping
+from collections.abc import AsyncGenerator, Mapping
 from dataclasses import dataclass, replace
 from time import perf_counter
 from urllib.parse import unquote, urlsplit
@@ -42,8 +42,11 @@ from livingworld.application.llm import (
 )
 from livingworld.application.llm_config import CredentialProvider, ProviderConfig
 from livingworld.infrastructure.llm.adapter_support import (
+    adapter_error,
     error_from_failure,
     resolve_adapter_secret,
+    response_count,
+    safe_diagnostic_identifier,
 )
 from livingworld.infrastructure.llm.http_transport import (
     bounded_body,
@@ -215,19 +218,11 @@ def _plain(value):
 
 
 def _safe_identifier(value, secret, request):
-    if type(value) is not str or not _DIAGNOSTIC.fullmatch(value) or secret in value:
-        return None
-    protected = [block.text for message in request.messages for block in message.content]
-    protected.extend(request.stop_sequences)
-    return None if any(text and text in value for text in protected) else value
+    return safe_diagnostic_identifier(value, secret, request, _DIAGNOSTIC)
 
 
 def _count(value):
-    if value is None:
-        return None
-    if type(value) is not int or value < 0:
-        raise _InvalidResponse
-    return value
+    return response_count(value, _InvalidResponse)
 
 
 def _usage(value):
@@ -712,17 +707,15 @@ class OpenAIResponsesGateway:
                 level="WARNING",
                 trace_id=str(request.invocation_id.value),
             )
-        return LLMError(
-            LLMFailure(
-                code,
-                request.invocation_id,
-                diagnostics or ProviderDiagnostics(),
-                attempt,
-                structured_detail,
-                dispatch_state,
-                http_status,
-                retry_after_seconds,
-            )
+        return adapter_error(
+            request,
+            code,
+            diagnostics,
+            attempt=attempt,
+            structured_detail=structured_detail,
+            dispatch_state=dispatch_state,
+            http_status=http_status,
+            retry_after_seconds=retry_after_seconds,
         )
 
     def _failure_error(self, request, failure):
@@ -985,7 +978,7 @@ class OpenAIResponsesGateway:
                 await response.aclose()
             secret = None
 
-    async def stream(self, request: LLMRequest) -> AsyncIterator[LLMStreamEvent]:
+    async def stream(self, request: LLMRequest) -> AsyncGenerator[LLMStreamEvent, None]:
         wire = response = secret = None
         failure = completion = None
         try:

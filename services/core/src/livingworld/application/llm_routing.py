@@ -1,7 +1,7 @@
 """Deterministic operational routing above attempt execution; no provider IO/schema."""
 
 import asyncio
-from collections.abc import AsyncIterator, Callable, Mapping
+from collections.abc import AsyncGenerator, Callable, Mapping
 from contextlib import aclosing
 from dataclasses import dataclass, replace
 from enum import StrEnum
@@ -623,7 +623,7 @@ class RoutedModelGateway:
         selection: ModelSelection | None = None,
         requirements: RouteRequirements | None = None,
         turn_budget: ChatTurnTokenBudget | None = None,
-    ) -> AsyncIterator[LLMStreamEvent]:
+    ) -> AsyncGenerator[LLMStreamEvent, None]:
         if not request.streaming:
             raise LLMContractError("stream_requires_streaming_request")
         plan, execution = self._prepare(request, selection, requirements, turn_budget)

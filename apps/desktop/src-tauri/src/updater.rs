@@ -1,10 +1,16 @@
 //! Signed, user-initiated Windows upgrades. Never exposes arbitrary URLs or paths to JS.
+mod check;
+mod package;
 use crate::{supervisor::LaunchConfig, SharedSupervisor};
+use check::{checked_update, record_check};
+use package::{
+    atomic_json, make_backup, owned_file, package_manifest, prune_recovery, remove_owned_files,
+    Handoff, PackageManifest,
+};
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use std::{
     collections::BTreeMap,
-    path::{Component, Path, PathBuf},
+    path::{Path, PathBuf},
     sync::atomic::{AtomicBool, Ordering},
     time::Duration,
 };
@@ -16,129 +22,6 @@ use uuid::Uuid;
 
 const IDENTITY: &str = "app.livingworld.desktop";
 const MAX_PACKAGE: u64 = 512 * 1024 * 1024;
-
-#[derive(Debug)]
-struct CheckFailure {
-    code: &'static str,
-    attempts: u8,
-}
-
-fn check_failure(error: &tauri_plugin_updater::Error) -> (&'static str, bool) {
-    use tauri_plugin_updater::Error;
-    match error {
-        Error::Reqwest(error) if error.is_timeout() => ("update_check_timeout", true),
-        Error::Reqwest(error) if error.is_connect() => ("update_connection_failed", true),
-        Error::Reqwest(error) if error.is_decode() => ("update_manifest_invalid", false),
-        Error::Network(_) => ("update_connection_failed", true),
-        Error::ReleaseNotFound => ("update_channel_unavailable", false),
-        Error::Serialization(_)
-        | Error::Semver(_)
-        | Error::UrlParse(_)
-        | Error::TargetNotFound(_)
-        | Error::TargetsNotFound(_) => ("update_manifest_invalid", false),
-        _ => ("update_check_failed", false),
-    }
-}
-
-async fn checked_update<F, Fut, T>(mut check: F) -> Result<(T, u8), CheckFailure>
-where
-    F: FnMut() -> Fut,
-    Fut: std::future::Future<Output = Result<T, tauri_plugin_updater::Error>>,
-{
-    // Metadata GET only: at most one retry, using the same endpoint, proxy and
-    // TLS policy. Both attempts share the original 30-second outer deadline.
-    let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
-    for attempts in 1..=2 {
-        match tokio::time::timeout_at(deadline, check()).await {
-            Ok(Ok(value)) => return Ok((value, attempts)),
-            Ok(Err(error)) => {
-                let (code, retryable) = check_failure(&error);
-                if retryable && attempts == 1 && tokio::time::Instant::now() < deadline {
-                    continue;
-                }
-                return Err(CheckFailure { code, attempts });
-            }
-            Err(_) => {
-                return Err(CheckFailure {
-                    code: "update_check_timeout",
-                    attempts,
-                })
-            }
-        }
-    }
-    unreachable!()
-}
-
-fn record_check(directory: &Path, version: &str, result: &'static str, attempts: u8) {
-    // One bounded metadata receipt. No URLs, exception text, credentials or save contents.
-    let _ = atomic_json(
-        &directory.join("updates/check-result.json"),
-        &serde_json::json!({
-            "current_version": version, "result": result, "attempts": attempts,
-            "time_unix_ms": std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis()
-        }),
-    );
-}
-
-#[cfg(test)]
-mod check_tests {
-    use super::*;
-
-    #[test]
-    fn transient_connection_can_recover_but_invalid_feed_is_not_retried() {
-        tauri::async_runtime::block_on(async {
-            let mut calls = 0;
-            let result = checked_update(|| {
-                calls += 1;
-                std::future::ready(if calls == 1 {
-                    Err(tauri_plugin_updater::Error::Network(
-                        "synthetic detail must not be logged".into(),
-                    ))
-                } else {
-                    Ok(None::<()>)
-                })
-            })
-            .await
-            .unwrap();
-            assert_eq!(calls, 2);
-            assert_eq!(result, (None, 2));
-            let mut calls = 0;
-            let result = checked_update(|| {
-                calls += 1;
-                std::future::ready(Err::<(), _>(tauri_plugin_updater::Error::TargetNotFound(
-                    "synthetic".into(),
-                )))
-            })
-            .await
-            .unwrap_err();
-            assert_eq!(calls, 1);
-            assert_eq!(result.code, "update_manifest_invalid");
-        });
-    }
-
-    #[test]
-    fn failed_connections_remain_errors_and_receipt_contains_no_exception_text() {
-        tauri::async_runtime::block_on(async {
-            let result = checked_update(|| {
-                std::future::ready(Err::<(), _>(tauri_plugin_updater::Error::Network(
-                    "synthetic-private-exception".into(),
-                )))
-            })
-            .await
-            .unwrap_err();
-            assert_eq!(result.attempts, 2);
-            assert_eq!(result.code, "update_connection_failed");
-            let directory = tempfile::tempdir().unwrap();
-            record_check(directory.path(), "0.1.81", result.code, result.attempts);
-            let text = std::fs::read_to_string(directory.path().join("updates/check-result.json"))
-                .unwrap();
-            assert!(!text.contains("synthetic-private-exception"));
-            let record: serde_json::Value = serde_json::from_str(&text).unwrap();
-            assert_eq!(record["result"], "update_connection_failed");
-            assert_eq!(record["attempts"], 2);
-        });
-    }
-}
 
 #[derive(Clone, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -241,18 +124,6 @@ fn progress(app: &tauri::AppHandle, phase: &'static str, downloaded: u64, total:
         },
     );
 }
-fn atomic_json<T: Serialize>(path: &Path, value: &T) -> Result<(), String> {
-    std::fs::create_dir_all(path.parent().ok_or("update_path_invalid")?)
-        .map_err(|_| "update_preferences_failed")?;
-    let temporary = path.with_extension("tmp");
-    std::fs::write(
-        &temporary,
-        serde_json::to_vec_pretty(value).map_err(|_| "update_record_failed")?,
-    )
-    .map_err(|_| "update_record_failed")?;
-    std::fs::rename(temporary, path).map_err(|_| "update_record_failed".to_owned())
-}
-
 #[tauri::command]
 pub async fn desktop_update_status(
     app: tauri::AppHandle,
@@ -673,238 +544,6 @@ pub async fn rollback_desktop_update(
     Ok(())
 }
 
-#[derive(Clone, Deserialize, Serialize, PartialEq)]
-#[serde(deny_unknown_fields)]
-struct PackageManifest {
-    identity: String,
-    version: String,
-    files: BTreeMap<String, String>,
-}
-
-#[derive(Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-struct Handoff {
-    identity: String,
-    version: String,
-    old_root: PathBuf,
-    old_package: Option<PackageManifest>,
-    #[serde(default)]
-    save_snapshot_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    prior_snapshot_ids: Vec<String>,
-    autostart: bool,
-    recovery: PathBuf,
-    installer: PathBuf,
-}
-
-fn is_link(metadata: &std::fs::Metadata) -> bool {
-    #[cfg(windows)]
-    {
-        use std::os::windows::fs::MetadataExt;
-        metadata.file_attributes() & 0x400 != 0
-    }
-    #[cfg(not(windows))]
-    {
-        metadata.file_type().is_symlink()
-    }
-}
-
-fn owned_file(root: &Path, relative: &str) -> Result<PathBuf, String> {
-    let relative_path = Path::new(relative);
-    if relative_path
-        .components()
-        .any(|part| !matches!(part, Component::Normal(_)))
-        || relative.is_empty()
-    {
-        return Err("update_package_manifest_invalid".to_owned());
-    }
-    let mut ancestor = Some(root);
-    while let Some(directory) = ancestor {
-        if std::fs::symlink_metadata(directory).is_ok_and(|meta| is_link(&meta)) {
-            return Err("update_package_symlink_rejected".to_owned());
-        }
-        ancestor = directory.parent();
-    }
-    let mut path = root.to_owned();
-    for part in relative_path.components() {
-        path.push(part.as_os_str());
-        if std::fs::symlink_metadata(&path).is_ok_and(|meta| is_link(&meta)) {
-            return Err("update_package_symlink_rejected".to_owned());
-        }
-    }
-    Ok(path)
-}
-fn digest(path: &Path) -> Result<String, String> {
-    use std::io::Read;
-    let mut file = std::fs::File::open(path).map_err(|_| "update_package_read_failed")?;
-    let mut hash = Sha256::new();
-    let mut buffer = [0u8; 64 * 1024];
-    loop {
-        let size = file
-            .read(&mut buffer)
-            .map_err(|_| "update_package_read_failed")?;
-        if size == 0 {
-            break;
-        }
-        hash.update(&buffer[..size]);
-    }
-    Ok(format!("{:x}", hash.finalize()))
-}
-fn package_manifest(root: &Path) -> Result<PackageManifest, String> {
-    if root.join(".git").exists() || root.parent().is_none() {
-        return Err("update_package_root_invalid".to_owned());
-    }
-    let manifest: PackageManifest = serde_json::from_slice(
-        &std::fs::read(root.join(".dreamtalk-package.json"))
-            .map_err(|_| "update_package_manifest_missing")?,
-    )
-    .map_err(|_| "update_package_manifest_invalid")?;
-    if manifest.identity != IDENTITY
-        || manifest.files.len() > 10_000
-        || !manifest.files.contains_key("dreamtalk-desktop.exe")
-        || !manifest.files.contains_key("core/dreamtalk-core.exe")
-    {
-        return Err("update_package_manifest_invalid".to_owned());
-    }
-    for (relative, expected) in &manifest.files {
-        if digest(&owned_file(root, relative)?)? != *expected {
-            return Err("update_package_modified".to_owned());
-        }
-    }
-    Ok(manifest)
-}
-fn copy_tree(source: &Path, target: &Path) -> Result<(), String> {
-    if !source.exists() {
-        return Ok(());
-    }
-    let metadata = std::fs::symlink_metadata(source).map_err(|_| "update_backup_failed")?;
-    if is_link(&metadata) {
-        return Err("update_backup_symlink_rejected".to_owned());
-    }
-    if metadata.is_file() {
-        std::fs::create_dir_all(target.parent().ok_or("update_path_invalid")?)
-            .map_err(|_| "update_backup_failed")?;
-        std::fs::copy(source, target).map_err(|_| "update_backup_failed")?;
-    } else {
-        std::fs::create_dir_all(target).map_err(|_| "update_backup_failed")?;
-        for entry in std::fs::read_dir(source).map_err(|_| "update_backup_failed")? {
-            let entry = entry.map_err(|_| "update_backup_failed")?;
-            if entry.file_name() == "cache" {
-                continue;
-            } // Rebuildable search caches are not saves.
-            copy_tree(&entry.path(), &target.join(entry.file_name()))?;
-        }
-    }
-    Ok(())
-}
-fn make_backup(
-    directory: &Path,
-    root: &Path,
-    manifest: &PackageManifest,
-) -> Result<PathBuf, String> {
-    let recovery = directory
-        .join("updates/recovery")
-        .join(uuid::Uuid::new_v4().to_string());
-    std::fs::create_dir_all(&recovery).map_err(|_| "update_backup_failed")?;
-    let result = (|| {
-        copy_tree(&directory.join("data"), &recovery.join("data"))?;
-        copy_tree(&directory.join("config"), &recovery.join("config"))?;
-        std::fs::create_dir_all(recovery.join("config")).map_err(|_| "update_backup_failed")?;
-        if directory.join(".dreamtalk-storage.json").is_file() {
-            copy_tree(
-                &directory.join(".dreamtalk-storage.json"),
-                &recovery.join(".dreamtalk-storage.json"),
-            )?;
-        }
-        for relative in manifest.files.keys() {
-            let target = owned_file(&recovery.join("program"), relative)?;
-            copy_tree(&owned_file(root, relative)?, &target)?;
-        }
-        atomic_json(&recovery.join("program/.dreamtalk-package.json"), manifest)?;
-        atomic_json(&recovery.join(".dreamtalk-recovery.json"), manifest)?;
-        let snapshot = PackageManifest {
-            identity: IDENTITY.to_owned(),
-            version: manifest.version.clone(),
-            files: inventory(&recovery)?,
-        };
-        atomic_json(&recovery.join(".dreamtalk-snapshot.json"), &snapshot)?;
-        Ok(recovery.clone())
-    })();
-    if result.is_err() {
-        if let Ok(files) = inventory(&recovery) {
-            let partial = PackageManifest {
-                identity: IDENTITY.to_owned(),
-                version: manifest.version.clone(),
-                files,
-            };
-            let _ = remove_owned_files(&recovery, &partial);
-            let _ = std::fs::remove_dir(&recovery);
-        }
-    }
-    result
-}
-
-fn inventory(root: &Path) -> Result<BTreeMap<String, String>, String> {
-    fn visit(
-        root: &Path,
-        folder: &Path,
-        files: &mut BTreeMap<String, String>,
-    ) -> Result<(), String> {
-        for entry in std::fs::read_dir(folder).map_err(|_| "update_backup_failed")? {
-            let entry = entry.map_err(|_| "update_backup_failed")?;
-            let path = entry.path();
-            let metadata = std::fs::symlink_metadata(&path).map_err(|_| "update_backup_failed")?;
-            if is_link(&metadata) {
-                return Err("update_backup_symlink_rejected".to_owned());
-            }
-            if metadata.is_dir() {
-                visit(root, &path, files)?;
-            } else {
-                files.insert(
-                    path.strip_prefix(root)
-                        .map_err(|_| "update_path_invalid")?
-                        .to_string_lossy()
-                        .replace('\\', "/"),
-                    digest(&path)?,
-                );
-            }
-        }
-        Ok(())
-    }
-    let mut files = BTreeMap::new();
-    visit(root, root, &mut files)?;
-    Ok(files)
-}
-
-fn prune_recovery(directory: &Path, keep: &Path) -> Result<(), String> {
-    let base = directory.join("updates/recovery");
-    for entry in std::fs::read_dir(&base).map_err(|_| "update_cleanup_failed")? {
-        let path = entry.map_err(|_| "update_cleanup_failed")?.path();
-        if path == keep
-            || !path.is_dir()
-            || uuid::Uuid::parse_str(&path.file_name().unwrap_or_default().to_string_lossy())
-                .is_err()
-        {
-            continue;
-        }
-        let marker = owned_file(&path, ".dreamtalk-snapshot.json")?;
-        if !marker.exists() {
-            continue;
-        }
-        let snapshot: PackageManifest =
-            serde_json::from_slice(&std::fs::read(&marker).map_err(|_| "update_cleanup_failed")?)
-                .map_err(|_| "update_cleanup_failed")?;
-        if snapshot.identity != IDENTITY {
-            continue;
-        }
-        remove_owned_files(&path, &snapshot)?;
-        std::fs::remove_file(marker).map_err(|_| "update_cleanup_failed")?;
-        // Never recursively remove unknown or locally added files.
-        let _ = std::fs::remove_dir(path);
-    }
-    Ok(())
-}
-
 #[tauri::command]
 pub async fn install_desktop_update(
     version: String,
@@ -1207,34 +846,6 @@ pub async fn install_desktop_update(
             Err("update_installer_failed".to_owned())
         }
     }
-}
-
-fn remove_owned_files(root: &Path, manifest: &PackageManifest) -> Result<(), String> {
-    let mut folders = Vec::new();
-    for (relative, expected) in &manifest.files {
-        let path = owned_file(root, relative)?;
-        if !path.exists() {
-            continue;
-        }
-        if digest(&path)? != *expected {
-            return Err("update_cleanup_modified_file".to_owned());
-        }
-        std::fs::remove_file(&path).map_err(|_| "update_cleanup_failed")?;
-        let mut parent = path.parent();
-        while let Some(folder) = parent {
-            if folder == root {
-                break;
-            }
-            folders.push(folder.to_owned());
-            parent = folder.parent();
-        }
-    }
-    folders.sort_by_key(|v| std::cmp::Reverse(v.components().count()));
-    folders.dedup();
-    for folder in folders {
-        let _ = std::fs::remove_dir(folder);
-    }
-    Ok(())
 }
 
 #[tauri::command]

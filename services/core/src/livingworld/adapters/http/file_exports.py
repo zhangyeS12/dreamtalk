@@ -6,6 +6,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
 from starlette.responses import Response, StreamingResponse
 
+from livingworld.adapters.http import contracts as wire
 from livingworld.application.content import ContentConflictError
 from livingworld.application.errors import EntityNotFoundError
 from livingworld.application.exports import ContentExportError, ExportTarget
@@ -42,7 +43,7 @@ def file_export_router(content_exports, chat_exports, authorize):
         except (DomainInvariantError, KeyError, ValueError):
             raise HTTPException(422, "export_content_invalid") from None
 
-    @router.get("/content/{import_id}/export/info")
+    @router.get("/content/{import_id}/export/info", response_model=wire.ContentExportInfo)
     async def content_info(
         world_id: UUID,
         import_id: UUID,
@@ -84,7 +85,7 @@ def file_export_router(content_exports, chat_exports, authorize):
         except EntityNotFoundError:
             raise HTTPException(404, "export_conversation_unavailable") from None
 
-    @router.get("/conversations/{conversation_id}/export/info")
+    @router.get("/conversations/{conversation_id}/export/info", response_model=wire.ChatExportInfo)
     async def chat_info(world_id: UUID, conversation_id: UUID):
         snapshot = await chat_snapshot(world_id, conversation_id)
         return {

@@ -6,6 +6,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field, StrictBool
 
+from livingworld.adapters.http import contracts as wire
 from livingworld.domain.contracts import API_PROTOCOL
 from livingworld.infrastructure.persistence.factions import FactionError
 
@@ -46,38 +47,42 @@ def faction_router(store, authorize):
             )
             raise HTTPException(status, detail=code) from None
 
-    @router.get("")
+    @router.get("", response_model=wire.SocialSnapshot)
     async def snapshot(world_id: UUID):
         return await call(store.snapshot(world_id))
 
-    @router.get("/avatars")
+    @router.get("/avatars", response_model=list[wire.AvatarDigest])
     async def avatar_digests(
         world_id: UUID,
         roots: Annotated[list[UUID], Query(min_length=1, max_length=128, alias="root_import_id")],
     ):
         return await call(store.avatar_digests(world_id, roots))
 
-    @router.post("/factions")
+    @router.post("/factions", response_model=wire.CreateFactionResult)
     async def create(world_id: UUID, body: FactionWrite):
         identity = await call(store.create(world_id, body.name, body.parent_id))
         return {"faction_id": str(identity)}
 
-    @router.put("/factions/{faction_id}")
+    @router.put("/factions/{faction_id}", response_model=wire.EditStickerResult)
     async def edit(world_id: UUID, faction_id: UUID, body: FactionWrite):
         await call(store.edit(world_id, faction_id, body.name, body.parent_id))
         return {"saved": True}
 
-    @router.delete("/factions/{faction_id}")
+    @router.delete("/factions/{faction_id}", response_model=wire.EditStickerResult)
     async def remove(world_id: UUID, faction_id: UUID):
         await call(store.remove(world_id, faction_id))
         return {"saved": True}
 
-    @router.put("/factions/{faction_id}/members/{root_import_id}")
+    @router.put(
+        "/factions/{faction_id}/members/{root_import_id}", response_model=wire.EditStickerResult
+    )
     async def add_member(world_id: UUID, faction_id: UUID, root_import_id: UUID):
         await call(store.membership(world_id, faction_id, root_import_id, True))
         return {"saved": True}
 
-    @router.delete("/factions/{faction_id}/members/{root_import_id}")
+    @router.delete(
+        "/factions/{faction_id}/members/{root_import_id}", response_model=wire.EditStickerResult
+    )
     async def remove_member(
         world_id: UUID, faction_id: UUID, root_import_id: UUID, body: FactionLeave | None = None
     ):
@@ -92,7 +97,7 @@ def faction_router(store, authorize):
         )
         return {"saved": True}
 
-    @router.put("/avatars/{root_import_id}")
+    @router.put("/avatars/{root_import_id}", response_model=wire.EditStickerResult)
     async def avatar(world_id: UUID, root_import_id: UUID, body: AvatarWrite):
         await call(store.avatar(world_id, root_import_id, body.digest))
         return {"saved": True}
