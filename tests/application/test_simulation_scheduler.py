@@ -43,6 +43,13 @@ class FixedClock:
         return self.value
 
 
+class ControlledMonotonicClock:
+    value = 0
+
+    def now_ns(self):
+        return self.value
+
+
 def marker_registry():
     def validate(payload):
         if "marker" not in payload.data:
@@ -373,12 +380,6 @@ def test_runtime_wakes_for_new_earlier_trigger_and_shuts_down(tmp_path):
 
 
 def test_pause_and_resume_revision_changes_wake_and_recompute(tmp_path):
-    class ControlledMonotonicClock:
-        value = 0
-
-        def now_ns(self):
-            return self.value
-
     async def run():
         env = SchedulerEnvironment(tmp_path)
         monotonic = ControlledMonotonicClock()
@@ -443,16 +444,25 @@ def test_pause_and_resume_revision_changes_wake_and_recompute(tmp_path):
 def test_scale_revision_change_interrupts_old_sleep(tmp_path):
     async def run():
         env = SchedulerEnvironment(tmp_path)
-        env.clock = SystemWallClock()
+        monotonic = ControlledMonotonicClock()
+        env.time_source = EffectiveWorldTimeSource(env.clock, monotonic)
         await env.initialize(state=ClockState.RUNNING)
         runtime = SimulationSchedulerRuntime(
             env.scheduler,
-            EffectiveWorldTimeSource(env.clock, SystemMonotonicClock()),
+            env.time_source,
             env.wake,
         )
+        waiting = asyncio.Event()
+
+        async def observe_original_scale(world, _now):
+            if world.clock.time_scale == Decimal("1"):
+                waiting.set()
+
+        runtime.set_world_work(observe_original_scale)
         try:
-            await env.scheduler.schedule_trigger(env.request(2_000_000))
-            await asyncio.sleep(0.03)
+            trigger = env.request(60_000_000)
+            await env.scheduler.schedule_trigger(trigger)
+            await asyncio.wait_for(waiting.wait(), timeout=5)
             now = env.clock.now_utc().isoformat(timespec="microseconds")
             async with env.database.engine.begin() as connection:
                 await connection.execute(
@@ -463,8 +473,14 @@ def test_scale_revision_change_interrupts_old_sleep(tmp_path):
                     ),
                     {"now": now, "world": env.world.value.hex},
                 )
+            # One controlled second reaches this deadline only at the new scale.
+            # Without a revision wake, the old 60-second sleep outlasts the check.
+            env.clock.value += timedelta(seconds=1)
+            monotonic.value += 1_000_000_000
             runtime.clock_changed(env.world)
-            assert len(await wait_for_activation(env, max_wait_seconds=0.5)) == 1
+            activations = await wait_for_activation(env, max_wait_seconds=5)
+            assert len(activations) == 1
+            assert activations[0].source_trigger_id == trigger.trigger_id
         finally:
             await runtime.aclose()
             await env.database.close()
