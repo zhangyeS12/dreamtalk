@@ -1,7 +1,7 @@
 import asyncio
 import io
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from uuid import uuid4
 
@@ -373,17 +373,32 @@ def test_runtime_wakes_for_new_earlier_trigger_and_shuts_down(tmp_path):
 
 
 def test_pause_and_resume_revision_changes_wake_and_recompute(tmp_path):
+    class ControlledMonotonicClock:
+        value = 0
+
+        def now_ns(self):
+            return self.value
+
     async def run():
         env = SchedulerEnvironment(tmp_path)
-        env.clock = SystemWallClock()
+        monotonic = ControlledMonotonicClock()
+        env.time_source = EffectiveWorldTimeSource(env.clock, monotonic)
         await env.initialize(state=ClockState.RUNNING)
         runtime = SimulationSchedulerRuntime(
             env.scheduler,
-            EffectiveWorldTimeSource(env.clock, SystemMonotonicClock()),
+            env.time_source,
             env.wake,
         )
+        paused = asyncio.Event()
+
+        async def observe_clock(world, _now):
+            if world.clock.state is ClockState.PAUSED:
+                paused.set()
+
+        runtime.set_world_work(observe_clock)
         try:
-            await env.scheduler.schedule_trigger(env.request(250_000))
+            trigger = env.request(250_000)
+            await env.scheduler.schedule_trigger(trigger)
             await asyncio.sleep(0.03)
             now = env.clock.now_utc().isoformat(timespec="microseconds")
             async with env.database.engine.begin() as connection:
@@ -395,8 +410,16 @@ def test_pause_and_resume_revision_changes_wake_and_recompute(tmp_path):
                     {"now": now, "world": env.world.value.hex},
                 )
             runtime.clock_changed(env.world)
+            await asyncio.wait_for(paused.wait(), timeout=5)
+            # Advance beyond the deadline while paused. CI load cannot move
+            # this deadline ahead of the pause transaction or change the result.
+            env.clock.value += timedelta(seconds=1)
+            monotonic.value += 1_000_000_000
             await asyncio.sleep(0.3)
             assert await env.store.list_activations(env.world) == ()
+            assert (
+                await env.scheduler.get_trigger(trigger.trigger_id)
+            ).status is TriggerStatus.PENDING
             now = env.clock.now_utc().isoformat(timespec="microseconds")
             async with env.database.engine.begin() as connection:
                 await connection.execute(
@@ -406,8 +429,10 @@ def test_pause_and_resume_revision_changes_wake_and_recompute(tmp_path):
                     ),
                     {"now": now, "world": env.world.value.hex},
                 )
+            env.clock.value += timedelta(seconds=1)
+            monotonic.value += 1_000_000_000
             runtime.clock_changed(env.world)
-            assert len(await wait_for_activation(env)) == 1
+            assert len(await wait_for_activation(env, max_wait_seconds=5)) == 1
         finally:
             await runtime.aclose()
             await env.database.close()

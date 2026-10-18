@@ -32,7 +32,9 @@ def connect(path):
 @pytest.fixture
 def isolated(monkeypatch):
     with tempfile.TemporaryDirectory(prefix="dreamtalk-slots-check-") as temporary:
-        root = Path(temporary)
+        # Match the canonical paths used by storage; Windows TEMP may use an
+        # 8.3 user-directory alias that resolves to a different spelling.
+        root = Path(temporary).resolve()
         assert not root.is_relative_to(Path(__file__).resolve().parents[2])
         for key in ("LOCALAPPDATA", "APPDATA", "HF_HOME", "XDG_CACHE_HOME", "TEMP", "TMP"):
             folder = root / key.lower()
