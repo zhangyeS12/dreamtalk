@@ -59,12 +59,14 @@ pwsh -File scripts/updater-signing.ps1 -Mode Import -RecoveryFile E:\Backup\drea
 
 ## 发布流程
 
-只有获得对应版本 GitHub 发布授权后执行。2026-10-18用户已明确批准0.1.82完整Windows预发布及原频道更新，仅build-only；工程端不运行安装器，真实更新由用户验收，见[记录](maintenance/2026-10-18-release-0182.md)。2026-10-16用户已明确批准0.1.81完整Windows预发布、原频道更新和build-only构建，见[发行记录](maintenance/2026-10-16-release-0181.md)。2026-10-15用户已另明确授权0.1.80快照／更新修复与完整Windows发布，见[本轮记录](maintenance/2026-10-15-save-snapshot-update.md)。此前用户已明确授权v0.1.78存档保护与媒体修复发布，包括源码、完整Windows下载和既有更新频道；本轮证据见[发布记录](maintenance/2026-10-15-release-0178.md)，原0.1.76大更新记录保持。此前v0.1.53保留原发布；历史 v0.1.48 修复交付另见[修复记录](maintenance/2026-10-08-update-manifest-fix.md)。
+只有获得对应版本 GitHub 发布授权后执行，并事先明确默认分支同步、Release 和频道操作的范围；历史许可不沿用。各版授权与证据从[状态清单](PROJECT_STATUS.md)及[历史索引](history/README.md)查询。
 
-1. 编译签名完整包，更新`docs/releases/v<version>.md`中的用户可读说明，检查产物清单和SHA256。
-2. 创建版本Release（如`v0.1.81`，当前仍预发布），上传安装器、`.sig`、便携ZIP、SHA256SUMS及说明。
-3. 版本资产上传成功后，将该版本`windows.json`上传／替换到固定`update-preview` Release，文件名必须`windows.json`。首次需创建此频道Release；它承载当前预发布清单。
-4. 频道内容使用更高SemVer、对应完整安装器URL及签名。仅提交源码、仅发布便携包或只创建版本Release都不够。
-5. 用户验收跨版本下载／校验／等待任务／安装／Core重启／系统入口／旧文件回收。工程端不把产物存在当作这条链已验收。
+1. 准备版本及`docs/releases/v<version>.md`用户说明。标签和包内的状态文档应标明“构建时快照，最终公开状态见对应Release及默认分支当前状态”，避免将上一公开版本写成不带时间边界的长期现状。
+2. 提交并核对源码隐私，确认该提交的完整CI通过，再沿既有build-only流程编译签名完整包，核对静态载荷、签名与SHA256。版本标签须固定到实际构建提交。
+3. 创建版本Release草稿，上传安装器、`.sig`、便携ZIP、更新清单、SHA256SUMS及修复脚本；附件大小和摘要核对后才公开版本。
+4. 版本资产公开后，最后将该版本`windows.json`上传／替换到固定`update-preview` Release。频道使用更高SemVer、对应完整安装器URL及签名，并核对匿名清单和下载。仅提交源码、仅发布便携包或只创建版本Release都不够。
+5. 发布结果补记到`PROJECT_STATUS.md`及其发行记录。在授权范围内将已验证发行提交及后续文档正常合并或快进到默认分支；遇到分叉先处理冲突，不强推。核对远程默认分支包含发行标签，其应用源码与发行提交一致，后续差异仅为预期文档修正。
+6. 对照默认分支版本、标签、Release说明、附件摘要及频道，确认交接入口可找到当前状态。已有标签和签名产物保持固定；后补说明写入Release和默认分支文档，不能通过移动标签或替换既有包来“补齐”历史快照。
+7. 用户验收跨版本下载／校验／等待任务／安装／Core重启／系统入口／旧文件回收。工程端不把产物存在当作这条链已验收。
 
 实现：[成熟方案调查](research/2026-10-08-desktop-updates.md)、[批准范围](proposals/2026-10-08-desktop-updates.md)、[本轮记录](maintenance/2026-10-08-desktop-updates.md)。
