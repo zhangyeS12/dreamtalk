@@ -67,7 +67,7 @@ export interface CoreConnection { endpoint: string; token: string; generation: s
 
 
 export class CoreRequestError extends Error {
-  constructor(public readonly status: number, public readonly code: string | null = null) {
+  constructor(public readonly status: number, public readonly code: string | null = null, public readonly path: string | null = null) {
     super(`product_request_failed_${status}`);
     this.name = "CoreRequestError";
   }
@@ -255,7 +255,10 @@ export class CoreClient {
         const code = typeof body === "object" && body !== null && "detail" in body
           && typeof body.detail === "string" && /^[a-z][a-z0-9_]{0,95}$/.test(body.detail)
           ? body.detail : null;
-        throw new CoreRequestError(response.status, code);
+        const path = typeof body === "object" && body !== null && "path" in body
+          && typeof body.path === "string" && /^(?:[a-zA-Z0-9_./-]|\[|\]){1,200}$/.test(body.path)
+          ? body.path : null;
+        throw new CoreRequestError(response.status, code, path);
       }
       if (download) {
         if (!response.body) throw new CoreRequestError(502, "export_download_failed");

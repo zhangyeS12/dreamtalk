@@ -1,8 +1,10 @@
 """Authenticated bounded binary upload, review and world-owned content read boundary."""
 
+import re
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from livingworld.adapters.http import contracts as wire
@@ -123,7 +125,7 @@ def world_content_router(service: WorldContentService, authorize, activities=Non
         kind: ImportKind,
         request: Request,
         replaces_import_id: UUID | None = None,
-    ) -> dict:
+    ) -> dict | JSONResponse:
         payload = bytearray()
         async for chunk in request.stream():
             if len(payload) + len(chunk) > 32 * 1024 * 1024:
@@ -143,7 +145,15 @@ def world_content_router(service: WorldContentService, authorize, activities=Non
         except EntityNotFoundError:
             raise HTTPException(404, "world_not_found") from None
         except ContentImportError as error:
-            raise HTTPException(422, error.code) from None
+            # Only structural identifiers/array indices may cross the error boundary.
+            # Native World Info can use arbitrary authored object keys.
+            path = (
+                error.path
+                if len(error.path) <= 200
+                and re.fullmatch(r"[a-z_]+(?:\.[a-z_]+|\[[0-9]{1,12}\]){0,16}", error.path)
+                else ""
+            )
+            return JSONResponse(status_code=422, content={"detail": error.code, "path": path})
         except ContentConflictError:
             raise HTTPException(409, "replacement_target_conflict") from None
 

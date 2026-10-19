@@ -1,87 +1,44 @@
-# Character Card Compatibility — C-004B
+# 角色卡兼容约定
 
-状态（2026-10-07）：独立实现 V2/V3 导入，沿用独立内容库与 Draft → Preview → confirmed Commit；未复制或依赖 SillyTavern 源码。本文主要说明 C-004B adapter 格式边界；当前产品已支持确认后的角色开聊实例化、Builder 和公共 Lore，见[状态清单](../PROJECT_STATUS.md)。格式兼容不等于酒馆全部运行行为兼容。
+导入由独立 adapter 实现，格式转换不依赖酒馆运行，不复制其源码。当前实现、静态检查和用户验收分别见[状态清单](../PROJECT_STATUS.md)。以下行为适用于本轮源码；不代表已公开安装包或任意酒馆插件行为已经兼容。
 
-公开规范：[Character Card V2](https://github.com/malfoyslastname/character-card-spec-v2/blob/main/spec_v2.md)、[Character Card V3](https://github.com/kwaroran/character-card-spec-v3/blob/main/SPEC_V3.md)。容器结构依据 [W3C PNG Third Edition](https://www.w3.org/TR/png-3/)。这些文档描述外部数据，不能向导入器授予执行权限。
+## 支持范围
 
-## 1. 支持矩阵
-
-| 输入 | C-004B 行为 |
+| 输入 | 处理方式 |
 | --- | --- |
-| CCv2 JSON | spec=chara_card_v2，spec_version=2.0；结构校验与 canonical adapter |
-| CCv2-compatible PNG/APNG chara | 严格 base64 → UTF-8 JSON；按实际 spec 识别 V2/V3 |
-| CCv3 JSON | spec=chara_card_v3；完全理解 3.0 的卡片外层结构 |
-| CCv3 PNG/APNG ccv3 | 必须具有 V3 identity；不处理像素或动画播放 |
-| 较新 V3 | 解析已知结构、保留未知数据、Preview warning；结构不兼容则明确失败 |
-| V1 | 被选中的 V1-shaped payload 明确 unsupported_character_card_v1，不自动升级 |
-| CHARX | 明确不支持；解包/资产物化留给后续任务 |
-| embedded character_book | 卡片 parser 保留并 warning；C-004C1 normalizer 从该表示生成 LoreCollection/typed content reference，见下文 |
-| legacy embedded assets | 识别 tEXt namespace、记录位置/大小并保留 raw；不解码/提取 |
-| external JSON export | C-004D1 显式 V2/V3 target，canonical 优先与损失警告；无 PNG/APNG writer |
-| runtime instantiation | 导入不实例化；确认后首次开聊由会话服务创建/复用稳定 Character |
+| V2/V3 JSON、PNG/APNG | 识别公开 spec，先进行有记录的输入兼容转换，再生成 canonical 内容预览。 |
+| V1、旧 Pygmalion JSON、PNG 内 V1 | 映射已知旧字段到 V2 canonical 表示；记录原始格式，原始文件完整保留。 |
+| CHARX | 在内存中只读取根目录 card.json，复用同一导入流程；归档、资产描述符保留为来源，不提取附件或自动设置头像。 |
+| 较新 V3 | 解析已知结构并提示版本差异；未知字段保留为不透明数据。 |
+| 其他容器／酒馆插件运行行为 | 尚无通用兼容承诺。YAML、BYAF、PNG writer、脚本／正则插件执行及完整酒馆提示编排不属于上述支持范围。 |
 
-实现：[character_cards.py](../../services/core/src/livingworld/infrastructure/imports/character_cards.py)、[png.py](../../services/core/src/livingworld/infrastructure/imports/png.py)、[imports.py](../../services/core/src/livingworld/application/imports.py)。
+公开规范为 [V2](https://github.com/malfoyslastname/character-card-spec-v2/blob/main/spec_v2.md)、[V3](https://github.com/kwaroran/character-card-spec-v3/blob/main/SPEC_V3.md)；容器参照 [PNG](https://www.w3.org/TR/png-3/)。本轮对照酒馆 **1.19.0** 的[JSON 导入分支](https://github.com/SillyTavern/SillyTavern/blob/1.19.0/src/endpoints/characters.js#L818)、[PNG metadata 读写](https://github.com/SillyTavern/SillyTavern/blob/1.19.0/src/character-card-parser.js)及[CHARX 结构](https://github.com/SillyTavern/SillyTavern/blob/1.19.0/src/charx.js)。酒馆采用 [AGPL-3.0](https://github.com/SillyTavern/SillyTavern/blob/1.19.0/LICENSE)；这里只核对外部格式与互操作行为，使用现有 Python 标准库独立实现，未引入依赖或分发其代码。
 
-## 2. 外部字段到 canonical 的明确映射
+## 输入转换与保留
 
-| 来源字段 | 目标及限制 |
-| --- | --- |
-| name | display_name 原样；空白名称无法满足既有 canonical invariant，明确拒绝，不造名称 |
-| description / personality / scenario / creator_notes | 同义 canonical 文本原样保留 |
-| mes_example | 整个非空白来源块作为一个 example_dialogue 成员；不拆分或改写；原值亦完整保存在 authored_instructions |
-| system_prompt / post_history_instructions | authored_instructions.character_card；不替换 dreamtalk 系统设置、不执行 {{original}} |
-| first_mes / alternate_greetings | authored_instructions.character_card；保留空字符串、顺序及模板；不创建对话历史 |
-| tags | 非空白值原样映射，保持空格/大小写/重复项及顺序；空白值仅省略 canonical 并 warning |
-| creator / character_version | livingworld.character_card 兼容元数据，不充当内容 schema version |
-| extensions | external_extensions opaque structured data；不与 dreamtalk 自有 namespace 合并 |
-| unknown top-level / data | 兼容元数据、raw unknown_extensions 和完整原始 bytes 中保留；不解释 |
-| character_book | 完整嵌套对象保存在 compatibility metadata，关联相同 raw provenance；不生成 LoreEntry/Truth |
-| V3 nickname | 独立 compatibility 字段；display_name、aliases 不变；不实施 preferred prompt-name 规则 |
-| multilingual notes / source / group greetings / source dates | 原始键、数组、数值保留；不选 locale、不获取 URL、不创建 Message；卡片日期不替换 imported_at |
-| V3 assets | typed ContentAsset + AssetReference；完整原描述符可从 raw 恢复；元数据及 opaque raw references 不物化 |
+- 角色名称必须是非空文本。描述、性格、情境、开场、对话示例等文本缺失或 null 时使用空文本；明确写成对象等无法解释的正文拒绝，并指出结构路径，不随意 stringification。
+- 空缺或 null 的标签／问候使用空数组；字符串标签按酒馆的逗号形式处理，单条字符串问候转成一项。缺失 V3 群聊问候不阻断导入；数值版本和已知旧版本写法规范化，并保留来源。
+- character_book 为 null 按未附带世界书处理。附带书应用可解释的空值默认；个别不可用条目只保留来源，其他条目仍可预览。整本书结构不可用时，角色主体仍可预览，必须展示书未启用的提示。来源缺失的正则开关按普通关键词处理并记录，不启用正则执行。
+- 不可用的可选元数据／资产只保留来源并提示，不使角色主体失败。assets 的源索引在过滤后保持可追踪；数据 URL 不访问，原描述符可用于受控导出。
+- UTF-8 BOM 可读取。原始 bytes、来源 hash、未知字段和转换记录保存；不改写源文件。V1/Pygmalion 转换后的 provenance 使用 V2 格式，input_compatibility.origin、original_spec、original_version 保留输入身份。
+- 常规文本映射 display_name、description、personality、scenario、creator_notes、example_dialogue、tags；system_prompt、post_history_instructions、first_mes、alternate_greetings 保存在 authored_instructions。开场白不自动创建消息，来源指令不提升权限。
 
-没有对应来源语义的 background、speech_guidance、aliases、lore_entry_ids 使用既有 canonical 自然默认值，不从描述中猜测或推断内容。完整原始 tags 数组保存在 canonical compatibility.original_tags、RawImportEnvelope.unknown_extensions.original_tags 与原 bytes。警告 character_card_blank_tags_omitted_from_canonical 明确说明来源数据仍保留，Commit 可继续。
+## PNG 选择与明确确认
 
-## 3. JSON 与版本边界
+ccv3 优先于 chara，两者不合并。卡片关键字忽略大小写；base64 允许空白与缺失 padding，同时保持字符和解码大小校验。主数据有效时，另一份未采用数据的解码／结构问题只提示并保留原图。
 
-输入必须是 exact bytes。JSON 必须是 UTF-8 卡片对象；拒绝重复键、非有限数、无效 UTF-8/孤立 surrogate、缺失或类型错误的已知必需字段。不给缺失文本、数组或 V3 group_only_greetings 猜默认值；仅 extensions 使用规范定义的空对象默认值。未知字段不是错误。
+V3 无法读取但 chara 可读取时，预览明确标记来自 V2，确认按钮显示“确认使用 V2 内容”；用户取消不会提交。不存在有效候选、同关键字不同 payload 的歧义、PNG 容器边界／CRC 损坏继续拒绝，不猜测应使用的正文版本。
 
-V3 版本采用有限 Decimal 数值比较，避免不必要浮点舍入；原始版本字符串仍保留。较新版本 warning，非标准但数值等于 3.0 的字符串也 warning；低于 3.0 或无法安全比较的版本明确失败。未知结构不自动转换为已知结构。
+## 安全、容量与保存
 
-卡片 parser 对嵌入书只检查外层 object 与 entries array-of-objects，完整源数据不改写；C-004C1 独立 normalizer 解释 entry 兼容语义，运行激活/regex/插入仍不执行。多语言备注检查两位小写语言键形状与文本值，不做语言注册表查询、locale 选择或 prompt 使用。
+原始上传和解码后的 JSON 各最多 **32 MiB**；JSON 嵌套最多64层，PNG chunks／CHARX 成员最多10000，世界书最多10000条；超过10000项的资产列表只保留来源并提示，不实例化为附件。CHARX 声明的展开总量最多128 MiB；禁止不安全路径、重复归档路径、符号链接和加密条目，只读取有界 card.json，不向磁盘解包。
 
-## 4. PNG/APNG、优先级与损坏策略
+重复 JSON 键、无效 UTF-8／孤立 surrogate、非有限数、无法识别的角色主体及资源超限明确失败，不截断正文。错误保留稳定 detail code，并附加结构 path；界面分别说明格式／字段／容量／服务异常，不显示源正文。批量兼容提示按 code 分组，字段可展开，避免每个默认字段生成一个顶层提示节点。
 
-窄 reader 检查签名、边界/长度、chunk type、CRC、首个 IHDR 的基础格式、PLTE/IDAT 次序、末尾 IEND 和 tEXt keyword framing。APNG 检查 acTL、fcTL/fdAT 的长度、序号、帧数量、矩形范围及数据块归属。没有 IDAT/fdAT 解压、像素有效性/图像可显示性验证、动画渲染或帧资源生成。未知 ancillary chunks 原样保留，不解释压缩元数据。
+预览不写数据库，仍需 reviewed hash 明确确认；内容、来源、资产元数据按原事务保存。来源不授予 WorldTruth／角色知识，不执行脚本、模板或外部工具，不下载 URL。世界书权限与[已有触发边界](LOREBOOK_COMPATIBILITY.md)保持。
 
-卡片 tEXt 严格 base64 解码（包括 padding）后做 UTF-8 JSON 校验。规则：**ccv3 > chara**。同时存在时记录两者及数量、选择 ccv3 并 warning，绝不合并字段。即使未被选中，另一卡片块的 base64/JSON 损坏也明确失败；其外部 schema 不参与选中卡片映射，仅原样留存，不升级或解释被遮蔽的 V1 数据。
+## 导出与工程检查边界
 
-同关键字多个不同 payload 是 ambiguous_character_card_chunks；不选 first/last。字节完全相同的重复块可导入并 warning，原容器保留所有块。损坏 ccv3 不回退到 chara。缺少卡片块、ccv3 中错误 identity、未知 critical chunk 等是错误。
+输入兼容转换位于 card_compatibility.py、card_lore.py；严格 schema 单独位于 card_schema.py，导出直接使用该 schema。canonical 内容优先，输出继续生成规范 V2/V3 JSON，不把坏源字段重新包装成合法输出；未启用的书和未打包附件给出损失提示。原始文件保留与规范 JSON 导出是两个不同操作。
 
-## 5. 资产与不可信内容
-
-V3 描述符验证 type/uri/name/ext 字符串、基础 extension 形状及多 icon/background 的 main 约束。缺少 assets 时使用规范定义的 icon/main/ccdefault/png 描述符；显式空数组保持为空。所有资产均 reference-only，并 warning；未知 type/URI 另加兼容警告，不销毁源数据。
-
-PNG/APNG icon 的 ccdefault 使用 `raw-import:<RawImportId>#container-image`，指向原容器；user_icon 不使用这一关联。其他描述符使用 raw descriptor pointer；data URL 在 canonical asset metadata 中仅保存 pointer，完整原值留在 raw envelope。不推断 URL 对应文件的真实 MIME，不读取路径/URL、不解码 data URL、不运行 JS/代码资产。chara-ext-asset_: 块只记录 namespace/offset/size，不创建文件。
-
-system_prompt、creator_notes、description、scenario、模板及扩展中的指令均是**不可信作者数据**。解析没有网络、shell、LLM、文件资源读取、prompt insertion、runtime command 或知识权限。来源与 assets 均不能开启上述能力；不会把卡片描述断言为 WorldTruth，也不自动授予任何角色或玩家知识。导入器不写日志，错误只含稳定 code 与结构路径，不含源文本。
-
-## 6. 资源限制、审阅、持久化与验证
-
-默认本地资源策略：原输入最多 32 MiB、单卡片 JSON 最多 4 MiB、JSON nesting 64、PNG chunks 10,000。CharacterCardLimits 可配置；限制是 parser 防护，不是冻结产品大小承诺。超限明确失败，不截断数据。
-
-ImportDraft/ImportPreview 从已冻结 Draft 的 livingworld.import 读取 warning；该自有元数据参与 preview_hash。Commit 复用 ContentService 和独立 content repository，未新增 migration/表/依赖。每次独立导入产生新的 typed UUID；相同 hash 不覆盖既有定义。冲突时 content、raw、assets 全部回滚。
-
-受控手写 [fixtures](../../tests/fixtures/character_cards/README.md) 与 [兼容/安全/重启测试](../../tests/application/test_character_card_import.py) 覆盖所有容器、映射、来源/未知数据、blank tags、损坏/重复、双 chunk 优先级、离线资产、注入字符串、preview hash、原子回滚、重启及完整 runtime snapshot 不变。[架构测试](../../tests/core/test_architecture.py) 禁止 importer 引入 Kernel、网络/shell、LLM/Tauri/browser 能力；既有 Stage 2 和 C-004A 测试继续保留。
-
-## 7. C-004C1 embedded CharacterBook 边界
-
-[LorebookImporter.normalize_embedded](../../services/core/src/livingworld/infrastructure/imports/lorebooks.py) 接收尚未提交的 ImportDraft，直接消费 livingworld.character_card.character_book；不重解析卡片/PNG，不改变完整来源对象、raw envelope、asset reference 或 character identity。返回 Draft 增加 LoreCollection/owned LoreEntry，并以 CharacterDefinition.lore_collection_ids 保存 typed 内容引用，移除已完成规范化的 deferred warning。详见 [LOREBOOK_COMPATIBILITY.md](LOREBOOK_COMPATIBILITY.md)。
-
-合法空白正文条目只保留来源并 warning；V3 secondary_keys 单字符串原样保留并 warning，不 split；canonical 非空约束不放宽，Commit 可继续。引用不创建 Runtime Character/Knowledge，也不赋予集合内容 Truth 地位或角色知识权限。0007 只为集合与归属新增内容 schema；C-004B parser 自身依然没有存储权限。
-
-## 8. C-004D1 JSON export
-
-[EXPORT_MODEL.md](EXPORT_MODEL.md) 定义 pure-content JSON export：当前 canonical name/text/tags/examples 与 authored/card compatibility state 优先于旧源；同格式仅受限恢复 unknown/opaque extensions，跨格式不注入未知语义。V3→V2 逐字段 warning；V2→V3 不创造 optional 内容或资产。一个 linked book 可嵌入，多个必须 selection 或省略并 warning；旧未规范化 raw book 不自动代替 canonical 集合。V3 book 的 unspecified use_regex 要求显式 caller export policy，V3 secondary_keys 按用户确认输出 array。完整原 bytes 与导出 bytes 是独立操作。
-
-Builder、公共 lore 激活、原生资产布局、首次开聊运行实例化与导入冲突预览已由后续切片接入；PNG/APNG writer、CHARX 与完整酒馆运行行为仍不在当前支持范围。
+本轮按用户要求不运行 CI，不新增或运行自动化测试；既有测试原样保留。旧测试中“V1必须拒绝”“缺失字段必须拒绝”“未选中坏块必须拒绝”等断言描述旧契约，尚未按新行为修订或复验，不能作为本轮通过证据。具体静态检查结果只维护在状态表；真实导入、确认保存、重启和导出往返等待用户验收。

@@ -1,11 +1,7 @@
 """Public-spec CCv2/CCv3 adapter, implemented independently of SillyTavern."""
 
-import base64
-import binascii
-import re
 from dataclasses import asdict, dataclass
 from datetime import datetime
-from decimal import Decimal, InvalidOperation
 from hashlib import sha256
 from uuid import uuid4
 
@@ -28,38 +24,44 @@ from livingworld.domain.content.models import (
     ContentProvenance,
     ContentSourceKind,
 )
+from livingworld.infrastructure.imports.card_compatibility import normalize_card
+from livingworld.infrastructure.imports.card_png import select_card
+from livingworld.infrastructure.imports.card_schema import (
+    _TEXTS as _TEXTS,
+)
+from livingworld.infrastructure.imports.card_schema import (
+    _V2_FIELDS as _V2_FIELDS,
+)
+from livingworld.infrastructure.imports.card_schema import (
+    _V3_FIELDS as _V3_FIELDS,
+)
+from livingworld.infrastructure.imports.card_schema import (
+    CARD_METADATA_KEY as CARD_METADATA_KEY,
+)
+from livingworld.infrastructure.imports.card_schema import (
+    V2_SPEC as V2_SPEC,
+)
+from livingworld.infrastructure.imports.card_schema import (
+    V2_VERSION as V2_VERSION,
+)
+from livingworld.infrastructure.imports.card_schema import (
+    V3_SPEC as V3_SPEC,
+)
+from livingworld.infrastructure.imports.card_schema import (
+    V3_VERSION as V3_VERSION,
+)
+from livingworld.infrastructure.imports.card_schema import (
+    _object as _object,
+)
+from livingworld.infrastructure.imports.card_schema import (
+    _strings as _strings,
+)
+from livingworld.infrastructure.imports.card_schema import (
+    _validate as _validate,
+)
+from livingworld.infrastructure.imports.charx import read_charx
 from livingworld.infrastructure.imports.json_input import read_json_object
 from livingworld.infrastructure.imports.png import PNG_SIGNATURE, read_png
-
-CARD_METADATA_KEY = "livingworld.character_card"
-V2_SPEC = "chara_card_v2"
-V3_SPEC = "chara_card_v3"
-V2_VERSION = "2.0"
-V3_VERSION = "3.0"
-_TEXTS = (
-    "name",
-    "description",
-    "personality",
-    "scenario",
-    "first_mes",
-    "mes_example",
-    "creator_notes",
-    "system_prompt",
-    "post_history_instructions",
-    "creator",
-    "character_version",
-)
-_V2_FIELDS = {*_TEXTS, "alternate_greetings", "tags", "extensions", "character_book"}
-_V3_FIELDS = {
-    *_V2_FIELDS,
-    "assets",
-    "nickname",
-    "creator_notes_multilingual",
-    "source",
-    "group_only_greetings",
-    "creation_date",
-    "modification_date",
-}
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,25 +69,13 @@ class CharacterCardLimits:
     """Local parser resource policy, configurable without changing content semantics."""
 
     max_input_bytes: int = 32 * 1024 * 1024
-    max_json_bytes: int = 4 * 1024 * 1024
+    max_json_bytes: int = 32 * 1024 * 1024
     max_json_depth: int = 64
     max_png_chunks: int = 10000
 
     def __post_init__(self) -> None:
         if any(type(value) is not int or value <= 0 for value in asdict(self).values()):
             raise ValueError("Character card parser limits must be positive integers")
-
-
-def _object(value: object, path: str) -> dict:
-    if type(value) is not dict:
-        raise ContentImportError("invalid_character_card_structure", path)
-    return value
-
-
-def _strings(value: object, path: str) -> list[str]:
-    if type(value) is not list or any(type(item) is not str for item in value):
-        raise ContentImportError("invalid_character_card_structure", path)
-    return value
 
 
 def _json(payload: bytes, limits: CharacterCardLimits) -> dict:
@@ -95,121 +85,8 @@ def _json(payload: bytes, limits: CharacterCardLimits) -> dict:
         max_depth=limits.max_json_depth,
         prefix="character_card",
         root_path="card",
+        allow_bom=True,
     )
-
-
-def _base64(payload: bytes, limits: CharacterCardLimits) -> dict:
-    if len(payload) > 4 * ((limits.max_json_bytes + 2) // 3):
-        raise ContentImportError("character_card_json_size_limit")
-    try:
-        decoded = base64.b64decode(payload, validate=True)
-        if base64.b64encode(decoded) != payload:
-            raise ValueError("Noncanonical base64 padding")
-    except (ValueError, binascii.Error):
-        raise ContentImportError("invalid_character_card_base64") from None
-    return _json(decoded, limits)
-
-
-def _validate(document: dict, warnings: list[ImportWarning]) -> tuple[str, str, dict]:
-    spec = document.get("spec")
-    if spec is None and all(key in document for key in _TEXTS[:6]):
-        raise ContentImportError("unsupported_character_card_v1")
-    if spec not in (V2_SPEC, V3_SPEC):
-        raise ContentImportError("unsupported_character_card_spec", "spec")
-    version = document.get("spec_version")
-    if type(version) is not str:
-        raise ContentImportError("invalid_character_card_structure", "spec_version")
-    if spec == V2_SPEC and version != V2_VERSION:
-        raise ContentImportError("unsupported_character_card_version", "spec_version")
-    if spec == V3_SPEC:
-        try:
-            numeric_version = Decimal(version)
-        except InvalidOperation:
-            raise ContentImportError("unsupported_character_card_version", "spec_version") from None
-        if not numeric_version.is_finite() or numeric_version < Decimal(V3_VERSION):
-            raise ContentImportError("unsupported_character_card_version", "spec_version")
-        if version != V3_VERSION:
-            warnings.append(
-                ImportWarning(
-                    "character_card_newer_v3"
-                    if numeric_version > Decimal(V3_VERSION)
-                    else "character_card_noncanonical_v3_version",
-                    "Known V3 structure imported; original version and unknown fields retained.",
-                    "spec_version",
-                )
-            )
-    data = dict(_object(document.get("data"), "data"))
-    for field in _TEXTS:
-        if type(data.get(field)) is not str:
-            raise ContentImportError("invalid_character_card_structure", f"data.{field}")
-    if not data["name"].strip():
-        raise ContentImportError("character_card_name_not_representable", "data.name")
-    for field in ("tags", "alternate_greetings"):
-        _strings(data.get(field), f"data.{field}")
-    # Only extensions has a spec-defined empty-object default among V2 fields.
-    data.setdefault("extensions", {})
-    _object(data["extensions"], "data.extensions")
-    if "character_book" in data:
-        book = _object(data["character_book"], "data.character_book")
-        if type(book.get("entries")) is not list or any(
-            type(entry) is not dict for entry in book["entries"]
-        ):
-            raise ContentImportError(
-                "invalid_character_card_structure", "data.character_book.entries"
-            )
-        warnings.append(
-            ImportWarning(
-                "character_card_embedded_lore_deferred",
-                "Complete embedded lore retained with card provenance; "
-                "normalization deferred to C-004C.",
-                "data.character_book",
-            )
-        )
-    if spec == V3_SPEC:
-        _strings(data.get("group_only_greetings"), "data.group_only_greetings")
-        if "nickname" in data and type(data["nickname"]) is not str:
-            raise ContentImportError("invalid_character_card_structure", "data.nickname")
-        if "source" in data:
-            _strings(data["source"], "data.source")
-        if "creator_notes_multilingual" in data:
-            multilingual = _object(
-                data["creator_notes_multilingual"], "data.creator_notes_multilingual"
-            )
-            if any(
-                re.fullmatch(r"[a-z]{2}", key) is None or type(value) is not str
-                for key, value in multilingual.items()
-            ):
-                raise ContentImportError(
-                    "invalid_character_card_structure", "data.creator_notes_multilingual"
-                )
-        for field in ("creation_date", "modification_date"):
-            if field in data and type(data[field]) not in (int, float):
-                raise ContentImportError("invalid_character_card_structure", f"data.{field}")
-        if "assets" in data:
-            if type(data["assets"]) is not list:
-                raise ContentImportError("invalid_character_card_structure", "data.assets")
-            for index, asset in enumerate(data["assets"]):
-                _object(asset, f"data.assets[{index}]")
-                if any(type(asset.get(key)) is not str for key in ("type", "uri", "name", "ext")):
-                    raise ContentImportError(
-                        "invalid_character_card_structure", f"data.assets[{index}]"
-                    )
-                extension = asset["ext"]
-                if (
-                    not extension
-                    or extension != extension.lower()
-                    or any(char in extension for char in ".\\/\0")
-                    or any(char.isspace() for char in extension)
-                ):
-                    raise ContentImportError(
-                        "invalid_character_card_asset_extension", f"data.assets[{index}].ext"
-                    )
-            for kind in ("icon", "background"):
-                matching = [asset for asset in data["assets"] if asset["type"] == kind]
-                mains = sum(asset["name"] == "main" for asset in matching)
-                if len(matching) > 1 and ((kind == "icon" and mains != 1) or mains > 1):
-                    raise ContentImportError("ambiguous_character_card_main_asset", "data.assets")
-    return spec, version, data
 
 
 class CharacterCardImporter:
@@ -224,6 +101,7 @@ class CharacterCardImporter:
         if len(payload) > self.limits.max_input_bytes:
             raise ContentImportError("character_card_input_size_limit")
         warnings: list[ImportWarning] = []
+        input_compatibility: dict = {}
         container = "json"
         selected = None
         chunk_counts = {}
@@ -232,41 +110,35 @@ class CharacterCardImporter:
             metadata = read_png(payload, max_chunks=self.limits.max_png_chunks)
             container = metadata.container
             embedded_assets = metadata.embedded_assets
-            candidates = {}
-            for name, encoded in metadata.card_chunks:
-                chunk_counts[name] = chunk_counts.get(name, 0) + 1
-                if name in candidates and candidates[name][0] != encoded:
-                    raise ContentImportError("ambiguous_character_card_chunks", name)
-                # Validate even the nonselected payload: corruption never becomes a fallback.
-                candidates[name] = (encoded, _base64(encoded, self.limits))
-            selected = "ccv3" if "ccv3" in candidates else "chara"
-            if selected not in candidates:
-                raise ContentImportError("missing_character_card_chunk")
-            document = candidates[selected][1]
-            if selected == "ccv3" and document.get("spec") != V3_SPEC:
-                raise ContentImportError("invalid_ccv3_payload_identity")
-            if len(candidates) == 2:
-                warnings.append(
-                    ImportWarning(
-                        "character_card_chara_shadowed",
-                        "ccv3 selected; chara retained only in raw container.",
-                        "chara",
-                    )
-                )
-            if any(value > 1 for value in chunk_counts.values()):
-                warnings.append(
-                    ImportWarning(
-                        "character_card_identical_chunks",
-                        "Identical duplicate card chunks retained in raw container.",
-                    )
-                )
+            document, input_compatibility, warnings, selected, chunk_counts = select_card(
+                metadata.card_chunks,
+                max_bytes=self.limits.max_json_bytes,
+                max_depth=self.limits.max_json_depth,
+            )
         elif payload.startswith(b"\x89PNG"):
             raise ContentImportError("invalid_png_signature")
         elif payload.startswith(b"PK\x03\x04"):
-            raise ContentImportError("unsupported_character_card_charx")
+            container = "charx"
+            document = _json(
+                read_charx(
+                    payload,
+                    max_json_bytes=self.limits.max_json_bytes,
+                    max_entries=self.limits.max_png_chunks,
+                ),
+                self.limits,
+            )
         else:
             document = _json(payload, self.limits)
-        spec, version, data = _validate(document, warnings)
+        if container not in ("png", "apng"):
+            document, input_compatibility = normalize_card(document, warnings)
+        if container == "charx":
+            warnings.append(
+                ImportWarning(
+                    "character_card_charx_assets_reference_only",
+                    "CHARX attachments retained in source archive; not extracted.",
+                )
+            )
+        spec, version, data = _validate(document, [] if container in ("png", "apng") else warnings)
         unknown_top = {
             key: value
             for key, value in document.items()
@@ -326,7 +198,13 @@ class CharacterCardImporter:
                 "assets", [{"type": "icon", "uri": "ccdefault:", "name": "main", "ext": "png"}]
             )
             for index, descriptor in enumerate(descriptors):
-                pointer = f"/data/assets/{index}" if "assets" in data else "spec-default-assets/0"
+                source_indices = input_compatibility.get("original_fields", {}).get(
+                    "asset_source_indices", []
+                )
+                source_index = source_indices[index] if index < len(source_indices) else index
+                pointer = (
+                    f"/data/assets/{source_index}" if "assets" in data else "spec-default-assets/0"
+                )
                 kind, uri = descriptor["type"], descriptor["uri"]
                 if kind not in ("icon", "background", "user_icon", "emotion"):
                     warnings.append(
@@ -347,7 +225,9 @@ class CharacterCardImporter:
                             pointer,
                         )
                     )
-                container_image = uri == "ccdefault:" and kind == "icon" and container != "json"
+                container_image = (
+                    uri == "ccdefault:" and kind == "icon" and container in ("png", "apng")
+                )
                 reference = f"raw-import:{raw_id.value.hex}#" + (
                     "container-image" if container_image else pointer
                 )
@@ -375,7 +255,17 @@ class CharacterCardImporter:
                         "data.assets",
                     )
                 )
-        compatibility = {
+        compatibility: dict = {
+            "input_compatibility": {
+                key: value
+                for key, value in input_compatibility.items()
+                if key not in ("source_book", "source_assets")
+            },
+            **(
+                {"character_book": input_compatibility["source_book"]}
+                if "source_book" in input_compatibility
+                else {}
+            ),
             "original_tags": data["tags"],
             "creator": data["creator"],
             "character_version": data["character_version"],
@@ -403,26 +293,37 @@ class CharacterCardImporter:
             and type(native.get("version")) is int
             and native["version"] == 1
         ):
-            for field in ("background", "speech_guidance"):
-                if field in native:
-                    if type(native[field]) is not str:
-                        raise ContentImportError(
-                            "invalid_character_card_structure",
+            for field in ("background", "speech_guidance", "aliases", "example_dialogue"):
+                if field not in native:
+                    continue
+                value = native[field]
+                valid = (
+                    type(value) is str
+                    if field in ("background", "speech_guidance")
+                    else (
+                        type(value) is list
+                        and all(type(item) is str and item.strip() for item in value)
+                    )
+                )
+                if not valid:
+                    warnings.append(
+                        ImportWarning(
+                            "character_card_optional_field_preserved",
+                            "Invalid native extension retained without activation.",
                             f"data.extensions.dreamtalk.export.{field}",
                         )
-                    extra[field] = native[field]
-            if "aliases" in native:
-                extra["aliases"] = tuple(
-                    _strings(native["aliases"], "data.extensions.dreamtalk.export.aliases")
-                )
-            if "example_dialogue" in native:
-                examples = _strings(
-                    native["example_dialogue"], "data.extensions.dreamtalk.export.example_dialogue"
-                )
-                # Other apps may edit the standard field while keeping extensions.
-                # Never restore stale examples over an explicitly edited field.
-                if "\n\n".join(examples) == data["mes_example"]:
-                    extra["example_dialogue"] = tuple(examples)
+                    )
+                    continue
+                if field == "example_dialogue" and "\n\n".join(value) != data["mes_example"]:
+                    continue
+                extra[field] = tuple(value) if type(value) is list else value
+        import_metadata: dict = {
+            "container": container,
+            "selected_chunk": selected,
+            "card_chunk_counts": chunk_counts,
+            "embedded_asset_chunks": list(embedded_assets),
+            "warnings": [asdict(warning) for warning in warnings],
+        }
         character = CharacterDefinition(
             content_id=CharacterDefinitionId(uuid4()),
             display_name=data["name"],
@@ -457,17 +358,9 @@ class CharacterCardImporter:
                 )
                 for asset in assets
             ),
-            extensions={
-                CARD_METADATA_KEY: compatibility,
-                IMPORT_METADATA_KEY: {
-                    "container": container,
-                    "selected_chunk": selected,
-                    "card_chunk_counts": chunk_counts,
-                    "embedded_asset_chunks": embedded_assets,
-                    "warnings": [asdict(warning) for warning in warnings],
-                },
-            },
+            extensions={CARD_METADATA_KEY: compatibility, IMPORT_METADATA_KEY: import_metadata},
         )
+
         raw = RawImportEnvelope(
             import_id=raw_id,
             provenance=provenance,
@@ -477,7 +370,11 @@ class CharacterCardImporter:
                 "data": unknown_data,
                 "extensions": data["extensions"],
                 "original_tags": data["tags"],
-                **({"assets": data["assets"]} if "assets" in data and spec == V3_SPEC else {}),
+                **(
+                    {"assets": input_compatibility.get("source_assets", data["assets"])}
+                    if "assets" in data and spec == V3_SPEC
+                    else {}
+                ),
             },
         )
         return ImportDraft(

@@ -1,5 +1,6 @@
 {
   "include": [
+    "services/core/src/livingworld/infrastructure/imports",
     "services/core/src/livingworld/application/player_persona.py",
     "services/core/src/livingworld/infrastructure/persistence/player_persona.py",
     "services/core/src/livingworld/infrastructure/persistence/player_persona_models.py",

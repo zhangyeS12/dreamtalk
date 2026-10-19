@@ -101,7 +101,7 @@ def read_png(payload: bytes, *, max_chunks: int) -> PngMetadata:
                 or b"  " in keyword
             ):
                 raise ContentImportError("invalid_png_text")
-            name = keyword.decode("latin-1")
+            name = keyword.decode("latin-1").lower()
             if name in ("chara", "ccv3"):
                 cards.append((name, text))
             elif name.startswith("chara-ext-asset_:"):

@@ -1,7 +1,5 @@
-name: dreamtalk continuous integration
+name: dreamtalk manual verification
 on:
-  push:
-  pull_request:
   workflow_dispatch:
 permissions:
   contents: read

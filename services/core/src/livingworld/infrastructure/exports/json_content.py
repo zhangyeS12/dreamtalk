@@ -27,7 +27,7 @@ from livingworld.domain.content.models import (
 )
 from livingworld.domain.content.serialization import json_value, stable_json
 from livingworld.domain.errors import DomainInvariantError
-from livingworld.infrastructure.imports.character_cards import (
+from livingworld.infrastructure.imports.card_schema import (
     _V2_FIELDS,
     _V3_FIELDS,
     CARD_METADATA_KEY,

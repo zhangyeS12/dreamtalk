@@ -4,6 +4,7 @@ from dataclasses import asdict, dataclass, replace
 from datetime import datetime
 from hashlib import sha256
 from math import isfinite
+from typing import NoReturn
 from uuid import uuid4
 
 from livingworld.application.content import ContentDraft, RawImportEnvelope
@@ -23,6 +24,9 @@ from livingworld.domain.content.models import (
     LoreEntry,
 )
 from livingworld.domain.content.serialization import json_value
+from livingworld.domain.errors import DomainInvariantError
+from livingworld.infrastructure.imports.card_lore import normalize_book
+from livingworld.infrastructure.imports.card_schema import _object
 from livingworld.infrastructure.imports.character_cards import CARD_METADATA_KEY, V2_SPEC, V3_SPEC
 from livingworld.infrastructure.imports.json_input import read_json_object
 
@@ -111,7 +115,7 @@ _ST_ENTRY_FIELDS = {
 
 @dataclass(frozen=True, slots=True)
 class LorebookLimits:
-    max_json_bytes: int = 4 * 1024 * 1024
+    max_json_bytes: int = 32 * 1024 * 1024
     max_json_depth: int = 64
     max_entries: int = 10000
 
@@ -120,7 +124,7 @@ class LorebookLimits:
             raise ValueError("Lorebook parser limits must be positive integers")
 
 
-def _error(path: str) -> None:
+def _error(path: str) -> NoReturn:
     raise ContentImportError("invalid_lorebook_structure", path)
 
 
@@ -130,7 +134,8 @@ def _typed(value: object, kind: type, path: str) -> None:
 
 
 def _strings(value: object, path: str) -> list[str]:
-    _typed(value, list, path)
+    if not isinstance(value, list):
+        _error(path)
     if any(type(item) is not str for item in value):
         _error(path)
     return value
@@ -144,7 +149,11 @@ def _number(
     maximum: int | None = None,
     integral: bool = False,
 ) -> None:
-    if type(value) not in (int, float) or (type(value) is float and not isfinite(value)):
+    if (
+        not isinstance(value, (int, float))
+        or type(value) is bool
+        or (type(value) is float and not isfinite(value))
+    ):
         _error(path)
     if (minimum is not None and value < minimum) or (maximum is not None and value > maximum):
         raise ContentImportError("invalid_lorebook_numeric_range", path)
@@ -156,7 +165,9 @@ def _warn(warnings: list[ImportWarning], code: str, path: str, message: str) -> 
     warnings.append(ImportWarning(code, message, path))
 
 
-def _book(book: dict, *, native: bool, limits: LorebookLimits) -> list[tuple[str, dict]]:
+def _book(
+    book: dict, *, native: bool, limits: LorebookLimits, allow_invalid_entries: bool = False
+) -> list[tuple[str, dict]]:
     for name in ("name", "description"):
         if name in book:
             _typed(book[name], str, f"book.{name}")
@@ -168,12 +179,19 @@ def _book(book: dict, *, native: bool, limits: LorebookLimits) -> list[tuple[str
     if "recursive_scanning" in book:
         _typed(book["recursive_scanning"], bool, "book.recursive_scanning")
     entries = book.get("entries")
-    _typed(entries, dict if native else list, "book.entries")
+    if native:
+        if not isinstance(entries, dict):
+            _error("book.entries")
+        result = list(entries.items())
+    else:
+        if not isinstance(entries, list):
+            _error("book.entries")
+        result = [(str(i), item) for i, item in enumerate(entries)]
     if len(entries) > limits.max_entries:
         raise ContentImportError("lorebook_entry_count_limit", "book.entries")
-    result = list(entries.items()) if native else [(str(i), item) for i, item in enumerate(entries)]
     for key, entry in result:
-        _typed(entry, dict, f"book.entries[{key}]")
+        if not allow_invalid_entries:
+            _typed(entry, dict, f"book.entries[{key}]")
     return result
 
 
@@ -456,9 +474,21 @@ def _entry(
 
 
 def _normalize(
-    book: dict, provenance: ContentProvenance, limits: LorebookLimits, *, native: bool, v3: bool
+    book: dict,
+    provenance: ContentProvenance,
+    limits: LorebookLimits,
+    *,
+    native: bool,
+    v3: bool,
+    compatible: bool = False,
 ) -> tuple[LoreCollection, tuple[LoreEntry, ...]]:
-    external = _book(book, native=native, limits=limits)
+    source_book = book
+    normalization_warnings: list[ImportWarning] = []
+    if compatible:
+        if type(book.get("entries")) is list and len(book["entries"]) > limits.max_entries:
+            raise ContentImportError("lorebook_entry_count_limit", "book.entries")
+        book = normalize_book(book, v3=v3, warnings=normalization_warnings)
+    external = _book(book, native=native, limits=limits, allow_invalid_entries=compatible)
     extension = book.get("extensions", {}).get("dreamtalk.export", {})
     if (
         native
@@ -472,13 +502,25 @@ def _normalize(
             if len(order) == len(by_key) and set(order) == set(by_key):
                 external = [(key, by_key[key]) for key in order]
     collection_id = LoreCollectionId(uuid4())
-    warnings = []
-    entries = tuple(
-        result
-        for key, entry in external
-        if (result := _entry(entry, key, collection_id, provenance, warnings, native=native, v3=v3))
-        is not None
-    )
+    warnings = normalization_warnings
+    normalized_entries = []
+    for key, entry in external:
+        try:
+            _typed(entry, dict, f"book.entries[{key}]")
+            result = _entry(entry, key, collection_id, provenance, warnings, native=native, v3=v3)
+        except (ContentImportError, DomainInvariantError):
+            if not compatible:
+                raise
+            _warn(
+                warnings,
+                "character_card_book_entry_preserved_only",
+                f"book.entries[{key}]",
+                "Unusable entry retained only in original book; no active entry created.",
+            )
+            continue
+        if result is not None:
+            normalized_entries.append(result)
+    entries = tuple(normalized_entries)
     unknown = {name: value for name, value in book.items() if name not in _BOOK_FIELDS}
     if unknown:
         _warn(
@@ -500,7 +542,7 @@ def _normalize(
         },
         extensions={
             LOREBOOK_METADATA_KEY: {
-                "source_book": book,
+                "source_book": source_book,
                 "source_entry_count": len(external),
                 "unknown_fields": unknown,
                 "external_extensions": book.get("extensions", {}),
@@ -556,7 +598,9 @@ class LorebookImporter:
         if len(characters) != 1:
             raise ContentImportError("invalid_embedded_lore_draft")
         character = characters[0]
-        compatibility = character.extensions.get(CARD_METADATA_KEY, {})
+        compatibility = _object(
+            json_value(character.extensions.get(CARD_METADATA_KEY, {})), "character.compatibility"
+        )
         if "character_book" not in compatibility:
             return imported
         if character.lore_collection_ids:
@@ -564,14 +608,39 @@ class LorebookImporter:
         if character.provenance.source_format not in (V2_SPEC, V3_SPEC):
             raise ContentImportError("unsupported_embedded_lore_source")
         book = json_value(compatibility["character_book"])
-        collection, entries = _normalize(
-            book,
-            character.provenance,
-            self._limits,
-            native=False,
-            v3=character.provenance.source_format == V3_SPEC,
-        )
-        extensions = json_value(character.extensions)
+        try:
+            if type(book) is not dict:
+                raise ContentImportError("invalid_lorebook_structure", "book")
+            collection, entries = _normalize(
+                book,
+                character.provenance,
+                self._limits,
+                native=False,
+                v3=character.provenance.source_format == V3_SPEC,
+                compatible=True,
+            )
+        except (ContentImportError, DomainInvariantError):
+            extensions = _object(json_value(character.extensions), "character.extensions")
+            extensions[IMPORT_METADATA_KEY]["warnings"].append(
+                asdict(
+                    ImportWarning(
+                        "character_card_book_preserved_only",
+                        "Embedded book could not be activated; complete source retained.",
+                        "data.character_book",
+                    )
+                )
+            )
+            character = replace(character, extensions=extensions)
+            return ImportDraft(
+                replace(
+                    imported.draft,
+                    contents=tuple(
+                        character if root.content_id == character.content_id else root
+                        for root in imported.draft.contents
+                    ),
+                )
+            )
+        extensions = _object(json_value(character.extensions), "character.extensions")
         extensions[IMPORT_METADATA_KEY]["warnings"] = [
             item
             for item in extensions[IMPORT_METADATA_KEY]["warnings"]

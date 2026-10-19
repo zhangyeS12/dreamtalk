@@ -71,7 +71,7 @@ ImportDraft.preview() 返回 ImportPreview，其 content 是既有 ContentPrevie
 
 LorebookImporter.parse 接收 native ST JSON bytes，生成 initially unbound LoreCollection（尚无角色引用）与 owned entries。normalize_embedded 消费 CharacterCardImporter 已保存的 character_book，产生同一角色定义的 typed collection reference；不重新读取 PNG/JSON，也不把集合对象复制到定义中。
 
-ImportPreview.lorebooks 提供源条目数、canonical 条目数、collection ID 和 provenance；warnings 仍与内容和完整 source_book 一起参与 preview_hash。合法空白正文条目只留完整来源并 warning，不创建 LoreEntry；V3 secondary_keys 单字符串保留并 warning，不 split。两者都允许 confirmed Commit。unknown/不支持语义完整保留；结构错误明确失败，不以 warning 修复损坏输入。
+ImportPreview.lorebooks 提供源条目数、canonical 条目数、collection ID 和 provenance；warnings 仍与内容和完整 source_book 一起参与 preview_hash。合法空白正文条目只留完整来源并 warning，不创建 LoreEntry；V3 secondary_keys 单字符串保留并 warning，不 split。两者都允许 confirmed Commit。unknown/不支持语义完整保留；独立世界书仍按结构校验。角色卡附带世界书沿最新兼容约定应用明确默认值，并隔离不可用附加内容；预览必须说明未启用部分，见[角色卡兼容](CHARACTER_CARD_COMPATIBILITY.md)。
 
 新条目恰好一个 collection 的要求同时在应用 commit 和 repository 验证；legacy unbound 只允许引用/明确编辑，不猜集合、读时 re-home 或重写共享引用。无删除 cascade。测试见 [Lorebook import](../../tests/application/test_lorebook_import.py) 和 [migration/persistence](../../tests/persistence/test_lorebook_persistence.py)。
 

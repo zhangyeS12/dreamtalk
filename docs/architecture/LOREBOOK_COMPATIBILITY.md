@@ -81,6 +81,8 @@ ImportPreview.lorebooks 返回集合 ID、source_entry_count、canonical_entry_c
 
 缺失/wrong-type entries、非对象 entry、错误 keys/content/已知字段类型、已知非法概率/非负计数范围、duplicate JSON keys、非有限数、孤立 surrogate 和 parser 超限均为 ContentImportError。未知位置或未知字段是保留+warning，不因未来值丢失数据。
 
+角色卡内嵌书另有输入兼容步骤：空值默认、可用条目预览及不可用内容保留按[角色卡兼容约定](CHARACTER_CARD_COMPATIBILITY.md)执行；本节严格拒绝行为继续用于独立 World Info 和规范导出。
+
 ## 6. 持久化与 legacy 兼容
 
 [0007_lore_collections](../../services/core/src/livingworld/infrastructure/persistence/migrations/versions/0007_lore_collections.py) 新增集合独立内容表，给 content_lore_entries 增加 nullable collection_id FK（无 cascade），不重建旧表、不改 canonical JSON/hash/revision/raw/共享引用，也不创建合成集合。Alembic remains authoritative。

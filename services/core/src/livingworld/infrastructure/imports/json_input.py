@@ -8,7 +8,13 @@ from livingworld.domain.errors import DomainInvariantError
 
 
 def read_json_object(
-    payload: bytes, *, max_bytes: int, max_depth: int, prefix: str, root_path: str
+    payload: bytes,
+    *,
+    max_bytes: int,
+    max_depth: int,
+    prefix: str,
+    root_path: str,
+    allow_bom: bool = False,
 ) -> dict:
     if len(payload) > max_bytes:
         raise ContentImportError(f"{prefix}_json_size_limit")
@@ -22,7 +28,7 @@ def read_json_object(
         return result
 
     try:
-        text = payload.decode("utf-8")
+        text = payload.decode("utf-8-sig" if allow_bom else "utf-8")
         depth = 0
         quoted = escaped = False
         for char in text:

@@ -11,6 +11,7 @@ import { ContactAvatar, FactionManager, SocialGraph } from "./ContactSocial";
 import type { SocialSnapshot } from "@dreamtalk/api-client";
 import { CelestialEmpty, DirectorySearch, WorkspaceIcon } from "./WorkspacePrimitives";
 import { useDesktopUpdateBlock } from "./DesktopUpdates";
+import { contentImportError, contentImportWarning, groupImportWarnings } from "./contentImportFeedback";
 
 function originalCardGreeting(authored: Record<string, unknown>): string | null {
   const card = authored.character_card;
@@ -109,7 +110,7 @@ export function WorldImports({ client, worldId, onlyKind, onSaved, onDirtyChange
   useEffect(() => () => onDirtyChange(false), [onDirtyChange]);
   const upload = async (file: File) => {
     setError(""); setMessage("");
-    if (file.size > 32 * 1024 * 1024) { setError("文件不能超过 32 MB。"); return; }
+    if (file.size > 32 * 1024 * 1024) { setError("文件不能超过 32 MiB。"); return; }
     setBusy(true);
     try {
       if (preview) { await client.discardWorldContent(worldId, preview.import_id); setPreview(null); }
@@ -117,9 +118,7 @@ export function WorldImports({ client, worldId, onlyKind, onSaved, onDirtyChange
       if (!active.current) { await client.discardWorldContent(worldId, result.import_id); return; }
       pendingId.current = result.import_id;
       setPreview(result);
-    } catch (failure) { setError(failure instanceof CoreRequestError && failure.status === 409
-      ? "该内容已更新，请重新打开管理页面并选择最新版本。"
-      : "无法读取文件。请选择有效的角色卡或世界书；文件内容尚未保存。"); }
+    } catch (failure) { setError(contentImportError(failure)); }
     finally { setBusy(false); }
   };
   const commit = async () => {
@@ -195,12 +194,13 @@ export function WorldImports({ client, worldId, onlyKind, onSaved, onDirtyChange
     <details className="file-import-options" open={onlyKind === "lorebook" ? true : undefined}><summary>{onlyKind === "lorebook" ? "导入世界书（JSON）" : "从文件导入"}</summary>
     {(kind === "lorebook" || visibleItems.some(item => item.kind === "lorebook")) && <p className="inline-hint">世界书条目默认隐藏。确认导入后，可逐条设为公共背景，供当前世界角色聊天和已开启的自动活动规划参考；暗线请保持隐藏。素材不会因此变成世界事实，也不会创建新地点。</p>}
     {replacement && <p className="inline-hint">正在更新：{replacement.characters[0]?.name ?? replacement.lorebooks[0]?.name} <button type="button" className="text-action" disabled={busy || !!preview} onClick={() => setReplacement(null)}>取消更新</button></p>}
-    {!onlyKind && <label className="field"><span>内容类型</span><select value={kind} disabled={busy || !!preview || !!replacement || !!editor} onChange={event => setKind(event.target.value as typeof kind)}><option value="character">角色卡（PNG / JSON）</option><option value="lorebook">世界书（JSON）</option></select></label>}
-    <label className="field import-file"><span>选择文件</span><input type="file" disabled={loading || loadFailed || busy || !!changingEntry || !!editor} accept={kind === "character" ? ".png,.json" : ".json"} onChange={event => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void upload(file); }} /></label>
+    {!onlyKind && <label className="field"><span>内容类型</span><select value={kind} disabled={busy || !!preview || !!replacement || !!editor} onChange={event => setKind(event.target.value as typeof kind)}><option value="character">角色卡（PNG / JSON / CHARX）</option><option value="lorebook">世界书（JSON）</option></select></label>}
+    <p className="inline-hint">{kind === "character" ? "支持 V1/V2/V3 JSON、PNG、CHARX 和旧 Pygmalion JSON。" : "支持 World Info JSON。"}文件及 JSON 上限 32 MiB；附加内容的兼容差异会在预览中说明。</p>
+    <label className="field import-file"><span>选择文件</span><input type="file" disabled={loading || loadFailed || busy || !!changingEntry || !!editor} accept={kind === "character" ? ".png,.apng,.json,.charx" : ".json"} onChange={event => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void upload(file); }} /></label>
     </details>{loading && <p role="status">正在读取已保存的内容…</p>}{busy && <p role="status">正在处理…</p>}{error && <p role="alert" className="app-alert">{error}</p>}{loadFailed && <button type="button" className="secondary-button" disabled={loading || busy || !!editor || !!preview} onClick={() => { setError(""); setReload(value => value + 1); }}>重新读取已保存内容</button>}{message && <p ref={savedNotice} tabIndex={-1} role="status" className="app-notice editor-feedback">{message}</p>}
     {preview && <div className="import-preview"><h3>导入预览</h3>{preview.kind === "character" && !replacement && <InitialLocationChoice client={client} worldId={worldId} value={initialLocation} onChange={setInitialLocation} disabled={busy} />}<ContentDetails item={preview} />
-      {!!preview.warnings?.length && <div className="compatibility-notice"><p>部分来源内容无法完整映射，原始数据仍会保留。确认前请检查以下提示。</p><ul>{preview.warnings.map((warning, index) => <li key={index}>{warning.code === "lore_activation_metadata_preserved_inert" ? "导入不会执行触发设定；聊天支持范围见各条目说明。" : warning.code.includes("blank_tags") ? "空白标签已从角色标签中省略。" : warning.code.includes("empty_content") ? "空白条目已从世界书中省略。" : warning.code.includes("secondary_keys") ? "存在含义不明确的次级关键词，未作猜测转换。" : "存在兼容性差异，请核对预览内容。"}</li>)}</ul></div>}
-      <div className="profile-actions"><button className="primary-button" type="button" disabled={busy || (preview.kind === "character" && !replacement && !initialLocation)} onClick={() => void commit()}>{replacement ? "确认更新当前世界" : "确认加入当前世界"}</button><button className="secondary-button" type="button" disabled={busy} onClick={() => { pendingId.current = null; void client.discardWorldContent(worldId, preview.import_id).catch(() => undefined); setPreview(null); }}>取消</button></div>
+      {!!preview.warnings?.length && <div className="compatibility-notice"><p>部分来源内容无法完整映射，原始数据仍会保留。确认前请检查以下提示。</p><ul>{groupImportWarnings(preview.warnings).map(warning => <li key={warning.code}>{contentImportWarning(warning.code)}{warning.count > 1 && <small>（共 {warning.count} 项）</small>}{warning.paths.length > 0 && <details><summary>查看涉及字段</summary><p>{warning.paths.join("、")}</p></details>}</li>)}</ul></div>}
+      <div className="profile-actions"><button className="primary-button" type="button" disabled={busy || (preview.kind === "character" && !replacement && !initialLocation)} onClick={() => void commit()}>{preview.warnings?.some(w => w.code === "character_card_v2_fallback_review_required") ? "确认使用 V2 内容" : replacement ? "确认更新当前世界" : "确认加入当前世界"}</button><button className="secondary-button" type="button" disabled={busy} onClick={() => { pendingId.current = null; void client.discardWorldContent(worldId, preview.import_id).catch(() => undefined); setPreview(null); }}>取消</button></div>
     </div>}
     {visibleItems.length > 0 && <div className="accepted-content"><h3>当前世界已保存</h3><button type="button" className="text-action" disabled={commonDisabled || !!changingEntry} onClick={refreshAccepted}>刷新已保存内容与范围</button>{onlyKind === "lorebook" && <p className="inline-hint">公开范围选择后立即保存。通过界面编辑世界书时，完全未变且有原条目对应的内容保留原范围；新增、修改正文或触发条件、从文件替换的条目需要重新确认公开。编辑或预览期间，请先完成内容保存，再设置范围。</p>}{visibleItems.map(item => <div key={item.import_id} className="accepted-item"><details><summary>{item.characters[0]?.name ?? item.lorebooks[0]?.name ?? "导入内容"} · {item.kind === "character" ? "角色卡" : "世界书"}</summary><ContentDetails item={item} onCommonChange={item.kind === "lorebook" ? (entryId, common) => void setCommon(item.import_id, entryId, common) : undefined} changingEntry={changingEntry} commonDisabled={commonDisabled} exposureFeedback={exposureFeedback} onCommonRefresh={refreshAccepted} /></details><button type="button" className="text-action" disabled={loading || loadFailed || busy || !!changingEntry || !!preview || !!editor} onClick={() => { setEditor({ kind: item.kind, item }); setError(""); setMessage(""); }}>编辑</button><button type="button" className="text-action" disabled={loading || loadFailed || busy || !!changingEntry || !!preview || !!editor} onClick={() => { setReplacement(item); setKind(item.kind); setMessage(""); }}>从文件更新</button><ContentExportButton client={client} worldId={worldId} item={item} disabled={commonDisabled || !!changingEntry} />{item.kind === "character" && <button type="button" className="text-action destructive-action" disabled={commonDisabled || !!changingEntry} onClick={() => void removeCard(item)}>删除角色卡</button>}</div>)}</div>}
   </section>;
