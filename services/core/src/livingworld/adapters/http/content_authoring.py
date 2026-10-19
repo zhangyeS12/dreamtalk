@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 
 from livingworld.adapters.http import contracts as wire
+from livingworld.adapters.http.content_editor_pages import install_editor_pages
 from livingworld.adapters.http.world_content import _view
 from livingworld.application.content import ContentConflictError
 from livingworld.application.content_authoring import EditorDraft, authored_graph, editable
@@ -38,6 +39,8 @@ def content_authoring_router(service, repository, builder, authorize, logger=Non
         prefix=f"/api/v{API_PROTOCOL}/worlds/{{world_id}}/content/editor",
         dependencies=[Depends(authorize)],
     )
+
+    install_editor_pages(router, service, repository)
 
     @router.get("/{import_id}", response_model=wire.ContentEditorResult)
     async def read_editor(world_id: UUID, import_id: UUID):

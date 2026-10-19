@@ -73,8 +73,8 @@ def generate() -> str:
                 def visit_Name(self, node: ast.Name) -> ast.Name:
                     if node.id in self.local_names:
                         node.id = self.name_prefix + node.id
-                    elif node.id == "EditorDraft":
-                        node.id = "ContentEditorDraft"
+                    elif node.id in {"EditorDraft", "EditorEntry"}:
+                        node.id = "Content" + node.id
                     elif node.id == "StrictBool":
                         node.id = "bool"
                     return node

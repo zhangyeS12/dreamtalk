@@ -34,7 +34,7 @@ export function useChatUnread(client: CoreClient, worldId: string, playerId: str
   }, [client, worldId, playerId, scope, refresh]);
   const value = result?.scope === scope ? result.value : null;
   return { value, error, refresh: useCallback(() => setRefresh(n => n + 1), []),
-    hasUnread: Boolean(value?.items.some(item => item.unread > 0)),
+    hasUnread: Boolean(value?.has_unread || value?.items.some(item => item.unread > 0)),
     unread: (conversationId: string) => (value?.items.find(item => item.conversation_id === conversationId)?.unread ?? 0) > 0 };
 }
 

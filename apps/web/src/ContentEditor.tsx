@@ -1,3 +1,4 @@
+import { ContentEditorPages } from "./contentEditorPages";
 import { InitialLocationChoice } from "./InitialLocationChoice";
 import { useEffect, useRef, useState } from "react";
 import { CoreClient, CoreRequestError, type ContentBuilderJob, type ContentEditorDraft,
@@ -89,6 +90,8 @@ export function ContentEditor({ client, worldId, kind, editing, onSaved, onCance
   onSaved: (item: WorldContentItem) => void; onCancel: () => void;
 }) {
   const [draft, setDraft] = useState(() => emptyDraft(kind));
+  const pages = useRef(new ContentEditorPages());
+  const [entryOffset, setEntryOffset] = useState(0);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(!!editing);
   const [loadFailed, setLoadFailed] = useState(false);
@@ -120,8 +123,8 @@ export function ContentEditor({ client, worldId, kind, editing, onSaved, onCance
   useEffect(() => {
     live.current = true;
     try { const id = localStorage.getItem(storageKey); if (id) setRecoverId(id); } catch { /* Memory still works. */ }
-    if (editing) void client.contentEditor(worldId, editing.import_id).then(result => {
-      if (live.current) { setDraft(result.draft); setResearch(result.research); }
+    if (editing) void client.contentEditorPage(worldId, editing.import_id).then(result => {
+      if (live.current) { pages.current.accept(result); setDraft(result.draft); setResearch(result.research); }
     }).catch(() => { if (live.current) { setError("无法打开该内容的编辑稿。请重新进入设置并选择最新版本。"); setLoadFailed(true); } })
       .finally(() => { if (live.current) setLoading(false); });
     return () => {
@@ -135,6 +138,7 @@ export function ContentEditor({ client, worldId, kind, editing, onSaved, onCance
     setJob(result);
     if (result.state === "ready" && result.result && appliedJob.current !== result.request_id) {
       appliedJob.current = result.request_id;
+      pages.current.reset(); setEntryOffset(0);
       setDraft(result.result.draft); setResearch(result.result); setGenerationId(result.request_id);
       setQuery(result.result.query); setError("");
     } else if (result.state === "failed" || result.state === "interrupted") {
@@ -196,13 +200,15 @@ export function ContentEditor({ client, worldId, kind, editing, onSaved, onCance
     if (busy || generating || loading || loadFailed || preview) return;
     if (!draft.name.trim()) { setError(kind === "character" ? "请填写角色名称后再预览。" : "请填写世界书名称后再预览。"); return; }
     if (kind === "lorebook") {
-      if (!draft.entries.length) { setError("请至少添加一条世界书正文后再预览。"); return; }
+      if (!pages.current.original && !draft.entries.length) { setError("请至少添加一条世界书正文后再预览。"); return; }
       const invalid = draft.entries.findIndex(entry => !entry.content.trim() || entry.secondary_keywords.length > 0 && !entry.keywords.length);
       if (invalid >= 0) { setError(`请检查条目 ${invalid + 1}：正文不能为空，使用次级关键词时需要填写主关键词。`); return; }
     }
     setBusy(true); setError("");
     try {
-      const result = await client.previewEditedContent(worldId, draft, editing?.import_id, generationId);
+      const result = editing && pages.current.original
+        ? await client.previewContentChanges(worldId, editing.import_id, pages.current.patch(draft))
+        : await client.previewEditedContent(worldId, draft, editing?.import_id, generationId);
       if (!live.current) { await client.discardWorldContent(worldId, result.import_id); return; }
       pending.current = result.import_id; setPreview(result);
     } catch (failure) {
@@ -226,6 +232,27 @@ export function ContentEditor({ client, worldId, kind, editing, onSaved, onCance
   const update = (key: keyof ContentEditorDraft, value: string | string[]) => setDraft(old => ({ ...old, [key]: value }));
   const updateEntry = (index: number, change: Partial<ContentEditorEntry>) => setDraft(old => ({ ...old,
     entries: old.entries.map((entry, i) => i === index ? { ...entry, ...change } : entry) }));
+  const moveEntries = async (offset: number) => {
+    if (busy || loading || generating) return;
+    if (!editing || !pages.current.original) { setEntryOffset(offset); return; }
+    pages.current.capture(draft.entries);
+    const cached = pages.current.pages.get(offset);
+    if (cached) {
+      pages.current.offset = offset; setEntryOffset(offset);
+      setDraft(old => ({ ...old, entries: cached })); return;
+    }
+    setLoading(true); setError("");
+    try {
+      const page = await client.contentEditorPage(worldId, editing.import_id, offset);
+      if (!live.current) return;
+      pages.current.accept(page); setEntryOffset(offset);
+      setDraft(old => ({ ...old, entries: page.draft.entries }));
+    } catch { if (live.current) setError("这一页暂未读取成功，已修改的内容仍保留。可再次翻页重试。"); }
+    finally { if (live.current) setLoading(false); }
+  };
+  const paged = pages.current.original !== null;
+  const totalEntries = paged ? pages.current.total : draft.entries.length;
+  const shownEntries = paged ? draft.entries : draft.entries.slice(entryOffset, entryOffset + 32);
   const disabled = busy || generating || loading || loadFailed;
   const reviewActions = preview && (
       <div className="profile-actions"><button type="button" className="primary-button" disabled={busy || (kind === "character" && !editing && !initialLocation)} onClick={() => void save()}>{busy ? "正在保存…" : editing ? "确认更新当前世界" : "确认加入当前世界"}</button>
@@ -261,8 +288,12 @@ export function ContentEditor({ client, worldId, kind, editing, onSaved, onCance
           <label className="field"><span>标签（用逗号分隔）</span><ListInput value={draft.tags} onChange={value => update("tags", value)} /></label>
           <label className="field"><span>创作者备注</span><textarea rows={2} maxLength={16000} value={draft.creator_notes} onChange={event => update("creator_notes", event.target.value)} /></label>
         </> : <div className="lore-entry-editor"><h4>世界书条目</h4><p className="inline-hint">正文写清独立设定。公开后，常驻条目持续提供；关键词条目在会话中命中时提供。已开启的自动活动规划也会匹配角色名和当前地点名。</p>
-          {draft.entries.map((entry, index) => <section className="editable-lore-entry" key={entry.source_entry_id ?? index}>
-            <div className="editor-heading"><h4>条目 {index + 1}</h4><button type="button" className="text-action" onClick={() => setDraft(old => ({ ...old, entries: old.entries.filter((_, i) => i !== index) }))}>删除条目</button></div>
+          {totalEntries > 32 && <div className="profile-actions" aria-label="世界书条目分页"><button type="button" disabled={disabled || entryOffset === 0} onClick={() => void moveEntries(Math.max(0, entryOffset - 32))}>上一页</button><span>第 {Math.floor(entryOffset / 32) + 1} / {Math.ceil(totalEntries / 32)} 页 · {paged ? "原书" : "当前"} {totalEntries} 条</span><button type="button" disabled={disabled || entryOffset + 32 >= totalEntries} onClick={() => void moveEntries(entryOffset + 32)}>下一页</button></div>}
+          {shownEntries.map((entry, shownIndex) => { const index = paged ? shownIndex : entryOffset + shownIndex; return <section className="editable-lore-entry" key={entry.source_entry_id ?? index}>
+            <div className="editor-heading"><h4>条目 {(paged ? entryOffset : 0) + index + 1}</h4><button type="button" className="text-action" onClick={() => {
+              if (!paged && entryOffset > 0 && draft.entries.length - 1 <= entryOffset) setEntryOffset(Math.max(0, entryOffset - 32));
+              setDraft(old => ({ ...old, entries: old.entries.filter((_, i) => i !== index) }));
+            }}>删除条目</button></div>
             <label className="field"><span>标题</span><input maxLength={300} value={entry.title} onChange={event => updateEntry(index, { title: event.target.value })} /></label>
             <label className="field"><span>正文 *</span><textarea rows={4} maxLength={16000} value={entry.content} required onChange={event => updateEntry(index, { content: event.target.value })} /></label>
             <div className="editor-columns"><label className="field"><span>主关键词（逗号分隔）</span><ListInput value={entry.keywords} onChange={value => updateEntry(index, { keywords: value })} /></label>
@@ -271,11 +302,14 @@ export function ContentEditor({ client, worldId, kind, editing, onSaved, onCance
               <label className="field"><span>次级条件</span><select value={entry.selective_logic} onChange={event => updateEntry(index, { selective_logic: event.target.value as ContentEditorEntry["selective_logic"] })}><option value="AND_ANY">任一命中</option><option value="AND_ALL">全部命中</option><option value="NOT_ANY">全部不命中</option><option value="NOT_ALL">不能全部命中</option></select></label>
               <div className="editor-columns">{(["priority", "order"] as const).map(key => <label key={key} className="field"><span>{key === "priority" ? "优先级" : "顺序"}</span><input type="number" min={-1000000} max={1000000} step={1} value={entry[key]} onChange={event => updateEntry(index, { [key]: Number(event.target.value) })} /></label>)}</div>
             </details><label className="editor-checkbox"><input type="checkbox" checked={entry.enabled} onChange={event => updateEntry(index, { enabled: event.target.checked })} />启用条目</label>
-          </section>)}<button className="secondary-button" type="button" disabled={draft.entries.length >= 128} onClick={() => setDraft(old => ({ ...old, entries: [...old.entries, emptyEntry(old.entries.length)] }))}>添加条目</button>
+          </section>; })}<button className="secondary-button" type="button" disabled={draft.entries.length >= (paged ? 128 : 10000)} onClick={() => {
+            if (!paged) setEntryOffset(Math.floor(draft.entries.length / 32) * 32);
+            setDraft(old => ({ ...old, entries: [...old.entries, emptyEntry(totalEntries + old.entries.length)] }));
+          }}>添加条目</button>
         </div>}
         {editing && <p className="inline-hint">附带素材、角色内嵌世界书和未开放的兼容字段会保留。高级触发条件的支持范围以保存预览为准。</p>}
       </fieldset>
-      {research && <ResearchDetails research={research} edited={!sameDraft(draft, research.draft)} />}
+      {research && <ResearchDetails research={research} edited={paged ? pages.current.changed(draft) : !sameDraft(draft, research.draft)} />}
       <div className="profile-actions"><button type="button" className="primary-button" disabled={disabled} onClick={() => void review()}>{busy ? "正在准备预览…" : "预览并保存"}</button><span className="inline-hint" role="status">{busy ? "正在创建保存预览，请稍候。此步骤不会调用模型。" : "先打开保存预览，再确认加入当前世界。"}</span></div>
     </>}
   </div>;

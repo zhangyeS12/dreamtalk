@@ -10,8 +10,8 @@ from sqlalchemy import and_, case, func, or_, select, update
 from livingworld.application.chat_event_annotations import ChatEventAnnotation
 from livingworld.application.director import DirectorError
 from livingworld.application.errors import EntityNotFoundError
+from livingworld.application.input_budget import encode_input, planning_references
 from livingworld.application.llm import LLMMessage, MessageRole, TextContent
-from livingworld.application.lore_activation import select_common_background
 from livingworld.application.world_story import (
     ACTIVE_NEWS_LIMIT,
     BATCH_SIZE,
@@ -79,13 +79,16 @@ def _uuid(value):
 async def _news_background(session, world):
     record = await session.get(WorldRecord, world.value)
     try:
-        public = await read_director_background(session, world)
-        background = select_common_background(
-            public,
-            (record.name + " " + " ".join(item.entry.title for item in public),),
-            generation_kind="quiet",
-            include_references=True,
-        )
+        public = await read_director_background(session, world, news_name=record.name)
+        background = [
+            {
+                "title": item.entry.title,
+                "content": item.entry.content,
+                "import_id": str(item.import_id),
+                "entry_id": str(item.entry.content_id.value),
+            }
+            for item in public
+        ]
     except DirectorError as error:
         code = (
             "news_background_capacity"
@@ -643,9 +646,15 @@ class SqlAlchemyWorldStoryStore:
                 "common_world_background": background,
                 "existing_titles": list(recent),
             }
-            raw = json.dumps(snapshot, ensure_ascii=False)
-            if len(raw.encode()) > 65536:
+            try:
+                snapshot = planning_references(snapshot)
+                raw = encode_input(snapshot)
+            except ValueError:
                 config.state, config.error = "attention", "news_background_capacity"
+                await session.commit()
+                return None
+            if not snapshot["common_world_background"]:
+                config.state, config.error = "attention", "news_background_required"
                 await session.commit()
                 return None
             session.add(

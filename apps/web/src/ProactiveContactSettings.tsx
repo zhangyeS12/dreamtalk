@@ -70,6 +70,7 @@ export function ProactiveContactSettings({ client, worldId, playerId }: { client
   const label = !status ? readError ? "主动联系状态尚未读取成功。" : "正在读取主动联系设置…"
     : status.state === "waiting_reply" ? "等待你回复上一次主动联系，期间所有角色都不会再次主动联系。"
     : status?.state === "writing" ? "正在准备一次主动联系。"
+    : status?.state === "idle" && status.error === "proactive_input_unavailable" ? "部分联系资料暂未就绪，后台会继续核对其他有效候选。"
     : status?.state === "attention" ? "本次任务已停止，不会自动重试模型调用。"
     : status?.enabled ? "已开启；达到间隔并有真实活动理由时才联系。" : "尚未开启在线主动联系。";
   return <section className="settings-section" aria-label="在线主动联系">
@@ -82,7 +83,7 @@ export function ProactiveContactSettings({ client, worldId, playerId }: { client
     <p className="inline-hint">默认360分钟，首次开启从此刻计时，每批日常最多一次。忙碌、暂停或没有有效活动时跳过。打开会话只清除红点；在收到联系的会话里发送回复才解除等待。同一次共同邀请若分成两条私聊，回复其中任意一条即可；另一条的未读红点仍需打开查看。在线与离线联系共用这个限制。</p>
     <p className="inline-hint">依赖已开启的世界自动活动；多人还需开启相遇和共同休闲。程序完全退出或电脑关机后停止。后台生成使用当前模型、遵守已有任务预算，可能产生费用。</p>
     {consenting && <div className="inline-notice"><p>同意此世界使用已确认角色资料、实际活动与公共背景生成主动消息。私聊正文、摘要、私人记忆和隐藏世界书不发送。双人消息一次生成，同一件事共同发出邀请。</p><button type="button" className="primary-button" disabled={busy || !status || !status.model_available} onClick={() => void save(true, true)}>同意后台模型用量并开启</button><button type="button" className="text-action" disabled={busy} onClick={() => setConsenting(false)}>暂不开启</button></div>}
-    {status?.error && <p className="app-alert">{status.error === "proactive_context_changed" ? "活动、资料或玩家状态已变化，迟到邀请已取消。" : status.error === "proactive_input_unavailable" ? "角色活动或获准资料暂不可用，请检查后关闭再开启。" : "本次生成未完成或被中断，可能已有用量。检查后可关闭再开启；不会重放原任务。"}</p>}
+    {status?.error && <p className="app-alert">{status.error === "proactive_context_changed" ? "活动、资料或玩家状态已变化，迟到邀请已取消。" : status.error === "proactive_input_unavailable" ? "部分角色的活动或获准资料暂不可用，已跳过；原资料保持完整，后续会继续准备，不需反复切换开关。" : "本次生成未完成或被中断，可能已有用量。检查后可关闭再开启；不会重放原任务。"}</p>}
     {notice && <p className="inline-notice" role="status">{notice}</p>}
     {!status?.model_available && status && <p className="inline-hint">当前模型不可用，请先检查模型设置，再开启主动联系。</p>}
     {readError && <p className="app-alert" role="alert">{readError}</p>}

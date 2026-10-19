@@ -14,7 +14,7 @@ export function taskErrorGuidance(code: string | null, message: string, title = 
     : suffix === "model_unavailable" || suffix === "model_failed" || suffix === "generation_failed" && code !== "news_generation_failed" ? "model"
     : suffix === "player_required" ? "me"
     : suffix === "characters_required" ? code?.startsWith("director_") ? "locations" : "contacts"
-    : suffix === "character_mapping_invalid" || suffix === "input_unavailable" || suffix === "input_capacity" ? "contacts"
+    : suffix === "character_mapping_invalid" || suffix === "input_unavailable" || suffix === "input_capacity" || suffix === "candidates_unavailable" ? "contacts"
     : suffix === "world_capacity" ? "locations"
     : suffix === "pending_capacity" ? "events"
     : suffix === "token_bound_unavailable" || suffix === "model_quota" || suffix === "context_limit" ? "model"
@@ -67,6 +67,8 @@ export function offlineGuidance(status: OfflineContactStatus | null, paused: boo
   if (status.state === "skipped" && status.error === "offline_no_contact") return { title: "已开启，本次恢复没有发起联系", detail: "旧记录也可能是上一条主动消息未回复；新记录会单独标明。其他可能原因包括忙碌、暂停、没有合适角色或模型决定不联系。刷新不会补发。", destination: "chats" };
   if (status.error === "offline_context_changed") return { tone: "warning", title: "本次联系已取消，开关仍已开启", detail: "身份、资料、玩家状态或新消息发生变化，原结果不再适用。等待下次符合条件的离线恢复。" };
   if (status.error === "offline_clock_regression") return { tone: "warning", title: "系统时间回退，暂不判断离线时长", detail: "请核对电脑时间。程序等待时间恢复，不会把负时长当成离线。" };
+  const preparationErrors = ["offline_input_capacity", "offline_snapshot_capacity", "offline_input_unavailable", "offline_character_mapping_invalid", "offline_background_capacity", "offline_background_invalid", "offline_candidates_unavailable"];
+  if (status.error && preparationErrors.includes(status.error)) return { ...taskErrorGuidance(status.error, reason || "离线联系输入暂未准备好，原角色资料和聊天保持完整。"), tone: "warning", title: "离线联系资料暂未就绪" };
   if (status.state === "attention" || status.error) return { ...taskErrorGuidance(status.error, `${reason || "本次离线任务未能完成。"} 本次恢复不会自动重试；修正后等待下次符合条件的恢复，重新保存开关不会补发。`), title: "本次离线任务已停止" };
   if (status.state === "planning" || status.state === "writing") return { title: status.state === "planning" ? "正在选择联系角色和时段" : "角色正在写离线消息", detail: "这次恢复正在处理，已开始的请求可能计费。不要反复关闭再开启；状态会自动更新。" };
   if (status.state === "delivered") return { tone: "success", title: "本次离线消息已送达", detail: status.unread.length ? `有${status.unread.length}条主动消息尚未读。打开聊天查看；显示的剧情时间与真实生成时间分开保留。` : "可以在聊天中查看已送达的消息。查看或刷新不会再次生成。", destination: "chats" };
@@ -74,7 +76,15 @@ export function offlineGuidance(status: OfflineContactStatus | null, paused: boo
   if (paused) return { title: "已开启，世界暂停时不发起联系", detail: "暂停状态下的离线恢复会跳过；恢复世界不会立即补发。", destination: "time" };
   if (availability === "busy") return { title: "已开启，当前交流状态为忙碌", detail: "忙碌时的离线恢复会跳过普通主动消息；设为可用不会立即补发。" };
   if (!status.model_available) return { tone: "warning", title: "已开启，当前模型尚不可用", detail: "请检查模型设置；开启开关不代表已有可用生成服务。", destination: "model" };
-  return { title: "已开启，等待下一次离线恢复", detail: `Core停止运行至少${status.hours}个真实小时后，再恢复时考虑联系。只隐藏窗口或留在托盘不算离线，首次开启和刷新都不会立即发消息。` };
+  const prepared = status.input_preparation;
+  const notes = prepared ? [
+    prepared.batched ? `角色按批轮选，本批已准备${prepared.selected}位候选。` : "",
+    prepared.clipped ? "较长设定已自动选取本次参考片段，原资料保持完整。" : "",
+    prepared.excluded ? `${prepared.excluded}位候选的资料暂不可用，本批已跳过。` : "",
+    prepared.background_omitted ? "公共背景暂不可用，本批仅参考角色资料。" : "",
+    prepared.context_limited ? "本批已按容量选取背景和计划参考。" : "",
+  ].filter(Boolean).join("") : "";
+  return { tone: prepared?.excluded || prepared?.background_omitted ? "warning" : "neutral", title: "已开启，等待下一次离线恢复", detail: `${notes}Core停止运行至少${status.hours}个真实小时后，再恢复时考虑联系。只隐藏窗口或留在托盘不算离线，首次开启和刷新都不会立即发消息。` };
 }
 
 export function BackgroundTaskFeedback({ name, guidance, onNavigate, disabled = false }: { name: string; guidance: Guidance; onNavigate?: BackgroundNavigate; disabled?: boolean }) {

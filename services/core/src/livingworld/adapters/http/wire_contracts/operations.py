@@ -78,6 +78,15 @@ class ContentEditorResult(TypedDict):
 
 
 @with_config(ConfigDict(extra="allow"))
+class ContentEditorPage(TypedDict):
+    draft: ContentEditorDraft
+    research: ContentResearch | None
+    total_entries: int
+    offset: int
+    next_offset: int | None
+
+
+@with_config(ConfigDict(extra="allow"))
 class DiscardWorldContentResult(TypedDict):
     discarded: bool
 

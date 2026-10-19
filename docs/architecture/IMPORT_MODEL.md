@@ -88,3 +88,11 @@ Character Card字段映射、兼容namespaces和资源限制沿既有契约。�
 NEW/IDENTICAL/LOCAL_MODIFIED/INCOMING_DIFFERENT/DIVERGED/DIFFERENT_NO_BASELINE 使用 persisted accepted hash 作三方证据；不同成员必须 KEEP_LOCAL 或 REPLACE_WITH_INCOMING，不 merge、不 IMPORT_AS_COPY。baseline 不参加 canonical hash、不导出。NEW/REPLACE/明确接受 IDENTICAL 在对应 DB transaction 建立/刷新 baseline，KEEP 不变。
 
 native snapshot acceptance 与普通 next-revision edit 分开。canonical graph/bindings/baseline 同一 DB transaction；物化 hash blobs 在此之前，失败 DB 可留不可达 orphan，不能声称 FS+SQLite ACID。legacy unbound dependencies 明确 compatibility error，不造集合。解析和 Preview 不写 DB/asset。详见 [STAGE_3_ACCEPTANCE.md](https://github.com/zhangyeS12/dreamtalk/blob/485b512a5dac8da7077326d1cd3daea5eb3304c8/docs/architecture/STAGE_3_ACCEPTANCE.md)。
+
+## 分页编辑与稀疏修改
+
+已有内容使用 `/content/editor/{import_id}/page` 每页读取32条世界书条目；已接受的长字段完整返回，不套新建稿的长度校验。旧编辑读取和完整预览接口保留兼容。
+
+`preview-changes` 只接收有界字段修改、明确删除的来源条目ID及新增条目；后端基于指定的当前不可变版本合并完整图。未加载、未修改条目及不透明兼容字段保留，来源不存在／重复更新／同时删除与更新／过期版本拒绝。新增与修改字段继续执行原校验，新增条目不得携带伪造来源ID；单次修改正文最多4MiB，条目总量沿导入边界最多10000。原生完整稿也使用相同总量边界。
+
+合并仅创建完整预览，仍由 reviewed hash 确认提交；不自动保存页面或丢弃其他页修改。角色后台来源使用元数据版本链解析，正常长版本链不设128次替换上限；真实循环或无效来源继续拒绝。当前实现与检查证据见[状态清单](../PROJECT_STATUS.md)。

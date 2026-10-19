@@ -1,6 +1,6 @@
 import type * as Requests from "./contracts.generated";
-import { isChatReplyProgress } from "./contracts.generated";
-export type { ContentResearch, SpeechPreviewJob } from "./contracts.generated";
+import { isContentEditorPage, isChatReplyProgress } from "./contracts.generated";
+export type { ContentEditorPage, ContentResearch, SpeechPreviewJob } from "./contracts.generated";
 import { isChatMediaSettings, isMediaUsageResult, isStickersResult, isStickerEntry, isEditStickerResult, isRemoveStickerResult, isCaptionMediaResult, isSpeechStatus, isSpeechPricing, isVoiceCardPage, isVoiceBindingResult, isVoiceCardPreview, isVoiceCard, isRemoveVoiceCardResult, isSpeechJob, isSpeechPreviewsResult, isWorldContentItem, isSetCommonLoreResult, isChatMessage, isChatMessagePage, isChatHistoryMatches, isLongChatMemorySnapshot, isConversationMemorySnapshot, isConversationMemoryDraft, isConversationMemoryRevision, isConversationMemorySources, isConversationMemoryDraftSourcesResult, isPendingPlayerSend, isChatReplyAvailability, isChatContextReports, isReplyRecoveryView, isCreateReplyRecoveryResult, isDirectTurnView, isGroupTurnView, isContentEditorResult, isContentBuilderJob, isDiscardWorldContentResult, isActivityCharacterDirectory, isInitializeCharacterActivityResult, isActivityLocation, isWorldCover, isCoverImage, isSocialSnapshot, isAvatarDigest, isCreateFactionResult, isDeleteWorldResult, isContentExportInfo, isChatExportInfo, isDissolveGroupResult, isCreateWorldResult, isExampleWorldTemplate, isPauseProductWorldResult, isSetPlayerAvailabilityResult, isBindPlayerResult, isProactiveContactStatus, isChatUnreadStatus, isMarkConversationReadResult, isOfflineContactStatus, isWorldStoryEntries, isWorldNewsStatus, isDirectorStatus, isWorldSummary, isInspectorSnapshot, isScheduleTriggerResult, isRecordMemoryResult, isCoreHealth, isWorldSettings, isSelectablePlayer, isSelectedPlayerState, isLocalProfile, isKnownWorldEvent, isChatConversation, isGroupChatConversation } from "./contracts.generated";
 
 import type { MediaUsageResult, StickersResult, EditStickerResult, RemoveStickerResult, CaptionMediaResult, VoiceBindingResult, RemoveVoiceCardResult, SpeechPreviewsResult, SetCommonLoreResult, ConversationMemoryDraftSourcesResult, CreateReplyRecoveryResult, ContentEditorResult, DiscardWorldContentResult, InitializeCharacterActivityResult, CreateFactionResult, DeleteWorldResult, DissolveGroupResult, CreateWorldResult, PauseProductWorldResult, SetPlayerAvailabilityResult, BindPlayerResult, MarkConversationReadResult, ScheduleTriggerResult, RecordMemoryResult } from "./contracts.generated";
@@ -504,6 +504,14 @@ export class CoreClient {
   contentEditor(worldId: string, importId: string): Promise<ContentEditorResult> {
     return this.contractRequest(`/worlds/${encodeURIComponent(worldId)}/content/editor/${encodeURIComponent(importId)}`, isContentEditorResult);
   }
+  contentEditorPage(worldId: string, importId: string, offset = 0): Promise<Requests.ContentEditorPage> {
+    return this.contractRequest(`/worlds/${encodeURIComponent(worldId)}/content/editor/${encodeURIComponent(importId)}/page?offset=${offset}`, isContentEditorPage);
+  }
+  previewContentChanges(worldId: string, importId: string, patch: Requests.HttpContentEditorPagesEditorPatchRequest): Promise<WorldContentItem> {
+    return this.contractRequest(`/worlds/${encodeURIComponent(worldId)}/content/editor/${encodeURIComponent(importId)}/preview-changes`, isWorldContentItem, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch),
+    });
+  }
   previewEditedContent(worldId: string, draft: ContentEditorDraft, replacesImportId?: string, generationId?: string): Promise<WorldContentItem> {
     return this.contractRequest(`/worlds/${encodeURIComponent(worldId)}/content/editor/preview`, isWorldContentItem, {
       method: "POST", headers: { "Content-Type": "application/json" },
@@ -703,8 +711,22 @@ export class CoreClient {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ enabled, interval_minutes: minutes, consent_background_usage: consent, expected_revision: status.revision, expected_player_id: status.player_id } satisfies Requests.HttpProactiveContactSettingsRequest) });
   }
-  chatUnread(worldId: string, signal?: AbortSignal): Promise<ChatUnreadStatus> {
-    return this.contractRequest(`/worlds/${encodeURIComponent(worldId)}/chat-unread`, isChatUnreadStatus, { signal });
+  async chatUnread(worldId: string, signal?: AbortSignal): Promise<ChatUnreadStatus> {
+    const items: ChatUnreadStatus["items"] = [];
+    let cursor: string | null = null, first: ChatUnreadStatus | null = null;
+    const seen = new Set<string>();
+    do {
+      const query = new URLSearchParams({ page: "true" });
+      if (cursor) query.set("after", cursor);
+      const value: ChatUnreadStatus = await this.contractRequest(`/worlds/${encodeURIComponent(worldId)}/chat-unread?${query}`, isChatUnreadStatus, { signal });
+      if (first && first.player_id !== value.player_id) throw new CoreRequestError(409, "proactive_player_changed");
+      first ??= value;
+      items.push(...value.items);
+      cursor = value.next_after ?? null;
+      if (cursor && seen.has(cursor)) throw new CoreRequestError(502, "unread_cursor_invalid");
+      if (cursor) seen.add(cursor);
+    } while (cursor);
+    return { ...first!, items, next_after: null };
   }
   markConversationRead(worldId: string, conversationId: string, position: number): Promise<MarkConversationReadResult> {
     return this.contractRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/${encodeURIComponent(conversationId)}/read`, isMarkConversationReadResult, {

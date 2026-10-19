@@ -34,12 +34,24 @@ class ChatUnreadStatus(TypedDict):
     player_id: str
     items: list[ChatUnreadStatusItemsItem]
     waiting_conversation_id: str | None
+    has_unread: NotRequired[bool]
+    next_after: NotRequired[str | None]
 
 
 @with_config(ConfigDict(extra="allow"))
 class OfflineContactStatusUnreadItem(TypedDict):
     message_id: str
     conversation_id: str
+
+
+@with_config(ConfigDict(extra="allow"))
+class OfflineInputPreparation(TypedDict):
+    selected: int
+    excluded: int
+    clipped: int
+    batched: bool
+    background_omitted: bool
+    context_limited: bool
 
 
 @with_config(ConfigDict(extra="allow"))
@@ -55,6 +67,7 @@ class OfflineContactStatus(TypedDict):
     last_online_at: str | None
     model_available: bool
     unread: list[OfflineContactStatusUnreadItem]
+    input_preparation: NotRequired[OfflineInputPreparation | None]
 
 
 @with_config(ConfigDict(extra="allow"))

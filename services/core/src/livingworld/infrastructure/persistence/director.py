@@ -1,5 +1,6 @@
 """Durable consent, one-way planning claims and Kernel-bound routine candidates."""
 
+import codecs
 import json
 from datetime import UTC, datetime
 from uuid import UUID, uuid5
@@ -8,11 +9,13 @@ from sqlalchemy import LargeBinary, case, cast, func, select, true, update
 
 from livingworld.application.director import MAX_CHARACTERS, MAX_LOCATIONS, WINDOW_US, DirectorError
 from livingworld.application.errors import EntityNotFoundError
+from livingworld.application.input_budget import encode_input, planning_references
 from livingworld.application.lore_activation import select_common_background
 from livingworld.domain.actions import ActionRejectionReason
 from livingworld.infrastructure.persistence.character_card_bindings import (
     CharacterCardBindingRecord,
 )
+from livingworld.infrastructure.persistence.character_lineage import latest_character_import
 from livingworld.infrastructure.persistence.character_mobility import (
     mobility_is_current,
     mobility_record,
@@ -349,7 +352,7 @@ class SqlAlchemyDirectorStore(SharedDirectorMixin):
                     window_start=now,
                     window_end=now + WINDOW_US,
                     candidate_count=0,
-                    input_json=json.dumps(snapshot, ensure_ascii=False),
+                    input_json=encode_input(snapshot),
                     state="planning",
                     created_at=datetime.now(UTC),
                 )
@@ -442,7 +445,9 @@ class SqlAlchemyDirectorStore(SharedDirectorMixin):
                 context_locations.update(rules.ancestors(identity))
             if state.location_id in allowed:
                 context_locations.update(rules.ancestors(state.location_id))
-            character.update(await self.approved_persona(session, world, state.character_id))
+            character.update(
+                await self.approved_persona(session, world, state.character_id, text_limit=8192)
+            )
             characters.append(character)
         if len(permitted_locations) > MAX_LOCATIONS:
             raise DirectorError("director_world_capacity")
@@ -516,16 +521,19 @@ class SqlAlchemyDirectorStore(SharedDirectorMixin):
             else []
         )
         snapshot["common_world_background"] = select_common_background(
-            await read_director_background(session, world),
+            await read_director_background(session, world, texts=(planning_text,)),
             (planning_text,),
             generation_kind="quiet",
             include_references=True,
         )
-        if len(json.dumps(snapshot, ensure_ascii=False).encode("utf-8")) > 64 * 1024:
-            raise DirectorError("director_world_capacity")
-        return snapshot
+        try:
+            return planning_references(snapshot)
+        except ValueError:
+            raise DirectorError("director_world_capacity") from None
 
-    async def approved_persona(self, session, world, character_id):
+    async def approved_persona(
+        self, session, world, character_id, *, text_limit: int | None = None
+    ):
         """Reuse the approved field projection for both placed routines and remote contacts."""
         roots = (
             await session.scalars(
@@ -545,25 +553,10 @@ class SqlAlchemyDirectorStore(SharedDirectorMixin):
             raise DirectorError("director_character_mapping_invalid")
         if roots:
             imported = WorldContentImportRecord
-            current = roots[0]
-            for _ in range(128):
-                kind = await session.scalar(
-                    select(imported.kind).where(
-                        imported.world_id == world.value, imported.import_id == current
-                    )
-                )
-                if kind != "character":
-                    raise DirectorError("director_character_mapping_invalid")
-                replacement = await session.scalar(
-                    select(imported.import_id).where(
-                        imported.world_id == world.value, imported.replaces_import_id == current
-                    )
-                )
-                if replacement is None:
-                    break
-                current = replacement
-            else:
-                raise DirectorError("director_world_capacity")
+            try:
+                current = await latest_character_import(session, world.value, roots[0])
+            except ValueError:
+                raise DirectorError("director_character_mapping_invalid") from None
             # The accepted snapshot is an array of serialized canonical envelopes.
             # SQL extracts only the character's approved basic persona fields;
             # embedded lore, notes, extensions and instructions are never loaded.
@@ -578,9 +571,31 @@ class SqlAlchemyDirectorStore(SharedDirectorMixin):
                 case((func.length(cast(value, LargeBinary)) <= 65536, value), else_=None)
                 for value in values
             ]
+            if text_limit is not None:
+                if not 1 <= text_limit <= 8192:
+                    raise ValueError("persona_text_limit_invalid")
+                # SQL only reads the approved fields; never load the full card or
+                # change the default Director/proactive projection policy.
+                projection = [
+                    case(
+                        (
+                            func.json_type(safe_part, f"$.data.{field}") == "text",
+                            # SQLite substr(empty BLOB) is NULL; an authored empty
+                            # string remains a valid field, not a broken mapping.
+                            func.coalesce(
+                                func.substr(cast(value, LargeBinary), 1, text_limit), b""
+                            ),
+                        ),
+                        else_=None,
+                    )
+                    for field, value in zip(fields, values, strict=True)
+                ]
+            lengths = (
+                [func.length(cast(value, LargeBinary)) for value in values] if text_limit else []
+            )
             cards = (
                 await session.execute(
-                    select(*projection)
+                    select(*projection, *lengths)
                     .select_from(imported)
                     .join(parts, true())
                     .where(
@@ -594,11 +609,28 @@ class SqlAlchemyDirectorStore(SharedDirectorMixin):
             ).all()
             if len(cards) != 1:
                 raise DirectorError("director_character_mapping_invalid")
-            if any(not isinstance(value, str) for value in cards[0]):
+            expected_type = bytes if text_limit is not None else str
+            if any(not isinstance(value, expected_type) for value in cards[0][:3]):
                 raise DirectorError("director_world_capacity")
+            texts = cards[0][:3]
+            if text_limit is not None:
+                try:
+                    # Retain NUL and escaped characters; only an incomplete final
+                    # UTF-8 code point may be omitted from this byte prefix.
+                    texts = tuple(
+                        codecs.getincrementaldecoder("utf-8")().decode(value, final=False)
+                        for value in texts
+                    )
+                except UnicodeError:
+                    raise DirectorError("director_character_mapping_invalid") from None
             return {
-                "persona": dict(zip(fields, cards[0], strict=True)),
+                "persona": dict(zip(fields, texts, strict=True)),
                 "accepted_import_id": str(current),
+                **(
+                    {"persona_truncated": any(size > text_limit for size in cards[0][3:])}
+                    if text_limit is not None
+                    else {}
+                ),
             }
         return {}
 

@@ -26,7 +26,7 @@ npm run check:contracts
 
 ## 类型与业务契约
 
-Python 类型门禁采用锁定的 Pyright 1.1.414（MIT），复用现有 Node 工具链，仅作为开发依赖，不进入 Core 或安装载荷。Ruff 不检查跨函数类型，因此不能替代它；配置依据[官方说明](https://github.com/microsoft/pyright/blob/main/docs/configuration.md)。当前 standard 门禁由根 pyrightconfig.json 定义，覆盖整个 HTTP 目录，以及命令、LLM 执行／记账、存档协调、主动联系持久化、生产组装及生成器，共61个文件；尚非全仓类型覆盖。HTTP 目录新增文件自动进入门禁，没有错误忽略基线。CI 的 web job 执行此门禁，Python 矩阵检查生成契约是否过期。
+Python 类型门禁采用锁定的 Pyright 1.1.414（MIT），复用现有 Node 工具链，仅作为开发依赖，不进入 Core 或安装载荷。Ruff 不检查跨函数类型，因此不能替代它；配置依据[官方说明](https://github.com/microsoft/pyright/blob/main/docs/configuration.md)。当前 standard 门禁由根 pyrightconfig.json 定义，覆盖整个 HTTP 目录，以及命令、LLM 执行／记账、存档协调、主动联系持久化、输入预算、分页编辑、角色版本解析、后台背景与未读、生产组装及生成器，共68个文件；尚非全仓类型覆盖。HTTP 目录新增文件自动进入门禁，没有错误忽略基线。CI 的 web job 执行此门禁，Python 矩阵检查生成契约是否过期。
 
 业务响应 DTO 按模块维护在 services/core/src/livingworld/adapters/http/wire_contracts，contracts.py 保留兼容导出；写请求直接读取 HTTP handler 实际使用的 Pydantic 模型，复用领域枚举与运行状态类型。`npm run generate:contracts` 只读取 Python AST，生成 packages/api-client/src/contracts.generated.ts 的类型和校验；不导入应用、不连接数据库。修改契约后重新生成，禁止手改生成文件。未知注解使生成失败，不静默退成 any。
 

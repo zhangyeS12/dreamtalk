@@ -5,10 +5,12 @@ import json
 from datetime import UTC, datetime
 from uuid import UUID, uuid4, uuid5
 
-from sqlalchemy import func, select, update
+from sqlalchemy import func, select, tuple_, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from livingworld.application.director import DirectorError
 from livingworld.application.errors import EntityNotFoundError
+from livingworld.application.input_budget import encode_input, planning_references
 from livingworld.application.lore_activation import select_common_background
 from livingworld.application.proactive_contact import ProactiveContactError
 from livingworld.domain.identifiers import PlayerId, WorldId
@@ -61,7 +63,7 @@ MINUTE = 60_000_000
 
 
 def _json(data):
-    value = json.dumps(data, ensure_ascii=False, sort_keys=True)
+    value = encode_input(data)
     if len(value.encode("utf-8")) > 65536:
         raise ProactiveContactError("proactive_input_capacity")
     return value
@@ -70,6 +72,7 @@ def _json(data):
 class SqlAlchemyProactiveContactStore:
     def __init__(self, sessions: async_sessionmaker[AsyncSession], director, offline):
         self.sessions, self.director, self.offline = sessions, director, offline
+        self._after_config = None
 
     async def _owner(self, session: AsyncSession, world: WorldId, player: PlayerId | None) -> Clock:
         binding = await session.get(Binding, world.value)
@@ -145,6 +148,27 @@ class SqlAlchemyProactiveContactStore:
                 update(Settings)
                 .where(Settings.state == "writing")
                 .values(state="attention", error="proactive_interrupted")
+            )
+            # Old input failures could stop consent before any claim existed.
+            # A current failed/interrupted claim must never be unlocked here.
+            paid_receipt = (
+                select(Episode.episode_id)
+                .where(
+                    Episode.world_id == Settings.world_id,
+                    Episode.player_id == Settings.player_id,
+                    Episode.generation == Settings.revision,
+                    Episode.state.in_(("writing", "failed", "interrupted")),
+                )
+                .exists()
+            )
+            await session.execute(
+                update(Settings)
+                .where(
+                    Settings.state == "attention",
+                    Settings.error == "proactive_input_unavailable",
+                    ~paid_receipt,
+                )
+                .values(state="idle")
             )
             await session.commit()
 
@@ -257,7 +281,9 @@ class SqlAlchemyProactiveContactStore:
             if len(contact) != 1:
                 return None
             convo, member = contact[0]
-            persona = await self.director.approved_persona(session, world, character)
+            persona = await self.director.approved_persona(
+                session, world, character, text_limit=8192
+            )
             if "accepted_import_id" not in persona:
                 return None
             named = await session.get(CharacterRecord, (cfg.world_id, character))
@@ -276,7 +302,9 @@ class SqlAlchemyProactiveContactStore:
         if not location:
             return None
         background = select_common_background(
-            await read_director_background(session, world),
+            await read_director_background(
+                session, world, texts=("\n".join(c["name"] for c in characters), location.name)
+            ),
             ("\n".join(c["name"] for c in characters), location.name),
             generation_kind="quiet",
             include_references=True,
@@ -294,15 +322,31 @@ class SqlAlchemyProactiveContactStore:
     async def claim_ready(self):
         async with self.sessions() as session:
             await _write(session)
-            configs = (
-                await session.scalars(
-                    select(Settings)
-                    .where(Settings.enabled.is_(True), Settings.state == "idle")
-                    .order_by(Settings.world_id)
-                    .limit(64)
+            query = (
+                select(Settings)
+                .where(Settings.enabled.is_(True), Settings.state == "idle")
+                .order_by(Settings.world_id, Settings.player_id)
+            )
+            key = tuple_(Settings.world_id, Settings.player_id)
+            configs = list(
+                (
+                    await session.scalars(
+                        (
+                            query.where(key > self._after_config) if self._after_config else query
+                        ).limit(64)
+                    )
+                ).all()
+            )
+            if self._after_config and len(configs) < 64:
+                configs.extend(
+                    (
+                        await session.scalars(
+                            query.where(key <= self._after_config).limit(64 - len(configs))
+                        )
+                    ).all()
                 )
-            ).all()
             for cfg in configs:
+                self._after_config = (cfg.world_id, cfg.player_id)
                 clock = await session.get(Clock, cfg.world_id)
                 if not clock or clock.state != "running":
                     continue
@@ -349,6 +393,7 @@ class SqlAlchemyProactiveContactStore:
                         hashlib.sha256(f"{plan_id}:{pair[1]}".encode()).digest(),
                     )
                 )
+                input_failed = False
                 for kind, identity in choices:
                     used = await session.scalar(
                         select(Episode.episode_id)
@@ -366,14 +411,16 @@ class SqlAlchemyProactiveContactStore:
                         data = await self._source(session, cfg, kind, identity)
                         if data is None:
                             continue
+                        data["reference_budget"] = 1
+                        data = planning_references(data, limit=65536 - 256)
                         serialized = _json(data)
                         if len(data["characters"]) == 2:
                             # Reserve the exact receipt shape before the paid call; only IDs
                             # are added on delivery, never either private conversation's text.
                             _json({**data, "private_delivery_turn_ids": ["0" * 32] * 2})
-                    except Exception:
-                        cfg.state, cfg.error = "attention", "proactive_input_unavailable"
-                        break
+                    except (DirectorError, ProactiveContactError, ValueError):
+                        input_failed = True
+                        continue
                     episode = uuid4()
                     session.add(
                         Episode(
@@ -397,6 +444,9 @@ class SqlAlchemyProactiveContactStore:
                     )
                     await session.commit()
                     return {"episode_id": episode, "world_id": cfg.world_id, "input": data}
+                # A local preparation problem never replays or masks a paid task.
+                # Only idle configurations reach this branch; later scans can heal it.
+                cfg.error = "proactive_input_unavailable" if input_failed else None
             await session.commit()
             return None
 
@@ -422,9 +472,12 @@ class SqlAlchemyProactiveContactStore:
             ):
                 raise ProactiveContactError("proactive_context_changed")
             current = await self._source(session, cfg, episode.source_kind, episode.source_id)
-            if current is None or _json(current) != episode.input_json:
-                raise ProactiveContactError("proactive_context_changed")
             data = json.loads(episode.input_json)
+            if current is not None and data.get("reference_budget") == 1:
+                current["reference_budget"] = 1
+                current = planning_references(current, limit=65536 - 256)
+            if current is None or current != data:
+                raise ProactiveContactError("proactive_context_changed")
             characters = data["characters"]
             now = datetime.now(UTC)
             if len(characters) == 1:

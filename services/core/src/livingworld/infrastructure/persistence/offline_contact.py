@@ -11,6 +11,17 @@ from livingworld.application.director import DirectorError
 from livingworld.application.errors import EntityNotFoundError
 from livingworld.application.lore_activation import select_common_background
 from livingworld.application.offline_contact import OfflineContactError
+from livingworld.application.offline_contact_inputs import (
+    MAX_CONTACT_SCAN,
+    MAX_CONTACTS,
+    MAX_INPUT_BYTES,
+    PERSONA_READ_BYTES,
+    PREPARATION_ERRORS,
+    ContactInput,
+    capture_cursor,
+    encode_input,
+    pack_snapshot,
+)
 from livingworld.domain.identifiers import PlayerId, WorldId
 from livingworld.infrastructure.persistence.director_background import (
     background_is_current,
@@ -69,9 +80,9 @@ async def _write(session):
 
 
 def _json(value):
-    text = json.dumps(value, ensure_ascii=False)
-    if len(text.encode("utf-8")) > 65536:
-        raise OfflineContactError("offline_input_capacity")
+    text = encode_input(value)
+    if len(text.encode("utf-8")) > MAX_INPUT_BYTES:
+        raise OfflineContactError("offline_snapshot_capacity")
     return text
 
 
@@ -113,6 +124,11 @@ class SqlAlchemyOfflineContactStore:
                 "hours": cfg.hours if owned else 6,
                 "state": cfg.state if owned else "off",
                 "error": cfg.error if owned else None,
+                "input_preparation": (
+                    json.loads(cfg.input_json).get("input_preparation")
+                    if owned and cfg.input_json
+                    else None
+                ),
                 "last_online_at": cfg.last_online_at.isoformat()
                 if owned and cfg.last_online_at
                 else None,
@@ -153,12 +169,14 @@ class SqlAlchemyOfflineContactStore:
                 session.add(cfg)
             if not owned:
                 cfg.consented_at = now
+                cfg.input_json = None
             cfg.world_id, cfg.player_id = world.value, player.value
             cfg.enabled, cfg.hours, cfg.revision = enabled, hours, cfg.revision + 1
             cfg.state, cfg.error, cfg.episode_id = ("idle" if enabled else "off"), None, None
             # Enabling/change establishes a new baseline; it cannot backfill old downtime.
             cfg.last_online_at = now
             cfg.input_json = await self._capture(session, cfg, now) if enabled else None
+            await self._preparation_status(session, cfg)
             await session.commit()
 
     async def _epoch(self, session, world, player):
@@ -179,10 +197,11 @@ class SqlAlchemyOfflineContactStore:
         )
         return str(value) if value else "initial"
 
-    async def _capture(self, session, cfg, now):
+    async def _capture(self, session, cfg, now, *, advance=False):
         from livingworld.infrastructure.persistence.authored_lifecycle import removed_character_ids
 
         removed = await removed_character_ids(session, cfg.world_id)
+        after = capture_cursor(cfg.input_json, advance=advance)
         binding = await session.get(Binding, cfg.world_id)
         presence = await session.get(Presence, (cfg.world_id, cfg.player_id))
         clock = await session.get(Clock, cfg.world_id)
@@ -196,56 +215,116 @@ class SqlAlchemyOfflineContactStore:
             or not clock
             or clock.state != "running"
         ):
-            return _json({"eligible": False})
+            return _json(
+                {
+                    "eligible": False,
+                    "input_selection": {
+                        "after": str(after) if after else None,
+                        "next_after": str(after) if after else None,
+                    },
+                }
+            )
         world = WorldId(cfg.world_id)
         logical = clock.logical_time.microseconds
         elapsed = max(0, int((now - clock.observed_wall_time_utc).total_seconds() * 1000000))
         logical += int(elapsed * clock.time_scale)
         # Remote contact does not require a physical placement or a routine plan.
         # Bind the finite contact set to this Player before reading approved personas.
-        contacts = (
-            await session.execute(
-                select(Conversation, Participant, CharacterRecord.name)
-                .join(
-                    Participant,
-                    (Participant.world_id == Conversation.world_id)
-                    & (Participant.conversation_id == Conversation.conversation_id),
-                )
-                .join(
-                    CharacterRecord,
-                    (CharacterRecord.world_id == Participant.world_id)
-                    & (CharacterRecord.character_id == Participant.character_id),
-                )
-                .where(
-                    Conversation.world_id == cfg.world_id,
-                    Conversation.player_id == cfg.player_id,
-                    Conversation.kind == "direct",
-                    Participant.character_id.not_in(removed),
-                )
-                .order_by(Conversation.conversation_id)
-                .limit(17)
+        query = (
+            select(Conversation, Participant, CharacterRecord.name)
+            .join(
+                Participant,
+                (Participant.world_id == Conversation.world_id)
+                & (Participant.conversation_id == Conversation.conversation_id),
             )
-        ).all()
-        if len(contacts) > 16:
-            raise OfflineContactError("offline_input_capacity")
-        by_character = {str(part.character_id): (convo, part) for convo, part, _ in contacts}
-        characters = []
-        try:
-            for convo, part, name in contacts:
-                persona = await self.director.approved_persona(session, world, part.character_id)
-                if "accepted_import_id" not in persona:
+            .join(
+                CharacterRecord,
+                (CharacterRecord.world_id == Participant.world_id)
+                & (CharacterRecord.character_id == Participant.character_id),
+            )
+            .where(
+                Conversation.world_id == cfg.world_id,
+                Conversation.player_id == cfg.player_id,
+                Conversation.kind == "direct",
+                Participant.character_id.not_in(removed),
+            )
+            .order_by(Conversation.conversation_id)
+        )
+        # A keyset cursor advances once per recovery, never on every heartbeat.
+        # Read one bounded local cohort, wrapping at the end of the directory.
+        contacts = list(
+            (
+                await session.execute(
+                    (query.where(Conversation.conversation_id > after) if after else query).limit(
+                        MAX_CONTACT_SCAN + 1
+                    )
+                )
+            ).all()
+        )
+        if after and len(contacts) <= MAX_CONTACT_SCAN:
+            contacts.extend(
+                (
+                    await session.execute(
+                        query.where(Conversation.conversation_id <= after).limit(
+                            MAX_CONTACT_SCAN + 1 - len(contacts)
+                        )
+                    )
+                ).all()
+            )
+        characters: list[ContactInput] = []
+        seen = set()
+        scanned, excluded = 0, 0
+        next_after = after
+        for convo, part, name in contacts[:MAX_CONTACT_SCAN]:
+            scanned += 1
+            next_after = convo.conversation_id
+            if part.character_id in seen:
+                continue
+            seen.add(part.character_id)
+            try:
+                persona = await self.director.approved_persona(
+                    session, world, part.character_id, text_limit=PERSONA_READ_BYTES
+                )
+                if not isinstance(persona, dict) or not isinstance(
+                    persona.get("accepted_import_id"), str
+                ):
                     raise OfflineContactError("offline_character_mapping_invalid")
+                accepted = UUID(persona["accepted_import_id"])
+                if not isinstance(persona.get("persona"), dict):
+                    raise OfflineContactError("offline_character_mapping_invalid")
+                public_persona = {
+                    field: persona["persona"].get(field)
+                    for field in ("personality", "description", "background")
+                }
+                if any(not isinstance(value, str) for value in public_persona.values()):
+                    raise OfflineContactError("offline_character_mapping_invalid")
+                name.encode("utf-8")
+                for value in public_persona.values():
+                    value.encode("utf-8")
                 characters.append(
                     {
                         "character_id": str(part.character_id),
                         "name": name,
                         "conversation_id": str(convo.conversation_id),
-                        **persona,
+                        "accepted_import_id": str(accepted),
+                        "persona": public_persona,
+                        "persona_truncated": persona.get("persona_truncated") is True,
                     }
                 )
+            except (DirectorError, OfflineContactError, ValueError, TypeError, KeyError):
+                # Only this candidate is excluded. Database failures still abort
+                # the capture and cannot authorize a model invocation.
+                excluded += 1
+                continue
+            if len(characters) == MAX_CONTACTS:
+                break
+        background_omitted = False
+        try:
             background = (
                 select_common_background(
-                    await read_director_background(session, world),
+                    await read_director_background(
+                        session, world, texts=("\n".join(c["name"] for c in characters),)
+                    ),
                     ("\n".join(c["name"] for c in characters),),
                     generation_kind="quiet",
                     include_references=True,
@@ -253,28 +332,25 @@ class SqlAlchemyOfflineContactStore:
                 if characters
                 else []
             )
-        except DirectorError as error:
-            labels = {
-                "director_world_capacity": "offline_input_capacity",
-                "director_character_mapping_invalid": "offline_character_mapping_invalid",
-                "director_background_capacity": "offline_background_capacity",
-                "director_background_invalid": "offline_background_invalid",
-            }
-            raise OfflineContactError(labels.get(str(error), "offline_input_unavailable")) from None
+        except DirectorError:
+            # An unavailable optional public context cannot stop a valid greeting.
+            # Do not bypass exposure checks or substitute private lore.
+            background, background_omitted = [], True
         snapshot = {
-            "characters": characters,
-            "eligible": bool(characters),
-            "common_world_background": background,
+            "player_epoch": await self._epoch(session, cfg.world_id, cfg.player_id),
+            "utc_offset_minutes": int(now.astimezone().utcoffset().total_seconds() // 60),
+            "input_selection": {
+                "after": str(after) if after else None,
+                "next_after": str(next_after) if next_after else None,
+            },
         }
-        snapshot["player_epoch"] = await self._epoch(session, cfg.world_id, cfg.player_id)
-        snapshot["utc_offset_minutes"] = int(now.astimezone().utcoffset().total_seconds() // 60)
         # This is a past plan/intent, not evidence that future activities occurred.
         candidates = (
             await session.scalars(
                 select(Candidate)
                 .where(
                     Candidate.world_id == cfg.world_id,
-                    Candidate.character_id.in_([part.character_id for _, part, _ in contacts]),
+                    Candidate.character_id.in_([UUID(c["character_id"]) for c in characters]),
                     Candidate.state.in_(["pending", "active"]),
                     Candidate.end_at > logical,
                 )
@@ -282,7 +358,7 @@ class SqlAlchemyOfflineContactStore:
                 .limit(64)
             )
         ).all()
-        snapshot["existing_intentions"] = [
+        intentions = [
             {
                 "character_id": str(c.character_id),
                 "activity": c.activity,
@@ -290,9 +366,53 @@ class SqlAlchemyOfflineContactStore:
                 "ends_after_minutes": max(0, (c.end_at - logical) // 60000000),
             }
             for c in candidates
-            if str(c.character_id) in by_character
         ]
-        return _json(snapshot)
+        preparation = {
+            "selected": len(characters),
+            "excluded": excluded,
+            "clipped": 0,
+            "batched": len(contacts) > scanned,
+            "background_omitted": background_omitted,
+            "context_limited": False,
+        }
+        try:
+            return pack_snapshot(snapshot, characters, background, intentions, preparation)
+        except ValueError:
+            raise OfflineContactError("offline_snapshot_capacity") from None
+
+    async def _preparation_status(self, session, cfg):
+        if not cfg.enabled or not cfg.input_json or cfg.state in {"waiting", "planning", "writing"}:
+            return
+        data = json.loads(cfg.input_json)
+        preparation = data.get("input_preparation", {})
+        prepared = data.get("eligible") or (
+            preparation.get("selected") == 0 and preparation.get("excluded") == 0
+        )
+        if cfg.state == "attention" and cfg.error in PREPARATION_ERRORS and prepared:
+            episode = await session.get(Episode, cfg.episode_id) if cfg.episode_id else None
+            # Recover the actual task receipt if an old preparation error hid it.
+            if (
+                episode
+                and episode.world_id == cfg.world_id
+                and episode.player_id == cfg.player_id
+                and episode.generation == cfg.revision
+            ):
+                state = {
+                    "queued": "waiting",
+                    "planning": "planning",
+                    "writing": "writing",
+                    "failed": "attention",
+                    "interrupted": "attention",
+                }.get(episode.state, episode.state)
+                cfg.state, cfg.error = state, episode.error
+            else:
+                cfg.state, cfg.error = "idle", None
+        if (
+            not data.get("eligible")
+            and preparation.get("excluded", 0)
+            and (cfg.error is None or cfg.error in PREPARATION_ERRORS)
+        ):
+            cfg.state, cfg.error = "attention", "offline_candidates_unavailable"
 
     async def _unanswered(self, session, cfg, exclude=None):
         from livingworld.infrastructure.persistence.contact_gate import contact_blocked
@@ -324,7 +444,8 @@ class SqlAlchemyOfflineContactStore:
                 await session.commit()
                 return
             previous = cfg.last_online_at
-            if recover and previous and now - previous >= timedelta(hours=cfg.hours):
+            recovering = bool(recover and previous and now - previous >= timedelta(hours=cfg.hours))
+            if recovering:
                 frozen = json.loads(cfg.input_json) if cfg.input_json else {}
                 binding = await session.get(Binding, cfg.world_id)
                 epoch = frozen.get("player_epoch", "initial")
@@ -381,14 +502,19 @@ class SqlAlchemyOfflineContactStore:
                     cfg.state, cfg.error = "skipped", skip_reason
             cfg.last_online_at = now
             try:
-                cfg.input_json = await self._capture(session, cfg, now)
+                cfg.input_json = await self._capture(session, cfg, now, advance=recovering)
+                await self._preparation_status(session, cfg)
             except OfflineContactError as error:
                 cfg.input_json = None
-                if cfg.state not in {"waiting", "planning", "writing"}:
+                if cfg.state not in {"waiting", "planning", "writing"} and (
+                    cfg.error is None or cfg.error in PREPARATION_ERRORS
+                ):
                     cfg.state, cfg.error = "attention", str(error)
             except Exception:
                 cfg.input_json = None
-                if cfg.state not in {"waiting", "planning", "writing"}:
+                if cfg.state not in {"waiting", "planning", "writing"} and (
+                    cfg.error is None or cfg.error in PREPARATION_ERRORS
+                ):
                     cfg.state, cfg.error = "attention", "offline_input_unavailable"
             await session.commit()
 

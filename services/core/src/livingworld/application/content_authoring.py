@@ -63,7 +63,7 @@ class EditorDraft(BaseModel):
     creator_notes: str = Field(default="", max_length=16000)
     tags: list[str] = Field(default_factory=list, max_length=64)
     example_dialogue: list[str] = Field(default_factory=list, max_length=32)
-    entries: list[EditorEntry] = Field(default_factory=list, max_length=128)
+    entries: list[EditorEntry] = Field(default_factory=list, max_length=10000)
 
     @model_validator(mode="after")
     def valid_draft(self):
@@ -73,7 +73,7 @@ class EditorDraft(BaseModel):
             raise ValueError("editor_draft_invalid")
         if self.kind == "character" and self.entries:
             raise ValueError("character_embedded_entries_are_preserved")
-        if len(self.model_dump_json().encode("utf-8")) > 256 * 1024:
+        if len(self.model_dump_json().encode("utf-8")) > 4 * 1024 * 1024:
             raise ValueError("editor_draft_too_large")
         return self
 

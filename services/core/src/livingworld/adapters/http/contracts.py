@@ -316,6 +316,9 @@ from livingworld.adapters.http.wire_contracts.operations import (
     CaptionMediaResult as CaptionMediaResult,
 )
 from livingworld.adapters.http.wire_contracts.operations import (
+    ContentEditorPage as ContentEditorPage,
+)
+from livingworld.adapters.http.wire_contracts.operations import (
     ContentEditorResult as ContentEditorResult,
 )
 from livingworld.adapters.http.wire_contracts.operations import (

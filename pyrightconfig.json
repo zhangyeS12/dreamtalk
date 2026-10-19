@@ -1,5 +1,11 @@
 {
   "include": [
+    "services/core/src/livingworld/application/offline_contact_inputs.py",
+    "services/core/src/livingworld/application/input_budget.py",
+    "services/core/src/livingworld/application/content_editor_pages.py",
+    "services/core/src/livingworld/infrastructure/persistence/character_lineage.py",
+    "services/core/src/livingworld/infrastructure/persistence/chat_unread.py",
+    "services/core/src/livingworld/infrastructure/persistence/director_background.py",
     "services/core/src/livingworld/application/command_handler.py",
     "services/core/src/livingworld/application/command_mutation.py",
     "services/core/src/livingworld/application/command_support.py",

@@ -32,9 +32,11 @@ export type ChatUnreadStatus = {
   player_id: string;
   items: Array<ChatUnreadStatusItemsItem>;
   waiting_conversation_id: (string | null);
+  has_unread?: boolean;
+  next_after?: (string | null);
 };
 export function isChatUnreadStatus(value: unknown): value is ChatUnreadStatus {
-  return (isObject(value)) && (typeof value.player_id === "string") && ((Array.isArray(value.items) && value.items.every(item => isChatUnreadStatusItemsItem(item)))) && ((typeof value.waiting_conversation_id === "string" || value.waiting_conversation_id === null));
+  return (isObject(value)) && (typeof value.player_id === "string") && ((Array.isArray(value.items) && value.items.every(item => isChatUnreadStatusItemsItem(item)))) && ((typeof value.waiting_conversation_id === "string" || value.waiting_conversation_id === null)) && ((!("has_unread" in value) || (typeof value.has_unread === "boolean"))) && ((!("next_after" in value) || ((typeof value.next_after === "string" || value.next_after === null))));
 }
 export type OfflineContactStatusUnreadItem = {
   message_id: string;
@@ -42,6 +44,17 @@ export type OfflineContactStatusUnreadItem = {
 };
 export function isOfflineContactStatusUnreadItem(value: unknown): value is OfflineContactStatusUnreadItem {
   return (isObject(value)) && (typeof value.message_id === "string") && (typeof value.conversation_id === "string");
+}
+export type OfflineInputPreparation = {
+  selected: number;
+  excluded: number;
+  clipped: number;
+  batched: boolean;
+  background_omitted: boolean;
+  context_limited: boolean;
+};
+export function isOfflineInputPreparation(value: unknown): value is OfflineInputPreparation {
+  return (isObject(value)) && (typeof value.selected === "number") && (typeof value.excluded === "number") && (typeof value.clipped === "number") && (typeof value.batched === "boolean") && (typeof value.background_omitted === "boolean") && (typeof value.context_limited === "boolean");
 }
 export type OfflineContactStatus = {
   enabled: boolean;
@@ -53,9 +66,10 @@ export type OfflineContactStatus = {
   last_online_at: (string | null);
   model_available: boolean;
   unread: Array<OfflineContactStatusUnreadItem>;
+  input_preparation?: (OfflineInputPreparation | null);
 };
 export function isOfflineContactStatus(value: unknown): value is OfflineContactStatus {
-  return (isObject(value)) && (typeof value.enabled === "boolean") && (typeof value.consented === "boolean") && (isWireNumber(value.revision)) && (isWireNumber(value.hours)) && ((value.state === "off" || value.state === "idle" || value.state === "waiting" || value.state === "planning" || value.state === "writing" || value.state === "delivered" || value.state === "skipped" || value.state === "attention")) && ((typeof value.error === "string" || value.error === null)) && ((typeof value.last_online_at === "string" || value.last_online_at === null)) && (typeof value.model_available === "boolean") && ((Array.isArray(value.unread) && value.unread.every(item => isOfflineContactStatusUnreadItem(item))));
+  return (isObject(value)) && (typeof value.enabled === "boolean") && (typeof value.consented === "boolean") && (isWireNumber(value.revision)) && (isWireNumber(value.hours)) && ((value.state === "off" || value.state === "idle" || value.state === "waiting" || value.state === "planning" || value.state === "writing" || value.state === "delivered" || value.state === "skipped" || value.state === "attention")) && ((typeof value.error === "string" || value.error === null)) && ((typeof value.last_online_at === "string" || value.last_online_at === null)) && (typeof value.model_available === "boolean") && ((Array.isArray(value.unread) && value.unread.every(item => isOfflineContactStatusUnreadItem(item)))) && ((!("input_preparation" in value) || ((isOfflineInputPreparation(value.input_preparation) || value.input_preparation === null))));
 }
 export type DirectorStatus = {
   batch_size?: WireNumber;
@@ -1097,6 +1111,16 @@ export type ContentEditorResult = {
 export function isContentEditorResult(value: unknown): value is ContentEditorResult {
   return (isObject(value)) && (isContentEditorDraft(value.draft)) && ((isContentResearch(value.research) || value.research === null));
 }
+export type ContentEditorPage = {
+  draft: ContentEditorDraft;
+  research: (ContentResearch | null);
+  total_entries: number;
+  offset: number;
+  next_offset: (number | null);
+};
+export function isContentEditorPage(value: unknown): value is ContentEditorPage {
+  return (isObject(value)) && (isContentEditorDraft(value.draft)) && ((isContentResearch(value.research) || value.research === null)) && (typeof value.total_entries === "number") && (typeof value.offset === "number") && ((typeof value.next_offset === "number" || value.next_offset === null));
+}
 export type DiscardWorldContentResult = {
   discarded: boolean;
 };
@@ -1480,6 +1504,51 @@ export type HttpContentAuthoringResearchRequest = {
 };
 export function isHttpContentAuthoringResearchRequest(value: unknown): value is HttpContentAuthoringResearchRequest {
   return (isObject(value)) && (typeof value.kind === "string") && (typeof value.query === "string") && ((!("token_ceiling" in value) || ((typeof value.token_ceiling === "number" || value.token_ceiling === null))));
+}
+export type HttpContentEditorPagesHeaderPatch = {
+  name?: (string | null);
+  description?: (string | null);
+  personality?: (string | null);
+  background?: (string | null);
+  scenario?: (string | null);
+  speech_guidance?: (string | null);
+  first_message?: (string | null);
+  creator_notes?: (string | null);
+  tags?: (Array<string> | null);
+  example_dialogue?: (Array<string> | null);
+};
+export function isHttpContentEditorPagesHeaderPatch(value: unknown): value is HttpContentEditorPagesHeaderPatch {
+  return (isObject(value)) && ((!("name" in value) || ((typeof value.name === "string" || value.name === null)))) && ((!("description" in value) || ((typeof value.description === "string" || value.description === null)))) && ((!("personality" in value) || ((typeof value.personality === "string" || value.personality === null)))) && ((!("background" in value) || ((typeof value.background === "string" || value.background === null)))) && ((!("scenario" in value) || ((typeof value.scenario === "string" || value.scenario === null)))) && ((!("speech_guidance" in value) || ((typeof value.speech_guidance === "string" || value.speech_guidance === null)))) && ((!("first_message" in value) || ((typeof value.first_message === "string" || value.first_message === null)))) && ((!("creator_notes" in value) || ((typeof value.creator_notes === "string" || value.creator_notes === null)))) && ((!("tags" in value) || (((Array.isArray(value.tags) && value.tags.every(item => typeof item === "string")) || value.tags === null)))) && ((!("example_dialogue" in value) || (((Array.isArray(value.example_dialogue) && value.example_dialogue.every(item => typeof item === "string")) || value.example_dialogue === null))));
+}
+export type HttpContentEditorPagesEntryFields = {
+  title?: (string | null);
+  content?: (string | null);
+  keywords?: (Array<string> | null);
+  secondary_keywords?: (Array<string> | null);
+  enabled?: (boolean | null);
+  constant?: (boolean | null);
+  selective_logic?: (string | null);
+  priority?: (number | null);
+  order?: (number | null);
+};
+export function isHttpContentEditorPagesEntryFields(value: unknown): value is HttpContentEditorPagesEntryFields {
+  return (isObject(value)) && ((!("title" in value) || ((typeof value.title === "string" || value.title === null)))) && ((!("content" in value) || ((typeof value.content === "string" || value.content === null)))) && ((!("keywords" in value) || (((Array.isArray(value.keywords) && value.keywords.every(item => typeof item === "string")) || value.keywords === null)))) && ((!("secondary_keywords" in value) || (((Array.isArray(value.secondary_keywords) && value.secondary_keywords.every(item => typeof item === "string")) || value.secondary_keywords === null)))) && ((!("enabled" in value) || ((typeof value.enabled === "boolean" || value.enabled === null)))) && ((!("constant" in value) || ((typeof value.constant === "boolean" || value.constant === null)))) && ((!("selective_logic" in value) || ((typeof value.selective_logic === "string" || value.selective_logic === null)))) && ((!("priority" in value) || ((typeof value.priority === "number" || value.priority === null)))) && ((!("order" in value) || ((typeof value.order === "number" || value.order === null))));
+}
+export type HttpContentEditorPagesEntryPatch = {
+  source_entry_id: string;
+  fields: HttpContentEditorPagesEntryFields;
+};
+export function isHttpContentEditorPagesEntryPatch(value: unknown): value is HttpContentEditorPagesEntryPatch {
+  return (isObject(value)) && (typeof value.source_entry_id === "string") && (isHttpContentEditorPagesEntryFields(value.fields));
+}
+export type HttpContentEditorPagesEditorPatchRequest = {
+  fields: HttpContentEditorPagesHeaderPatch;
+  updates?: Array<HttpContentEditorPagesEntryPatch>;
+  removed?: Array<string>;
+  added?: Array<ContentEditorEntry>;
+};
+export function isHttpContentEditorPagesEditorPatchRequest(value: unknown): value is HttpContentEditorPagesEditorPatchRequest {
+  return (isObject(value)) && (isHttpContentEditorPagesHeaderPatch(value.fields)) && ((!("updates" in value) || ((Array.isArray(value.updates) && value.updates.every(item => isHttpContentEditorPagesEntryPatch(item)))))) && ((!("removed" in value) || ((Array.isArray(value.removed) && value.removed.every(item => typeof item === "string"))))) && ((!("added" in value) || ((Array.isArray(value.added) && value.added.every(item => isContentEditorEntry(item))))));
 }
 export type HttpConversationMemoryGenerateMemoryRequest = {
   base_revision: number;

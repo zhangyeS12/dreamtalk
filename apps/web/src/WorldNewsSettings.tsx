@@ -7,7 +7,7 @@ import { PublicBackgroundReadiness } from "./PublicBackgroundReadiness";
 const errors: Record<string, string> = {
   news_background_required: "尚无可用于生成动态的公共背景，本次未调用模型。请返回书架，在“管理 / 导入世界书”中确认世界书并逐条设为“公共背景”。若关键词未命中，可编辑一个适合公开的条目，将“提供条件”改为“常驻背景”，预览确认后重新设为公共背景，再生成。",
   news_background_invalid: "公共背景格式异常，请检查世界书。",
-  news_background_capacity: "公共背景超过资料容量，请精简公开范围。",
+  news_background_capacity: "本次必要上下文未能装入安全容量，原资料保持完整；核对后可显式生成新一批。",
   news_background_changed: "本批采用的背景已隐藏或更新，待发布内容已停止；可显式生成新的一批。",
   news_plan_invalid: "模型已返回内容，但动态的条数、字段或取值不符合要求，本批未保存。无需反复修改公共背景；可显式生成新一批，会产生新用量。",
   news_output_empty: "模型没有返回动态正文，本批未保存，可能已产生用量。不会自动重试。",

@@ -26,7 +26,7 @@ class SqlAlchemyChatUnreadStore:
         if player is None or binding is None or binding.player_id != player.value:
             raise EntityNotFoundError("player_not_found")
 
-    async def snapshot(self, world, player):
+    async def snapshot(self, world, player, *, after=None, page=False):
         async with self.sessions() as session:
             await self._owner(session, world, player)
             incoming = func.sum(
@@ -35,40 +35,49 @@ class SqlAlchemyChatUnreadStore:
                     & (Message.position > func.coalesce(Read.position, 0))
                 ).cast(Integer)
             )
-            rows = (
-                await session.execute(
-                    select(
-                        Conversation.conversation_id,
-                        func.coalesce(func.max(Message.position), 0),
-                        func.coalesce(incoming, 0),
-                    )
-                    .outerjoin(
-                        Message,
-                        (Message.world_id == Conversation.world_id)
-                        & (Message.conversation_id == Conversation.conversation_id),
-                    )
-                    .outerjoin(
-                        Read,
-                        (Read.world_id == Conversation.world_id)
-                        & (Read.conversation_id == Conversation.conversation_id)
-                        & (Read.player_id == Conversation.player_id),
-                    )
-                    .where(
-                        Conversation.world_id == world.value,
-                        Conversation.player_id == player.value,
-                        Conversation.conversation_id.not_in(
-                            select(GroupDissolutionRecord.conversation_id).where(
-                                GroupDissolutionRecord.world_id == world.value
-                            )
-                        ),
-                    )
-                    .group_by(Conversation.conversation_id)
-                    .order_by(Conversation.conversation_id)
-                    .limit(513)
+            statement = (
+                select(
+                    Conversation.conversation_id,
+                    func.coalesce(func.max(Message.position), 0),
+                    func.coalesce(incoming, 0).label("unread_count"),
                 )
-            ).all()
-            if len(rows) > 512:
-                raise ValueError("chat_unread_capacity")
+                .outerjoin(
+                    Message,
+                    (Message.world_id == Conversation.world_id)
+                    & (Message.conversation_id == Conversation.conversation_id),
+                )
+                .outerjoin(
+                    Read,
+                    (Read.world_id == Conversation.world_id)
+                    & (Read.conversation_id == Conversation.conversation_id)
+                    & (Read.player_id == Conversation.player_id),
+                )
+                .where(
+                    Conversation.world_id == world.value,
+                    Conversation.player_id == player.value,
+                    Conversation.conversation_id.not_in(
+                        select(GroupDissolutionRecord.conversation_id).where(
+                            GroupDissolutionRecord.world_id == world.value
+                        )
+                    ),
+                )
+                .group_by(Conversation.conversation_id)
+            )
+            has_unread = None
+            if not page or after is None:
+                summary = statement.subquery()
+                has_unread = bool(
+                    await session.scalar(
+                        select(summary.c.conversation_id).where(summary.c.unread_count > 0).limit(1)
+                    )
+                )
+            if page and after is not None:
+                statement = statement.where(Conversation.conversation_id > after)
+            statement = statement.order_by(Conversation.conversation_id)
+            rows = (await session.execute(statement.limit(129) if page else statement)).all()
+            more = page and len(rows) > 128
+            if page:
+                rows = rows[:128]
             waiting = await waiting_conversation(session, world.value, player.value)
             return {
                 "player_id": str(player.value),
@@ -77,6 +86,8 @@ class SqlAlchemyChatUnreadStore:
                     for c, latest, count in rows
                 ],
                 "waiting_conversation_id": str(waiting) if waiting else None,
+                **({"has_unread": has_unread} if has_unread is not None else {}),
+                "next_after": str(rows[-1][0]) if more else None,
             }
 
     async def mark_read(self, world, player, conversation, position):

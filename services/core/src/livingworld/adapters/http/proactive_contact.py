@@ -59,8 +59,8 @@ def proactive_contact_router(service, authorize, logger):
         )
 
     @router.get("/chat-unread", response_model=wire.ChatUnreadStatus)
-    async def unread(world_id: UUID):
-        return await execute(service.unread_snapshot(WorldId(world_id)))
+    async def unread(world_id: UUID, after: UUID | None = None, page: bool = False):
+        return await execute(service.unread_snapshot(WorldId(world_id), after=after, page=page))
 
     @router.post(
         "/conversations/{conversation_id}/read", response_model=wire.MarkConversationReadResult

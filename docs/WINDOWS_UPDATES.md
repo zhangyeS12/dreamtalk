@@ -1,6 +1,6 @@
 # Windows 应用更新
 
-本轮发行版本为 [0.1.82](https://github.com/zhangyeS12/dreamtalk/releases/tag/v0.1.82)，实际状态见[发行记录](maintenance/2026-10-18-release-0182.md)，继承 0.1.46 起的更新入口与完整安装包。0.1.48 修复了 0.1.46／0.1.47 的安装清单问题，历史证据见[修复记录](maintenance/2026-10-08-update-manifest-fix.md)。固定[更新频道](https://github.com/zhangyeS12/dreamtalk/releases/tag/update-preview)用于应用内检查；真实跨版升级仍由用户验收。
+当前公开版本与发行证据统一见[状态清单](PROJECT_STATUS.md#当前基线)，沿用既有完整安装包和固定[更新频道](https://github.com/zhangyeS12/dreamtalk/releases/tag/update-preview)。0.1.48 修复了 0.1.46／0.1.47 的安装清单问题，历史证据见[修复记录](maintenance/2026-10-08-update-manifest-fix.md)。真实跨版升级仍由用户验收。
 
 **0.1.78增加存档保护与可靠更新。** 本轮补独立完整存档快照、卸载保留、真实存档核对、缺旧清单修复升级及未完成升级回退，见[存档](DATA_BACKUPS.md)和[原记录](maintenance/2026-10-14-save-safety.md)。2026-10-17当前源码五位置改动保留独立更新保护，不占用手动位置，纳入0.1.82发行范围。以下旧包行为按其版本区分，0.1.78源码能力不代表0.1.77下载包已经具备。
 
