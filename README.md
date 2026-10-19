@@ -8,11 +8,11 @@ dreamtalk 是一款开源桌面应用。你可以创建自己的世界，导入�
 
 每个世界有自己的角色、地点、聊天和记忆。你可以在一个世界是璃月的旅人，在另一个世界是新艾利都的居民，随时回到书架换一本书。
 
-[下载 Windows 体验版](https://github.com/zhangyeS12/dreamtalk/releases/tag/v0.1.83) · [本次更新内容](docs/releases/v0.1.83.md) · [完整设置说明](docs/SETTINGS_HANDBOOK.md) · [反馈问题](https://github.com/zhangyeS12/dreamtalk/issues)
+[下载 Windows 体验版](https://github.com/zhangyeS12/dreamtalk/releases/tag/v0.1.84) · [本次更新内容](docs/releases/v0.1.84.md) · [完整设置说明](docs/SETTINGS_HANDBOOK.md) · [反馈问题](https://github.com/zhangyeS12/dreamtalk/issues)
 
 目前提供 **Windows 10 / 11 的 64 位体验版**。应用免费开源；聊天所用的模型服务需要你自己提供 API 密钥，服务商可能按使用量收费。当前版本仍在持续完善，欢迎反馈实际体验。
 
-0.1.83新增双人共同邀请的双私聊／两人群投递与统一回复门禁，整理世界、身份、事件草稿及异步操作状态，统一业务接口校验并扩展关键代码类型门禁。保留一自动四手动存档，导入不加载，正常更新不要求手动恢复，见[存档](docs/DATA_BACKUPS.md)。实际升级与恢复仍待用户验收。
+0.1.84优化大世界书分页编辑、离线与在线联系的资料准备、公共背景筛选、大量会话未读及后台轮选，保留原角色资料和未修改条目。沿用一自动四手动存档，导入不加载，正常更新不要求手动恢复，见[存档](docs/DATA_BACKUPS.md)。实际升级与恢复仍待用户验收。
 
 0.1.78新增整份存档备份／恢复、卸载保留及升级保护，修复云端图片密钥的完整调用链、图库说明串改和联网图片保存问题。此前配音、表情与图片能力保持：角色可使用公共／专属表情，用户有自己的表情库；支持按聊天环境配图、可选联网与图片分析。用户已确认角色发送和新增表情识别有效，使用方法见[表情与图片](docs/CHAT_MEDIA.md)。
 
@@ -22,11 +22,11 @@ dreamtalk 是一款开源桌面应用。你可以创建自己的世界，导入�
 
 ### 1. 安装
 
-推荐下载 [Windows 安装包](https://github.com/zhangyeS12/dreamtalk/releases/download/v0.1.83/dreamtalk_0.1.83_x64-setup.exe)，按提示安装。
+推荐下载 [Windows 安装包](https://github.com/zhangyeS12/dreamtalk/releases/download/v0.1.84/dreamtalk_0.1.84_x64-setup.exe)，按提示安装。
 
 本版提供[数据与备份](docs/DATA_BACKUPS.md)，新版卸载保留数据，安装／升级前先备份。旧版卸载器若仍出现“删除应用程序数据”，不要选择；重要备份建议另存其他磁盘。备份／恢复及升级故障场景仍待实际验收。
 
-也可以使用 [便携版压缩包](https://github.com/zhangyeS12/dreamtalk/releases/download/v0.1.83/dreamtalk-0.1.83-windows-x64.zip)：完整解压到一个固定目录，打开 dreamtalk 文件夹里的 dreamtalk-desktop.exe。不要直接在压缩包中运行，也不要只复制其中的程序文件。
+也可以使用 [便携版压缩包](https://github.com/zhangyeS12/dreamtalk/releases/download/v0.1.84/dreamtalk-0.1.84-windows-x64.zip)：完整解压到一个固定目录，打开 dreamtalk 文件夹里的 dreamtalk-desktop.exe。不要直接在压缩包中运行，也不要只复制其中的程序文件。
 
 下载页中的 **Source code** 是给开发者看的源码，请选择上面的安装包或便携包。若系统缺少网页显示组件，可安装 [Microsoft WebView2](https://developer.microsoft.com/microsoft-edge/webview2/)。首次安装可能提示未知发布者：目前已有应用更新签名，但尚无 Windows 发布者证书。
 
