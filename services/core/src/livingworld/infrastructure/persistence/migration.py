@@ -16,6 +16,7 @@ from livingworld.infrastructure.persistence import (  # noqa: F401
     director_rotation,
     location_policy_models,  # noqa: F401
     media_models,
+    player_persona_models,
     speech_models,
 )
 from livingworld.infrastructure.persistence.content_builder import (
@@ -116,7 +117,8 @@ STICKER_LIBRARY_FRESHNESS_REVISION = "0050_sticker_library_freshness"
 MEDIA_FREQUENCY_KIND_REVISION = "0051_media_frequency_kind"
 STICKER_DESCRIPTION_REVISION = "0052_sticker_entry_description"
 EXAMPLE_WORLD_REVISION = "0053_example_world_setup"
-HEAD_REVISION = EXAMPLE_WORLD_REVISION
+PLAYER_PERSONA_REVISION = "0054_player_personas"
+HEAD_REVISION = PLAYER_PERSONA_REVISION
 
 # One reviewed linear chain replaces repeated hand-maintained suffix sets.
 _SUPPORTED_REVISIONS = (
@@ -172,6 +174,7 @@ _SUPPORTED_REVISIONS = (
     STICKER_LIBRARY_FRESHNESS_REVISION,
     MEDIA_FREQUENCY_KIND_REVISION,
     STICKER_DESCRIPTION_REVISION,
+    EXAMPLE_WORLD_REVISION,
     HEAD_REVISION,
 )
 _REVISION_RANGES = {
@@ -391,6 +394,7 @@ def _current_revision(connection: Connection) -> str:
 
 def _validate_managed_state(connection: Connection, revision: str) -> None:
     # Additive authored/job tables do not change the older runtime shapes.
+    pre_persona_revision = revision not in _REVISION_RANGES[PLAYER_PERSONA_REVISION]
     pre_example_revision = revision not in _REVISION_RANGES[EXAMPLE_WORLD_REVISION]
     pre_recall_revision = revision not in _REVISION_RANGES[RECALL_REVISION]
     pre_location_policy_revision = revision not in _REVISION_RANGES[LOCATION_REVISION]
@@ -633,6 +637,8 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         expected -= WORLD_COMMON_LORE_TABLES
     if pre_example_revision:
         expected -= {"example_world_setups"}
+    if pre_persona_revision:
+        expected -= {"world_player_personas"}
     if tables != expected:
         _fail("alembic_schema_state_mismatch")
     _validate_auxiliary_objects(
@@ -646,6 +652,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         _validate_domain_shape(
             connection,
             revision,
+            pre_persona_revision=pre_persona_revision,
             pre_example_revision=pre_example_revision,
             pre_chat_revision=pre_chat_revision,
             pre_message_revision=pre_message_revision,
@@ -753,6 +760,7 @@ def _validate_domain_shape(
     revision: str,
     metadata: MetaData = Base.metadata,
     *,
+    pre_persona_revision: bool = True,
     pre_chat_revision: bool | None = None,
     pre_message_revision: bool | None = None,
     pre_dispatch_revision: bool | None = None,
@@ -814,6 +822,8 @@ def _validate_domain_shape(
         "ck_command_receipt_command_result",
     }
     for table in metadata.sorted_tables:
+        if pre_persona_revision and table.name == "world_player_personas":
+            continue
         if pre_example_revision and table.name == "example_world_setups":
             continue
         if pre_media_revision and table.name in MEDIA_TABLES:

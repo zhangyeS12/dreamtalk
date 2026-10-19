@@ -20,6 +20,25 @@ def generate() -> str:
             for node in ast.parse(path.read_text(encoding="utf-8")).body
             if isinstance(node, (ast.ClassDef, ast.TypeAlias))
         )
+    # These production models also own the HTTP schema; do not mirror them in DTOs.
+    persona = ast.parse(
+        (SOURCE.parents[2] / "application/player_persona.py").read_text(encoding="utf-8")
+    )
+    persona_models = {
+        "PersonaModel",
+        "PersonaReference",
+        "InitialRecognition",
+        "PlayerPersonaDraft",
+        "PersonaSourceChoice",
+        "PersonaSourcePage",
+        "PlayerPersonaSnapshot",
+        "PlayerPersonaPreview",
+    }
+    models.extend(
+        node
+        for node in persona.body
+        if isinstance(node, ast.ClassDef) and node.name in persona_models
+    )
     runtime = ast.parse((SOURCE.parents[2] / "application/runtime.py").read_text(encoding="utf-8"))
     models.extend(
         node

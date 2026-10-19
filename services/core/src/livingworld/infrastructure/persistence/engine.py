@@ -344,6 +344,13 @@ class Database:
 
         return SqlAlchemyChatMessageStore(self._sessions, time_source)
 
+    def player_persona_store(self):
+        from livingworld.infrastructure.persistence.player_persona import (
+            SqlAlchemyPlayerPersonaStore,
+        )
+
+        return SqlAlchemyPlayerPersonaStore(self._sessions)
+
     def local_profile_store(self):
         from livingworld.infrastructure.persistence.local_profile import SqlAlchemyLocalProfileStore
 

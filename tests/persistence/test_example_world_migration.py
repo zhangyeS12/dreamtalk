@@ -6,7 +6,7 @@ from alembic import command
 from livingworld.infrastructure.persistence import Database, models, speech_models
 from livingworld.infrastructure.persistence import media_models as media
 from livingworld.infrastructure.persistence.migration import (
-    EXAMPLE_WORLD_REVISION,
+    HEAD_REVISION,
     STICKER_DESCRIPTION_REVISION,
     _alembic_config,
 )
@@ -146,7 +146,7 @@ def test_0052_upgrade_only_adds_example_receipts_and_preserves_existing_rows(tmp
             async with database.engine.connect() as connection:
                 assert (
                     await connection.execute(text("SELECT version_num FROM alembic_version"))
-                ).scalar_one() == EXAMPLE_WORLD_REVISION
+                ).scalar_one() == HEAD_REVISION
                 assert (
                     await connection.execute(text("SELECT COUNT(*) FROM example_world_setups"))
                 ).scalar_one() == 0

@@ -18,6 +18,7 @@ from livingworld.application.llm import (
     StructuredOutputRequest,
     TextContent,
 )
+from livingworld.application.player_persona import PERSONA_GROUNDING
 from livingworld.application.update_maintenance import UpdateMaintenance
 from livingworld.application.world_model_config import (
     WorldModelValue,
@@ -134,6 +135,8 @@ class ProactiveContactService:
             payload["characters"] = [
                 {k: c[k] for k in ("character_id", "name", "persona")} for c in data["characters"]
             ]
+            if claim.get("player_identity") is not None:
+                payload["player_identity"] = claim["player_identity"]
             payload["schema"] = OutreachDialogue.model_json_schema()
             request = LLMRequest(
                 invocation_id=InvocationId(uuid5(claim["episode_id"], "proactive-dialogue")),
@@ -157,6 +160,7 @@ class ProactiveContactService:
                                 "每条台词都须独立说明自己和另一位角色正在共同做什么，即使分别私聊也能完整理解；不要依赖玩家读过另一人的消息。"
                                 "不得混合各自不同的邀约，也不得添加没有活动和地点依据的第二件事。共同在商场休闲时可以自然邀请玩家来一起逛街；不得编造未来行程、成果、关系或角色移动。"
                                 "角色资料可能为引用片段，不补全未提供的设定。保持各角色性格，每条不超过200个汉字。"
+                                + PERSONA_GROUNDING
                             ),
                         ),
                     ),

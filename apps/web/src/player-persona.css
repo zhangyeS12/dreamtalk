@@ -1,0 +1,14 @@
+.player-persona-editor { margin-top: 36px; max-width: 680px; border-top: 1px solid var(--line); padding-top: 28px; }
+.persona-fields { border: 0; padding: 0; margin: 20px 0; display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+.player-persona-editor details { margin: 10px 0; }
+.player-persona-editor summary { cursor: pointer; line-height: 1.7; }
+.player-persona-editor .profile-actions { flex-wrap: wrap; }
+.persona-source-picker { padding: 12px 0; }
+.persona-source-picker > button { margin-top: 10px; }
+.persona-source-list { list-style: none; padding: 0; margin: 12px 0; }
+.persona-source-list li, .persona-recognition { border-bottom: 1px solid var(--line); padding: 14px 0; }
+.persona-source-list small, .persona-preview dt { color: var(--muted); }
+.persona-text { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 20rem; overflow-y: auto; }
+.persona-recognition .field { margin: 12px 0; }
+.persona-preview { border-top: 1px solid var(--line); padding-top: 18px; }
+.persona-preview dd { margin: 6px 0 16px; overflow-wrap: anywhere; }

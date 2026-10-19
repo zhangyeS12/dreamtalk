@@ -70,6 +70,10 @@ def seed(app, label, draft=None):
         connection.execute("INSERT INTO local_player_bindings VALUES (?,?)", (world, player))
         connection.execute("INSERT INTO local_user_profile VALUES (1,?,?,1)", (label, label))
         connection.execute(
+            "INSERT INTO world_player_personas VALUES (?,?,1,?,?)",
+            (world, player, json.dumps({"identity_name": label}), uuid4().hex),
+        )
+        connection.execute(
             "INSERT INTO local_world_profiles VALUES (?,?,?,1)", (world, label, label)
         )
         # The extra records are intentionally synthetic; their full rows must round-trip.
@@ -331,6 +335,7 @@ def test_corrupt_archive_never_changes_current_data(isolated):
 def test_previous_schema_migrates_only_working_copy(isolated):
     app = configured(isolated)
     with connect(app / "data/runtime.sqlite3") as connection:
+        connection.execute("DROP TABLE world_player_personas")
         connection.execute("DROP TABLE example_world_setups")
         connection.execute(
             "UPDATE alembic_version SET version_num='0052_sticker_entry_description'"
@@ -341,7 +346,7 @@ def test_previous_schema_migrates_only_working_copy(isolated):
     )
     digest = safety.digest(sealed)
     slots.load(app, "0.1.81", 1, slots.status()["revision"])
-    assert safety.metadata(app / "data")["revisions"] == ["0053_example_world_setup"]
+    assert safety.metadata(app / "data")["revisions"] == ["0054_player_personas"]
     assert safety.digest(sealed) == digest
 
 

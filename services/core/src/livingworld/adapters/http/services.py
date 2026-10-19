@@ -26,6 +26,7 @@ if TYPE_CHECKING:
     from livingworld.application.offline_contact import OfflineContactService
     from livingworld.application.player_event_feed import PlayerEventFeedService
     from livingworld.application.player_onboarding import LocalPlayerOnboardingService
+    from livingworld.application.player_persona import PlayerPersonaService
     from livingworld.application.proactive_contact import ProactiveContactService
     from livingworld.application.speech import SpeechService
     from livingworld.application.update_maintenance import UpdateMaintenance
@@ -48,6 +49,7 @@ class HttpServices:
     world_settings: WorldSettingsService | None = None
     player_event_feed: PlayerEventFeedService | None = None
     local_profiles: LocalProfileStore | None = None
+    player_persona: PlayerPersonaService | None = None
     world_content: WorldContentService | None = None
     player_onboarding: LocalPlayerOnboardingService | None = None
     chat_conversations: ChatConversationService | None = None

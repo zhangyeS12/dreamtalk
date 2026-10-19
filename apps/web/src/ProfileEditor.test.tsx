@@ -7,7 +7,7 @@ afterEach(cleanup);
 
 it("saves the selected world's description with its loaded edit revision", async () => {
   const saveProfile = vi.fn().mockResolvedValue({ name: "旅人", description: "新的身份", revision: 4 });
-  const client = { profile: vi.fn().mockResolvedValue({ name: "旅人", description: "旧身份", revision: 3 }), saveProfile } as unknown as CoreClient;
+  const client = { profile: vi.fn().mockResolvedValue({ name: "旅人", description: "旧身份", revision: 3 }), playerPersona: vi.fn().mockResolvedValue({ player_id: null, revision: 0, draft: {}, source_state: "original" }), saveProfile } as unknown as CoreClient;
   const onDirtyChange = vi.fn();
   render(<ProfileEditor client={client} worldId="world-a" onDirtyChange={onDirtyChange} />);
   const description = await screen.findByLabelText("我在这个世界的身份");

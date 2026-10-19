@@ -28,6 +28,7 @@ from livingworld.adapters.http.offline_contact import (
     session_visibility_router,
 )
 from livingworld.adapters.http.player_events import player_events_router
+from livingworld.adapters.http.player_persona import player_persona_router
 from livingworld.adapters.http.proactive_contact import proactive_contact_router
 from livingworld.adapters.http.profiles import profile_router
 from livingworld.adapters.http.services import HttpServices
@@ -129,6 +130,8 @@ def create_app(
             player_events_router(services.player_event_feed, authorize, services.player_onboarding)
         )
 
+    if services.player_persona is not None:
+        app.include_router(player_persona_router(services.player_persona, authorize))
     if services.local_profiles is not None:
         app.include_router(profile_router(services.local_profiles, authorize))
 

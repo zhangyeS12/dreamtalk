@@ -12,6 +12,7 @@ from livingworld.application.director import DirectorError
 from livingworld.application.errors import EntityNotFoundError
 from livingworld.application.input_budget import encode_input, planning_references
 from livingworld.application.lore_activation import select_common_background
+from livingworld.application.player_persona import shared_identity_context
 from livingworld.application.proactive_contact import ProactiveContactError
 from livingworld.domain.identifiers import PlayerId, WorldId
 from livingworld.infrastructure.persistence.contact_gate import (
@@ -45,6 +46,10 @@ from livingworld.infrastructure.persistence.models import LocalPlayerBindingReco
 from livingworld.infrastructure.persistence.models import PlayerPresenceRecord as Presence
 from livingworld.infrastructure.persistence.models import WorldClockRecord as Clock
 from livingworld.infrastructure.persistence.offline_contact import _write
+from livingworld.infrastructure.persistence.player_persona import (
+    player_persona_stamp,
+    read_player_persona,
+)
 from livingworld.infrastructure.persistence.proactive_models import (
     ProactiveEpisodeRecord as Episode,
 )
@@ -317,6 +322,11 @@ class SqlAlchemyProactiveContactStore:
             "common_world_background": background,
             "plan_id": str(row.plan_id),
             "player_epoch": await self.offline._epoch(session, cfg.world_id, cfg.player_id),
+            **(
+                {"player_identity_stamp": stamp}
+                if (stamp := await player_persona_stamp(session, world, cfg.player_id)) is not None
+                else {}
+            ),
         }
 
     async def claim_ready(self):
@@ -442,8 +452,24 @@ class SqlAlchemyProactiveContactStore:
                         "writing",
                         None,
                     )
+                    player_identity = shared_identity_context(
+                        [
+                            await read_player_persona(
+                                session,
+                                WorldId(cfg.world_id),
+                                cfg.player_id,
+                                UUID(character["root_import_id"]),
+                            )
+                            for character in data["characters"]
+                        ]
+                    )
                     await session.commit()
-                    return {"episode_id": episode, "world_id": cfg.world_id, "input": data}
+                    return {
+                        "episode_id": episode,
+                        "world_id": cfg.world_id,
+                        "input": data,
+                        "player_identity": player_identity,
+                    }
                 # A local preparation problem never replays or masks a paid task.
                 # Only idle configurations reach this branch; later scans can heal it.
                 cfg.error = "proactive_input_unavailable" if input_failed else None

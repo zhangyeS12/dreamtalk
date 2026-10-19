@@ -71,6 +71,10 @@ from livingworld.infrastructure.persistence.offline_contact_models import (
 from livingworld.infrastructure.persistence.offline_contact_models import (
     OfflineContactSettingsRecord as Settings,
 )
+from livingworld.infrastructure.persistence.player_persona import (
+    player_persona_stamp,
+    read_player_persona,
+)
 from livingworld.infrastructure.persistence.world_story import record_contact_invitation
 
 
@@ -338,6 +342,7 @@ class SqlAlchemyOfflineContactStore:
             background, background_omitted = [], True
         snapshot = {
             "player_epoch": await self._epoch(session, cfg.world_id, cfg.player_id),
+            "player_identity_stamp": await player_persona_stamp(session, world, cfg.player_id),
             "utc_offset_minutes": int(now.astimezone().utcoffset().total_seconds() // 60),
             "input_selection": {
                 "after": str(after) if after else None,
@@ -538,6 +543,10 @@ class SqlAlchemyOfflineContactStore:
         ):
             return False
         data = json.loads(ep.input_json)
+        if await player_persona_stamp(session, WorldId(ep.world_id), ep.player_id) != data.get(
+            "player_identity_stamp"
+        ):
+            return False
         if await self._epoch(session, ep.world_id, ep.player_id) != data.get("player_epoch"):
             return False
         if await self._unanswered(session, cfg, exclude=ep.episode_id):
@@ -613,6 +622,16 @@ class SqlAlchemyOfflineContactStore:
             ep.purpose, ep.story_sent_at_utc, ep.state = purpose, story_time, "writing"
             cfg = await session.get(Settings, 1)
             cfg.state = "writing"
+            participant = await session.get(
+                Participant, (ep.world_id, ep.conversation_id, ep.character_id)
+            )
+            if participant is None:
+                raise OfflineContactError("offline_context_changed")
+            identity_context = await read_player_persona(
+                session, WorldId(ep.world_id), ep.player_id, participant.root_import_id
+            )
+            if identity_context is not None:
+                chosen = {**chosen, "player_identity": identity_context}
             await session.commit()
             return chosen
 

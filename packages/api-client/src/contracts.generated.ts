@@ -1437,6 +1437,72 @@ export type ActivityCharacterDirectory = {
 export function isActivityCharacterDirectory(value: unknown): value is ActivityCharacterDirectory {
   return (isObject(value)) && ((typeof value.player_id === "string" || value.player_id === null)) && ((Array.isArray(value.items) && value.items.every(item => isActivityCharacter(item))));
 }
+export type PersonaModel = object;
+export function isPersonaModel(value: unknown): value is PersonaModel { return isObject(value); }
+export type PersonaReference = PersonaModel & {
+  import_id: string;
+  content_id: string;
+  reviewed_hash: string;
+};
+export function isPersonaReference(value: unknown): value is PersonaReference {
+  return (isObject(value)) && (typeof value.import_id === "string") && (typeof value.content_id === "string") && (typeof value.reviewed_hash === "string") && (isPersonaModel(value));
+}
+export type InitialRecognition = PersonaModel & {
+  character_import_id: string;
+  character_name?: string;
+  relationship?: string;
+  known_details?: string;
+};
+export function isInitialRecognition(value: unknown): value is InitialRecognition {
+  return (isObject(value)) && (typeof value.character_import_id === "string") && ((!("character_name" in value) || (typeof value.character_name === "string"))) && ((!("relationship" in value) || (typeof value.relationship === "string"))) && ((!("known_details" in value) || (typeof value.known_details === "string"))) && (isPersonaModel(value));
+}
+export type PlayerPersonaDraft = PersonaModel & {
+  identity_name?: string;
+  public_identity?: string;
+  story_start?: string;
+  source?: (PersonaReference | null);
+  recognitions?: Array<InitialRecognition>;
+};
+export function isPlayerPersonaDraft(value: unknown): value is PlayerPersonaDraft {
+  return (isObject(value)) && ((!("identity_name" in value) || (typeof value.identity_name === "string"))) && ((!("public_identity" in value) || (typeof value.public_identity === "string"))) && ((!("story_start" in value) || (typeof value.story_start === "string"))) && ((!("source" in value) || ((isPersonaReference(value.source) || value.source === null)))) && ((!("recognitions" in value) || ((Array.isArray(value.recognitions) && value.recognitions.every(item => isInitialRecognition(item)))))) && (isPersonaModel(value));
+}
+export type PersonaSourceChoice = PersonaModel & {
+  reference: PersonaReference;
+  kind: ("character" | "lorebook");
+  title: string;
+  text: string;
+  excerpt: boolean;
+  root_import_id?: (string | null);
+};
+export function isPersonaSourceChoice(value: unknown): value is PersonaSourceChoice {
+  return (isObject(value)) && (isPersonaReference(value.reference)) && ((value.kind === "character" || value.kind === "lorebook")) && (typeof value.title === "string") && (typeof value.text === "string") && (typeof value.excerpt === "boolean") && ((!("root_import_id" in value) || ((typeof value.root_import_id === "string" || value.root_import_id === null)))) && (isPersonaModel(value));
+}
+export type PersonaSourcePage = PersonaModel & {
+  items: Array<PersonaSourceChoice>;
+  next_after: (string | null);
+};
+export function isPersonaSourcePage(value: unknown): value is PersonaSourcePage {
+  return (isObject(value)) && ((Array.isArray(value.items) && value.items.every(item => isPersonaSourceChoice(item)))) && ((typeof value.next_after === "string" || value.next_after === null)) && (isPersonaModel(value));
+}
+export type PlayerPersonaSnapshot = PersonaModel & {
+  player_id: (string | null);
+  revision: number;
+  draft: PlayerPersonaDraft;
+  source_state: ("original" | "current" | "changed");
+};
+export function isPlayerPersonaSnapshot(value: unknown): value is PlayerPersonaSnapshot {
+  return (isObject(value)) && ((typeof value.player_id === "string" || value.player_id === null)) && (typeof value.revision === "number") && (isPlayerPersonaDraft(value.draft)) && ((value.source_state === "original" || value.source_state === "current" || value.source_state === "changed")) && (isPersonaModel(value));
+}
+export type PlayerPersonaPreview = PersonaModel & {
+  preview_id: string;
+  expected_revision: number;
+  draft: PlayerPersonaDraft;
+  source_title: (string | null);
+  expires_in_seconds: number;
+};
+export function isPlayerPersonaPreview(value: unknown): value is PlayerPersonaPreview {
+  return (isObject(value)) && (typeof value.preview_id === "string") && (typeof value.expected_revision === "number") && (isPlayerPersonaDraft(value.draft)) && ((typeof value.source_title === "string" || value.source_title === null)) && (typeof value.expires_in_seconds === "number") && (isPersonaModel(value));
+}
 export type LLMRuntimeStatus = ("ready" | "partially_configured" | "unconfigured" | "degraded");
 export function isLLMRuntimeStatus(value: unknown): value is LLMRuntimeStatus { return (value === "ready" || value === "partially_configured" || value === "unconfigured" || value === "degraded"); }
 export type HttpCharacterActivitySetupInitialActivityRequest = {
@@ -1684,6 +1750,21 @@ export type HttpOfflineContactSessionVisibilityRequest = {
 };
 export function isHttpOfflineContactSessionVisibilityRequest(value: unknown): value is HttpOfflineContactSessionVisibilityRequest {
   return (isObject(value)) && ((!("world_id" in value) || ((typeof value.world_id === "string" || value.world_id === null)))) && (typeof value.visible === "boolean") && (typeof value.sequence === "number");
+}
+export type HttpPlayerPersonaPersonaPreviewRequest = {
+  draft: PlayerPersonaDraft;
+  expected_revision: number;
+  expected_player_id: string;
+};
+export function isHttpPlayerPersonaPersonaPreviewRequest(value: unknown): value is HttpPlayerPersonaPersonaPreviewRequest {
+  return (isObject(value)) && (isPlayerPersonaDraft(value.draft)) && (typeof value.expected_revision === "number") && (typeof value.expected_player_id === "string");
+}
+export type HttpPlayerPersonaPersonaCommitRequest = {
+  preview_id: string;
+  confirmed: (true);
+};
+export function isHttpPlayerPersonaPersonaCommitRequest(value: unknown): value is HttpPlayerPersonaPersonaCommitRequest {
+  return (isObject(value)) && (typeof value.preview_id === "string") && ((value.confirmed === true));
 }
 export type HttpProactiveContactSettingsRequest = {
   expected_player_id: string;

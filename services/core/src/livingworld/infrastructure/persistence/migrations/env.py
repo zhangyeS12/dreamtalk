@@ -7,6 +7,7 @@ from livingworld.infrastructure.persistence import (  # noqa: F401
     director_rotation,
     location_policy_models,  # noqa: F401
     media_models,
+    player_persona_models,
     speech_models,
 )
 from livingworld.infrastructure.persistence.content_builder import (

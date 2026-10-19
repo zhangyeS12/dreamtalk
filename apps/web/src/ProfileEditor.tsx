@@ -1,5 +1,6 @@
 import { useEffect, useId, useState, type FormEvent } from "react";
 import { CoreClient, CoreRequestError, type LocalProfile } from "@dreamtalk/api-client";
+import { PlayerPersonaEditor } from "./PlayerPersonaEditor";
 
 export function ProfileEditor({ client, worldId, onDirtyChange }: {
   client: CoreClient;
@@ -14,7 +15,9 @@ export function ProfileEditor({ client, worldId, onDirtyChange }: {
   const [notice, setNotice] = useState("");
   const [saving, setSaving] = useState(false);
   const [reload, setReload] = useState(0);
-  const dirty = saved !== null && (name !== saved.name || description !== saved.description);
+  const [personaDirty, setPersonaDirty] = useState(false);
+  const profileDirty = saved !== null && (name !== saved.name || description !== saved.description);
+  const dirty = profileDirty || personaDirty;
 
   useEffect(() => {
     let active = true;
@@ -39,7 +42,7 @@ export function ProfileEditor({ client, worldId, onDirtyChange }: {
 
   async function save(event: FormEvent) {
     event.preventDefault();
-    if (!saved || saving || !dirty) return;
+    if (!saved || saving || !profileDirty) return;
     setSaving(true); setError(""); setNotice("");
     try {
       const result = await client.saveProfile({ name, description, revision: saved.revision }, worldId);
@@ -58,7 +61,8 @@ export function ProfileEditor({ client, worldId, onDirtyChange }: {
     {saved ? <form className="profile-form" onSubmit={event => void save(event)}>
       <div className="field"><label htmlFor={`${formId}-name`}>{worldId ? "世界中的称呼" : "我的称呼"}</label><input id={`${formId}-name`} maxLength={120} value={name} disabled={saving} onChange={event => { setName(event.target.value); setNotice(""); }} placeholder={worldId ? "留空则使用通用称呼" : "你希望被怎样称呼"} /></div>
       <div className="field"><label htmlFor={`${formId}-description`}>{worldId ? "我在这个世界的身份" : "关于我"}</label><textarea id={`${formId}-description`} rows={5} maxLength={8000} value={description} disabled={saving} onChange={event => { setDescription(event.target.value); setNotice(""); }} placeholder={worldId ? "例如职业、经历，以及与这个世界的关系" : "写下你愿意让角色了解的个人描述"} /></div>
-      <div className="profile-actions"><button className="primary-button" type="submit" disabled={saving || !dirty}>{saving ? "正在保存…" : worldId ? "保存世界身份" : "保存通用信息"}</button><span role="status">{notice || (dirty ? "尚未保存" : "")}</span></div>
+      <div className="profile-actions"><button className="primary-button" type="submit" disabled={saving || !profileDirty}>{saving ? "正在保存…" : worldId ? "保存世界身份" : "保存通用信息"}</button><span role="status">{notice || (profileDirty ? "尚未保存" : "")}</span></div>
     </form> : !error ? <p className="inline-hint" role="status">正在读取资料…</p> : null}
+    {worldId && <PlayerPersonaEditor key={worldId} client={client} worldId={worldId} onDirtyChange={setPersonaDirty} />}
   </section>;
 }

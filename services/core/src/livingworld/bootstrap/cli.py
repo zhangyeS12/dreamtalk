@@ -390,6 +390,7 @@ async def run(
                 lambda owner: database.character_activity_context_reader(owner, time_source),
                 long_memory_store,
                 social_reader=database.faction_store().context_for_character,
+                persona_reader=database.player_persona_store().context_for_character,
             ),
             journal=story_store,
         )
@@ -408,6 +409,7 @@ async def run(
                 lambda owner: database.character_activity_context_reader(owner, time_source),
                 long_memory_store,
                 social_reader=database.faction_store().context_for_character,
+                persona_reader=database.player_persona_store().context_for_character,
             ),
             journal=story_store,
             logger=logger,
@@ -469,6 +471,7 @@ async def run(
         await speech.start()
 
         from livingworld.application.example_worlds import ExampleWorldService
+        from livingworld.application.player_persona import PlayerPersonaService
         from livingworld.infrastructure.example_templates import campus_template
 
         onboarding = LocalPlayerOnboardingService(command_handler, player_event_feed)
@@ -500,6 +503,7 @@ async def run(
                 world_settings=world_settings,
                 player_event_feed=player_event_feed,
                 local_profiles=database.local_profile_store(),
+                player_persona=PlayerPersonaService(database.player_persona_store()),
                 world_content=world_content,
                 player_onboarding=onboarding,
                 chat_conversations=chat_conversations,

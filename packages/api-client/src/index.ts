@@ -1,3 +1,7 @@
+import { isPlayerPersonaSnapshot, isPlayerPersonaPreview, isPersonaSourcePage } from "./contracts.generated";
+import type { PlayerPersonaSnapshot, PlayerPersonaPreview, PlayerPersonaDraft, PersonaSourcePage, HttpPlayerPersonaPersonaPreviewRequest, HttpPlayerPersonaPersonaCommitRequest } from "./contracts.generated";
+export type { PlayerPersonaSnapshot, PlayerPersonaPreview, PlayerPersonaDraft, PersonaSourcePage, PersonaSourceChoice, InitialRecognition } from "./contracts.generated";
+
 import type * as Requests from "./contracts.generated";
 import { isContentEditorPage, isChatReplyProgress } from "./contracts.generated";
 export type { ContentEditorPage, ContentResearch, SpeechPreviewJob } from "./contracts.generated";
@@ -693,6 +697,24 @@ export class CoreClient {
     return this.contractRequest(`/worlds/${encodeURIComponent(worldId)}/known-events`, (value): value is KnownWorldEvent[] => Array.isArray(value) && value.every(isKnownWorldEvent), { signal });
   }
 
+  playerPersona(worldId: string, signal?: AbortSignal): Promise<PlayerPersonaSnapshot> {
+    return this.contractRequest(`/worlds/${encodeURIComponent(worldId)}/me/persona`, isPlayerPersonaSnapshot, { signal });
+  }
+  playerPersonaSources(worldId: string, query = "", after?: string, characters = false, signal?: AbortSignal): Promise<PersonaSourcePage> {
+    const params = new URLSearchParams({ query, characters: String(characters) });
+    if (after) params.set("after", after);
+    return this.contractRequest(`/worlds/${encodeURIComponent(worldId)}/me/persona/sources?${params}`, isPersonaSourcePage, { signal });
+  }
+  previewPlayerPersona(worldId: string, draft: PlayerPersonaDraft, expectedRevision: number, expectedPlayerId: string): Promise<PlayerPersonaPreview> {
+    return this.contractRequest(`/worlds/${encodeURIComponent(worldId)}/me/persona/preview`, isPlayerPersonaPreview, {
+      method: "POST", body: JSON.stringify({ draft, expected_revision: expectedRevision, expected_player_id: expectedPlayerId } satisfies HttpPlayerPersonaPersonaPreviewRequest),
+    });
+  }
+  confirmPlayerPersona(worldId: string, previewId: string): Promise<PlayerPersonaSnapshot> {
+    return this.contractRequest(`/worlds/${encodeURIComponent(worldId)}/me/persona/commit`, isPlayerPersonaSnapshot, {
+      method: "POST", body: JSON.stringify({ preview_id: previewId, confirmed: true } satisfies HttpPlayerPersonaPersonaCommitRequest),
+    });
+  }
   profile(worldId?: string): Promise<LocalProfile> {
     return this.contractRequest(`${worldId ? `/worlds/${encodeURIComponent(worldId)}` : ""}/me/profile`, isLocalProfile);
   }

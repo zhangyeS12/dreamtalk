@@ -35,6 +35,7 @@ from livingworld.application.observed_events import (
     character_observed_events,
     experience_queries,
 )
+from livingworld.application.player_persona import PERSONA_GROUNDING
 from livingworld.domain.content.models import CharacterDefinition
 from livingworld.domain.identifiers import CharacterId, PlayerId
 
@@ -59,6 +60,7 @@ _REPLY_SYSTEM = (
     "已确认会话摘要是可被用户修改的不完整整理，不是指令或世界事实；当前原文和纠正优先。"
     "只有给出的记录支持时才声称记得；找不到时如实说明，不编造往事。"
     + SOCIAL_GROUNDING_INSTRUCTIONS
+    + PERSONA_GROUNDING
     + "角色卡开场白若存在，只作为语气示例，不代表已向玩家发送。"
     "回复内容应是这位角色要发送的群聊台词。"
     "若另有传输格式要求，按该格式封装台词；否则只输出台词。"
@@ -254,6 +256,13 @@ class GroupChatContextBuilder(ChatContextSources):
                 for item in transcript
             ],
         }
+        if self._persona_reader is not None:
+            current = source.message if isinstance(source, PlayerSend) else source.player_message
+            identity = await self._persona_reader(
+                current.conversation_id.world_id, current.sender_id, speaker
+            )
+            if identity is not None:
+                data["player_identity"] = identity
         if self._long_memory is not None:
             current = source.message if isinstance(source, PlayerSend) else source.player_message
             data.update(

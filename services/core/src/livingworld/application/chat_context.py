@@ -32,6 +32,7 @@ from livingworld.application.observed_events import (
     character_observed_events,
     experience_queries,
 )
+from livingworld.application.player_persona import PERSONA_GROUNDING, PersonaReader
 from livingworld.application.ports import CharacterMemoryReader
 from livingworld.application.world_content import CommonLoreEntry
 from livingworld.domain.content.models import CharacterDefinition
@@ -63,6 +64,7 @@ _SYSTEM = (
     "只有给出的记录支持时才声称记得；找不到时如实说明，不编造往事。"
     "角色卡开场白若存在，只作为语气示例，不代表已向玩家发送。"
     + SOCIAL_GROUNDING_INSTRUCTIONS
+    + PERSONA_GROUNDING
     + "回复内容应是这位角色要发给玩家的聊天台词。"
     "若另有传输格式要求，按该格式封装台词；否则只输出台词。"
 )
@@ -230,6 +232,7 @@ class ChatContextSources:
         activity_reader: Callable[[CharacterId], CharacterActivityContextReader] | None = None,
         long_memory=None,
         social_reader=None,
+        persona_reader: PersonaReader | None = None,
     ) -> None:
         self._conversations = conversations
         self._messages = messages
@@ -242,6 +245,7 @@ class ChatContextSources:
         self._activity_reader = activity_reader
         self._long_memory = long_memory
         self._social_reader = social_reader
+        self._persona_reader = persona_reader
 
 
 class DirectChatContextBuilder(ChatContextSources):
@@ -291,6 +295,12 @@ class DirectChatContextBuilder(ChatContextSources):
                 transcript_texts=tuple(item.text for item in visible),
             ),
         }
+        if self._persona_reader is not None:
+            identity = await self._persona_reader(
+                conversation_id.world_id, conversation.player_id, conversation.character_id
+            )
+            if identity is not None:
+                persona["player_identity"] = identity
         if self._long_memory is not None:
             persona.update(
                 await self._long_memory.for_character(
