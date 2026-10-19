@@ -59,6 +59,7 @@ async function renderProduct(client: CoreClient, enter = true) {
     speechSettings: vi.fn().mockResolvedValue({ revision: 0, settings: { enabled: false, provider: "local", local_url: "http://127.0.0.1:7861", secret_ref: null, max_characters: 10000, daily_calls: 0, skip_actions: true, consent_remote: false, consent_paid: false } }),
     speechPreviews: vi.fn().mockResolvedValue({ items: [] }),
     profile: vi.fn().mockResolvedValue({ name: "", description: "", revision: 0 }),
+    playerPersona: vi.fn().mockResolvedValue({ player_id: null, revision: 0, draft: {}, source_state: "original" }),
     socialSnapshot: vi.fn().mockResolvedValue({ factions: [], characters: [], memberships: [], connections: [] }),
     listActivityLocations: vi.fn().mockResolvedValue([]), listActivityCharacters: vi.fn().mockResolvedValue({ items: [], has_more: false }),
   };
