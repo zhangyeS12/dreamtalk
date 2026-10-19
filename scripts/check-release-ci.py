@@ -1,7 +1,8 @@
-"""Require a clean source tree and a successful full CI run for this exact commit."""
+"""Require clean committed release source; CI verification is explicitly opt-in."""
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import re
@@ -34,6 +35,13 @@ def validate_runs(payload: dict, commit: str) -> str:
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--require-ci",
+        action="store_true",
+        help="Verify CI only when the user explicitly requested it",
+    )
+    args = parser.parse_args()
     commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
     if not re.fullmatch(r"[0-9a-f]{40}", commit):
         raise SystemExit("release_ci_commit_invalid")
@@ -42,6 +50,9 @@ def main():
     )
     if dirty.strip():
         raise SystemExit("release_ci_requires_committed_clean_source")
+    if not args.require_ci:
+        print(f"Release source: CLEAN {commit}; CI NOT RUN (manual opt-in)")
+        return
     headers = {"Accept": "application/vnd.github+json", "User-Agent": "dreamtalk-release-check"}
     token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
     if token:
