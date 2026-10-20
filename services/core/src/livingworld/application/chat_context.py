@@ -118,11 +118,18 @@ async def common_chat_lore(
     *,
     relevance_text: str = "",
     transcript_texts: tuple[str, ...] = (),
-) -> list[dict[str, str]]:
+    activation_reader=None,
+    conversation=None,
+    anchor=None,
+) -> list[dict[str, str | int]]:
     """Activate only exposed background, then apply the existing prompt bounds."""
     if reader is None:
         return []
     entries = await reader(world_id)
+    if activation_reader is not None and conversation is not None and anchor is not None:
+        return await activation_reader(
+            conversation, anchor, entries, transcript_texts or (relevance_text,)
+        )
     return select_common_background(entries, transcript_texts or (relevance_text,))
 
 
@@ -232,6 +239,7 @@ class ChatContextSources:
         social_reader=None,
         persona_reader: PersonaReader | None = None,
         style_reader: WorldStyleStore | None = None,
+        lore_activation_reader=None,
     ) -> None:
         self._conversations = conversations
         self._messages = messages
@@ -246,6 +254,11 @@ class ChatContextSources:
         self._social_reader = social_reader
         self._persona_reader = persona_reader
         self._style_reader = style_reader
+        self._lore_activation_reader = lore_activation_reader
+
+    def _lore_commit(self, conversation, anchor):
+        commit = getattr(self._lore_activation_reader, "commit", None)
+        return (lambda keys: commit(conversation, anchor, keys)) if commit is not None else None
 
 
 class DirectChatContextBuilder(ChatContextSources):
@@ -293,6 +306,9 @@ class DirectChatContextBuilder(ChatContextSources):
                 self._common_lore_reader,
                 conversation_id.world_id,
                 transcript_texts=tuple(item.text for item in visible),
+                activation_reader=self._lore_activation_reader,
+                conversation=conversation_id,
+                anchor=sent.message,
             ),
         }
         if self._persona_reader is not None:
@@ -398,6 +414,7 @@ class DirectChatContextBuilder(ChatContextSources):
                 message_ids=tuple(str(item.message_id.value) for item in visible),
                 retrieval=retrieval,
                 reply_instructions=roleplay.post_history,
+                lore_commit=self._lore_commit(conversation_id, sent.message),
             ),
         )
 

@@ -5,6 +5,10 @@ from sqlalchemy import func, select
 from livingworld.application.chat_export import ChatExportSnapshot
 from livingworld.application.errors import EntityNotFoundError
 from livingworld.infrastructure.persistence.chat_messages import _message
+from livingworld.infrastructure.persistence.chat_path_queries import (
+    active_message_clause,
+    active_path_id,
+)
 from livingworld.infrastructure.persistence.models import (
     CharacterRecord,
     ChatConversationRecord,
@@ -42,6 +46,7 @@ class SqlAlchemyChatExportStore:
         async with self._sessions() as session, session.begin():
             row = await self._authorize(session, conversation, player)
             scope = (
+                active_message_clause(ChatMessageRecord),
                 ChatMessageRecord.world_id == conversation.world_id.value,
                 ChatMessageRecord.conversation_id == conversation.value,
             )
@@ -102,15 +107,29 @@ class SqlAlchemyChatExportStore:
                 tuple((str(identity), name) for identity, name in participants),
                 through,
                 count,
+                str(await active_path_id(session, conversation.world_id.value, conversation.value)),
             )
 
     async def page(self, snapshot, after):
         async with self._sessions() as session, session.begin():
             await self._authorize(session, snapshot.conversation_id, snapshot.player_id)
+            if (
+                snapshot.path_id is not None
+                and str(
+                    await active_path_id(
+                        session,
+                        snapshot.conversation_id.world_id.value,
+                        snapshot.conversation_id.value,
+                    )
+                )
+                != snapshot.path_id
+            ):
+                raise EntityNotFoundError("export_transcript_changed")
             rows = (
                 await session.scalars(
                     select(ChatMessageRecord)
                     .where(
+                        active_message_clause(ChatMessageRecord),
                         ChatMessageRecord.world_id == snapshot.conversation_id.world_id.value,
                         ChatMessageRecord.conversation_id == snapshot.conversation_id.value,
                         ChatMessageRecord.position > after,

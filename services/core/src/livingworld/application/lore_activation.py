@@ -1,5 +1,7 @@
 """Literal Lorebook activation inside an already-authorized common-background set."""
 
+import hashlib
+import json
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -26,6 +28,7 @@ class BackgroundEntry:
     group: str | None
     activation_metadata: Mapping
     extensions: Mapping
+    insertion_metadata: Mapping | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,15 +93,24 @@ def _unsupported_reason(
         and meta["case_sensitive"] != meta["caseSensitive"]
     ):
         return "大小写条件相互冲突。"
-    if meta.get("useProbability") is True and meta.get("probability", 100) != 100:
-        return "概率触发尚未支持。"
-    if any(
-        meta.get(key) not in (None, 0, False)
-        for key in ("sticky", "cooldown", "delay", "delayUntilRecursion")
+    for key, maximum in (
+        ("probability", 100),
+        ("sticky", 1000000),
+        ("cooldown", 1000000),
+        ("delay", 1000000),
+        ("delayUntilRecursion", 32),
     ):
-        return "持续、冷却、延迟或递归条件尚未支持。"
-    if entry.group or meta.get("group"):
-        return "互斥分组条件尚未支持。"
+        value = meta.get(key)
+        if key == "delayUntilRecursion" and type(value) is bool:
+            continue
+        if value is not None and (type(value) is not int or not 0 <= value <= maximum):
+            return "概率或消息计数条件无效。"
+    if meta.get("group") is not None and not isinstance(meta["group"], str):
+        return "互斥组名称无效。"
+    if generation_kind != "normal" and any(
+        meta.get(key) for key in ("sticky", "cooldown", "delay")
+    ):
+        return "消息计数条件仅用于聊天。"
     filters = meta.get("characterFilter")
     if filters and (
         not isinstance(filters, Mapping) or filters.get("names") or filters.get("tags")
@@ -151,7 +163,7 @@ def lore_activation_summary(
     if reason := _unsupported_reason(entry, collection, generation_kind):
         return f"暂不参与{target}：" + reason
     if entry.activation_metadata.get("constant") is True:
-        return f"公开后始终提供，受{target}背景容量限制。"
+        return f"公开后参与常驻选择，仍受概率、延迟、冷却及{target}背景容量限制。"
     if not entry.keywords:
         return f"没有关键词且未设常驻，暂不参与{target}。"
     depth = _scan_depth(entry, collection)
@@ -168,7 +180,8 @@ def lore_activation_summary(
     if meta.get("matchWholeWords") is True:
         summary += "单词关键词要求完整词匹配。"
     if meta.get("selective") is True and entry.secondary_keywords:
-        summary += "次级关键词需" + _LOGIC_NAMES[meta.get("selective_logic", "AND_ANY")] + "。"
+        summary += "次级关键词需" + _LOGIC_NAMES[str(meta.get("selective_logic", "AND_ANY"))] + "。"
+    summary += " 支持概率、递归、持续／冷却／延迟（按本路线消息数）；互斥组按优先级选择。"
     if meta.get("vectorized") is True:
         summary += "向量触发尚未接入。"
     return summary
@@ -183,63 +196,144 @@ def _matches(key: str, buffer: str, sensitive: bool, whole: bool) -> bool:
     return literal in buffer
 
 
+@dataclass(frozen=True, slots=True)
+class ActivationContext:
+    seed: str = ""
+    message_count: int = 0
+    elapsed: Mapping[str, int] | None = None
+    already: frozenset[str] = frozenset()
+
+
+def entry_key(item) -> str:
+    from livingworld.domain.content.serialization import json_value
+
+    entry = item.entry
+    value = [
+        str(item.import_id),
+        str(entry.content_id.value),
+        entry.content,
+        list(entry.keywords),
+        list(entry.secondary_keywords),
+        entry.priority,
+        entry.order,
+        entry.group,
+        json_value(entry.activation_metadata),
+        json_value(getattr(entry, "insertion_metadata", None) or {}),
+        json_value(item.collection.activation_metadata) if item.collection else {},
+    ]
+    return hashlib.sha256(
+        json.dumps(value, ensure_ascii=False, sort_keys=True).encode()
+    ).hexdigest()
+
+
+def _count(meta, key: str, default: int = 0) -> int:
+    value = meta.get(key)
+    if key == "delayUntilRecursion" and type(value) is bool:
+        return int(value)
+    return value if type(value) is int else default
+
+
 def active_common_lore(
     entries: tuple[CommonLoreEntry | BackgroundItem, ...],
     texts: tuple[str, ...],
     *,
     generation_kind: str = "normal",
+    context: ActivationContext | None = None,
 ) -> tuple[CommonLoreEntry | BackgroundItem, ...]:
-    """No hidden text, card fields, templates, regexes or recursive scans are read."""
+    """Recursive scans only consume entries already authorized by the caller."""
     if generation_kind not in ("normal", "quiet"):
         raise ValueError("unsupported_lore_generation_kind")
-    messages = texts[-_MAX_SCAN_MESSAGES:]
-    buffers: dict[tuple[int, bool], str] = {}
-
-    def scan(depth: int, sensitive: bool) -> str:
-        cache_key = (depth, sensitive)
-        if cache_key not in buffers:
-            parts = []
-            remaining = _MAX_SCAN_CHARS
-            for text in reversed(messages[-depth:]):
-                if remaining <= 0:
-                    break
-                part = text[-remaining:]
-                parts.append(part)
-                remaining -= len(part) + 1
-            buffer = "\n".join(reversed(parts))
-            buffers[cache_key] = buffer if sensitive else buffer.casefold()
-        return buffers[cache_key]
-
-    selected = []
-    for item in entries:
-        entry, meta = item.entry, item.entry.activation_metadata
-        if not entry.enabled or _unsupported_reason(entry, item.collection, generation_kind):
-            continue
-        if meta.get("constant") is True:
-            selected.append(item)
-            continue
-        depth = _scan_depth(entry, item.collection)
-        if not depth or not entry.keywords:
-            continue
-        sensitive = meta.get("case_sensitive", meta.get("caseSensitive")) is True
-        buffer = scan(depth, sensitive)
-
-        whole = meta.get("matchWholeWords") is True
-        if not any(_matches(key, buffer, sensitive, whole) for key in entry.keywords):
-            continue
-        if meta.get("selective") is True and entry.secondary_keywords:
-            hits = [_matches(key, buffer, sensitive, whole) for key in entry.secondary_keywords]
-            logic = meta.get("selective_logic", "AND_ANY")
-            active = {
-                "AND_ANY": any(hits),
-                "AND_ALL": all(hits),
-                "NOT_ANY": not any(hits),
-                "NOT_ALL": not all(hits),
-            }[logic]
-            if not active:
+    context = context or ActivationContext(
+        seed=hashlib.sha256("\n".join(texts).encode()).hexdigest(), message_count=len(texts)
+    )
+    elapsed = context.elapsed or {}
+    selected, recursive = {}, []
+    remaining = sorted(
+        (
+            item
+            for item in entries
+            if item.entry.enabled
+            and not _unsupported_reason(item.entry, item.collection, generation_kind)
+        ),
+        key=lambda item: (-item.entry.priority, item.entry.order, str(item.entry.content_id.value)),
+    )
+    keyed = [(entry_key(item), item) for item in remaining]
+    occupied = set()
+    # Each entry is selected at most once. A fixed recursion limit bounds work,
+    # and recursive text has its own character budget instead of growing quadratically.
+    for level in range(33):
+        added = []
+        for identity, item in keyed:
+            entry, meta = item.entry, item.entry.activation_metadata
+            if identity in selected:
                 continue
-        selected.append(item)
-    return tuple(selected)
+            group = entry.group or meta.get("group")
+            if group and group in occupied:
+                continue
+            if context.message_count < _count(meta, "delay"):
+                continue
+            age = elapsed.get(identity)
+            sticky = age is not None and age < _count(meta, "sticky")
+            reused = identity in context.already
+            if (
+                not sticky
+                and not reused
+                and age is not None
+                and age < _count(meta, "sticky") + _count(meta, "cooldown")
+            ):
+                continue
+            if not sticky and not reused:
+                if level < _count(meta, "delayUntilRecursion"):
+                    continue
+                if (
+                    level
+                    and item.collection is not None
+                    and item.collection.activation_metadata.get("recursive_scanning") is False
+                ):
+                    continue
+                if level and meta.get("excludeRecursion") is True:
+                    continue
+                sensitive = meta.get("case_sensitive", meta.get("caseSensitive")) is True
+                depth = _scan_depth(entry, item.collection)
+                base = "\n".join(texts[-depth:])[-_MAX_SCAN_CHARS:] if depth else ""
+                buffer = base if level == 0 else "\n".join(recursive)[-_MAX_SCAN_CHARS:]
+                if not sensitive:
+                    buffer = buffer.casefold()
+                whole = meta.get("matchWholeWords") is True
+                constant = meta.get("constant") is True
+                if not constant and not any(
+                    _matches(key, buffer, sensitive, whole) for key in entry.keywords
+                ):
+                    continue
+                if not constant and meta.get("selective") is True and entry.secondary_keywords:
+                    hits = [
+                        _matches(key, buffer, sensitive, whole) for key in entry.secondary_keywords
+                    ]
+                    if not {
+                        "AND_ANY": any(hits),
+                        "AND_ALL": all(hits),
+                        "NOT_ANY": not any(hits),
+                        "NOT_ALL": not all(hits),
+                    }[str(meta.get("selective_logic", "AND_ANY"))]:
+                        continue
+                probability = (
+                    _count(meta, "probability", 100) if meta.get("useProbability") is True else 100
+                )
+                draw = (
+                    int(hashlib.sha256((context.seed + identity).encode()).hexdigest()[:16], 16)
+                    % 100
+                )
+                if draw >= probability:
+                    continue
+            selected[identity] = item
+            if group:
+                occupied.add(group)
+            if meta.get("preventRecursion") is not True:
+                added.append(entry.content[:_MAX_SCAN_CHARS])
+        if not added:
+            break
+        recursive = (recursive + added)[-MAX_COMMON_LORE_ITEMS:]
+    return tuple(selected.values())
 
 
 MAX_COMMON_LORE_BYTES = 12 * 1024
@@ -252,9 +346,10 @@ def select_common_background(
     *,
     generation_kind: str = "normal",
     include_references: bool = False,
-) -> list[dict[str, str]]:
+    context: ActivationContext | None = None,
+) -> list[dict[str, str | int]]:
     """One activation/ranking/budget policy for chat and consented world planning."""
-    active = active_common_lore(entries, texts, generation_kind=generation_kind)
+    active = active_common_lore(entries, texts, generation_kind=generation_kind, context=context)
     ordered = sorted(
         active,
         key=lambda item: (
@@ -270,7 +365,17 @@ def select_common_background(
         size = len(item.entry.content.encode("utf-8")) + len(item.entry.title.encode("utf-8"))
         if size > MAX_COMMON_LORE_BYTES - used:
             continue
-        value = {"title": item.entry.title, "content": item.entry.content}
+        value: dict[str, str | int] = {"title": item.entry.title, "content": item.entry.content}
+        insertion = getattr(item.entry, "insertion_metadata", None) or {}
+        depth = insertion.get("depth")
+        position = insertion.get("position")
+        if (
+            generation_kind == "normal"
+            and (position in (4, "at_depth", "in_chat") or insertion.get("mode") == "at_depth")
+            and type(depth) is int
+            and 0 <= depth <= 32
+        ):
+            value["_chat_depth"] = depth
         if include_references:
             value.update(import_id=str(item.import_id), entry_id=str(item.entry.content_id.value))
         selected.append(value)

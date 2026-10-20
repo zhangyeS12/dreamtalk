@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from livingworld.application.content import ContentDraft
 from livingworld.application.imports import ContentImportError
+from livingworld.application.lore_controls import LoreControls, apply_controls, editable_controls
 from livingworld.domain.content.identifiers import (
     CharacterDefinitionId,
     LoreCollectionId,
@@ -32,6 +33,7 @@ class EditorEntry(BaseModel):
     secondary_keywords: list[str] = Field(default_factory=list, max_length=64)
     enabled: bool = True
     constant: bool = False
+    advanced: LoreControls | None = None
     selective_logic: str = Field(default="AND_ANY", pattern="^(AND_ANY|AND_ALL|NOT_ANY|NOT_ALL)$")
     priority: int = Field(default=0, ge=-1000000, le=1000000)
     order: int = Field(default=0, ge=-1000000, le=1000000)
@@ -118,6 +120,7 @@ def editable(item) -> EditorDraft:
                 secondary_keywords=list(x.secondary_keywords),
                 enabled=x.enabled,
                 constant=x.activation_metadata.get("constant") is True,
+                advanced=editable_controls(x),
                 selective_logic=x.activation_metadata.get("selective_logic", "AND_ANY")
                 if x.activation_metadata.get("selective_logic", "AND_ANY")
                 in ("AND_ANY", "AND_ALL", "NOT_ANY", "NOT_ALL")
@@ -233,6 +236,12 @@ async def authored_graph(fields: EditorDraft, previous, repository, research=Non
                     old_logic = "AND_ANY"
                 if field.selective_logic != old_logic:
                     meta["selective_logic"] = field.selective_logic
+            insertion = json_value(entry.insertion_metadata)
+            group = (
+                apply_controls(entry, field.advanced, meta, insertion)
+                if field.advanced is not None
+                else entry.group
+            )
             entries.append(
                 replace(
                     entry,
@@ -245,6 +254,8 @@ async def authored_graph(fields: EditorDraft, previous, repository, research=Non
                     priority=field.priority,
                     order=field.order,
                     activation_metadata=meta,
+                    insertion_metadata=insertion,
+                    group=group,
                 )
             )
         root = replace(

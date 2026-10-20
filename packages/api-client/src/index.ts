@@ -1,3 +1,6 @@
+import { isChatPathSnapshot, isChatPathPreview, isChatPathResult } from "./contracts.generated";
+import type { ChatPathSnapshot, ChatPathPreview, ChatPathResult, PathDraft, PathConfirm } from "./contracts.generated";
+export type { ChatPath, ChatPathSnapshot, ChatPathPreview, ChatPathResult, PathDraft, PathConfirm, LoreControls } from "./contracts.generated";
 import { isWorldStyleSnapshot, isWorldStylePreview } from "./contracts.generated";
 import type { WorldStyleSnapshot, WorldStylePreview, HttpWorldStyleStyleDraft, HttpWorldStyleStyleConfirm } from "./contracts.generated";
 export type { WorldStyleSnapshot, WorldStylePreview } from "./contracts.generated";
@@ -424,6 +427,16 @@ export class CoreClient {
   chatMessageContext(worldId: string, conversationId: string, position: number, signal?: AbortSignal): Promise<ChatMessagePage> {
     if (!Number.isSafeInteger(position) || position < 1 || !Number.isSafeInteger(position + 4)) throw new Error("chat_position_invalid");
     return this.contractRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/${encodeURIComponent(conversationId)}/messages/page?limit=7&before_position=${position + 4}`, isChatMessagePage, { signal });
+  }
+  chatPaths(worldId: string, conversationId: string, before?: string, signal?: AbortSignal): Promise<ChatPathSnapshot> {
+    const query = before ? `?before=${encodeURIComponent(before)}` : "";
+    return this.contractRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/${encodeURIComponent(conversationId)}/paths${query}`, isChatPathSnapshot, { signal });
+  }
+  previewChatPath(worldId: string, conversationId: string, draft: PathDraft): Promise<ChatPathPreview> {
+    return this.contractRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/${encodeURIComponent(conversationId)}/paths/preview`, isChatPathPreview, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(draft) });
+  }
+  commitChatPath(worldId: string, conversationId: string, request: PathConfirm): Promise<ChatPathResult> {
+    return this.contractRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/${encodeURIComponent(conversationId)}/paths/commit`, isChatPathResult, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(request) });
   }
   longChatMemory(worldId: string, conversationId: string, characterId: string, query = "", before?: string, signal?: AbortSignal): Promise<LongChatMemorySnapshot> {
     const params = new URLSearchParams({ query }); if (before) params.set("before", before);

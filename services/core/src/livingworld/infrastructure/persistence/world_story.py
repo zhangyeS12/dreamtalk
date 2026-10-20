@@ -19,6 +19,7 @@ from livingworld.application.world_story import (
     WorldStoryError,
 )
 from livingworld.domain.identifiers import PlayerId, WorldId
+from livingworld.infrastructure.persistence.chat_path_queries import message_visible_clause
 from livingworld.infrastructure.persistence.director_background import (
     background_is_current,
     read_director_background,
@@ -222,6 +223,9 @@ class SqlAlchemyWorldStoryStore:
                 await session.scalars(
                     select(Story)
                     .where(
+                        message_visible_clause(
+                            Story.world_id, Story.conversation_id, Story.message_id
+                        ),
                         Story.world_id == world.value,
                         Story.player_id == player.value,
                         Story.character_id == speaker.value,
@@ -308,7 +312,10 @@ class SqlAlchemyWorldStoryStore:
                     & (CharacterRecord.character_id == Story.character_id),
                 )
                 .where(
-                    Story.world_id == world.value, Story.player_id == owner, Story.hidden.is_(False)
+                    message_visible_clause(Story.world_id, Story.conversation_id, Story.message_id),
+                    Story.world_id == world.value,
+                    Story.player_id == owner,
+                    Story.hidden.is_(False),
                 )
             )
             if before is not None:

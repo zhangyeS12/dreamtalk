@@ -339,6 +339,16 @@ class Database:
 
         return SqlAlchemyChatConversationStore(self._sessions)
 
+    def chat_lore_reader(self):
+        from livingworld.infrastructure.persistence.chat_lore import SqlAlchemyChatLoreReader
+
+        return SqlAlchemyChatLoreReader(self._sessions)
+
+    def chat_path_store(self):
+        from livingworld.infrastructure.persistence.chat_paths import SqlAlchemyChatPathStore
+
+        return SqlAlchemyChatPathStore(self._sessions)
+
     def chat_message_store(self, time_source=None):
         from livingworld.infrastructure.persistence.chat_messages import SqlAlchemyChatMessageStore
 

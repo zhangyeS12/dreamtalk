@@ -5,6 +5,7 @@
 | 目的 | 阅读入口 |
 | --- | --- |
 | 使用、下载、了解产品 | [项目主页](../README.md)、[Windows安装](PORTABLE_WINDOWS.md)、[设置手册](SETTINGS_HANDBOOK.md) |
+| 消息编辑、候选、分支／检查点与高级世界书 | [使用与契约](CHAT_PATHS_AND_LORE.md) |
 | 接手开发 | [工程规则](../AGENTS.md) → [交接与调用链](../HANDOFF.md) → [状态清单](PROJECT_STATUS.md)；环境见[开发说明](DEVELOPMENT.md) |
 | 核对批准行为 | [现行产品约定](../PRODUCT.md)，再读对应模块手册／批准方案；[原始FR规格](product/PRODUCT_SPEC.md)仅用于规则编号追溯 |
 | 查架构与实现边界 | [系统概览](architecture/SYSTEM_OVERVIEW.md)、[ADR索引](architecture/ADR/README.md)；其余模型文档按模块选读 |

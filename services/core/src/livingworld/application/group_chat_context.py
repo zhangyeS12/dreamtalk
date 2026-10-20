@@ -242,7 +242,12 @@ class GroupChatContextBuilder(ChatContextSources):
                 source.message.conversation_id.world_id
                 if isinstance(source, PlayerSend)
                 else source.conversation_id.world_id,
-                transcript_texts=tuple(item.text for item in transcript),
+                transcript_texts=tuple(
+                    item.text for item in transcript if item.position <= current.position
+                ),
+                activation_reader=self._lore_activation_reader,
+                conversation=current.conversation_id,
+                anchor=current,
             ),
             "transcript": [
                 {"sender_id": str(item.sender_id.value), "text": prompt_text(item)}
@@ -348,5 +353,6 @@ class GroupChatContextBuilder(ChatContextSources):
                 retrieval=retrieval,
                 group_dialogue=dialogue,
                 reply_instructions=roleplay.post_history,
+                lore_commit=self._lore_commit(current.conversation_id, current),
             ),
         )

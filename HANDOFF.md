@@ -13,7 +13,7 @@
 
 - 正式仓库为D:\LivingWorld；分支／HEAD／工作区以Git现场为准，不从旧工作日志推断。源码、发行标签、安装包和实际运行程序分别核对。
 - 用户入口为artifacts/local-desktop/dreamtalk-desktop.exe，依赖仓库开发环境；对外完整包包含Core及资源，两者用途不同。该入口的版本／摘要回执在同目录entry.json，必要编译规则见[验证责任](AGENTS.md#20-current-verification-responsibility)。
-- 本机入口通过仓库现有环境加载Core源码；当前工作树包含角色扮演、回复格式、提示编排及通讯录世界风格／台词高亮。界面变化需沿规定入口重新编译，完全退出旧应用后重开生效；世界风格源码入口为application/world_style.py、persistence/world_style.py、adapters/http/world_style.py及前端WorldStyleEditor.tsx／dialogueHighlight.ts；玩家专用卡入口为application/player_card.py、player_persona.py及PlayerPersonaEditor.tsx，独立资料不走通讯录／NPC／地点初始化；迁移与检查证据见状态清单。该入口不是可搬运的完整便携包，工程检查不代表真实模型或安装升级验收。
+- 本机入口通过仓库现有环境加载Core源码；当前工作树包含角色扮演、回复格式、提示编排及通讯录世界风格／台词高亮，以及最新的[聊天路线与高级世界书](docs/CHAT_PATHS_AND_LORE.md)。界面变化需沿规定入口重新编译，完全退出旧应用后重开生效；世界风格源码入口为application/world_style.py、persistence/world_style.py、adapters/http/world_style.py及前端WorldStyleEditor.tsx／dialogueHighlight.ts；玩家专用卡入口为application/player_card.py、player_persona.py及PlayerPersonaEditor.tsx，独立资料不走通讯录／NPC／地点初始化；迁移与检查证据见状态清单。该入口不是可搬运的完整便携包，工程检查不代表真实模型或安装升级验收。
 - 更新继续沿原应用标识、公钥和频道。不得用旧程序打开已升级存档，不移动／删除DB或WAL，不改真实API、启动项或已安装应用。
 - 开屏及更新失败修复的实际限制见[可靠性记录](docs/maintenance/2026-10-17-reliability-hardening.md)；发行完整性与用户运行结果见状态表的不同栏目。
 
@@ -23,6 +23,7 @@
 | --- | --- | --- |
 | 世界书架、角色卡／世界书、身份 | WorldArchivePage.tsx／WorldContent.tsx／ProfileEditor.tsx → packages/api-client → adapters/http → application/content.py、world_content.py、infrastructure/persistence | [产品入口](PRODUCT.md)、[导入契约](docs/architecture/IMPORT_MODEL.md) |
 | 设定身份与逐角色初始认识 | PlayerPersonaEditor.tsx → player_persona.py的预览／确认 → 世界范围持久化；直接／群聊及主动联系在输入前过滤 | [身份契约](docs/PLAYER_PERSONA.md) |
+| 消息编辑、候选与聊天路线；高级世界书 | ChatPathTools.tsx／LoreAdvancedControls.tsx → chat_paths.py／lore_activation.py → chat_path_queries.py／chat_lore.py；0057迁移 | [入口与契约](docs/CHAT_PATHS_AND_LORE.md) |
 | 私聊、群聊与流式 | ProductApp.tsx／ChatTranscript.tsx／GroupChat.tsx／useReplyStream.ts → application/chat_reply.py、group_chat_reply.py | [聊天模型](docs/architecture/CHAT_MODEL.md)、[恢复说明](docs/CHAT_FUNCTIONAL_EXPERIENCE.md) |
 | 模型配置、费用和硬额度 | ModelSetup.tsx → Tauri llm_config.rs／凭据管道 → bootstrap/llm_runtime.py、application/chat_capacity.py、llm_execution.py | [生产组装](docs/architecture/LLM_PRODUCTION_COMPOSITION.md)、[账本](docs/architecture/LLM_ACCOUNTING.md) |
 | 记忆与RAG | LongChatMemoryPanel.tsx／ConversationMemoryPanel.tsx → long_chat_memory.py → persistence/long_chat_memory.py、semantic_chat_retrieval.py、recall_index.py | [上下文与召回](docs/CONTEXT_AND_RECALL.md)、[亲历召回](docs/EXPERIENCE_RECALL.md) |

@@ -1,11 +1,12 @@
 import { useRef, type ReactNode } from "react";
 import { WorkspaceIcon } from "./WorkspacePrimitives";
 
-export function ConversationHeading({ title, kind, portrait, onBack, onRefresh, onLongMemory, onMemory, onHistory, onExport, onDissolve, dissolveDisabled }: {
+export function ConversationHeading({ title, kind, portrait, onBack, onRefresh, onLongMemory, onMemory, onHistory, onExport, onPaths, onDissolve, dissolveDisabled }: {
   title: string; kind: string; portrait: ReactNode; onBack: () => void; onRefresh: () => void;
   onLongMemory: () => void; onMemory: () => void; onHistory: () => void;
   onDissolve?: () => void; dissolveDisabled?: boolean;
   onExport?: () => void;
+  onPaths?: () => void;
 }) {
   const tools = useRef<HTMLDetailsElement>(null);
   const summary = useRef<HTMLElement>(null);
@@ -27,6 +28,7 @@ export function ConversationHeading({ title, kind, portrait, onBack, onRefresh, 
         <button type="button" className="text-action" onClick={() => choose(onLongMemory)}>长期记忆</button>
         <button type="button" className="text-action" onClick={() => choose(onMemory)}>会话摘要</button>
         <button type="button" className="text-action" onClick={() => choose(onHistory)}>聊天回忆</button>
+        {onPaths && <button type="button" className="text-action" onClick={() => choose(onPaths)}>分支、检查点与候选</button>}
         {onExport && <button type="button" className="text-action" onClick={() => choose(onExport)}>导出聊天记录</button>}
         {onDissolve ? <button type="button" className="text-action destructive-action" disabled={dissolveDisabled} onClick={() => choose(onDissolve)}>解散群聊</button> : null}
       </div>

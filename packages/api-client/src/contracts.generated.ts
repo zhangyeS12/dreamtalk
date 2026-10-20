@@ -389,6 +389,44 @@ export type ChatContextReports = {
 export function isChatContextReports(value: unknown): value is ChatContextReports {
   return (isObject(value)) && (typeof value.turn_id === "string") && ((Array.isArray(value.reports) && value.reports.every(item => isChatContextReportsReportsItem(item))));
 }
+export type ChatPath = {
+  path_id: string;
+  parent_id: (string | null);
+  name: string;
+  kind: ("main" | "branch" | "checkpoint" | "candidate" | "edit");
+  created_at: string;
+  fork_message_id: (string | null);
+};
+export function isChatPath(value: unknown): value is ChatPath {
+  return (isObject(value)) && (typeof value.path_id === "string") && ((typeof value.parent_id === "string" || value.parent_id === null)) && (typeof value.name === "string") && ((value.kind === "main" || value.kind === "branch" || value.kind === "checkpoint" || value.kind === "candidate" || value.kind === "edit")) && (typeof value.created_at === "string") && ((typeof value.fork_message_id === "string" || value.fork_message_id === null));
+}
+export type ChatPathSnapshot = {
+  active: ChatPath;
+  revision: number;
+  paths: Array<ChatPath>;
+  next_before: (string | null);
+};
+export function isChatPathSnapshot(value: unknown): value is ChatPathSnapshot {
+  return (isObject(value)) && (isChatPath(value.active)) && (typeof value.revision === "number") && ((Array.isArray(value.paths) && value.paths.every(item => isChatPath(item)))) && ((typeof value.next_before === "string" || value.next_before === null));
+}
+export type ChatPathPreview = {
+  reviewed_hash: string;
+  draft: PathDraft;
+  original_text: (string | null);
+  calls_model: boolean;
+  creates_path: boolean;
+};
+export function isChatPathPreview(value: unknown): value is ChatPathPreview {
+  return (isObject(value)) && (typeof value.reviewed_hash === "string") && (isPathDraft(value.draft)) && ((typeof value.original_text === "string" || value.original_text === null)) && (typeof value.calls_model === "boolean") && (typeof value.creates_path === "boolean");
+}
+export type ChatPathResult = {
+  path_id: string;
+  revision: number;
+  turn_id: (string | null);
+};
+export function isChatPathResult(value: unknown): value is ChatPathResult {
+  return (isObject(value)) && (typeof value.path_id === "string") && (typeof value.revision === "number") && ((typeof value.turn_id === "string" || value.turn_id === null));
+}
 export type WorldContentItemCharactersItem = {
   id: string;
   name: string;
@@ -456,12 +494,13 @@ export type ContentEditorEntry = {
   secondary_keywords: Array<string>;
   enabled: boolean;
   constant: boolean;
+  advanced?: (LoreControls | null);
   selective_logic: ("AND_ANY" | "AND_ALL" | "NOT_ANY" | "NOT_ALL");
   priority: WireNumber;
   order: WireNumber;
 };
 export function isContentEditorEntry(value: unknown): value is ContentEditorEntry {
-  return (isObject(value)) && ((typeof value.source_entry_id === "string" || value.source_entry_id === null)) && (typeof value.title === "string") && (typeof value.content === "string") && ((Array.isArray(value.keywords) && value.keywords.every(item => typeof item === "string"))) && ((Array.isArray(value.secondary_keywords) && value.secondary_keywords.every(item => typeof item === "string"))) && (typeof value.enabled === "boolean") && (typeof value.constant === "boolean") && ((value.selective_logic === "AND_ANY" || value.selective_logic === "AND_ALL" || value.selective_logic === "NOT_ANY" || value.selective_logic === "NOT_ALL")) && (isWireNumber(value.priority)) && (isWireNumber(value.order));
+  return (isObject(value)) && ((typeof value.source_entry_id === "string" || value.source_entry_id === null)) && (typeof value.title === "string") && (typeof value.content === "string") && ((Array.isArray(value.keywords) && value.keywords.every(item => typeof item === "string"))) && ((Array.isArray(value.secondary_keywords) && value.secondary_keywords.every(item => typeof item === "string"))) && (typeof value.enabled === "boolean") && (typeof value.constant === "boolean") && ((!("advanced" in value) || ((isLoreControls(value.advanced) || value.advanced === null)))) && ((value.selective_logic === "AND_ANY" || value.selective_logic === "AND_ALL" || value.selective_logic === "NOT_ANY" || value.selective_logic === "NOT_ALL")) && (isWireNumber(value.priority)) && (isWireNumber(value.order));
 }
 export type ContentEditorDraft = {
   kind: ("character" | "lorebook");
@@ -1521,6 +1560,43 @@ export type PlayerPersonaPreview = PersonaModel & {
 export function isPlayerPersonaPreview(value: unknown): value is PlayerPersonaPreview {
   return (isObject(value)) && (typeof value.preview_id === "string") && (typeof value.expected_revision === "number") && (isPlayerPersonaDraft(value.draft)) && ((typeof value.source_title === "string" || value.source_title === null)) && (typeof value.expires_in_seconds === "number") && (isPersonaModel(value));
 }
+export type PathDraft = {
+  action: ("branch" | "checkpoint" | "edit" | "candidate" | "switch" | "rename");
+  revision: number;
+  message_id?: (string | null);
+  path_id?: (string | null);
+  name?: string;
+  text?: string;
+  token_ceiling?: number;
+};
+export function isPathDraft(value: unknown): value is PathDraft {
+  return (isObject(value)) && ((value.action === "branch" || value.action === "checkpoint" || value.action === "edit" || value.action === "candidate" || value.action === "switch" || value.action === "rename")) && (typeof value.revision === "number") && ((!("message_id" in value) || ((typeof value.message_id === "string" || value.message_id === null)))) && ((!("path_id" in value) || ((typeof value.path_id === "string" || value.path_id === null)))) && ((!("name" in value) || (typeof value.name === "string"))) && ((!("text" in value) || (typeof value.text === "string"))) && ((!("token_ceiling" in value) || (typeof value.token_ceiling === "number")));
+}
+export type PathConfirm = {
+  draft: PathDraft;
+  reviewed_hash: string;
+  confirmed: (true);
+  request_id: string;
+};
+export function isPathConfirm(value: unknown): value is PathConfirm {
+  return (isObject(value)) && (isPathDraft(value.draft)) && (typeof value.reviewed_hash === "string") && ((value.confirmed === true)) && (typeof value.request_id === "string");
+}
+export type LoreControls = {
+  probability?: number;
+  use_probability?: boolean;
+  sticky?: number;
+  cooldown?: number;
+  delay?: number;
+  recursion_level?: number;
+  exclude_recursion?: boolean;
+  prevent_recursion?: boolean;
+  scan_depth?: (number | null);
+  insertion_depth?: (number | null);
+  group?: string;
+};
+export function isLoreControls(value: unknown): value is LoreControls {
+  return (isObject(value)) && ((!("probability" in value) || (typeof value.probability === "number"))) && ((!("use_probability" in value) || (typeof value.use_probability === "boolean"))) && ((!("sticky" in value) || (typeof value.sticky === "number"))) && ((!("cooldown" in value) || (typeof value.cooldown === "number"))) && ((!("delay" in value) || (typeof value.delay === "number"))) && ((!("recursion_level" in value) || (typeof value.recursion_level === "number"))) && ((!("exclude_recursion" in value) || (typeof value.exclude_recursion === "boolean"))) && ((!("prevent_recursion" in value) || (typeof value.prevent_recursion === "boolean"))) && ((!("scan_depth" in value) || ((typeof value.scan_depth === "number" || value.scan_depth === null)))) && ((!("insertion_depth" in value) || ((typeof value.insertion_depth === "number" || value.insertion_depth === null)))) && ((!("group" in value) || (typeof value.group === "string")));
+}
 export type LLMRuntimeStatus = ("ready" | "partially_configured" | "unconfigured" | "degraded");
 export function isLLMRuntimeStatus(value: unknown): value is LLMRuntimeStatus { return (value === "ready" || value === "partially_configured" || value === "unconfigured" || value === "degraded"); }
 export type HttpCharacterActivitySetupInitialActivityRequest = {
@@ -1611,12 +1687,13 @@ export type HttpContentEditorPagesEntryFields = {
   secondary_keywords?: (Array<string> | null);
   enabled?: (boolean | null);
   constant?: (boolean | null);
+  advanced?: (LoreControls | null);
   selective_logic?: (string | null);
   priority?: (number | null);
   order?: (number | null);
 };
 export function isHttpContentEditorPagesEntryFields(value: unknown): value is HttpContentEditorPagesEntryFields {
-  return (isObject(value)) && ((!("title" in value) || ((typeof value.title === "string" || value.title === null)))) && ((!("content" in value) || ((typeof value.content === "string" || value.content === null)))) && ((!("keywords" in value) || (((Array.isArray(value.keywords) && value.keywords.every(item => typeof item === "string")) || value.keywords === null)))) && ((!("secondary_keywords" in value) || (((Array.isArray(value.secondary_keywords) && value.secondary_keywords.every(item => typeof item === "string")) || value.secondary_keywords === null)))) && ((!("enabled" in value) || ((typeof value.enabled === "boolean" || value.enabled === null)))) && ((!("constant" in value) || ((typeof value.constant === "boolean" || value.constant === null)))) && ((!("selective_logic" in value) || ((typeof value.selective_logic === "string" || value.selective_logic === null)))) && ((!("priority" in value) || ((typeof value.priority === "number" || value.priority === null)))) && ((!("order" in value) || ((typeof value.order === "number" || value.order === null))));
+  return (isObject(value)) && ((!("title" in value) || ((typeof value.title === "string" || value.title === null)))) && ((!("content" in value) || ((typeof value.content === "string" || value.content === null)))) && ((!("keywords" in value) || (((Array.isArray(value.keywords) && value.keywords.every(item => typeof item === "string")) || value.keywords === null)))) && ((!("secondary_keywords" in value) || (((Array.isArray(value.secondary_keywords) && value.secondary_keywords.every(item => typeof item === "string")) || value.secondary_keywords === null)))) && ((!("enabled" in value) || ((typeof value.enabled === "boolean" || value.enabled === null)))) && ((!("constant" in value) || ((typeof value.constant === "boolean" || value.constant === null)))) && ((!("advanced" in value) || ((isLoreControls(value.advanced) || value.advanced === null)))) && ((!("selective_logic" in value) || ((typeof value.selective_logic === "string" || value.selective_logic === null)))) && ((!("priority" in value) || ((typeof value.priority === "number" || value.priority === null)))) && ((!("order" in value) || ((typeof value.order === "number" || value.order === null))));
 }
 export type HttpContentEditorPagesEntryPatch = {
   source_entry_id: string;

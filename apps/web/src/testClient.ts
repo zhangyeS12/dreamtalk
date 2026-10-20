@@ -5,6 +5,7 @@ import type { CoreClient } from "@dreamtalk/api-client";
 // method supplied by the test, and never supply generation or write operations.
 export function withChatReads(client: CoreClient): CoreClient {
   const defaults = {
+    chatPaths: vi.fn(async (_world: string, conversation: string) => ({ active: { path_id: conversation, parent_id: null, name: "主线", kind: "main", created_at: "2026-01-01T00:00:00Z", fork_message_id: null }, revision: 0, paths: [], next_before: null })),
     replyRecovery: vi.fn().mockResolvedValue({ can_generate: false, can_recover: false, reason: "chat_recovery_has_replies" }),
     chatUnread: vi.fn().mockResolvedValue({ player_id: "player-a", items: [] }),
   };

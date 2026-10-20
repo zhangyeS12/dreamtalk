@@ -16,6 +16,7 @@ from livingworld.adapters.http.services import HttpServices
 from livingworld.application.chat_context import DirectChatContextBuilder
 from livingworld.application.chat_conversations import ChatConversationService
 from livingworld.application.chat_messages import ChatMessageService
+from livingworld.application.chat_paths import ChatPathService
 from livingworld.application.chat_recall import EarlierChatRecall
 from livingworld.application.command_handler import CommandHandler
 from livingworld.application.developer_inspector import (
@@ -393,6 +394,7 @@ async def run(
                 social_reader=database.faction_store().context_for_character,
                 persona_reader=database.player_persona_store().context_for_character,
                 style_reader=database.world_style_store(),
+                lore_activation_reader=database.chat_lore_reader(),
             ),
             journal=story_store,
         )
@@ -413,6 +415,7 @@ async def run(
                 social_reader=database.faction_store().context_for_character,
                 persona_reader=database.player_persona_store().context_for_character,
                 style_reader=database.world_style_store(),
+                lore_activation_reader=database.chat_lore_reader(),
             ),
             journal=story_store,
             logger=logger,
@@ -515,6 +518,7 @@ async def run(
                 player_onboarding=onboarding,
                 chat_conversations=chat_conversations,
                 chat_messages=chat_messages,
+                chat_paths=ChatPathService(database.chat_path_store(), player_event_feed),
                 chat_reply=chat_reply,
                 group_chat_reply=group_chat_reply,
                 content_builder=content_builder,

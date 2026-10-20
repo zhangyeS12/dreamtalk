@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field, replace
 
 from livingworld.application.chat_roleplay import append_post_history
@@ -20,6 +21,9 @@ class ContextLayout:
     retrieval: str = "keyword"
     group_dialogue: tuple[LLMMessage, ...] = field(default=(), repr=False)
     reply_instructions: str = field(default="", repr=False)
+    lore_commit: Callable[[tuple[str, ...]], Awaitable[None]] | None = field(
+        default=None, repr=False
+    )
 
 
 class ContextCapacityError(ValueError):
@@ -108,11 +112,23 @@ class ContextPacker:
             for message in self.layout.direct_turns[index]
         }
         result = []
+        history_indexes = []
+        direct_history = {
+            position + self.offset for turn in self.layout.direct_turns for position in turn
+        }
         for index, message in enumerate(self.messages):
             if index in removed:
                 continue
             if index == self.persona_index:
                 wire_data = dict(data)
+                if "common_world_background" in wire_data:
+                    wire_data["common_world_background"] = [
+                        {key: value for key, value in item.items() if not key.startswith("_lore_")}
+                        if isinstance(item, dict)
+                        else item
+                        for item in wire_data["common_world_background"]
+                        if "_chat_depth" not in item
+                    ]
                 if self.layout.group_dialogue:
                     wire_data.pop("transcript", None)
                 message = replace(
@@ -123,6 +139,8 @@ class ContextPacker:
                         ),
                     ),
                 )
+            if index in direct_history:
+                history_indexes.append(len(result))
             result.append(message)
         if self.layout.group_dialogue:
             removed_group = {
@@ -131,11 +149,66 @@ class ContextPacker:
                 if key == "group_history"
                 for position in self.layout.group_turns[index]
             }
-            result.extend(
+            retained_group = [
                 message
                 for index, message in enumerate(self.layout.group_dialogue)
                 if index not in removed_group
-            )
+            ]
+            history_indexes.extend(range(len(result), len(result) + len(retained_group)))
+            result.extend(retained_group)
+        # Place retained background only after history trimming. Supplemental data
+        # stays a USER block, compatible with providers requiring a leading SYSTEM.
+        depth_entries = [
+            item for item in data.get("common_world_background", []) if "_chat_depth" in item
+        ]
+        if depth_entries:
+            for idx, message in enumerate(result):
+                if idx != self.persona_index:
+                    continue
+                payload = json.loads(message.content[0].text)
+                payload["common_world_background"] = [
+                    item
+                    for item in payload.get("common_world_background", [])
+                    if "_chat_depth" not in item
+                ]
+                result[idx] = replace(
+                    message,
+                    content=(
+                        TextContent(json.dumps(payload, ensure_ascii=False, separators=(",", ":"))),
+                    ),
+                )
+            # Clamp excessive depth to the oldest retained history, never ahead of the card/persona.
+            insertions = {}
+            for item in depth_entries:
+                depth = item["_chat_depth"]
+                at = (
+                    history_indexes[-depth]
+                    if depth and depth <= len(history_indexes)
+                    else (history_indexes[0] if depth and history_indexes else len(result))
+                )
+                insertions.setdefault(at, []).append(
+                    {
+                        key: value
+                        for key, value in item.items()
+                        if key != "_chat_depth" and not key.startswith("_lore_")
+                    }
+                )
+            for at in sorted(insertions, reverse=True):
+                result.insert(
+                    at,
+                    LLMMessage(
+                        MessageRole.USER,
+                        (
+                            TextContent(
+                                json.dumps(
+                                    {"supplemental_world_background": insertions[at]},
+                                    ensure_ascii=False,
+                                    separators=(",", ":"),
+                                )
+                            ),
+                        ),
+                    ),
+                )
         self.final_data = data
         return replace(
             self.request,
@@ -269,6 +342,14 @@ async def fit_chat_context(request: LLMRequest, layout, gateway, bounder, select
                 for b in final
             ):
                 raise ContextCapacityError("turn_token_limit_exceeded")
+            if packer.layout.lore_commit is not None:
+                await packer.layout.lore_commit(
+                    tuple(
+                        item["_lore_start_key"]
+                        for item in packer.final_data.get("common_world_background", [])
+                        if "_lore_start_key" in item
+                    )
+                )
             return fitted, packer.report(
                 fitted, max(b.input_tokens for b in final if b is not None), remaining
             )

@@ -12,6 +12,7 @@ from sqlalchemy import CheckConstraint, Connection, MetaData, UniqueConstraint, 
 
 from livingworld.infrastructure.persistence import (  # noqa: F401
     character_card_bindings,
+    chat_path_models,
     deletion_models,
     director_rotation,
     location_policy_models,  # noqa: F401
@@ -120,7 +121,8 @@ EXAMPLE_WORLD_REVISION = "0053_example_world_setup"
 PLAYER_PERSONA_REVISION = "0054_player_personas"
 WORLD_STYLE_REVISION = "0055_world_styles"
 PLAYER_CARD_REVISION = "0056_player_cards"
-HEAD_REVISION = PLAYER_CARD_REVISION
+CHAT_PATH_REVISION = "0057_chat_paths"
+HEAD_REVISION = CHAT_PATH_REVISION
 
 # One reviewed linear chain replaces repeated hand-maintained suffix sets.
 _SUPPORTED_REVISIONS = (
@@ -179,11 +181,21 @@ _SUPPORTED_REVISIONS = (
     EXAMPLE_WORLD_REVISION,
     PLAYER_PERSONA_REVISION,
     WORLD_STYLE_REVISION,
+    PLAYER_CARD_REVISION,
     HEAD_REVISION,
 )
 _REVISION_RANGES = {
     revision: frozenset(_SUPPORTED_REVISIONS[index:])
     for index, revision in enumerate(_SUPPORTED_REVISIONS)
+}
+CHAT_PATH_TABLES = {
+    "chat_lore_activations",
+    "chat_paths",
+    "chat_path_states",
+    "chat_path_messages",
+    "chat_path_turns",
+    "chat_path_operations",
+    "chat_memory_origins",
 }
 LOCATION_POLICY_TABLES = {
     "location_policies",
@@ -401,6 +413,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
     pre_persona_revision = revision not in _REVISION_RANGES[PLAYER_PERSONA_REVISION]
     pre_style_revision = revision not in _REVISION_RANGES[WORLD_STYLE_REVISION]
     pre_player_card_revision = revision not in _REVISION_RANGES[PLAYER_CARD_REVISION]
+    pre_chat_path_revision = revision not in _REVISION_RANGES[CHAT_PATH_REVISION]
     pre_example_revision = revision not in _REVISION_RANGES[EXAMPLE_WORLD_REVISION]
     pre_recall_revision = revision not in _REVISION_RANGES[RECALL_REVISION]
     pre_location_policy_revision = revision not in _REVISION_RANGES[LOCATION_REVISION]
@@ -649,6 +662,8 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         expected -= {"world_styles"}
     if pre_player_card_revision:
         expected -= {"world_player_cards"}
+    if pre_chat_path_revision:
+        expected -= CHAT_PATH_TABLES
     if tables != expected:
         _fail("alembic_schema_state_mismatch")
     _validate_auxiliary_objects(
@@ -665,6 +680,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
             pre_persona_revision=pre_persona_revision,
             pre_style_revision=pre_style_revision,
             pre_player_card_revision=pre_player_card_revision,
+            pre_chat_path_revision=pre_chat_path_revision,
             pre_example_revision=pre_example_revision,
             pre_chat_revision=pre_chat_revision,
             pre_message_revision=pre_message_revision,
@@ -775,6 +791,7 @@ def _validate_domain_shape(
     pre_persona_revision: bool = True,
     pre_style_revision: bool = True,
     pre_player_card_revision: bool = True,
+    pre_chat_path_revision: bool = True,
     pre_chat_revision: bool | None = None,
     pre_message_revision: bool | None = None,
     pre_dispatch_revision: bool | None = None,
@@ -836,6 +853,8 @@ def _validate_domain_shape(
         "ck_command_receipt_command_result",
     }
     for table in metadata.sorted_tables:
+        if pre_chat_path_revision and table.name in CHAT_PATH_TABLES:
+            continue
         if pre_player_card_revision and table.name == "world_player_cards":
             continue
         if pre_style_revision and table.name == "world_styles":

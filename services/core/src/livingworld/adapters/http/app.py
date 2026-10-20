@@ -14,6 +14,7 @@ from livingworld.adapters.http.character_activity_setup import character_activit
 from livingworld.adapters.http.chat_conversations import chat_conversation_router
 from livingworld.adapters.http.chat_media import chat_media_router, media_error_handler
 from livingworld.adapters.http.chat_messages import chat_message_router
+from livingworld.adapters.http.chat_paths import chat_path_router
 from livingworld.adapters.http.content_authoring import content_authoring_router
 from livingworld.adapters.http.contracts import CoreHealth as HealthResponse
 from livingworld.adapters.http.conversation_memory import conversation_memory_router
@@ -135,6 +136,8 @@ def create_app(
         app.include_router(player_persona_router(services.player_persona, authorize))
     if services.local_profiles is not None:
         app.include_router(profile_router(services.local_profiles, authorize))
+    if services.chat_paths is not None:
+        app.include_router(chat_path_router(services.chat_paths, authorize))
     if services.world_style is not None:
         app.include_router(world_style_router(services.world_style, authorize))
 

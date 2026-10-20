@@ -39,6 +39,16 @@ def generate() -> str:
         for node in persona.body
         if isinstance(node, ast.ClassDef) and node.name in persona_models
     )
+    paths = ast.parse((SOURCE.parents[2] / "application/chat_paths.py").read_text("utf-8"))
+    models.extend(
+        node
+        for node in paths.body
+        if isinstance(node, ast.ClassDef) and node.name in {"PathDraft", "PathConfirm"}
+    )
+    lore = ast.parse((SOURCE.parents[2] / "application/lore_controls.py").read_text("utf-8"))
+    models.extend(
+        node for node in lore.body if isinstance(node, ast.ClassDef) and node.name == "LoreControls"
+    )
     runtime = ast.parse((SOURCE.parents[2] / "application/runtime.py").read_text(encoding="utf-8"))
     models.extend(
         node

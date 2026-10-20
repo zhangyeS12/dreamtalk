@@ -5,12 +5,19 @@ import json
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from sqlalchemy import func, select, update
+from sqlalchemy import func, or_, select, update
 
 from livingworld.application.errors import (
     ChatTurnUnavailableError,
     EntityNotFoundError,
     IdempotencyConflictError,
+)
+from livingworld.infrastructure.persistence.chat_path_models import ChatPathStateRecord as PathState
+from livingworld.infrastructure.persistence.chat_path_models import ChatPathTurnRecord as PathTurn
+from livingworld.infrastructure.persistence.chat_path_queries import (
+    active_message_clause,
+    require_current_attempt,
+    stamp_turn,
 )
 from livingworld.infrastructure.persistence.models import (
     ChatMessageRecord as Message,
@@ -48,6 +55,7 @@ class ChatReplyRecoveryMixin:
                 raise EntityNotFoundError("chat_state_invalid")
         message = await session.scalar(
             select(Message).where(
+                active_message_clause(Message),
                 Message.world_id == turn.world_id,
                 Message.turn_id == source_id,
                 Message.conversation_id == conversation.value,
@@ -64,12 +72,40 @@ class ChatReplyRecoveryMixin:
             .where(
                 Recovery.world_id == world,
                 Recovery.source_turn_id == source,
+                or_(
+                    ~select(PathState.conversation_id)
+                    .join(
+                        Turn,
+                        (Turn.world_id == PathState.world_id)
+                        & (Turn.conversation_id == PathState.conversation_id),
+                    )
+                    .where(Turn.world_id == Recovery.world_id, Turn.turn_id == Recovery.turn_id)
+                    .exists(),
+                    select(PathTurn.turn_id)
+                    .join(
+                        PathState,
+                        (PathState.world_id == PathTurn.world_id)
+                        & (PathState.active_path_id == PathTurn.path_id),
+                    )
+                    .where(
+                        PathTurn.world_id == Recovery.world_id, PathTurn.turn_id == Recovery.turn_id
+                    )
+                    .exists(),
+                    select(Message.message_id)
+                    .where(
+                        Message.world_id == Recovery.world_id,
+                        Message.turn_id == Recovery.turn_id,
+                        active_message_clause(Message),
+                    )
+                    .exists(),
+                ),
             )
             .order_by(Recovery.ordinal.desc())
             .limit(1)
         )
 
     async def _active_attempt(self, session, conversation, turn, completing=False):
+        await require_current_attempt(session, turn)
         recovery = await session.get(Recovery, (turn.world_id, turn.turn_id))
         source = recovery.source_turn_id if recovery else turn.turn_id
         latest = await self._latest_attempt(session, turn.world_id, source)
@@ -82,12 +118,14 @@ class ChatReplyRecoveryMixin:
         elif recovery:
             last = await session.scalar(
                 select(func.max(Message.position)).where(
+                    active_message_clause(Message),
                     Message.world_id == turn.world_id,
                     Message.conversation_id == conversation.value,
                 )
             )
             source_message = await session.scalar(
                 select(Message).where(
+                    active_message_clause(Message),
                     Message.world_id == turn.world_id,
                     Message.turn_id == source,
                     Message.sender_player_id.is_not(None),
@@ -116,6 +154,7 @@ class ChatReplyRecoveryMixin:
         dispatch = await session.get(Dispatch, (source.world_id, current_id))
         last_position = await session.scalar(
             select(func.max(Message.position)).where(
+                active_message_clause(Message),
                 Message.world_id == source.world_id,
                 Message.conversation_id == conversation.value,
             )
@@ -123,6 +162,7 @@ class ChatReplyRecoveryMixin:
         has_reply = await session.scalar(
             select(Message.message_id)
             .where(
+                active_message_clause(Message),
                 Message.world_id == source.world_id,
                 Message.conversation_id == conversation.value,
                 Message.position > message.position,
@@ -197,7 +237,6 @@ class ChatReplyRecoveryMixin:
                 raise ChatTurnUnavailableError("chat_recovery_changed")
             if not view["can_create"]:
                 raise ChatTurnUnavailableError(view["reason"] or "chat_recovery_unavailable")
-            latest = await self._latest_attempt(session, conversation.world_id.value, source.value)
             identity = uuid4()
             session.add(
                 Turn(
@@ -218,10 +257,22 @@ class ChatReplyRecoveryMixin:
                     world_id=conversation.world_id.value,
                     turn_id=identity,
                     source_turn_id=source.value,
-                    ordinal=latest.ordinal + 1 if latest else 1,
+                    ordinal=(
+                        await session.scalar(
+                            select(func.max(Recovery.ordinal)).where(
+                                Recovery.world_id == conversation.world_id.value,
+                                Recovery.source_turn_id == source.value,
+                            )
+                        )
+                        or 0
+                    )
+                    + 1,
                 )
             )
             await session.flush()
+            await stamp_turn(
+                session, await session.get(Turn, (conversation.world_id.value, identity))
+            )
             return {"turn_id": str(identity), "token_ceiling": ceiling}
 
     async def fail_reply_execution(self, sent, known_failure):

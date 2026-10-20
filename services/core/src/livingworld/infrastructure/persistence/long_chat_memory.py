@@ -10,6 +10,12 @@ from sqlalchemy import LargeBinary, and_, cast, exists, func, or_, select
 
 from livingworld.application.errors import EntityNotFoundError
 from livingworld.application.long_chat_memory import LongMemoryError
+from livingworld.infrastructure.persistence.chat_path_models import ChatMemoryOriginRecord as Origin
+from livingworld.infrastructure.persistence.chat_path_queries import (
+    active_memory_clause,
+    active_message_clause,
+    memory_visible_clause,
+)
 from livingworld.infrastructure.persistence.long_memory_models import LongChatMemoryRecord as Memory
 from livingworld.infrastructure.persistence.long_memory_models import (
     LongChatMemorySettingsRecord as Settings,
@@ -24,6 +30,7 @@ from livingworld.infrastructure.semantic_chat_retrieval import reference_key
 
 def _scope(world, player, character):
     return (
+        memory_visible_clause(Memory),
         Memory.world_id == world,
         Memory.player_id == player,
         Memory.character_id == character,
@@ -137,7 +144,7 @@ async def record_chat_memories(
             select(Memory).where(
                 *_scope(reply.world_id, player.value, reply.sender_character_id),
                 Memory.entry_id == old_id,
-                Memory.state == "active",
+                active_memory_clause(Memory),
                 or_(
                     Memory.source_sender_id == sender,
                     and_(item.source == "player", Memory.kind == "promise"),
@@ -163,7 +170,13 @@ async def record_chat_memories(
                 continue
             fingerprint = hashlib.sha256(
                 json.dumps(
-                    [str(source.message_id), item.kind, item.topic.strip().casefold(), item.quote],
+                    [
+                        str(source.message_id),
+                        str(reply.message_id),
+                        item.kind,
+                        item.topic.strip().casefold(),
+                        item.quote,
+                    ],
                     ensure_ascii=False,
                 ).encode()
             ).hexdigest()
@@ -183,18 +196,19 @@ async def record_chat_memories(
                     select(Memory).where(
                         *_scope(reply.world_id, player.value, owner),
                         Memory.fingerprint == old_fingerprint,
-                        Memory.state == "active",
+                        active_memory_clause(Memory),
                     )
                 )
                 if old is None and owner == reply.sender_character_id:
                     continue
             # A shared topic alone does not prove a correction. Supplements coexist.
-            if old is not None:
-                old.state, old.revision = "superseded", old.revision + 1
+            # Supersession is derived from visible successor sources. Mutating
+            # the old record would change other branches retroactively.
+            identity = uuid4()
             session.add(
                 Memory(
                     world_id=reply.world_id,
-                    entry_id=uuid4(),
+                    entry_id=identity,
                     player_id=player.value,
                     character_id=owner,
                     conversation_id=reply.conversation_id,
@@ -215,6 +229,9 @@ async def record_chat_memories(
                 )
             )
             await session.flush()
+            session.add(
+                Origin(world_id=reply.world_id, entry_id=identity, message_id=reply.message_id)
+            )
 
 
 @dataclass(frozen=True)
@@ -238,6 +255,7 @@ class SqlAlchemyLongChatMemoryStore:
             await session.scalars(
                 select(Message.text)
                 .where(
+                    active_message_clause(Message),
                     Message.world_id == conversation.world_id.value,
                     Message.conversation_id == conversation.value,
                     Message.position < current.position,
@@ -285,7 +303,7 @@ class SqlAlchemyLongChatMemoryStore:
         scope = f"{world}:{player}:{character}"
         authorized = select(Memory).where(
             *_scope(world, player, character),
-            Memory.state == "active",
+            active_memory_clause(Memory),
             *([Memory.created_at <= cutoff] if cutoff is not None else []),
         )
         rows = await self.index.lexical(session, authorized, Memory, terms, 500)
@@ -337,6 +355,7 @@ class SqlAlchemyLongChatMemoryStore:
         recent = (
             select(Message.message_id)
             .where(
+                active_message_clause(Message),
                 Message.world_id == conversation.world_id.value,
                 Message.conversation_id == conversation.value,
                 Message.position <= current.position,
@@ -350,7 +369,7 @@ class SqlAlchemyLongChatMemoryStore:
                 Memory.player_id == player.value,
                 Memory.character_id == character.value,
                 Memory.message_id == Message.message_id,
-                Memory.state.in_(("forgotten", "superseded")),
+                or_(Memory.state == "forgotten", ~active_memory_clause(Memory)),
             )
         )
         authorized = (
@@ -370,6 +389,7 @@ class SqlAlchemyLongChatMemoryStore:
                 ),
             )
             .where(
+                active_message_clause(Message),
                 Message.world_id == conversation.world_id.value,
                 Conversation.player_id == player.value,
                 Participant.character_id == character.value,
@@ -484,7 +504,7 @@ class SqlAlchemyLongChatMemoryStore:
             )
             scope = (
                 *_scope(conversation.world_id.value, player.value, character.value),
-                Memory.state == "active",
+                active_memory_clause(Memory),
                 Memory.created_at <= current.created_at_utc,
             )
             pinned = (
@@ -627,10 +647,28 @@ class SqlAlchemyLongChatMemoryStore:
                 ).all()
             more = len(rows) > 50
             rows = rows[:50]
+            active_ids = set(
+                await session.scalars(
+                    select(Memory.entry_id).where(
+                        Memory.entry_id.in_([row.entry_id for row in rows]),
+                        active_memory_clause(Memory),
+                    )
+                )
+            )
             return {
                 "enabled": settings is None or settings.enabled,
                 "settings_revision": settings.revision if settings else 0,
-                "items": [_view(row) for row in rows],
+                "items": [
+                    {
+                        **_view(row),
+                        "state": "active"
+                        if row.entry_id in active_ids
+                        else "forgotten"
+                        if row.state == "forgotten"
+                        else "superseded",
+                    }
+                    for row in rows
+                ],
                 "next_cursor": rows[-1].created_at.isoformat() + "|" + str(rows[-1].entry_id)
                 if more
                 else None,
@@ -668,7 +706,14 @@ class SqlAlchemyLongChatMemoryStore:
             )
             if row is None:
                 raise EntityNotFoundError("long_memory_not_found")
-            if row.revision != revision or row.state == "superseded":
+            current = await session.scalar(
+                select(Memory.entry_id).where(
+                    Memory.world_id == row.world_id,
+                    Memory.entry_id == row.entry_id,
+                    active_memory_clause(Memory),
+                )
+            )
+            if row.revision != revision or (row.state != "forgotten" and current is None):
                 raise LongMemoryError("long_memory_changed")
             row.state, row.pinned, row.revision = (
                 "active" if active else "forgotten",

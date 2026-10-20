@@ -2,6 +2,7 @@
 
 from livingworld.application.content_authoring import EditorDraft, EditorEntry
 from livingworld.application.imports import ContentImportError
+from livingworld.application.lore_controls import LoreControls, editable_controls
 from livingworld.domain.content.models import CharacterDefinition, LoreCollection, LoreEntry
 from livingworld.domain.content.serialization import json_value
 
@@ -16,6 +17,7 @@ def entry_fields(entry):
         "secondary_keywords": list(entry.secondary_keywords),
         "enabled": entry.enabled,
         "constant": entry.activation_metadata.get("constant") is True,
+        "advanced": editable_controls(entry).model_dump(),
         "selective_logic": logic
         if logic in ("AND_ANY", "AND_ALL", "NOT_ANY", "NOT_ALL")
         else "AND_ANY",
@@ -131,6 +133,8 @@ def merge_editor_patch(item, header, updates, removed, added):
                 raise ContentImportError("editor_entry_invalid")
             # Only validated patch fields bypass old whole-draft limits; every
             # other value comes from this exact accepted immutable source.
+            if isinstance(raw.get("advanced"), dict):
+                raw["advanced"] = LoreControls.model_validate(raw["advanced"])
             entries.append(EditorEntry.model_construct(**raw))
         if any(entry.source_entry_id is not None for entry in added):
             raise ContentImportError("editor_entry_target_invalid")

@@ -36,6 +36,12 @@ from livingworld.domain.identifiers import (
 )
 from livingworld.infrastructure.persistence.authored_lifecycle import require_active_conversation
 from livingworld.infrastructure.persistence.chat_context_report import ChatContextReportMixin
+from livingworld.infrastructure.persistence.chat_path_queries import (
+    active_message_clause,
+    require_writable_path,
+    stamp_message,
+    stamp_turn,
+)
 from livingworld.infrastructure.persistence.chat_reply_recovery import ChatReplyRecoveryMixin
 from livingworld.infrastructure.persistence.long_chat_memory import record_chat_memories
 from livingworld.infrastructure.persistence.mapping import to_domain
@@ -193,6 +199,9 @@ class SqlAlchemyChatMessageStore(ChatContextReportMixin, ChatReplyRecoveryMixin)
                     existing.token_ceiling,
                     existing.status,
                 )
+            await require_writable_path(
+                session, conversation_id.world_id.value, conversation_id.value
+            )
             await require_active_conversation(
                 session, conversation_id.world_id.value, conversation_id.value
             )
@@ -234,6 +243,11 @@ class SqlAlchemyChatMessageStore(ChatContextReportMixin, ChatReplyRecoveryMixin)
             )
             session.add(row)
             await session.flush()
+            await stamp_message(session, row)
+            await stamp_turn(
+                session,
+                await session.get(ChatTurnRecord, (conversation_id.world_id.value, turn_id)),
+            )
             if sticker_entry_id is not None:
                 from livingworld.infrastructure.persistence.chat_media import attach_player_media
 
@@ -258,6 +272,7 @@ class SqlAlchemyChatMessageStore(ChatContextReportMixin, ChatReplyRecoveryMixin)
                 await session.scalars(
                     select(ChatMessageRecord)
                     .where(
+                        active_message_clause(ChatMessageRecord),
                         ChatMessageRecord.world_id == conversation_id.world_id.value,
                         ChatMessageRecord.conversation_id == conversation_id.value,
                     )
@@ -293,6 +308,7 @@ class SqlAlchemyChatMessageStore(ChatContextReportMixin, ChatReplyRecoveryMixin)
                     ),
                 )
                 .where(
+                    active_message_clause(ChatMessageRecord),
                     ChatMessageRecord.world_id == character_id.world_id.value,
                     ChatParticipantRecord.character_id == character_id.value,
                     ChatConversationRecord.player_id == player_id.value,
@@ -323,6 +339,7 @@ class SqlAlchemyChatMessageStore(ChatContextReportMixin, ChatReplyRecoveryMixin)
         async with self._sessions() as session:
             await self._conversation(session, conversation_id, player_id)
             statement = select(ChatMessageRecord).where(
+                active_message_clause(ChatMessageRecord),
                 ChatMessageRecord.world_id == conversation_id.world_id.value,
                 ChatMessageRecord.conversation_id == conversation_id.value,
             )
@@ -352,6 +369,7 @@ class SqlAlchemyChatMessageStore(ChatContextReportMixin, ChatReplyRecoveryMixin)
             await self._conversation(session, conversation_id, player_id)
             # Resolve the stable ID under the current binding before reading text.
             scope = (
+                active_message_clause(ChatMessageRecord),
                 ChatMessageRecord.world_id == conversation_id.world_id.value,
                 ChatMessageRecord.conversation_id == conversation_id.value,
                 LocalPlayerBindingRecord.player_id == player_id.value,
@@ -405,6 +423,7 @@ class SqlAlchemyChatMessageStore(ChatContextReportMixin, ChatReplyRecoveryMixin)
                     await session.execute(
                         select(ChatMessageRecord.turn_id, ChatMessageRecord.position)
                         .where(
+                            active_message_clause(ChatMessageRecord),
                             ChatMessageRecord.world_id == world_id,
                             ChatMessageRecord.conversation_id == conversation_value,
                             ChatMessageRecord.position < cursor,
@@ -434,6 +453,7 @@ class SqlAlchemyChatMessageStore(ChatContextReportMixin, ChatReplyRecoveryMixin)
                 await session.scalars(
                     select(ChatMessageRecord)
                     .where(
+                        active_message_clause(ChatMessageRecord),
                         ChatMessageRecord.world_id == world_id,
                         ChatMessageRecord.conversation_id == conversation_value,
                         ChatMessageRecord.turn_id.in_([current_turn, *prior_turns]),
@@ -460,6 +480,7 @@ class SqlAlchemyChatMessageStore(ChatContextReportMixin, ChatReplyRecoveryMixin)
                 questions = (
                     await session.scalars(
                         select(ChatMessageRecord).where(
+                            active_message_clause(ChatMessageRecord),
                             ChatMessageRecord.world_id == world_id,
                             ChatMessageRecord.conversation_id == conversation_value,
                             ChatMessageRecord.turn_id.in_(missing_sources),
@@ -505,6 +526,7 @@ class SqlAlchemyChatMessageStore(ChatContextReportMixin, ChatReplyRecoveryMixin)
             rows = (
                 await session.scalars(
                     select(ChatMessageRecord).where(
+                        active_message_clause(ChatMessageRecord),
                         ChatMessageRecord.world_id == conversation_id.world_id.value,
                         ChatMessageRecord.conversation_id == conversation_id.value,
                         ChatMessageRecord.turn_id == turn_id.value,
@@ -561,6 +583,7 @@ class SqlAlchemyChatMessageStore(ChatContextReportMixin, ChatReplyRecoveryMixin)
                 await session.scalars(
                     select(ChatMessageRecord)
                     .where(
+                        active_message_clause(ChatMessageRecord),
                         ChatMessageRecord.world_id == conversation_id.world_id.value,
                         ChatMessageRecord.conversation_id == conversation_id.value,
                         ChatMessageRecord.turn_id == turn_id.value,
@@ -624,6 +647,9 @@ class SqlAlchemyChatMessageStore(ChatContextReportMixin, ChatReplyRecoveryMixin)
             conversation = await self._conversation(session, conversation_id, player_id)
             if conversation.kind != "direct":
                 raise ChatTurnUnavailableError("direct_turn_required")
+            await require_writable_path(
+                session, conversation_id.world_id.value, conversation_id.value
+            )
             await require_active_conversation(
                 session, conversation_id.world_id.value, conversation_id.value
             )
@@ -756,6 +782,7 @@ class SqlAlchemyChatMessageStore(ChatContextReportMixin, ChatReplyRecoveryMixin)
             )
             session.add(row)
             await session.flush()
+            await stamp_message(session, row)
             await record_chat_events(
                 session,
                 row,
@@ -789,6 +816,9 @@ class SqlAlchemyChatMessageStore(ChatContextReportMixin, ChatReplyRecoveryMixin)
             conversation = await self._conversation(session, conversation_id, player_id)
             if conversation.kind != "group":
                 raise ChatTurnUnavailableError("group_turn_required")
+            await require_writable_path(
+                session, conversation_id.world_id.value, conversation_id.value
+            )
             await require_active_conversation(
                 session, conversation_id.world_id.value, conversation_id.value
             )
@@ -949,6 +979,7 @@ class SqlAlchemyChatMessageStore(ChatContextReportMixin, ChatReplyRecoveryMixin)
             )
             session.add(row)
             await session.flush()
+            await stamp_message(session, row)
             await record_chat_events(
                 session,
                 row,

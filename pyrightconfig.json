@@ -1,5 +1,12 @@
 {
   "include": [
+    "services/core/src/livingworld/application/chat_paths.py",
+    "services/core/src/livingworld/application/lore_controls.py",
+    "services/core/src/livingworld/application/lore_activation.py",
+    "services/core/src/livingworld/infrastructure/persistence/chat_paths.py",
+    "services/core/src/livingworld/infrastructure/persistence/chat_path_models.py",
+    "services/core/src/livingworld/infrastructure/persistence/chat_path_queries.py",
+    "services/core/src/livingworld/infrastructure/persistence/chat_lore.py",
     "services/core/src/livingworld/application/player_card.py",
     "services/core/src/livingworld/application/world_style.py",
     "services/core/src/livingworld/infrastructure/persistence/world_style.py",

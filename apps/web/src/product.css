@@ -315,3 +315,17 @@
 .world-style-editor textarea { display: block; width: 100%; margin-top: 8px; resize: vertical; }
 .world-style-preview { border-top: 1px solid var(--line); margin-top: 20px; padding-top: 12px; }
 .world-style-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* Chat route controls reuse the existing transcript and form vocabulary. */
+.chat-path-tools { padding: .65rem 1rem; border-bottom: 1px solid var(--border, #303544); }
+.chat-path-current { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+.chat-path-panel { margin-top: .75rem; max-width: 56rem; }
+.chat-path-panel ul { list-style: none; padding: 0; margin: .75rem 0; max-height: 20rem; overflow-y: auto; }
+.chat-path-panel li { display: flex; align-items: center; gap: .6rem; padding: .4rem 0; border-bottom: 1px solid var(--border, #303544); }
+.chat-path-panel li > span { flex: 1; overflow-wrap: anywhere; }
+.chat-path-time { display: block; color: var(--muted, #acb5c9); }
+.chat-path-review pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 18rem; overflow-y: auto; }
+.message-path-actions { font-size: .8rem; margin-top: .4rem; }
+.message-path-actions summary { cursor: pointer; color: var(--muted, #acb5c9); }
+.message-path-actions > div { display: flex; gap: .8rem; flex-wrap: wrap; padding: .4rem 0; }
+.lore-advanced { margin-block: .75rem; }

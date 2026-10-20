@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from livingworld.application.chat_export import ChatExportService
     from livingworld.application.chat_media import ChatMediaService
     from livingworld.application.chat_messages import ChatMessageService
+    from livingworld.application.chat_paths import ChatPathService
     from livingworld.application.chat_recall import EarlierChatRecall
     from livingworld.application.chat_reply import DirectChatReplyService
     from livingworld.application.content import ContentRepository
@@ -56,6 +57,7 @@ class HttpServices:
     player_onboarding: LocalPlayerOnboardingService | None = None
     chat_conversations: ChatConversationService | None = None
     chat_messages: ChatMessageService | None = None
+    chat_paths: ChatPathService | None = None
     chat_reply: DirectChatReplyService | WorldModelValue[DirectChatReplyService | None] | None = (
         None
     )

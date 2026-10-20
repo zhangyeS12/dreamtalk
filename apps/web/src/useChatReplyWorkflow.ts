@@ -6,6 +6,7 @@ import {
 } from "./chatFeedback";
 import { useReplyStream } from "./useReplyStream";
 import { useSpeech } from "./SpeechPlayback";
+import { useChatPaths } from "./useChatPaths";
 import { useTranscriptPages } from "./useTranscriptPages";
 
 interface Options {
@@ -20,12 +21,13 @@ interface Options {
   onSuggestionUsed?: () => void;
   onDirtyChange?: (dirty: boolean) => void;
   readOnly?: boolean;
+  extraDirty?: boolean;
 }
 
 /** Save retries reuse one request ID; uncertain model calls are only inspected. */
 export function useChatReplyWorkflow({
   client, worldId, playerId, conversationId, kind, speakers, tokenCeiling,
-  suggestedDraft, onSuggestionUsed, onDirtyChange, readOnly = false,
+  suggestedDraft, onSuggestionUsed, onDirtyChange, readOnly = false, extraDirty = false,
 }: Options) {
   const [refresh, setRefresh] = useState(0);
   const [availability, setAvailability] = useState<ChatReplyAvailability | null>(null);
@@ -41,16 +43,19 @@ export function useChatReplyWorkflow({
   const actionLock = useRef(false);
   const stream = useReplyStream();
   const speech = useSpeech();
-  const transcript = useTranscriptPages(client, worldId, conversationId, refresh, true);
+  const paths = useChatPaths(client, worldId, conversationId);
+  const pathKey = paths.snapshot ? `${paths.snapshot.active.path_id}:${paths.snapshot.revision}` : "loading";
+  const transcript = useTranscriptPages(client, worldId, conversationId, refresh, true, pathKey, !!paths.snapshot);
   const acceptMessage: typeof transcript.acceptMessage = message => {
     transcript.acceptMessage(message);
     speech?.committed(conversationId, message);
   };
-  const available = !readOnly && availability?.available === true && !availabilityReading && !availabilityFailed;
+  const modelReady = !readOnly && availability?.available === true && !availabilityReading && !availabilityFailed;
+  const available = modelReady && !!paths.snapshot && !paths.failed && !paths.busy && paths.snapshot.active.kind !== "checkpoint";
   const budgetFeedback = chatTokenReservationFeedback(availability, tokenCeiling, kind);
   const sending = phase !== null || recoveryBusy;
 
-  useEffect(() => { onDirtyChange?.(Boolean(draft.trim() || sticker || pending || sending)); }, [draft, sticker, pending, sending, onDirtyChange]);
+  useEffect(() => { onDirtyChange?.(Boolean(draft.trim() || sticker || pending || sending || paths.busy || extraDirty)); }, [draft, sticker, pending, sending, paths.busy, extraDirty, onDirtyChange]);
   useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
   useEffect(() => {
     if (suggestedDraft) { setDraft(suggestedDraft); onSuggestionUsed?.(); }
@@ -103,8 +108,8 @@ export function useChatReplyWorkflow({
     if (turn?.state !== "completed") setReplyFailure({ turnId, message, modelSettingsSuggested: chatFailureNeedsModelSettings(failure) });
   };
 
-  const generateSavedReply = async (turnId: string) => {
-    if (actionLock.current || pending || !available) return;
+  const generateSavedReply = async (turnId: string, confirmedPath = false) => {
+    if (actionLock.current || pending || (confirmedPath ? !modelReady : !available)) return;
     actionLock.current = true;
     setPhase("replying"); setFeedback(""); setReplyFailure(null);
     try {
@@ -144,6 +149,7 @@ export function useChatReplyWorkflow({
   };
 
   return {
+    paths, pathKey, modelReady,
     ...transcript, refresh, setRefresh, available, availabilityReading, availabilityFailed,
     budgetFeedback, draft, setDraft, sticker, setSticker, pending, phase, sending, setRecoveryBusy, feedback,
     modelSettingsSuggested: Boolean(replyFailure?.message === feedback && replyFailure.modelSettingsSuggested),

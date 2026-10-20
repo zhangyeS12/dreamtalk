@@ -1,3 +1,4 @@
+import { LoreAdvancedControls } from "./LoreAdvancedControls";
 import { ContentEditorPages } from "./contentEditorPages";
 import { InitialLocationChoice } from "./InitialLocationChoice";
 import { useEffect, useRef, useState } from "react";
@@ -298,6 +299,7 @@ export function ContentEditor({ client, worldId, kind, editing, onSaved, onCance
             <label className="field"><span>正文 *</span><textarea rows={4} maxLength={16000} value={entry.content} required onChange={event => updateEntry(index, { content: event.target.value })} /></label>
             <div className="editor-columns"><label className="field"><span>主关键词（逗号分隔）</span><ListInput value={entry.keywords} onChange={value => updateEntry(index, { keywords: value })} /></label>
               <label className="field"><span>提供条件</span><select value={entry.constant ? "constant" : "keywords"} onChange={event => updateEntry(index, { constant: event.target.value === "constant" })}><option value="keywords">命中关键词</option><option value="constant">常驻背景</option></select></label></div>
+            <LoreAdvancedControls value={entry.advanced} onChange={advanced => updateEntry(index, { advanced })} />
             <details><summary>次级条件与排序</summary><label className="field"><span>次级关键词（需要主关键词）</span><ListInput value={entry.secondary_keywords} onChange={value => updateEntry(index, { secondary_keywords: value })} /></label>
               <label className="field"><span>次级条件</span><select value={entry.selective_logic} onChange={event => updateEntry(index, { selective_logic: event.target.value as ContentEditorEntry["selective_logic"] })}><option value="AND_ANY">任一命中</option><option value="AND_ALL">全部命中</option><option value="NOT_ANY">全部不命中</option><option value="NOT_ALL">不能全部命中</option></select></label>
               <div className="editor-columns">{(["priority", "order"] as const).map(key => <label key={key} className="field"><span>{key === "priority" ? "优先级" : "顺序"}</span><input type="number" min={-1000000} max={1000000} step={1} value={entry[key]} onChange={event => updateEntry(index, { [key]: Number(event.target.value) })} /></label>)}</div>

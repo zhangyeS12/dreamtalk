@@ -21,6 +21,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from livingworld.application.conversation_memory import ConversationMemoryError
 from livingworld.application.errors import EntityNotFoundError
+from livingworld.infrastructure.persistence.chat_path_queries import active_message_clause
 from livingworld.infrastructure.persistence.models import (
     Base,
     CharacterRecord,
@@ -182,9 +183,50 @@ class SqlAlchemyConversationMemoryStore:
         )
         if before_position is not None:
             query = query.where(ConversationMemoryRevisionRecord.through_position < before_position)
-        return await session.scalar(
-            query.order_by(ConversationMemoryRevisionRecord.revision.desc()).limit(1)
+        visible = {0: True}
+        rows = await session.stream_scalars(
+            query.order_by(ConversationMemoryRevisionRecord.revision.desc())
         )
+        async for row in rows:
+            if await self._lineage_visible(session, conversation, row, visible):
+                return row
+        return None
+
+    async def _lineage_visible(self, session, conversation, row, visible=None):
+        visible = {0: True} if visible is None else visible
+        pending = []
+        while row is not None and row.revision not in visible:
+            ids = [UUID(value) for value in json.loads(row.source_ids)]
+            count = await session.scalar(
+                select(func.count())
+                .select_from(ChatMessageRecord)
+                .where(
+                    ChatMessageRecord.world_id == conversation.world_id.value,
+                    ChatMessageRecord.conversation_id == conversation.value,
+                    ChatMessageRecord.message_id.in_(ids),
+                    active_message_clause(ChatMessageRecord),
+                )
+            )
+            if count != len(ids):
+                visible[row.revision] = False
+                break
+            pending.append(row.revision)
+            if not row.base_revision:
+                row = None
+                break
+            parent = await session.get(
+                ConversationMemoryRevisionRecord,
+                (row.world_id, row.conversation_id, row.base_revision),
+            )
+            if parent is None or parent.revision >= row.revision:
+                for revision in pending:
+                    visible[revision] = False
+                return False
+            row = parent
+        valid = visible.get(row.revision, False) if row is not None else True
+        for revision in pending:
+            visible[revision] = valid
+        return valid
 
     async def _draft(self, session, conversation, player, draft_id):
         row = await session.scalar(
@@ -206,6 +248,8 @@ class SqlAlchemyConversationMemoryStore:
         )
         if row is None:
             raise ConversationMemoryError("memory_revision_not_found")
+        if not await self._lineage_visible(session, conversation, row):
+            raise ConversationMemoryError("memory_source_invalid")
         return row
 
     async def _source_messages(self, session, conversation, player, ids):
@@ -218,6 +262,7 @@ class SqlAlchemyConversationMemoryStore:
                 await session.scalars(
                     select(ChatMessageRecord)
                     .where(
+                        active_message_clause(ChatMessageRecord),
                         ChatMessageRecord.world_id == conversation.world_id.value,
                         ChatMessageRecord.conversation_id == conversation.value,
                         ChatMessageRecord.message_id.in_([UUID(value) for value in ids]),
@@ -296,8 +341,18 @@ class SqlAlchemyConversationMemoryStore:
                 )
                 .limit(1)
             )
+            if draft is not None:
+                try:
+                    await self._source_messages(
+                        session, conversation, player, json.loads(draft.source_ids)
+                    )
+                    if draft.base_revision:
+                        await self._revision(session, conversation, player, draft.base_revision)
+                except ConversationMemoryError:
+                    draft = None
             latest = await session.scalar(
                 select(func.max(ChatMessageRecord.position)).where(
+                    active_message_clause(ChatMessageRecord),
                     ChatMessageRecord.world_id == conversation.world_id.value,
                     ChatMessageRecord.conversation_id == conversation.value,
                 )
@@ -336,6 +391,7 @@ class SqlAlchemyConversationMemoryStore:
                         await session.scalars(
                             select(ChatMessageRecord)
                             .where(
+                                active_message_clause(ChatMessageRecord),
                                 ChatMessageRecord.world_id == conversation.world_id.value,
                                 ChatMessageRecord.conversation_id == conversation.value,
                                 ChatMessageRecord.position > through,
@@ -391,7 +447,11 @@ class SqlAlchemyConversationMemoryStore:
     async def draft(self, conversation, player, draft_id):
         async with self._sessions() as session:
             await self._owner(session, conversation, player)
-            return _view(await self._draft(session, conversation, player, draft_id))
+            row = await self._draft(session, conversation, player, draft_id)
+            await self._source_messages(session, conversation, player, json.loads(row.source_ids))
+            if row.base_revision:
+                await self._revision(session, conversation, player, row.base_revision)
+            return _view(row)
 
     async def finish(self, conversation, player, draft_id, state, *, content=None, error=None):
         async with self._sessions() as session, session.begin():
@@ -458,7 +518,15 @@ class SqlAlchemyConversationMemoryStore:
                 world_id=row.world_id,
                 conversation_id=row.conversation_id,
                 player_id=row.player_id,
-                revision=row.base_revision + 1,
+                revision=(
+                    await session.scalar(
+                        select(func.max(ConversationMemoryRevisionRecord.revision)).where(
+                            *_scope(ConversationMemoryRevisionRecord, conversation, player)
+                        )
+                    )
+                    or 0
+                )
+                + 1,
                 base_revision=row.base_revision,
                 through_position=row.through_position,
                 source_ids=row.source_ids,

@@ -7,6 +7,7 @@ from typing import Literal, NotRequired, TypedDict
 from pydantic import ConfigDict, with_config
 
 from livingworld.adapters.http.wire_contracts.numbers import WireNumber
+from livingworld.application.lore_controls import LoreControls
 
 
 @with_config(ConfigDict(extra="allow"))
@@ -72,6 +73,7 @@ class ContentEditorEntry(TypedDict):
     secondary_keywords: list[str]
     enabled: bool
     constant: bool
+    advanced: NotRequired[LoreControls | None]
     selective_logic: Literal["AND_ANY", "AND_ALL", "NOT_ANY", "NOT_ALL"]
     priority: WireNumber
     order: WireNumber

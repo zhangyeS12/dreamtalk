@@ -23,8 +23,8 @@ function mergeMessages(current: ChatMessage[], incoming: ChatMessage[]): ChatMes
 }
 
 /** Bounded transcript reads; a new page is merged by durable message identity. */
-export function useTranscriptPages(client: CoreClient, worldId: string, conversationId: string, refresh: number, poll = false) {
-  const key = `${worldId}/${conversationId}`;
+export function useTranscriptPages(client: CoreClient, worldId: string, conversationId: string, refresh: number, poll = false, viewKey = "", enabled = true) {
+  const key = `${worldId}/${conversationId}/${viewKey}`;
   const currentKey = useRef(key);
   currentKey.current = key;
   const latestGeneration = useRef(0);
@@ -32,6 +32,7 @@ export function useTranscriptPages(client: CoreClient, worldId: string, conversa
   const [state, setState] = useState<TranscriptState>(() => initial(key));
 
   useEffect(() => {
+    if (!enabled) return;
     let active = true;
     const controller = new AbortController();
     let timer: number | undefined;
@@ -68,7 +69,7 @@ export function useTranscriptPages(client: CoreClient, worldId: string, conversa
     };
     void readLatest();
     return () => { active = false; window.clearTimeout(timer); controller.abort(); };
-  }, [client, worldId, conversationId, key, refresh, poll, latestRequest]);
+  }, [client, worldId, conversationId, key, refresh, poll, latestRequest, enabled]);
 
   const loadOlder = async (beforePrepend: () => void) => {
     if (state.key !== key || state.messages === null || state.loadingOlder || state.beforePosition === null) return;

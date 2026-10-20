@@ -13,6 +13,7 @@ from livingworld.application.content_builder import research_view
 from livingworld.application.content_editor_pages import editor_page, merge_editor_patch
 from livingworld.application.errors import EntityNotFoundError
 from livingworld.application.imports import ContentImportError
+from livingworld.application.lore_controls import LoreControls
 from livingworld.domain.content.serialization import json_value
 from livingworld.domain.identifiers import WorldId
 
@@ -45,6 +46,7 @@ class EntryFields(BaseModel):
     secondary_keywords: list[str] | None = Field(default=None, max_length=64)
     enabled: bool | None = None
     constant: bool | None = None
+    advanced: LoreControls | None = None
     selective_logic: str | None = Field(default=None, pattern="^(AND_ANY|AND_ALL|NOT_ANY|NOT_ALL)$")
     priority: int | None = Field(default=None, ge=-1000000, le=1000000)
     order: int | None = Field(default=None, ge=-1000000, le=1000000)

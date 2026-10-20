@@ -24,6 +24,7 @@ class ChatExportSnapshot:
     characters: tuple[tuple[str, str], ...]
     through_position: int
     message_count: int
+    path_id: str | None = None
 
     def metadata(self):
         return {
@@ -35,6 +36,7 @@ class ChatExportSnapshot:
             "characters": [{"id": identity, "name": name} for identity, name in self.characters],
             "through_position": self.through_position,
             "message_count": self.message_count,
+            "path_id": self.path_id,
         }
 
     @property

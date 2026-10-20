@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from sqlalchemy import Integer, func, select
 
 from livingworld.application.errors import EntityNotFoundError
+from livingworld.infrastructure.persistence.chat_path_queries import active_message_clause
 from livingworld.infrastructure.persistence.contact_gate import waiting_conversation
 from livingworld.infrastructure.persistence.deletion_models import GroupDissolutionRecord
 from livingworld.infrastructure.persistence.models import ChatConversationRecord as Conversation
@@ -31,7 +32,7 @@ class SqlAlchemyChatUnreadStore:
             await self._owner(session, world, player)
             incoming = func.sum(
                 (
-                    (Message.sender_character_id.is_not(None))
+                    (Message.sender_character_id.is_not(None) & active_message_clause(Message))
                     & (Message.position > func.coalesce(Read.position, 0))
                 ).cast(Integer)
             )
@@ -44,7 +45,8 @@ class SqlAlchemyChatUnreadStore:
                 .outerjoin(
                     Message,
                     (Message.world_id == Conversation.world_id)
-                    & (Message.conversation_id == Conversation.conversation_id),
+                    & (Message.conversation_id == Conversation.conversation_id)
+                    & active_message_clause(Message),
                 )
                 .outerjoin(
                     Read,
@@ -102,6 +104,7 @@ class SqlAlchemyChatUnreadStore:
                     Message.world_id == world.value,
                     Message.conversation_id == conversation,
                     Message.position == position,
+                    active_message_clause(Message),
                 )
             )
             if message is None:

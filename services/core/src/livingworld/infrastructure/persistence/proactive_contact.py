@@ -15,6 +15,10 @@ from livingworld.application.lore_activation import select_common_background
 from livingworld.application.player_persona import shared_identity_context
 from livingworld.application.proactive_contact import ProactiveContactError
 from livingworld.domain.identifiers import PlayerId, WorldId
+from livingworld.infrastructure.persistence.chat_path_queries import (
+    stamp_message,
+    writable_conversation_clause,
+)
 from livingworld.infrastructure.persistence.contact_gate import (
     contact_blocked,
     waiting_conversation,
@@ -279,6 +283,7 @@ class SqlAlchemyProactiveContactStore:
                         Conversation.world_id == cfg.world_id,
                         Conversation.player_id == cfg.player_id,
                         Conversation.kind == "direct",
+                        writable_conversation_clause(Conversation),
                         Participant.character_id == character,
                     )
                     .limit(2)
@@ -527,6 +532,7 @@ class SqlAlchemyProactiveContactStore:
                         Conversation.world_id == episode.world_id,
                         Conversation.player_id == episode.player_id,
                         Conversation.kind == "group",
+                        writable_conversation_clause(Conversation),
                         Conversation.conversation_id.in_(pair_groups),
                         Conversation.conversation_id.not_in(
                             select(GroupDissolutionRecord.conversation_id).where(
@@ -602,6 +608,7 @@ class SqlAlchemyProactiveContactStore:
                     )
                     session.add(message)
                     await session.flush()
+                    await stamp_message(session, message)
                     await record_contact_invitation(
                         session,
                         message,

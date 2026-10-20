@@ -23,6 +23,11 @@ from livingworld.application.offline_contact_inputs import (
     pack_snapshot,
 )
 from livingworld.domain.identifiers import PlayerId, WorldId
+from livingworld.infrastructure.persistence.chat_path_queries import (
+    require_writable_path,
+    stamp_message,
+    writable_conversation_clause,
+)
 from livingworld.infrastructure.persistence.director_background import (
     background_is_current,
     read_director_background,
@@ -251,6 +256,7 @@ class SqlAlchemyOfflineContactStore:
                 Conversation.world_id == cfg.world_id,
                 Conversation.player_id == cfg.player_id,
                 Conversation.kind == "direct",
+                writable_conversation_clause(Conversation),
                 Participant.character_id.not_in(removed),
             )
             .order_by(Conversation.conversation_id)
@@ -623,6 +629,7 @@ class SqlAlchemyOfflineContactStore:
             if chosen is None:
                 raise OfflineContactError("offline_plan_invalid")
             ep.character_id, ep.conversation_id = UUID(character), UUID(chosen["conversation_id"])
+            await require_writable_path(session, ep.world_id, ep.conversation_id)
             ep.purpose, ep.story_sent_at_utc, ep.state = purpose, story_time, "writing"
             cfg = await session.get(Settings, 1)
             cfg.state = "writing"
@@ -694,6 +701,7 @@ class SqlAlchemyOfflineContactStore:
             )
             session.add(message)
             await session.flush()
+            await stamp_message(session, message)
             if ep.purpose == "invite_chat":
                 chosen = next(
                     c

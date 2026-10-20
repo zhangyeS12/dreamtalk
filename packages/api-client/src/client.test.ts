@@ -121,3 +121,15 @@ describe("CoreClient", () => {
     expect(fetcher.mock.calls[2][0].toString()).toBe(`${connection.endpoint}/api/v${API_PROTOCOL}/worlds/world/conversations/group/group-turns/turn`);
   });
 });
+
+it("sends reviewed chat-path writes as authenticated JSON with stable request identity", async () => {
+  const draft = { action: "candidate" as const, revision: 2, message_id: "message", token_ceiling: 10000 };
+  const request = { draft, reviewed_hash: "a".repeat(64), confirmed: true as const, request_id: "request" };
+  const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({ path_id: "candidate", revision: 3, turn_id: "attempt" })));
+  await new CoreClient(connection, fetcher).commitChatPath("world", "chat", request);
+  expect(fetcher).toHaveBeenCalledOnce();
+  expect(fetcher.mock.calls[0][0].toString()).toBe(`${connection.endpoint}/api/v${API_PROTOCOL}/worlds/world/conversations/chat/paths/commit`);
+  expect(fetcher.mock.calls[0][1].headers["Content-Type"]).toBe("application/json");
+  expect(fetcher.mock.calls[0][1].headers.Authorization).toBe("Bearer memory-session");
+  expect(JSON.parse(fetcher.mock.calls[0][1].body)).toEqual(request);
+});
