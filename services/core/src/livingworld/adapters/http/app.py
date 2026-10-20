@@ -38,6 +38,7 @@ from livingworld.adapters.http.world_content import world_content_router
 from livingworld.adapters.http.world_covers import create_world_cover_router
 from livingworld.adapters.http.world_locations import world_locations_router
 from livingworld.adapters.http.world_story import world_story_router
+from livingworld.adapters.http.world_style import world_style_router
 from livingworld.adapters.http.worlds import world_router
 from livingworld.application.chat_media import MediaError
 from livingworld.application.runtime import RuntimeStatus, ShutdownRequests
@@ -134,6 +135,8 @@ def create_app(
         app.include_router(player_persona_router(services.player_persona, authorize))
     if services.local_profiles is not None:
         app.include_router(profile_router(services.local_profiles, authorize))
+    if services.world_style is not None:
+        app.include_router(world_style_router(services.world_style, authorize))
 
     if services.world_content is not None:
         app.include_router(

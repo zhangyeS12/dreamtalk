@@ -44,6 +44,7 @@ from livingworld.application.simulation_runtime import (
 )
 from livingworld.application.world_locations import WorldLocationsService
 from livingworld.application.world_settings import WorldSettingsService
+from livingworld.application.world_style import WorldStyleService
 from livingworld.bootstrap.llm_control import HostControlListener
 from livingworld.bootstrap.llm_runtime import (
     configure_content_builder,
@@ -391,6 +392,7 @@ async def run(
                 long_memory_store,
                 social_reader=database.faction_store().context_for_character,
                 persona_reader=database.player_persona_store().context_for_character,
+                style_reader=database.world_style_store(),
             ),
             journal=story_store,
         )
@@ -410,6 +412,7 @@ async def run(
                 long_memory_store,
                 social_reader=database.faction_store().context_for_character,
                 persona_reader=database.player_persona_store().context_for_character,
+                style_reader=database.world_style_store(),
             ),
             journal=story_store,
             logger=logger,
@@ -473,6 +476,7 @@ async def run(
         from livingworld.application.example_worlds import ExampleWorldService
         from livingworld.application.player_persona import PlayerPersonaService
         from livingworld.infrastructure.example_templates import campus_template
+        from livingworld.infrastructure.imports.character_cards import CharacterCardImporter
 
         onboarding = LocalPlayerOnboardingService(command_handler, player_event_feed)
         activity_setup = CharacterActivitySetupService(
@@ -503,7 +507,10 @@ async def run(
                 world_settings=world_settings,
                 player_event_feed=player_event_feed,
                 local_profiles=database.local_profile_store(),
-                player_persona=PlayerPersonaService(database.player_persona_store()),
+                world_style=WorldStyleService(database.world_style_store()),
+                player_persona=PlayerPersonaService(
+                    database.player_persona_store(), CharacterCardImporter()
+                ),
                 world_content=world_content,
                 player_onboarding=onboarding,
                 chat_conversations=chat_conversations,

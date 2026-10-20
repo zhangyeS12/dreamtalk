@@ -356,5 +356,10 @@ class Database:
 
         return SqlAlchemyLocalProfileStore(self._sessions)
 
+    def world_style_store(self):
+        from livingworld.infrastructure.persistence.world_style import SqlAlchemyWorldStyleStore
+
+        return SqlAlchemyWorldStyleStore(self._sessions)
+
     async def close(self) -> None:
         await self.engine.dispose()

@@ -22,7 +22,7 @@ const errors: Record<string, string> = {
   offline_generation_failed: "本次生成未完成，可能已产生费用，系统不会自动重试。",
   offline_plan_invalid: "本次联系计划未通过校验，已停止。",
   offline_dialogue_invalid: "本次角色消息未通过校验，已停止。",
-  offline_context_changed: "身份、资料、玩家状态或新消息已变化，本次联系已取消。",
+  offline_context_changed: "身份、资料、世界风格、玩家状态或新消息已变化，本次联系已取消。",
   offline_clock_regression: "系统时间向后调整，等待时间恢复后再判断离线时长。",
   offline_storage_corrupt: "存档读取异常，请退出程序并保留存档文件，先诊断；反复点击或刷新不能修复存档。",
   offline_storage_busy: "存档暂时被占用，请稍后点击刷新状态，再手动保存。",

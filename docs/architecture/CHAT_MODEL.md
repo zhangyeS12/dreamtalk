@@ -13,6 +13,54 @@ history between the current world's bound Player and one or more runtime
 Characters. Chat messages provide roleplay and topics; they are not WorldEvents,
 WorldTruth, CharacterKnowledge, or PlayerKnowledge by themselves.
 
+## 角色扮演优先与开场
+
+私聊和群聊以扮演为主要任务，通信入口不预设远程或同场。角色卡是人物、性格、关系设定与语气的首要依据；题材、内容尺度和整体叙事风格优先采用当前世界已确认的世界风格。当前获准世界书、记忆、身份及活动资料用于补充背景，不把角色变成活动记录播报员。回复可包含台词、动作、神态、心理和场景描写；只有补充的系统记录需要按其主体、来源与时间解释，缺少后台记录不禁止当下场景表演。
+
+`application/chat_roleplay.py`供私聊与群聊共用。完整描述、性格、背景、情境、表达指导以独立文字段落进入SYSTEM；非空`system_prompt`替换默认的写作主提示，不只是JSON字段，也不替换数据权限、玩家自主、传输或预算边界。补充USER资料只留角色ID／名称引用，不重复发送整卡。`{{char}}`／`{{user}}`按当前角色名、世界优先的玩家名作单次字面替换；只有卡内主提示和后置指令另外支持`{{original}}`引用相应默认写作要求。替换结果不递归求值，未知宏保持字面，不执行脚本、表达式或插件；creator_notes仍是元数据。
+
+对话示例按`<START>`分块，仅识别当前角色／玩家名称及其冒号前缀，生成明确标记的USER／ASSISTANT示范；未识别说话者的文本保留为文风示例，不升级为SYSTEM指令。完整`first_mes`在真实历史前以ASSISTANT场景示范提供，并有独立标记说明它来自卡片。初次互动承接开场，已有对话以最新进展衔接，不重演或覆盖后续变化；不创建、补写或修改持久消息，也不认证世界事件。开场每轮完整提供，仍无单独8 KiB省略规则，不参与可选背景裁剪；这与酒馆将开场持久化为新聊天第一条消息的行为不同。
+
+`post_history_instructions`在容量打包后附于真实历史末尾：最后为USER时增加独立文字块，否则增加标记为卡内写作要求的末尾USER消息。使用此统一形式是因为现有Anthropic／Gemini接口不接受历史后的SYSTEM，不能为了位置而放宽adapter门禁。四类路径都保持末尾位置，不使用assistant prefill，不把它保存为玩家新消息。打包后的实际请求包含全部示例、完整开场与后置要求，再做可信输入／输出预留；无法容纳必要内容时明确拒绝，不静默截卡或额外付费重试。
+
+群聊回复将裁剪后保留的历史按USER／ASSISTANT分别发送，角色消息带姓名和稳定发言者标识以区分同名者；只扮演选定角色，不回显内部标识。历史不再重复出现在补充JSON的`transcript`中。独立selector继续使用其有界JSON资料、选人与整轮费用规则，不接收开场示范。其他角色的私人信息仍在输入前过滤，开场不代表群内成员看过私聊。
+
+活动、长期记忆、摘要、身份及社交来源解释只在输入具有相应资料时提供；基础知情、来源与玩家自主边界始终存在。移除事件／记忆／媒体指令里的通用寒暄、购物、咖啡及表情台词示例，避免与卡片文风竞争。同次辅助提取及普通正文兼容保持，不增加第二次模型调用；输出不是世界事实，Kernel及持久化校验保持。
+
+本次依据用户2026-10-20“取长补短，优化聊天”的决定，参考酒馆**1.19.0**的[提示排序实现](https://github.com/SillyTavern/SillyTavern/blob/1.19.0/public/scripts/PromptManager.js)、[角色字段与开场](https://github.com/SillyTavern/SillyTavern/blob/1.19.0/public/script.js)、[示例编排](https://github.com/SillyTavern/SillyTavern/blob/1.19.0/public/scripts/openai.js)及[Prompt Manager说明](https://docs.sillytavern.app/usage/prompts/prompt-manager/)。酒馆为AGPL-3.0；本项目以现有Python 3.13标准库独立实现，不复制其代码、不新增依赖。复用理由是分离人物写作、示范和历史位置，同时保留当前供应商及世界权限边界。未引入完整酒馆宏、世界书深度注入或插件，也未更改模型配置、温度、采样或思考参数。实现、工程检查与用户验收分别见[状态清单](../PROJECT_STATUS.md)。
+
+## 实际发送的消息顺序
+
+私聊／群聊回复共用以下内部结构；供应商适配器转换到对应API的system／messages字段，不把世界风格降为普通资料或擅自重排对话：
+
+1. 首个SYSTEM：世界风格全文（非空时最前）→基础扮演／知情／玩家自主边界与台词排版→当前NPC卡内主提示及人物段落→实际出现的补充资料来源说明。随后在同一个SYSTEM追加同次事件／记忆辅助格式、适用的媒体／表情要求。
+2. USER补充资料：当前玩家公开身份、仅当前发言角色获准的初始认识、授权世界书／记忆及其他有效上下文。玩家专用卡仅作身份来源，不在这里执行其卡内系统提示。
+3. USER／ASSISTANT卡片示例；随后是明确标记的完整开场示范。两者都不冒充已经保存的真实历史。
+4. 经容量整理保留的真实USER／ASSISTANT历史。私聊的当前活动快照紧邻本轮玩家消息；群聊保留各角色的发言身份与顺序。
+5. 历史末尾的写作要求：只扮演当前角色、台词排版、存在世界风格时的一句遵循提醒，以及卡内后置要求。最后为USER时附加，否则新增USER写作块，不新增世界事件或持久聊天消息。
+
+世界风格不属于可选资料裁剪项，整段计入最终请求的可信预算；必要内容放不下时明确报容量问题。它在题材、内容尺度与文风上的“最高”是应用提供给模型的明确文字约定，不是供应商API中的独立强制权限层，也不能保证模型每次遵循或覆盖服务方自身约束。真实效果仍须以实际模型表现验收；位置核对不能代替模型对照。在线／离线联系沿各自较短的任务请求，在首个SYSTEM以同一风格写作块开头；群聊选人与离线规划不接收这项写作要求。
+
+## 世界风格与台词显示
+
+通讯录内的“世界风格”按当前世界独立编辑，先预览再明确确认；留空关闭。用户可约定题材、内容尺度、叙事方式，包括成年角色之间自愿的亲密关系题材；不内置强制成人预设。风格在这些写作维度高于卡内主提示、示例和后置要求，人物身份、性格、偏好仍来自角色卡，关系发展衔接真实对话。允许某类情节不代表角色必须答应；不覆盖服务方规则，不授予秘密、工具、程序权限，不改变玩家自主、WorldTruth或预算。
+
+CoreClient的风格预览和确认请求均明确声明`Content-Type: application/json`，与身份编辑采用同一传输约定。检查不能只用自动补充请求头的Python `json=`调用或模拟成功的客户端方法；应覆盖真实客户端请求、后端解析及临时库写入后重读。
+
+`application/world_style.py`负责校验、世界／修订绑定的预览摘要及写作块；`persistence/world_style.py`以CAS保存，Alembic增量建立`world_styles`，旧世界缺行时为空。输入最多4000字符，JSON转义后的UTF-8字符串最多16000字节，超限明确拒绝，草稿保留。私聊／群聊SYSTEM完整放入一份风格，参与既有最终请求预留，不静默裁剪；selector不接收写作风格。在线／离线联系的冻结快照包含风格与修订，写作阶段使用同一写作块，投递事务再核对当前修订；旧快照缺字段按修订0处理。变更后迟到结果取消，沿原去重回执，不自动重试可能收费的调用；离线的上下文变化记为跳过，不伪报生成失败。
+
+消息显示参考酒馆**1.19.0**的[messageFormatting](https://github.com/SillyTavern/SillyTavern/blob/1.19.0/public/script.js)引号分色行为（AGPL-3.0，仅参考行为）。本项目使用已有react-markdown生成的语法树和React安全节点独立实现，无新增依赖或AGPL源码。新回复要求台词用“”包围；显示兼容英文双引号、中文双引号、直角引号、双直角引号、法式引号和全角双引号。明确台词黄色，其余文字默认颜色；斜体动作、行内代码和代码块不着台词色。不对无标记旧文字猜测语义，不改存储原文，不额外调用模型。私聊、群聊、流式与来源原文共用显示器；玩家消息不着色。跨粗体／链接保留引号状态，未闭合引号只延伸到本段末；仍禁用原始HTML、危险／本地链接和外部图片自动请求。
+
+## 回复正文与辅助格式容错
+
+私聊／群聊的同次辅助提取允许直接输出完整角色正文；需要事件、记忆或媒体时才使用带`reply`的JSON。普通`[动作]`、`{动作}`、Markdown及正文中提到字段名均不能单独触发JSON校验。解析只在明确JSON代码块或对象／封装结构开头生效，不把损坏的封装原样展示为台词。
+
+正常JSON保留通过校验的辅助字段。若只有JSON语法损坏，且位于开头的`reply`字符串已经完整关闭、合法并无第二个`reply`歧义，可以保留该正文并丢弃全部事件、记忆和媒体；正文缺失、空白、残缺、重复键、非有限数或非法Unicode仍拒绝。输出到达长度上限时也仅允许保留能够证明已关闭的`reply`正文，不把截断的普通文本猜作完整回复。既有64 KiB响应边界、整轮Token硬上限及严格结构化调用保持。
+
+流式普通正文可逐步显示；可能是封装的前缀先等待识别。预览解码发生分歧时停止后续预览，最终校验并持久化的消息替换预览，不因此丢弃有效正文，也不额外调用模型。失败只记录固定原因类别，不保留或输出被拒绝的原始正文；格式失败提示不指向模型设置。一次性dispatch、账本结算、人工恢复和无自动重试契约保持。
+
+恢复使用现有Python **3.13**标准库[`JSONDecoder.raw_decode`](https://docs.python.org/3.13/library/json.html#json.JSONDecoder.raw_decode)判定字符串结束，流式沿用已有pydantic-core **2.46.5**的[部分JSON解析](https://docs.pydantic.dev/latest/concepts/json/#partial-json-parsing)。前者沿PSF许可，后者沿现有MIT许可；不新增依赖，不手写引号／转义解析器。选择理由是精确区分已完整的正文与损坏的辅助字段。具体隔离检查及真实模型验收边界统一见[状态清单](../PROJECT_STATUS.md)。
+
 ## Runtime character identity
 
 An accepted CharacterDefinition (imported, manually authored, or generated and
@@ -80,8 +128,9 @@ same runtime Character identity. Speaker-selection input contains accepted
 public persona fields and a bounded owner-scoped group transcript, but no
 private Character memories. A selected Character's reply input adds only that
 Character's own bounded EpisodicMemory view and the local Player's general and
-current-world descriptions. Imported instructions and transcript text remain
-lower-trust data. An exact `@display-name` in the Player message can identify
+current-world descriptions. Accepted card instructions guide character writing;
+neither cards nor transcript text grant program or knowledge authority.
+An exact `@display-name` in the Player message can identify
 one participant; ambiguous names or multiple addressed participants fail
 closed. The group composer offers one-click `@display-name` insertion for
 uniquely named members; it does not change the server-side selection rule.
@@ -258,18 +307,13 @@ general/current-world profile. It also requests recent EpisodicMemory through
 a reader bound to that Conversation's Character identity. At most 12 recent
 memories are considered and at most 8 KiB of their UTF-8 content enters the
 prompt; a larger individual memory is skipped. The builder verifies each returned
-memory's owner again before assembly. Memory content and card/profile fields are
-serialized as lower-trust user data under a fixed system instruction. Card-authored
-system prompts, creator notes, raw import metadata, WorldTruth, hidden events,
-other worlds, and other Characters' private memories are not added. Knowledge
-assertions are not yet retrieved. The current-world profile is explicitly given
-precedence over the general description. The context may include the current
-accepted card's nonblank `first_mes` as a bounded
-`opening_style_example` for that Character's direct or group reply. The literal
-source text is limited to 8 KiB UTF-8; larger examples are omitted rather than
-truncated. It remains lower-trust authored data, is not template-expanded, and
-is never inserted as a sent Message or privileged system instruction. A card
-replacement updates this example for later replies without rewriting history.
+memory's owner again before assembly. Memory/profile content is serialized as
+supplementary USER data; the reviewed card and complete opening enter the SYSTEM
+roleplay block described above. Creator notes, raw import metadata, WorldTruth,
+hidden events, other worlds, and other Characters' private memories are not added.
+Knowledge assertions are not yet retrieved. The current-world profile is explicitly
+given precedence over the general description. A confirmed card replacement updates
+later roleplay input without rewriting conversation history or resetting the scene.
 The builder prepares input only; it does not dispatch a model or authorize any
 new knowledge.
 

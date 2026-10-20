@@ -1,5 +1,8 @@
 {
   "include": [
+    "services/core/src/livingworld/application/player_card.py",
+    "services/core/src/livingworld/application/world_style.py",
+    "services/core/src/livingworld/infrastructure/persistence/world_style.py",
     "services/core/src/livingworld/infrastructure/imports",
     "services/core/src/livingworld/application/player_persona.py",
     "services/core/src/livingworld/infrastructure/persistence/player_persona.py",

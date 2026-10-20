@@ -1245,6 +1245,21 @@ export type AvatarDigest = {
 export function isAvatarDigest(value: unknown): value is AvatarDigest {
   return (isObject(value)) && (typeof value.root_import_id === "string") && (typeof value.digest === "string");
 }
+export type WorldStyleSnapshot = {
+  instructions: string;
+  revision: number;
+};
+export function isWorldStyleSnapshot(value: unknown): value is WorldStyleSnapshot {
+  return (isObject(value)) && (typeof value.instructions === "string") && (typeof value.revision === "number");
+}
+export type WorldStylePreview = {
+  instructions: string;
+  revision: number;
+  preview_id: string;
+};
+export function isWorldStylePreview(value: unknown): value is WorldStylePreview {
+  return (isObject(value)) && (typeof value.instructions === "string") && (typeof value.revision === "number") && (typeof value.preview_id === "string");
+}
 export type ExampleWorldTemplateEntriesItem = {
   key: string;
   title: string;
@@ -1443,9 +1458,10 @@ export type PersonaReference = PersonaModel & {
   import_id: string;
   content_id: string;
   reviewed_hash: string;
+  scope?: ("world" | "player");
 };
 export function isPersonaReference(value: unknown): value is PersonaReference {
-  return (isObject(value)) && (typeof value.import_id === "string") && (typeof value.content_id === "string") && (typeof value.reviewed_hash === "string") && (isPersonaModel(value));
+  return (isObject(value)) && (typeof value.import_id === "string") && (typeof value.content_id === "string") && (typeof value.reviewed_hash === "string") && ((!("scope" in value) || ((value.scope === "world" || value.scope === "player")))) && (isPersonaModel(value));
 }
 export type InitialRecognition = PersonaModel & {
   character_import_id: string;
@@ -1473,9 +1489,10 @@ export type PersonaSourceChoice = PersonaModel & {
   text: string;
   excerpt: boolean;
   root_import_id?: (string | null);
+  warnings?: Array<string>;
 };
 export function isPersonaSourceChoice(value: unknown): value is PersonaSourceChoice {
-  return (isObject(value)) && (isPersonaReference(value.reference)) && ((value.kind === "character" || value.kind === "lorebook")) && (typeof value.title === "string") && (typeof value.text === "string") && (typeof value.excerpt === "boolean") && ((!("root_import_id" in value) || ((typeof value.root_import_id === "string" || value.root_import_id === null)))) && (isPersonaModel(value));
+  return (isObject(value)) && (isPersonaReference(value.reference)) && ((value.kind === "character" || value.kind === "lorebook")) && (typeof value.title === "string") && (typeof value.text === "string") && (typeof value.excerpt === "boolean") && ((!("root_import_id" in value) || ((typeof value.root_import_id === "string" || value.root_import_id === null)))) && ((!("warnings" in value) || ((Array.isArray(value.warnings) && value.warnings.every(item => typeof item === "string"))))) && (isPersonaModel(value));
 }
 export type PersonaSourcePage = PersonaModel & {
   items: Array<PersonaSourceChoice>;
@@ -1489,9 +1506,10 @@ export type PlayerPersonaSnapshot = PersonaModel & {
   revision: number;
   draft: PlayerPersonaDraft;
   source_state: ("original" | "current" | "changed");
+  source_title?: (string | null);
 };
 export function isPlayerPersonaSnapshot(value: unknown): value is PlayerPersonaSnapshot {
-  return (isObject(value)) && ((typeof value.player_id === "string" || value.player_id === null)) && (typeof value.revision === "number") && (isPlayerPersonaDraft(value.draft)) && ((value.source_state === "original" || value.source_state === "current" || value.source_state === "changed")) && (isPersonaModel(value));
+  return (isObject(value)) && ((typeof value.player_id === "string" || value.player_id === null)) && (typeof value.revision === "number") && (isPlayerPersonaDraft(value.draft)) && ((value.source_state === "original" || value.source_state === "current" || value.source_state === "changed")) && ((!("source_title" in value) || ((typeof value.source_title === "string" || value.source_title === null)))) && (isPersonaModel(value));
 }
 export type PlayerPersonaPreview = PersonaModel & {
   preview_id: string;
@@ -1898,4 +1916,18 @@ export type HttpWorldStoryStoryCorrectionRequest = {
 };
 export function isHttpWorldStoryStoryCorrectionRequest(value: unknown): value is HttpWorldStoryStoryCorrectionRequest {
   return (isObject(value)) && ((!("hidden" in value) || (typeof value.hidden === "boolean"))) && ((!("correction" in value) || ((typeof value.correction === "string" || value.correction === null)))) && (typeof value.expected_revision === "number");
+}
+export type HttpWorldStyleStyleDraft = {
+  instructions: string;
+  expected_revision: number;
+};
+export function isHttpWorldStyleStyleDraft(value: unknown): value is HttpWorldStyleStyleDraft {
+  return (isObject(value)) && (typeof value.instructions === "string") && (typeof value.expected_revision === "number");
+}
+export type HttpWorldStyleStyleConfirm = HttpWorldStyleStyleDraft & {
+  preview_id: string;
+  confirmed: (true);
+};
+export function isHttpWorldStyleStyleConfirm(value: unknown): value is HttpWorldStyleStyleConfirm {
+  return (isObject(value)) && (typeof value.preview_id === "string") && ((value.confirmed === true)) && (isHttpWorldStyleStyleDraft(value));
 }

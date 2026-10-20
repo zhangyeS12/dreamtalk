@@ -1,13 +1,16 @@
 """Reviewed player identity and recipient-specific authored opening knowledge."""
 
 from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
 from time import monotonic
 from typing import Literal, Protocol
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from livingworld.application.imports import ContentImporter
 from livingworld.application.input_budget import bounded_text, json_size
+from livingworld.application.player_card import PlayerCardImport, parse_player_card
 from livingworld.domain.identifiers import CharacterId, PlayerId, WorldId
 
 PERSONA_GROUNDING = (
@@ -40,6 +43,7 @@ class PersonaReference(PersonaModel):
     import_id: UUID
     content_id: UUID
     reviewed_hash: str = Field(min_length=64, max_length=64)
+    scope: Literal["world", "player"] = "world"
 
 
 class InitialRecognition(PersonaModel):
@@ -64,6 +68,7 @@ class PersonaSourceChoice(PersonaModel):
     text: str
     excerpt: bool
     root_import_id: UUID | None = None
+    warnings: list[str] = Field(default_factory=list)
 
 
 class PersonaSourcePage(PersonaModel):
@@ -76,6 +81,7 @@ class PlayerPersonaSnapshot(PersonaModel):
     revision: int
     draft: PlayerPersonaDraft
     source_state: Literal["original", "current", "changed"]
+    source_title: str | None = None
 
 
 class PlayerPersonaPreview(PersonaModel):
@@ -94,10 +100,18 @@ class PlayerPersonaStore(Protocol):
     async def snapshot(self, world: WorldId) -> PlayerPersonaSnapshot: ...
 
     async def sources(
-        self, world: WorldId, query: str, after: str | None, *, characters: bool = False
+        self,
+        world: WorldId,
+        query: str,
+        after: str | None,
+        *,
+        characters: bool = False,
+        lorebooks_only: bool = False,
     ) -> PersonaSourcePage: ...
 
-    async def validate(self, world: WorldId, draft: PlayerPersonaDraft) -> str | None: ...
+    async def validate(
+        self, world: WorldId, draft: PlayerPersonaDraft, *, card: PlayerCardImport | None = None
+    ) -> str | None: ...
 
     async def commit(
         self,
@@ -106,15 +120,56 @@ class PlayerPersonaStore(Protocol):
         revision: int,
         draft: PlayerPersonaDraft,
         confirmation: UUID,
+        *,
+        card: PlayerCardImport | None = None,
     ) -> PlayerPersonaSnapshot: ...
 
     async def confirmation(self, world: WorldId, confirmation: UUID) -> bool: ...
 
 
 class PlayerPersonaService:
-    def __init__(self, store: PlayerPersonaStore) -> None:
+    def __init__(
+        self, store: PlayerPersonaStore, card_importer: ContentImporter | None = None
+    ) -> None:
         self.store = store
-        self._pending: dict[UUID, tuple[float, WorldId, UUID, int, PlayerPersonaDraft]] = {}
+        self._card_importer = card_importer
+        self._cards: dict[UUID, tuple[float, WorldId, UUID, PlayerCardImport]] = {}
+        self._pending: dict[
+            UUID, tuple[float, WorldId, UUID, int, PlayerPersonaDraft, PlayerCardImport | None]
+        ] = {}
+
+    async def import_card(
+        self, world: WorldId, payload: bytes, expected_revision: int, expected_player: UUID
+    ) -> PersonaSourceChoice:
+        snapshot = await self.store.snapshot(world)
+        if snapshot.player_id != expected_player:
+            raise PlayerPersonaError("persona_player_changed")
+        if snapshot.revision != expected_revision:
+            raise PlayerPersonaError("persona_edit_conflict")
+        if self._card_importer is None:
+            raise PlayerPersonaError("persona_card_import_unavailable")
+        active = {
+            key: value
+            for key, value in self._cards.items()
+            if value[0] > monotonic() and value[1] != world
+        }
+        if len(active) >= 2:
+            raise PlayerPersonaError("persona_card_preview_capacity")
+        card = parse_player_card(self._card_importer, payload, datetime.now(UTC))
+        self._cards = {**active, card.card_id: (monotonic() + 600, world, expected_player, card)}
+        return PersonaSourceChoice(
+            reference=PersonaReference(
+                import_id=card.card_id,
+                content_id=card.content_id,
+                reviewed_hash=card.reviewed_hash,
+                scope="player",
+            ),
+            kind="character",
+            title=bounded_text(card.title, 768),
+            text=card.summary,
+            excerpt=card.excerpt,
+            warnings=list(card.warnings),
+        )
 
     async def preview(
         self,
@@ -139,7 +194,22 @@ class PlayerPersonaService:
             raise PlayerPersonaError("persona_duplicate_character")
         if draft.source is not None and not draft.identity_name.strip():
             raise PlayerPersonaError("persona_name_required")
-        title = await self.store.validate(world, draft)
+        card = None
+        if draft.source is not None and draft.source.scope == "player":
+            pending_card = self._cards.get(draft.source.import_id)
+            if pending_card is not None:
+                expires, card_world, card_player, card = pending_card
+                if (
+                    expires <= monotonic()
+                    or card_world != world
+                    or card_player != snapshot.player_id
+                ):
+                    raise PlayerPersonaError("persona_source_changed")
+        title = (
+            (await self.store.validate(world, draft, card=card))
+            if card
+            else await self.store.validate(world, draft)
+        )
         self._pending = {
             key: value
             for key, value in self._pending.items()
@@ -154,6 +224,7 @@ class PlayerPersonaService:
             snapshot.player_id,
             expected_revision,
             draft.model_copy(deep=True),
+            card,
         )
         return PlayerPersonaPreview(
             preview_id=identity,
@@ -169,11 +240,17 @@ class PlayerPersonaService:
             if await self.store.confirmation(world, preview_id):
                 return await self.store.snapshot(world)
             raise PlayerPersonaError("persona_preview_expired")
-        expires, prepared_world, player, revision, draft = pending
+        expires, prepared_world, player, revision, draft, card = pending
         if prepared_world != world or expires <= monotonic():
             raise PlayerPersonaError("persona_preview_expired")
-        result = await self.store.commit(world, player, revision, draft, preview_id)
+        result = (
+            await self.store.commit(world, player, revision, draft, preview_id, card=card)
+            if card
+            else await self.store.commit(world, player, revision, draft, preview_id)
+        )
         self._pending.pop(preview_id, None)
+        if card:
+            self._cards.pop(card.card_id, None)
         return result
 
 

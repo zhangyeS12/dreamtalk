@@ -52,7 +52,7 @@ export function SourceMessageDialog({ client, worldId, conversationId, messageId
         aria-current={message.message_id === messageId ? "true" : undefined}>
         <div className="history-source"><strong>{message.sender_kind === "player" ? "玩家" : characters.find(character => character.character_id === message.sender_id)?.character_name ?? "其他角色"}</strong>
           <MessageTime message={message} />{message.message_id === messageId && <span>来源消息</span>}</div>
-        <ChatMessageBody text={message.text} />
+        <ChatMessageBody text={message.text} character={message.sender_kind === "character"} />
       </li>)}</ol>}
     <p className="history-footnote">只读取本地已保存的聊天，不调用模型。关闭后可以继续查看记忆或编辑批注。</p>
   </dialog>, document.body);

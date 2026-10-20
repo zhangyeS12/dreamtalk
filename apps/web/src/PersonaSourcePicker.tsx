@@ -1,10 +1,11 @@
 import { useEffect, useId, useState } from "react";
 import { CoreClient, type PersonaSourceChoice } from "@dreamtalk/api-client";
 
-export function PersonaSourcePicker({ client, worldId, characters = false, onChoose }: {
+export function PersonaSourcePicker({ client, worldId, characters = false, lorebooksOnly = false, onChoose }: {
   client: CoreClient;
   worldId: string;
   characters?: boolean;
+  lorebooksOnly?: boolean;
   onChoose: (source: PersonaSourceChoice) => void;
 }) {
   const id = useId();
@@ -21,7 +22,8 @@ export function PersonaSourcePicker({ client, worldId, characters = false, onCho
     const abort = new AbortController();
     setBusy(true); setError("");
     if (!after) setItems([]);
-    void client.playerPersonaSources(worldId, search, after, characters, abort.signal).then(page => {
+    const request = lorebooksOnly ? client.playerPersonaSources(worldId, search, after, characters, abort.signal, true) : client.playerPersonaSources(worldId, search, after, characters, abort.signal);
+    void request.then(page => {
       if (abort.signal.aborted) return;
       if (page.next_after && page.next_after === after) throw new Error("repeated cursor");
       setItems(page.items); setNext(page.next_after);
@@ -29,7 +31,7 @@ export function PersonaSourcePicker({ client, worldId, characters = false, onCho
       if (!abort.signal.aborted) setError("资料读取未完成，请重试。");
     }).finally(() => { if (!abort.signal.aborted) setBusy(false); });
     return () => abort.abort();
-  }, [client, worldId, characters, search, after, reload]);
+  }, [client, worldId, characters, lorebooksOnly, search, after, reload]);
 
   return <div className="persona-source-picker">
     <div className="field"><label htmlFor={id}>{characters ? "查找认识我的角色" : "查找设定资料"}</label>

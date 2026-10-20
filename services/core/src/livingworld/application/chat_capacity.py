@@ -5,7 +5,8 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field, replace
 
-from livingworld.application.llm import MessageRole, TextContent
+from livingworld.application.chat_roleplay import append_post_history
+from livingworld.application.llm import LLMMessage, LLMRequest, MessageRole, TextContent
 from livingworld.application.llm_budget import BoundGuarantee, prepare_usage_bound
 
 
@@ -17,6 +18,8 @@ class ContextLayout:
     current_turn: int = -1
     message_ids: tuple[str, ...] = ()
     retrieval: str = "keyword"
+    group_dialogue: tuple[LLMMessage, ...] = field(default=(), repr=False)
+    reply_instructions: str = field(default="", repr=False)
 
 
 class ContextCapacityError(ValueError):
@@ -25,7 +28,7 @@ class ContextCapacityError(ValueError):
 
 @dataclass
 class ContextPacker:
-    request: object = field(repr=False)
+    request: LLMRequest = field(repr=False)
     layout: ContextLayout = ContextLayout()
 
     def __post_init__(self):
@@ -69,9 +72,6 @@ class ContextPacker:
             self.units.append((70, "known_faction_contacts", None))
         if "confirmed_conversation_summary" in self.data:
             self.units.append((80, "confirmed_conversation_summary", None))
-        character = self.data.get("character", {})
-        if "opening_style_example" in character:
-            self.units.append((15, "opening_style_example", None))
         for key, turns in (
             ("direct_history", self.layout.direct_turns),
             ("group_history", self.layout.group_turns),
@@ -90,9 +90,7 @@ class ContextPacker:
         for _priority, key, index in self.dropped:
             omitted.setdefault(key, set()).add(index)
         for key, indexes in omitted.items():
-            if key == "opening_style_example":
-                data["character"].pop(key, None)
-            elif key in {"confirmed_conversation_summary", "known_faction_contacts"}:
+            if key in {"confirmed_conversation_summary", "known_faction_contacts"}:
                 data.pop(key, None)
             elif key == "group_history":
                 removed = {
@@ -114,15 +112,35 @@ class ContextPacker:
             if index in removed:
                 continue
             if index == self.persona_index:
+                wire_data = dict(data)
+                if self.layout.group_dialogue:
+                    wire_data.pop("transcript", None)
                 message = replace(
                     message,
                     content=(
-                        TextContent(json.dumps(data, ensure_ascii=False, separators=(",", ":"))),
+                        TextContent(
+                            json.dumps(wire_data, ensure_ascii=False, separators=(",", ":"))
+                        ),
                     ),
                 )
             result.append(message)
+        if self.layout.group_dialogue:
+            removed_group = {
+                position
+                for _priority, key, index in self.dropped
+                if key == "group_history"
+                for position in self.layout.group_turns[index]
+            }
+            result.extend(
+                message
+                for index, message in enumerate(self.layout.group_dialogue)
+                if index not in removed_group
+            )
         self.final_data = data
-        return replace(self.request, messages=tuple(result))
+        return replace(
+            self.request,
+            messages=append_post_history(tuple(result), self.layout.reply_instructions),
+        )
 
     def drop_batch(self):
         # Bound preflight passes, including providers with a remote count endpoint.
@@ -209,11 +227,14 @@ class ContextPacker:
         return report
 
 
-async def fit_chat_context(request, layout, gateway, bounder, selection, remaining):
+async def fit_chat_context(request: LLMRequest, layout, gateway, bounder, selection, remaining):
     """Only remove optional whole units; never cut the current question/turn or persona."""
+    output_limit = request.max_output_tokens
+    if output_limit is None:
+        raise ContextCapacityError("turn_token_limit_exceeded")
     plan = gateway.plan(request, selection=selection)
     packer = ContextPacker(request, layout or ContextLayout())
-    reserve = min(request.max_output_tokens, 2048, max(1, remaining // 4))
+    reserve = min(output_limit, 2048, max(1, remaining // 4))
     for _ in range(12):
         fitted = packer.render()
         bounds = [
@@ -224,7 +245,7 @@ async def fit_chat_context(request, layout, gateway, bounder, selection, remaini
             b is None or b.guarantee is not BoundGuarantee.HARD_UPPER_BOUND for b in bounds
         ):
             raise ContextCapacityError("turn_input_bound_unavailable")
-        input_bound = max(b.input_tokens for b in bounds)
+        input_bound = max(b.input_tokens for b in bounds if b is not None)
         room = remaining - input_bound
         feedback = getattr(bounder, "packing_feedback", lambda request: None)
         capacities = [feedback(replace(fitted, model=model)) for model in plan.candidates]
@@ -235,7 +256,7 @@ async def fit_chat_context(request, layout, gateway, bounder, selection, remaini
         if not over_capacity and (room >= reserve or not measurable or not packer.available):
             if room < 1:
                 raise ContextCapacityError("turn_token_limit_exceeded")
-            fitted = replace(fitted, max_output_tokens=min(fitted.max_output_tokens, room))
+            fitted = replace(fitted, max_output_tokens=min(output_limit, room))
             # Output changes can affect provider framing: always verify the final request.
             final = [
                 await prepare_usage_bound(bounder, replace(fitted, model=model))
@@ -248,7 +269,9 @@ async def fit_chat_context(request, layout, gateway, bounder, selection, remaini
                 for b in final
             ):
                 raise ContextCapacityError("turn_token_limit_exceeded")
-            return fitted, packer.report(fitted, max(b.input_tokens for b in final), remaining)
+            return fitted, packer.report(
+                fitted, max(b.input_tokens for b in final if b is not None), remaining
+            )
         if not packer.available:
             raise ContextCapacityError("turn_token_limit_exceeded")
         packer.drop_batch()

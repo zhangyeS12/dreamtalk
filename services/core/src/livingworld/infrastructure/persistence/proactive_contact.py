@@ -63,6 +63,7 @@ from livingworld.infrastructure.persistence.shared_activity_models import (
     SharedActivitySettingsRecord as SharedSettings,
 )
 from livingworld.infrastructure.persistence.world_story import record_contact_invitation
+from livingworld.infrastructure.persistence.world_style import style_snapshot
 
 MINUTE = 60_000_000
 
@@ -322,6 +323,7 @@ class SqlAlchemyProactiveContactStore:
             "common_world_background": background,
             "plan_id": str(row.plan_id),
             "player_epoch": await self.offline._epoch(session, cfg.world_id, cfg.player_id),
+            **await style_snapshot(session, cfg.world_id),
             **(
                 {"player_identity_stamp": stamp}
                 if (stamp := await player_persona_stamp(session, world, cfg.player_id)) is not None

@@ -180,6 +180,16 @@ class LocalWorldProfileRecord(Base):
     __table_args__ = (CheckConstraint("revision > 0", name="ck_local_world_profile_revision"),)
 
 
+class WorldStyleRecord(Base):
+    __tablename__ = "world_styles"
+    world_id: Mapped[UUID] = mapped_column(
+        UUIDStorage(), ForeignKey("worlds.world_id"), primary_key=True
+    )
+    instructions: Mapped[str] = mapped_column(Text, nullable=False)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    __table_args__ = (CheckConstraint("revision > 0", name="ck_world_style_revision"),)
+
+
 class PlayerPresenceRecord(Base):
     __tablename__ = "player_presences"
     world_id: Mapped[UUID] = mapped_column(

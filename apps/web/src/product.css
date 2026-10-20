@@ -184,6 +184,7 @@
 .message-content pre { max-width: 100%; overflow-x: auto; padding: .6em; border-radius: 6px; background: var(--page); }
 .message-content code { font-size: .9em; }
 .message-content a { overflow-wrap: anywhere; }
+.message-content .character-dialogue { color: var(--gold, #f2d575); }
 .message-image-placeholder { color: var(--muted); font-size: .85em; }
 .message-bubble time { display: block; color: var(--muted); font-size: .72rem; text-align: right; }
 .chat-composer { position: sticky; bottom: 0; display: flex; flex-direction: column; gap: 9px; padding: 14px 24px; border-top: 1px solid var(--line); background: var(--surface); }
@@ -309,3 +310,8 @@
 .context-references article { border-top: 1px solid #d7dfda; padding: 12px 0; }
 .context-references blockquote { margin: 12px 0; padding: 8px 16px; border-left: 3px solid #8eaa98; background: white; overflow-wrap: anywhere; }
 .message-reference { display: block; margin-top: 8px; font-size: 12px; }
+
+.world-style-editor { max-width: 760px; padding: 20px; }
+.world-style-editor textarea { display: block; width: 100%; margin-top: 8px; resize: vertical; }
+.world-style-preview { border-top: 1px solid var(--line); margin-top: 20px; padding-top: 12px; }
+.world-style-text { white-space: pre-wrap; overflow-wrap: anywhere; }

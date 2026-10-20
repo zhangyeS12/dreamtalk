@@ -21,7 +21,7 @@ it("requires preview and explicit confirmation before applying the selected pers
   const { client, asClient } = fixture();
   const dirty = vi.fn();
   render(<PlayerPersonaEditor client={asClient} worldId="world" onDirtyChange={dirty} />);
-  fireEvent.click(await screen.findByText("从世界书或角色卡选择身份"));
+  fireEvent.click(await screen.findByText("从世界书选择身份"));
   fireEvent.click(await screen.findByRole("button", { name: "采用哲" }));
   expect(client.confirmPlayerPersona).not.toHaveBeenCalled();
   expect((screen.getByLabelText("设定人物名称") as HTMLInputElement).value).toBe("哲");
@@ -95,7 +95,7 @@ it("keeps complete emoji characters when preparing a long source excerpt", async
   const { client, asClient, source } = fixture();
   client.playerPersonaSources.mockResolvedValue({ items: [{ ...source, text: "文" + "😀".repeat(2100) }], next_after: null });
   render(<PlayerPersonaEditor client={asClient} worldId="world" onDirtyChange={vi.fn()} />);
-  fireEvent.click(await screen.findByText("从世界书或角色卡选择身份"));
+  fireEvent.click(await screen.findByText("从世界书选择身份"));
   fireEvent.click(await screen.findByRole("button", { name: "采用哲" }));
   fireEvent.click(screen.getByRole("button", { name: "预览身份修改" }));
   await screen.findByRole("region", { name: "身份修改预览" });

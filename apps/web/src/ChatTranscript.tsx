@@ -45,7 +45,7 @@ export function ChatTranscript({ client, worldId, playerId, conversation, avatar
     refresh, setRefresh, available, availabilityReading, availabilityFailed, budgetFeedback,
     draft, setDraft, sticker, setSticker, pending: pendingSend, phase, sending, setRecoveryBusy, feedback, stream,
     messages, failed, hasOlder, loadingOlder, loadOlder, followingLatest, showLatest, visibleStreamDraft,
-    latestPlayerMessage, checkReply, generateSavedReply, send,
+    latestPlayerMessage, checkReply, generateSavedReply, send, modelSettingsSuggested,
   } = useChatReplyWorkflow({
     client, worldId, playerId, conversationId: conversation.conversation_id, kind: "direct", readOnly: conversation.read_only,
     speakers: [conversation.character_id], tokenCeiling, suggestedDraft, onSuggestionUsed, onDirtyChange,
@@ -83,7 +83,7 @@ export function ChatTranscript({ client, worldId, playerId, conversation, avatar
               {!own && <ContactAvatar name={conversation.character_name} url={avatarUrl} className="message-portrait" />}
               <div className="message-bubble">
                 <span className="message-sender">{own ? "我" : conversation.character_name}</span>
-                <>{!message.media?.only_media && <ChatMessageBody text={message.text} />}<MessageMedia client={client} worldId={worldId} media={message.media} /></>
+                <>{!message.media?.only_media && <ChatMessageBody text={message.text} character={!own} />}<MessageMedia client={client} worldId={worldId} media={message.media} /></>
                 <MessageTime message={message} />{!own ? <><button type="button" className="text-action message-reference" onClick={() => setReferenceTurn(message.turn_id)}>本次参考内容</button>{!message.media?.only_media && <SpeechControls conversation={conversation.conversation_id} message={message.message_id} />}</> : null}
               </div>
             </li></Fragment>;
@@ -91,7 +91,7 @@ export function ChatTranscript({ client, worldId, playerId, conversation, avatar
     <SpeechFeedback />
     {conversation.read_only ? <p className="thread-hint" role="status">角色卡已删除，此会话保留为只读历史。</p> : <form className="chat-composer" onSubmit={event => void send(event)}>
       {phase || feedback ? <p role="status" aria-live="polite" className="chat-feedback">{(phase === "replying" && stream.stage === "preparing" ? "消息已保存，正在准备角色回复…" : chatPhaseFeedback(phase, "direct")) || feedback}</p> : null}
-      {feedback && !phase && onModelSettings && <button type="button" className="text-action" onClick={onModelSettings}>打开当前世界模型设置</button>}
+      {feedback && !phase && modelSettingsSuggested && onModelSettings && <button type="button" className="text-action" onClick={onModelSettings}>打开当前世界模型设置</button>}
       <ReplyRecoveryControls client={client} worldId={worldId} conversationId={conversation.conversation_id} sourceTurnId={latestPlayerMessage?.turn_id} refresh={refresh} tokenCeiling={tokenCeiling} blocked={!available || phase !== null || !!pendingSend} onGenerate={generateSavedReply} onBusyChange={setRecoveryBusy} />
       {budgetFeedback ? <p className="chat-feedback" role="alert">{budgetFeedback}</p> : null}
       {availabilityReading ? <p className="chat-feedback" role="status">正在核对聊天模型状态…</p>

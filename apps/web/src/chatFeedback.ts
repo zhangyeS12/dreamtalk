@@ -46,7 +46,7 @@ export function chatReplyFailureFeedback(failure: unknown, kind: ChatKind): stri
   if (code === "group_selection_invalid") return `${prefix}自动选人没有返回一个有效的群内角色，未能继续发言。${noReplay}`;
   if (code === "chat_reply_output_limit") return `${prefix}模型输出达到本次回复长度上限，完整回复未保存。请在模型设置中提高回复长度，或让角色简短回答；请核对当前聊天剩余额度。${noReplay}`;
   if (code === "chat_reply_empty") return `${prefix}模型服务没有返回可用的回复正文，可能已产生用量。此提示不表示角色没有资料或聊天额度不足；检查回复状态只读取已有结果。${noReplay}`;
-  if (code === "chat_reply_format_invalid") return `${prefix}模型返回的格式不符合聊天要求，完整回复未保存；请检查模型设置后发送新消息。${noReplay}`;
+  if (code === "chat_reply_format_invalid") return `${prefix}这次返回内容未能解析出完整的角色正文，完整回复未保存。这不表示 API 密钥或模型配置有误；本次调用可能已产生用量。${noReplay}`;
   if (code === "chat_reply_invalid") return `${prefix}模型回复未通过校验，未作为完整回复发送。${noReplay}`;
   if (code === "chat_stream_interrupted") return `${prefix}实时连接已中断，未完成文字未保存。${noReplay}`;
   if (code === "chat_generation_failed") return `${prefix}生成服务未能完成这次回复。${noReplay}`;
@@ -55,6 +55,15 @@ export function chatReplyFailureFeedback(failure: unknown, kind: ChatKind): stri
     return `${prefix}核心连接已失效，请重新打开应用后检查记录。${noReplay}`;
   }
   return `${prefix}当前结果尚未确认。为避免重复消耗，${noReplay}`;
+}
+
+export function chatFailureNeedsModelSettings(failure: unknown): boolean {
+  return failure instanceof CoreRequestError && new Set([
+    "chat_provider_authentication", "chat_provider_permission_denied", "chat_provider_not_found",
+    "chat_provider_quota_exhausted", "chat_provider_timeout", "chat_provider_context_limit",
+    "chat_provider_unsupported", "chat_model_unavailable", "chat_turn_token_limit_exceeded",
+    "chat_input_bound_unavailable", "chat_reply_output_limit",
+  ]).has(failure.code ?? "");
 }
 
 export function chatReplyStateFeedback(state: DirectTurnView["state"] | null, kind: ChatKind): string {

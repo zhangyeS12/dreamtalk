@@ -33,7 +33,7 @@ LONG_MEMORY_GROUNDING_INSTRUCTIONS = (
 
 
 MEMORY_INSTRUCTIONS = (
-    "同一个json在events之后增加memories数组，最多4条，无重要信息则[]。"
+    "选择输出JSON辅助数据时，同一个json在events之后增加memories数组，最多4条，无重要信息则[]。"
     "记忆只保存本轮玩家消息或本次reply明确表达的长期身份/称呼(identity)、稳定偏好(preference)、"
     "约定(promise)、重要经历或明确变化(experience)；寒暄、临时情绪、推测和角色卡内容不记。"
     "每条字段kind、topic(稳定简短主题)、content(有明确说话者的简短记忆)、source(player/reply)、"
@@ -43,10 +43,6 @@ MEMORY_INSTRUCTIONS = (
     "同一主题的额外偏好、另一段经历或补充信息可以并存，不能仅因主题相同而替换。"
     "玩家明确取消与角色的约定时可引用该角色promise的旧ID，不能用玩家自述覆盖其他角色身份或偏好。"
     "不要把其他角色的私有记忆复述成自己的经历。long_memory_capture_enabled=false时memories必须[]。"
-    "完整示例（玩家本轮说‘我叫小林，喜欢无糖咖啡’）："
-    '{"reply":"记住了，小林。下次给你留无糖咖啡。","events":[],"memories":['
-    '{"kind":"preference","topic":"咖啡偏好","content":"玩家说自己喜欢无糖咖啡",'
-    '"source":"player","quote":"喜欢无糖咖啡","replaces":null}]}。'
 )
 
 

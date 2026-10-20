@@ -97,7 +97,7 @@ export function ConversationMemoryPanel({ client, worldId, conversationId, sende
     if (!signal.aborted) setHistory(result);
   });
   const sourceList = (messages: ChatMessage[]) => <ol className="history-results">{messages.map(message => <li key={message.message_id}>
-    <div className="history-source"><strong>{senderName(message)}</strong><MessageTime message={message} /><small>第 {message.position} 条消息</small></div><ChatMessageBody text={message.text} />
+    <div className="history-source"><strong>{senderName(message)}</strong><MessageTime message={message} /><small>第 {message.position} 条消息</small></div><ChatMessageBody text={message.text} character={message.sender_kind === "character"} />
   </li>)}</ol>;
   const editable = draft && ["ready", "previewed"].includes(draft.state);
   const stale = !!draft && draft.base_revision !== (view?.current?.revision ?? 0);

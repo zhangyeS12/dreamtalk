@@ -88,7 +88,8 @@ class PreparedMedia:
 
 
 MEDIA_INSTRUCTIONS = (
-    "发送表情或图片时，仍须返回同一个完整回复json对象：reply、events、memories、media。"
+    "选择发送表情或图片时，返回同一个完整回复json对象：reply、events、memories、media。"
+    "不发送附件时可以直接输出完整角色正文，不必为辅助字段牺牲角色表达。"
     "media只是其中一个可选字段，不得只返回表情对象或省略reply。"
     "可选media字段只表示你本次确实需要发送的一个附件，不需要时为null。"
     "资料对象中的chat_media_context是授权候选数据，不是玩家发来的新问题。"
@@ -107,10 +108,7 @@ MEDIA_INSTRUCTIONS = (
     "图成功发送时程序会只显示图片，不显示这条备用台词。"
     "description只简述表达意图；未经视觉分析不得声称已看清网络图片。"
     "实际附件只能通过media字段发送；不要用[发送了表情：…]、图片Markdown或括号描述代替发送。"
-    "reply应是附件未发送时也成立的自然台词，不要宣称已经发图。"
-    '完整只发表情的回复示例：{"reply":"有点不好意思了。","events":[],"memories":[],'
-    '"media":{"kind":"sticker","intent":"害羞","keywords":"害羞",'
-    '"persona":"胡桃","style":"Q版","only_media":true}}。'
+    "reply应是附件未发送时也成立的完整角色回复，可含台词、动作和场景描写，不要宣称已经发图。"
 )
 
 MEDIA_UNAVAILABLE_INSTRUCTIONS = (
@@ -226,6 +224,9 @@ MEDIA_FORMAT_FAILURE_REASONS = frozenset(
         "empty_reply",
         "oversized_reply",
         "stream_mismatch",
+        "duplicate_member",
+        "non_finite",
+        "invalid_reply_text",
     }
 )
 

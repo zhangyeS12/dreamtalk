@@ -13,7 +13,7 @@
 
 - 正式仓库为D:\LivingWorld；分支／HEAD／工作区以Git现场为准，不从旧工作日志推断。源码、发行标签、安装包和实际运行程序分别核对。
 - 用户入口为artifacts/local-desktop/dreamtalk-desktop.exe，依赖仓库开发环境；对外完整包包含Core及资源，两者用途不同。该入口的版本／摘要回执在同目录entry.json，必要编译规则见[验证责任](AGENTS.md#20-current-verification-responsibility)。
-- 发行轮特意保留旧本机入口供用户体验应用内更新，之后用户是否已升级尚未取得反馈。本轮不读取运行程序或真实存档来补这个结论。
+- 本机入口通过仓库现有环境加载Core源码；当前工作树包含角色扮演、回复格式、提示编排及通讯录世界风格／台词高亮。界面变化需沿规定入口重新编译，完全退出旧应用后重开生效；世界风格源码入口为application/world_style.py、persistence/world_style.py、adapters/http/world_style.py及前端WorldStyleEditor.tsx／dialogueHighlight.ts；玩家专用卡入口为application/player_card.py、player_persona.py及PlayerPersonaEditor.tsx，独立资料不走通讯录／NPC／地点初始化；迁移与检查证据见状态清单。该入口不是可搬运的完整便携包，工程检查不代表真实模型或安装升级验收。
 - 更新继续沿原应用标识、公钥和频道。不得用旧程序打开已升级存档，不移动／删除DB或WAL，不改真实API、启动项或已安装应用。
 - 开屏及更新失败修复的实际限制见[可靠性记录](docs/maintenance/2026-10-17-reliability-hardening.md)；发行完整性与用户运行结果见状态表的不同栏目。
 

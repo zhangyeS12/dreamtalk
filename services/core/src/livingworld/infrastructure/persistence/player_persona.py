@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import aliased
 
 from livingworld.application.input_budget import bounded_text
+from livingworld.application.player_card import PlayerCardImport
 from livingworld.application.player_persona import (
     PersonaReference,
     PersonaSourceChoice,
@@ -28,7 +29,10 @@ from livingworld.infrastructure.persistence.models import (
 from livingworld.infrastructure.persistence.models import (
     WorldContentImportRecord as Imported,
 )
-from livingworld.infrastructure.persistence.player_persona_models import PlayerPersonaRecord
+from livingworld.infrastructure.persistence.player_persona_models import (
+    PlayerCardRecord,
+    PlayerPersonaRecord,
+)
 
 
 def _sources_query(world: WorldId):
@@ -114,8 +118,35 @@ async def _choice(session, world: WorldId, row) -> PersonaSourceChoice:
 
 
 async def _source(
-    session: AsyncSession, world: WorldId, reference: PersonaReference
+    session: AsyncSession,
+    world: WorldId,
+    reference: PersonaReference,
+    card: PlayerCardImport | None = None,
 ) -> PersonaSourceChoice:
+    if reference.scope == "player":
+        if card is not None:
+            card_id, content_id, reviewed_hash = card.card_id, card.content_id, card.reviewed_hash
+            title, summary = card.title, card.summary
+        else:
+            player = await _player(session, world)
+            row = await session.get(PlayerCardRecord, (world.value, player)) if player else None
+            if row is None:
+                raise PlayerPersonaError("persona_source_changed")
+            card_id, content_id, reviewed_hash = row.card_id, row.content_id, row.reviewed_hash
+            title, summary = row.title, row.summary
+        if (reference.import_id, reference.content_id, reference.reviewed_hash) != (
+            card_id,
+            content_id,
+            reviewed_hash,
+        ):
+            raise PlayerPersonaError("persona_source_changed")
+        return PersonaSourceChoice(
+            reference=reference,
+            kind="character",
+            title=bounded_text(title, 768),
+            text=summary,
+            excerpt=False,
+        )
     query, content_id, _ = _sources_query(world)
     row = (
         await session.execute(
@@ -138,8 +169,13 @@ async def _player(session: AsyncSession, world: WorldId) -> UUID | None:
     return binding.player_id if binding else None
 
 
-async def _validate(session: AsyncSession, world: WorldId, draft: PlayerPersonaDraft) -> str | None:
-    source = await _source(session, world, draft.source) if draft.source else None
+async def _validate(
+    session: AsyncSession,
+    world: WorldId,
+    draft: PlayerPersonaDraft,
+    card: PlayerCardImport | None = None,
+) -> str | None:
+    source = await _source(session, world, draft.source, card) if draft.source else None
     for item in draft.recognitions:
         root = await _root(session, world, item.character_import_id)
         if root != item.character_import_id:
@@ -162,14 +198,19 @@ async def _snapshot(session: AsyncSession, world: WorldId) -> PlayerPersonaSnaps
     row = await session.get(PlayerPersonaRecord, (world.value, player)) if player else None
     draft = PlayerPersonaDraft.model_validate_json(row.draft_json) if row else PlayerPersonaDraft()
     state = "original"
+    title = None
     if draft.source:
         try:
-            await _source(session, world, draft.source)
+            title = (await _source(session, world, draft.source)).title
             state = "current"
         except PlayerPersonaError:
             state = "changed"
     return PlayerPersonaSnapshot(
-        player_id=player, revision=row.revision if row else 0, draft=draft, source_state=state
+        player_id=player,
+        revision=row.revision if row else 0,
+        draft=draft,
+        source_state=state,
+        source_title=title,
     )
 
 
@@ -210,7 +251,13 @@ class SqlAlchemyPlayerPersonaStore:
             return await _snapshot(session, world)
 
     async def sources(
-        self, world: WorldId, query: str, after: str | None, *, characters: bool = False
+        self,
+        world: WorldId,
+        query: str,
+        after: str | None,
+        *,
+        characters: bool = False,
+        lorebooks_only: bool = False,
     ) -> PersonaSourcePage:
         async with self.sessions() as session:
             await _player(session, world)
@@ -222,6 +269,8 @@ class SqlAlchemyPlayerPersonaStore:
                 )
             if characters:
                 statement = statement.where(Imported.kind == "character")
+            if lorebooks_only:
+                statement = statement.where(Imported.kind == "lorebook")
             if after:
                 try:
                     imported, content = (UUID(part).hex for part in after.split(":"))
@@ -241,9 +290,11 @@ class SqlAlchemyPlayerPersonaStore:
                 else None,
             )
 
-    async def validate(self, world: WorldId, draft: PlayerPersonaDraft) -> str | None:
+    async def validate(
+        self, world: WorldId, draft: PlayerPersonaDraft, *, card: PlayerCardImport | None = None
+    ) -> str | None:
         async with self.sessions() as session:
-            return await _validate(session, world, draft)
+            return await _validate(session, world, draft, card)
 
     async def commit(
         self,
@@ -252,6 +303,8 @@ class SqlAlchemyPlayerPersonaStore:
         revision: int,
         draft: PlayerPersonaDraft,
         confirmation: UUID,
+        *,
+        card: PlayerCardImport | None = None,
     ) -> PlayerPersonaSnapshot:
         async with self.sessions() as session, session.begin():
             await session.connection(execution_options={"livingworld_write_intent": True})
@@ -262,7 +315,23 @@ class SqlAlchemyPlayerPersonaStore:
                 return await _snapshot(session, world)
             if (row.revision if row else 0) != revision:
                 raise PlayerPersonaError("persona_edit_conflict")
-            await _validate(session, world, draft)
+            await _validate(session, world, draft, card)
+            if card is not None:
+                owned = await session.get(PlayerCardRecord, (world.value, player))
+                values = dict(
+                    card_id=card.card_id,
+                    content_id=card.content_id,
+                    reviewed_hash=card.reviewed_hash,
+                    title=card.title,
+                    summary=card.summary,
+                    raw_payload=card.payload,
+                    snapshot_json=card.snapshot_json,
+                )
+                if owned is None:
+                    session.add(PlayerCardRecord(world_id=world.value, player_id=player, **values))
+                else:
+                    for key, value in values.items():
+                        setattr(owned, key, value)
             if row is None:
                 row = PlayerPersonaRecord(
                     world_id=world.value,

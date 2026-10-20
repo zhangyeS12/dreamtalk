@@ -1,7 +1,7 @@
 """Authenticated author preview/confirm endpoints for the selected world's player."""
 
 from collections.abc import Callable
-from typing import Literal
+from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -10,7 +10,9 @@ from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
 from pydantic import BaseModel, ConfigDict, Field
 
+from livingworld.application.imports import ContentImportError
 from livingworld.application.player_persona import (
+    PersonaSourceChoice,
     PersonaSourcePage,
     PlayerPersonaDraft,
     PlayerPersonaError,
@@ -87,10 +89,15 @@ def player_persona_router(service: PlayerPersonaService, authorize: Callable[...
         query: str = Query(default="", max_length=120),
         after: str | None = Query(default=None, max_length=80),
         characters: bool = False,
+        lorebooks_only: bool = False,
     ) -> PersonaSourcePage:
         try:
             return await service.store.sources(
-                WorldId(world_id), query, after, characters=characters
+                WorldId(world_id),
+                query,
+                after,
+                characters=characters,
+                lorebooks_only=lorebooks_only,
             )
         except PlayerPersonaError as error:
             raise failure(error) from None
@@ -104,6 +111,27 @@ def player_persona_router(service: PlayerPersonaService, authorize: Callable[...
                 body.expected_revision,
                 expected_player=body.expected_player_id,
             )
+        except PlayerPersonaError as error:
+            raise failure(error) from None
+
+    @router.post("/card")
+    async def import_card(
+        world_id: UUID,
+        request: Request,
+        expected_revision: Annotated[int, Query(ge=0)],
+        expected_player_id: UUID,
+    ) -> PersonaSourceChoice:
+        payload = bytearray()
+        async for chunk in request.stream():
+            if len(payload) + len(chunk) > 32 * 1024 * 1024:
+                raise HTTPException(413, "import_too_large")
+            payload.extend(chunk)
+        try:
+            return await service.import_card(
+                WorldId(world_id), bytes(payload), expected_revision, expected_player_id
+            )
+        except ContentImportError as error:
+            raise HTTPException(422, error.code) from None
         except PlayerPersonaError as error:
             raise failure(error) from None
 

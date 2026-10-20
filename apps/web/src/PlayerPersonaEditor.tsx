@@ -4,6 +4,7 @@ import {
   type PlayerPersonaPreview, type PlayerPersonaSnapshot,
 } from "@dreamtalk/api-client";
 import { PersonaSourcePicker } from "./PersonaSourcePicker";
+import { contentImportError, contentImportWarning } from "./contentImportFeedback";
 import "./player-persona.css";
 
 function normalized(draft: PlayerPersonaDraft): PlayerPersonaDraft {
@@ -24,6 +25,8 @@ export function PlayerPersonaEditor({ client, worldId, onDirtyChange }: {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [reload, setReload] = useState(0);
+  const [cardTitle, setCardTitle] = useState("");
+  const [cardWarnings, setCardWarnings] = useState<string[]>([]);
   const [page, setPage] = useState(0);
   const generation = useRef(0);
   const dirty = saved !== null && JSON.stringify(draft) !== JSON.stringify(normalized(saved.draft));
@@ -34,6 +37,7 @@ export function PlayerPersonaEditor({ client, worldId, onDirtyChange }: {
     generation.current += 1;
     setBusy(false);
     setSaved(null); setPreview(null); setError(""); setNotice("");
+    setCardTitle(""); setCardWarnings([]);
     void client.playerPersona(worldId, abort.signal).then(result => {
       if (!abort.signal.aborted) { setSaved(result); setDraft(normalized(result.draft)); setPage(0); }
     }).catch(() => { if (!abort.signal.aborted) setError("设定身份暂时无法读取，请重试。"); });
@@ -65,6 +69,20 @@ export function PlayerPersonaEditor({ client, worldId, onDirtyChange }: {
         : "预览未完成，请检查身份名称和所选资料后重试。输入仍保留。");
     } finally { if (generation.current === current) setBusy(false); }
   }
+  async function importCard(file: File) {
+    if (!saved?.player_id || busy) return;
+    if (file.size > 32 * 1024 * 1024) { setError("角色卡不能超过 32 MiB。输入仍保留。"); return; }
+    setBusy(true); setError("");
+    const current = generation.current;
+    try {
+      const card = await client.importPlayerCard(worldId, file, saved.revision, saved.player_id);
+      if (generation.current !== current) return;
+      edit({ source: card.reference, identity_name: Array.from(card.title).slice(0, 120).join(""), public_identity: Array.from(card.text).slice(0, 2000).join("") });
+      setCardTitle(card.title); setCardWarnings(card.warnings ?? []);
+      setNotice(card.excerpt ? "已读取角色卡，公开介绍先填入开头；请核对并补充后预览确认。完整原卡在确认后保存。" : "已读取玩家角色卡；核对公开介绍后，请预览并确认采用。");
+    } catch (failure) { if (generation.current === current) setError(contentImportError(failure)); }
+    finally { if (generation.current === current) setBusy(false); }
+  }
   async function confirm() {
     if (!preview || busy) return;
     setBusy(true); setError("");
@@ -92,10 +110,17 @@ export function PlayerPersonaEditor({ client, worldId, onDirtyChange }: {
     {saved?.player_id && <>
       {saved.source_state === "changed" && <p role="status">绑定的资料已被替换、停用或移除。该设定暂不提供给角色，请重新选择来源并确认。</p>}
       <fieldset disabled={busy || !!preview} className="persona-fields">
-        <details><summary>从世界书或角色卡选择身份</summary>
-          <p className="inline-hint">只读取当前世界已接受的资料。同名不会自动绑定；采用后请核对公开介绍，删除不应让所有角色知道的秘密。</p>
-          <PersonaSourcePicker client={client} worldId={worldId} onChoose={source => {
+        <div className="field"><label htmlFor={`${id}-card`}>导入我的角色卡</label>
+          <input id={`${id}-card`} type="file" accept=".json,.png,.charx,application/json,image/png" onChange={event => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void importCard(file); }} />
+          <p className="inline-hint">支持 JSON、PNG、CHARX，最大32 MiB。作为当前世界的玩家身份保存，不加入通讯录，不需要初始地点，也不生成人物关系网节点。请检查公开介绍中哪些内容可让交流角色知道。</p>
+        </div>
+        {draft.source?.scope === "player" && <p className="inline-hint">玩家专用角色卡：{cardTitle || saved.source_title || draft.identity_name}。原卡及其附属世界书不会作为NPC或公共世界书加入当前世界。</p>}
+        {draft.source?.scope === "player" && cardWarnings.map(code => <p key={code} role="status" className="inline-hint">{contentImportWarning(code)}</p>)}
+        <details><summary>从世界书选择身份</summary>
+          <p className="inline-hint">也可以采用当前世界已接受的世界书条目。同名不会自动绑定；采用后请核对公开介绍，删除不应让所有角色知道的秘密。</p>
+          <PersonaSourcePicker client={client} worldId={worldId} lorebooksOnly onChoose={source => {
             edit({ source: source.reference, identity_name: Array.from(source.title).slice(0, 120).join(""), public_identity: Array.from(source.text).slice(0, 2000).join("") });
+            setCardTitle(""); setCardWarnings([]);
             setNotice("已填入资料开头作为草稿。请核对公开范围和故事阶段，再预览确认。");
           }} />
         </details>

@@ -4,12 +4,16 @@
 
 ## 使用流程
 
-1. 从当前世界已接受的世界书条目或角色卡中选择人物，也可以填写原创身份。同名不会自动绑定。资料按名称搜索、每页32项继续读取，没有只读取前32项的总量限制。
+1. 在“我”页直接选择“导入我的角色卡”，支持JSON、PNG、CHARX，最大32 MiB；无需先放入通讯录或指定角色初始地点。也可从当前世界已接受的世界书条目选择人物，或填写原创身份。世界书按名称搜索、每页32项继续读取，没有只读取前32项的总量限制。
 2. 核对“设定人物名称”“公开身份介绍”和“故事起点”。例如人物名称为“哲”，公开介绍说明对应本世界的录像店店主及可公开背景，故事起点说明采用的剧情阶段。无需依靠模型猜测某个名字对应哪位人物。
 3. 添加特定角色，填写其与玩家的初始关系和起初知道的详情。公开介绍对交流角色可见；各人的初始认识分别提供。不要把私人秘密写入公开介绍。
 4. 点击“预览身份修改”，核对内容后点击“确认采用身份”。预览十分钟有效，返回编辑会取消该预览。读取、选择和预览均不持久保存、不调用模型；只有确认会保存。并发修改冲突会保留输入，不能覆盖另一窗口的新设置。
 
 来源正文只展示有界片段，采用时填入可编辑的介绍草稿，并非完整复制或自动判定公开范围。需亲自检查摘要，避免遗漏关键身份或公开秘密。初始认识不设置固定角色总数；编辑与预览按页显示，完整确认稿仍有4 MiB的输入保护。
+
+玩家专用卡的原始文件及解析结果随确认完整保存，预览不写入库。公开介绍先填入卡片描述、性格和背景的前2000字符，较长时明确提示；`{{char}}`仅作一次字面替换为卡片本人名，原卡的`{{user}}`表示“对话对象”，未知模板不执行。模型仍只读取用户确认的公开摘要及当前角色获准的初始认识，不拿玩家卡的系统指令、开场或附属世界书去扮演玩家或公开秘密。
+
+这类卡不成为通讯录角色，不创建NPC、角色状态、初始位置、阵营成员或三维关系网节点。既有玩家身份和位置保持连续；已存在的旧通讯录角色及聊天不因新导入而自动删除。旧的世界来源绑定继续兼容，新的角色卡入口改用玩家专用来源。
 
 ## 知情与来源边界
 
@@ -23,14 +27,18 @@
 
 ## 工程边界
 
-新增表`world_player_personas`按世界及既有Player隔离，以Alembic `0054_player_personas`增量创建。旧资料不自动推断绑定；没有新设置时继续采用旧资料路径。新表随整库存档和世界范围管理走现有流程，不改变财务回执、协议或存档位置。
+`world_player_personas`以Alembic `0054_player_personas`创建，`0056_player_cards`新增`world_player_cards`保存当前玩家专用卡，两者按世界及既有Player隔离。引用以`scope=player`、卡ID、内容ID及审核摘要验证；缺少scope的旧引用按`world`处理。卡片与身份在同一个CAS事务确认，替换卡片不修改NPC来源、旧聊天或玩家位置。旧资料不自动推断绑定；没有新设置时继续采用旧资料路径。新表随整库存档和世界范围管理走现有流程，不改变财务回执、协议或存档位置。
 
-HTTP入口为`/api/v1/worlds/{world_id}/me/persona`，使用既有会话鉴权；`sources`分页查询，`preview`准备，`commit`要求明确确认。客户端类型和运行时校验由实际Python模型生成。生产组装缺少该服务会明确失败。
+HTTP入口为`/api/v1/worlds/{world_id}/me/persona`，使用既有会话鉴权；`card`读取玩家卡上传，`sources`分页查询（身份世界书筛选在后端执行），`preview`准备，`commit`要求明确确认。客户端类型和运行时校验由实际Python模型生成。生产组装缺少该服务会明确失败。
+
+预览和确认的客户端请求必须明确携带`Content-Type: application/json`；字符串请求体不能依赖浏览器自动推断JSON。保存链路的隔离检查从实际界面及CoreClient出发，经浏览器Request默认序列化、内存ASGI与临时SQLite，再重新读取已确认内容；故事起点允许留空。相关当前证据与用户复验边界见状态清单。
 
 模型输入只含有界身份摘要及当前角色的认识，按JSON转义后的字节数裁剪，完整作者设置保留。直接／群聊及后台调用继续经过原有硬Token预留与上限检查，不增设付费调用、后台开关或自动重试。长稿不能保证每个字都进入一次提示。
 
-源码入口：`application/player_persona.py`、`infrastructure/persistence/player_persona.py`、`adapters/http/player_persona.py`、`apps/web/src/PlayerPersonaEditor.tsx`。工程检查和实际验收只维护在[状态清单](PROJECT_STATUS.md)。
+源码入口：`application/player_persona.py`、`application/player_card.py`、`infrastructure/persistence/player_persona.py`、`adapters/http/player_persona.py`、`apps/web/src/PlayerPersonaEditor.tsx`。工程检查和实际验收只维护在[状态清单](PROJECT_STATUS.md)。
 
 ## 成熟实现参考
 
 2026-10-19参考SillyTavern **1.19.0**的[Persona](https://docs.sillytavern.app/usage/core-concepts/personas/)及[Persona Lorebook](https://docs.sillytavern.app/usage/core-concepts/worldinfo/#persona-lorebook)概念：将玩家身份作为明确的上下文，而非仅用显示名触发世界书。[源码许可为AGPL-3.0](https://github.com/SillyTavern/SillyTavern/blob/1.19.0/LICENSE)。本项目独立实现确认、来源失效和逐角色过滤，未复制或分发其代码；复用现有Pydantic、SQLAlchemy、Alembic和React，不增加依赖。
+
+2026-10-20进一步核对官方Persona说明中“玩家身份与对话角色分开”“角色转换为Persona时要注意姓名宏”的做法。dreamtalk按用户决定提供直接上传至玩家身份的入口，复用现有`CharacterCardImporter`兼容解析器，独立保存原卡并维持公开范围确认；无新增依赖或AGPL源码。

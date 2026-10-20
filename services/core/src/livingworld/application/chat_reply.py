@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import aclosing, asynccontextmanager
 from dataclasses import dataclass, field, replace
 from typing import Protocol
@@ -17,9 +17,11 @@ from livingworld.application.chat_event_annotations import (
     DialogueFormatError,
     annotate_request,
     annotation_request,
+    completed_reply,
     decode_dialogue,
     decode_optional_dialogue,
     optional_annotation_request,
+    partial_optional_reply,
     partial_reply,
 )
 from livingworld.application.chat_media import media_request
@@ -109,7 +111,7 @@ class ChatGateway(Protocol):
         *,
         selection: ModelSelection | None = None,
         turn_budget: ChatTurnTokenBudget,
-    ) -> AsyncIterator[LLMStreamEvent]: ...
+    ) -> AsyncGenerator[LLMStreamEvent, None]: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -169,6 +171,13 @@ def _generation_error(failure):
     return ChatReplyGenerationError(code)
 
 
+def _reply_size(text: str) -> int:
+    try:
+        return len(text.encode("utf-8"))
+    except UnicodeEncodeError:
+        raise ChatReplyValidationError("chat_reply_format_invalid") from None
+
+
 async def dialogue_text(
     gateway: ChatGateway,
     request: LLMRequest,
@@ -180,11 +189,12 @@ async def dialogue_text(
     format_failure: Callable[[str], None] | None = None,
 ) -> str | AnnotatedDialogue:
     """Reuse governed execution; stream deltas stay provisional until settlement."""
+    visible = ""
     try:
         if request.streaming:
             pieces: list[str] = []
             size = 0
-            visible = ""
+            preview_diverged = False
             completion = None
             async with aclosing(
                 gateway.stream(request, selection=selection, turn_budget=budget)
@@ -202,7 +212,7 @@ async def dialogue_text(
                     if isinstance(event, StreamFailed):
                         raise _generation_error(event.failure)
                     if isinstance(event, TextDelta):
-                        size += len(event.text.encode("utf-8"))
+                        size += _reply_size(event.text)
                         if size > 65536:
                             raise ChatReplyValidationError("chat_reply_invalid")
                         if event.text:
@@ -210,10 +220,21 @@ async def dialogue_text(
                             if progress is not None:
                                 delta = event.text
                                 if annotation_request(request):
-                                    decoded = partial_reply("".join(pieces))
+                                    if preview_diverged:
+                                        continue
+                                    decoded = (
+                                        partial_optional_reply("".join(pieces))
+                                        if optional_annotation_request(request)
+                                        else partial_reply("".join(pieces))
+                                    )
                                     if decoded is None:
                                         continue
                                     if not decoded.startswith(visible):
+                                        if optional_annotation_request(request):
+                                            # Stop provisional deltas; a validated terminal
+                                            # message replaces the preview on the client.
+                                            preview_diverged = True
+                                            continue
                                         raise ChatReplyValidationError("chat_reply_invalid")
                                     delta, visible = decoded[len(visible) :], decoded
                                 if delta:
@@ -244,24 +265,36 @@ async def dialogue_text(
         raise ChatReplyValidationError("chat_reply_invalid") from None
     if budget.bound_violated:
         raise ChatReplyValidationError("chat_token_bound_violated")
+    limit_reply = None
     if finish is FinishReason.OUTPUT_LIMIT:
-        raise ChatReplyValidationError("chat_reply_output_limit")
+        limit_reply = completed_reply(text) if optional_annotation_request(request) else None
+        if limit_reply is None:
+            raise ChatReplyValidationError("chat_reply_output_limit")
     if not text.strip():
         raise ChatReplyValidationError("chat_reply_empty")
     if (
         finish not in {FinishReason.STOP, FinishReason.REFUSAL}
+        and limit_reply is None
         or not text.strip()
-        or len(text.encode("utf-8")) > 65536
+        or _reply_size(text) > 65536
     ):
         raise ChatReplyValidationError("chat_reply_invalid")
     if annotation_request(request):
         try:
             annotated = (
-                decode_optional_dialogue(text)
+                AnnotatedDialogue(limit_reply)
+                if limit_reply is not None
+                else decode_optional_dialogue(text)
                 if optional_annotation_request(request)
                 else decode_dialogue(text)
             )
-            if request.streaming and progress is not None and visible and annotated.text != visible:
+            if (
+                request.streaming
+                and progress is not None
+                and visible
+                and annotated.text != visible
+                and not optional_annotation_request(request)
+            ):
                 raise ValueError()
         except ValueError as error:
             if format_failure is not None:
@@ -270,7 +303,7 @@ async def dialogue_text(
                 )
             raise ChatReplyValidationError("chat_reply_format_invalid") from None
         if request.streaming and progress is not None and not visible:
-            # Plain dialogue and a complete fenced envelope are withheld until
+            # Ambiguous prose prefixes and fenced envelopes are withheld until
             # terminal validation, so metadata never becomes a displayed delta.
             await progress(ChatProgress("delta", speaker, annotated.text))
         return annotated

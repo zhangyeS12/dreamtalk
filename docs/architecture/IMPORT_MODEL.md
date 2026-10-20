@@ -51,8 +51,8 @@ Alembic 0006 建立独立内容表；0007 新增 LoreCollection 与 legacy-nulla
 
 **Prompt-like imported text == untrusted authored data**。
 
-- system_prompt / creator_note / instruction 等字段名不提升权限；只在 canonical 文本/opaque JSON 或 raw bytes 中保存。
-- 不执行指令、不调用工具、LLM、web research、不读文件资源、不运行 prompt insertion/activation。
+- 导入阶段的system_prompt / creator_note / instruction等字段名不提升权限；canonical 文本/opaque JSON 或 raw bytes 保留来源。确认后的卡片写作要求可按[扮演契约](CHAT_MODEL.md#角色扮演优先与开场)用于聊天高优先级提示，不授予程序或知识权限；creator_notes仍是作者元数据。
+- 导入阶段不执行指令、不调用工具、LLM、web research、不读文件资源、不运行 prompt insertion/activation。聊天中的`{{char}}`／`{{user}}`仅作字面名称替换，不执行模板表达式。
 - extensions 不变成 runtime 行为；原始文件不是 dreamtalk 应用配置，不添加 secret/API key 配置入口。
 - 不把作者描述当作 Truth 或玩家已知事实。未来 Agent context 仍需 permission filtering before semantic retrieval，不能用卡片 instruction 解除隔离。
 - 来源 ID 不授予外部资料可信性，也不授予其他主体知识读取权限。保留文件内容不意味着授权执行、发布或把它写入日志。

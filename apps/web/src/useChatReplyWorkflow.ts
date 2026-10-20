@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { CoreClient, CoreRequestError, type ChatReplyAvailability, type StickerEntry } from "@dreamtalk/api-client";
 import {
-  chatReplyFailureFeedback, chatReplyStateFeedback, chatSaveFailureFeedback,
+  chatFailureNeedsModelSettings, chatReplyFailureFeedback, chatReplyStateFeedback, chatSaveFailureFeedback,
   chatTokenReservationFeedback, type ChatRequestPhase,
 } from "./chatFeedback";
 import { useReplyStream } from "./useReplyStream";
@@ -37,7 +37,7 @@ export function useChatReplyWorkflow({
   const [phase, setPhase] = useState<ChatRequestPhase>(null);
   const [recoveryBusy, setRecoveryBusy] = useState(false);
   const [feedback, setFeedback] = useState("");
-  const [replyFailure, setReplyFailure] = useState<{ turnId: string; message: string } | null>(null);
+  const [replyFailure, setReplyFailure] = useState<{ turnId: string; message: string; modelSettingsSuggested: boolean } | null>(null);
   const actionLock = useRef(false);
   const stream = useReplyStream();
   const speech = useSpeech();
@@ -100,7 +100,7 @@ export function useChatReplyWorkflow({
         ? "已请求停止生成。已保存的发言会保留；可检查回复状态，系统不会自动重新调用模型。"
         : chatReplyFailureFeedback(failure, kind);
     setFeedback(message);
-    if (turn?.state !== "completed") setReplyFailure({ turnId, message });
+    if (turn?.state !== "completed") setReplyFailure({ turnId, message, modelSettingsSuggested: chatFailureNeedsModelSettings(failure) });
   };
 
   const generateSavedReply = async (turnId: string) => {
@@ -146,6 +146,7 @@ export function useChatReplyWorkflow({
   return {
     ...transcript, refresh, setRefresh, available, availabilityReading, availabilityFailed,
     budgetFeedback, draft, setDraft, sticker, setSticker, pending, phase, sending, setRecoveryBusy, feedback,
+    modelSettingsSuggested: Boolean(replyFailure?.message === feedback && replyFailure.modelSettingsSuggested),
     stream, visibleStreamDraft, latestPlayerMessage, checkReply, generateSavedReply, send,
   };
 }

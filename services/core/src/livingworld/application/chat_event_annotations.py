@@ -18,10 +18,14 @@ from livingworld.application.long_chat_memory import MEMORY_INSTRUCTIONS, Memory
 
 CHAT_ANNOTATION_ENCODING = "same_call_chat_annotations_v1"
 _JSON_FENCE_START = re.compile(r"\A```(?:json)?[ \t]*\r?\n", re.IGNORECASE)
-_JSON_FENCE = re.compile(
-    r"\A```(?:json)?[ \t]*\r?\n(.*?)\r?\n```[ \t]*\Z", re.IGNORECASE | re.DOTALL
+_CODE_FENCE = re.compile(
+    r"\A```(?P<language>[\w+-]*)[ \t]*\r?\n(?P<body>.*?)\r?\n```[ \t]*\Z",
+    re.IGNORECASE | re.DOTALL,
 )
-_METADATA_MEMBER = re.compile(r'"(?:reply|events|memories|media)"\s*:')
+_ENVELOPE_START = re.compile(r'\A(?:\{\s*(?:["}]|(?:reply|events|memories|media)\s*:)|\[\s*\{\s*")')
+_LEADING_REPLY = re.compile(r'\A\{\s*"reply"\s*:\s*')
+_AUXILIARY_TAIL = re.compile(r'\A,\s*"(?:events|memories|media)"\s*:')
+_REPLY_MEMBER = re.compile(r'(?<!\\)"reply"\s*:')
 
 ANNOTATION_SCHEMA = {
     "type": "object",
@@ -30,26 +34,22 @@ ANNOTATION_SCHEMA = {
     "additionalProperties": True,
 }
 ANNOTATION_INSTRUCTIONS = (
-    "输出完整的json对象，不加Markdown代码块、解释或对象外文字。先完成非空reply台词，"
-    "再写events和memories。角色台词是首要任务，即使没有活动记录、事件或新记忆也必须正常回应。"
-    "寒暄可以简短回应，events和memories为空数组；不要以空正文或空reply代替回答。"
-    '完整寒暄格式示例：{"reply":"我在，怎么了？","events":[],"memories":[]}。'
-    "reply是正常角色台词，不向玩家显示字段，不要求机械复述示例。"
+    "首先完成自然、完整的角色回复。可以直接输出角色正文；事件、记忆和媒体数据是可选辅助内容，"
+    "不需要辅助数据或无法可靠组织JSON时直接输出正文，不附带字段、解释或残缺JSON。"
+    "需要提供辅助数据时输出同一个完整json对象，不加Markdown代码块、解释或对象外文字。先完成非空reply角色回复，"
+    "再写events和memories。角色扮演回复是首要任务，即使没有活动记录、事件或新记忆也必须正常回应。"
+    "没有重要辅助信息时，events和memories为空数组；不要以空正文或空reply代替回答。"
+    "reply是完整角色回复，可含台词、动作、神态、心理和场景描写，不向玩家显示字段。"
+    "辅助字段不规定人物口吻、篇幅或情节；reply遵循角色卡和当前互动。"
     "events是本次reply明确告知玩家的具体活动、未来计划、传闻、邀请或计划改变，最多3条；"
     "寒暄、感受、性格习惯、纯假设、玩笑和重复闲聊不记录，允许events为空数组，不为记录而编造剧情。"
-    "明确表达可约时间或带条件的实际邀约仍应记录：如今天有事、明天可约，或收工后若还早就来找你喝牛奶。"
-    "它们分别是计划或邀请，不是纯假设；标题与quote必须保留条件和取消分支，不能写成确定赴约或已经见面。"
-    "例如‘等我收工，若还早就来找你喝牛奶；若太晚，你也早点睡，别等’是一条条件邀请，"
-    "quote须包含‘若还早’和‘若太晚’两部分，不拆成多条，不把守梦等修辞当事件。"
+    "明确表达可约时间或带条件的实际邀约仍应记录；标题与quote保留全部条件和取消分支，"
+    "不能拆成无条件赴约或写成已经见面，不把修辞当事件。"
     "每条只含kind(activity/plan/rumor/invitation/change)、title(简短标题)、quote(reply中完整原句)、"
     "time_text(原句中的时间说法，无则null)、source_event_id(输入提供且本人有权知道的实际事件ID，无则null)、"
     "updates_entry_id(本会话提供的旧事件记录ID，只有明确取消/改变它才填写，否则null)。"
     "quote必须逐字出现在reply，time_text必须逐字出现在quote。计划不能说成已发生，传闻不能说成证实。"
     "活动回答仍以本人已提交的活动记录为依据，结构化字段不能增加台词没有告知的内容。"
-    '示例json：{"reply":"我明天下午想去商店购物，你要一起吗？",'
-    '"events":[{"kind":"plan","title":"铃计划购物",'
-    '"quote":"我明天下午想去商店购物，你要一起吗？","time_text":"明天下午",'
-    '"source_event_id":null,"updates_entry_id":null}],"memories":[]}。'
 )
 
 
@@ -82,8 +82,8 @@ class DialogueFormatError(ValueError):
 def annotate_request(request):
     return replace(
         request,
-        # Put the transport contract after role instructions and before the
-        # unchanged conversation. Past plain-text replies must not override JSON.
+        # Put the optional transport contract after role instructions and before
+        # the unchanged conversation; retain the full body in either encoding.
         # Messages/Interactions accept one leading system instruction. Keep all
         # existing blocks and append the same-call contract without changing roles
         # or moving conversation data into that privileged instruction.
@@ -133,48 +133,103 @@ def partial_reply(raw):
     return reply if isinstance(reply, str) else None
 
 
+def partial_optional_reply(raw):
+    """Stream unambiguous prose; withhold possible envelopes and code fences."""
+    candidate = raw.lstrip("\ufeff \t\r\n")
+    if candidate and candidate[0] not in "{[`":
+        return raw
+    return partial_reply(raw)
+
+
 def _unique_json(pairs):
     result = {}
     for key, value in pairs:
         if key in result:
-            raise ValueError("chat_reply_invalid")
+            raise DialogueFormatError("duplicate_member")
         result[key] = value
     return result
 
 
 def _reject_non_finite(_):
-    raise ValueError("chat_reply_invalid")
+    raise DialogueFormatError("non_finite")
+
+
+def _valid_reply(text):
+    if not isinstance(text, str):
+        raise DialogueFormatError("invalid_reply_type")
+    if not text.strip():
+        raise DialogueFormatError("empty_reply")
+    try:
+        size = len(text.encode("utf-8"))
+    except UnicodeEncodeError:
+        raise DialogueFormatError("invalid_reply_text") from None
+    if size > 65536:
+        raise DialogueFormatError("oversized_reply")
+    return text
+
+
+def completed_reply(raw):
+    """Decode only a closed, leading reply value; never repair or finish its text."""
+    candidate = raw.strip().lstrip("\ufeff").lstrip()
+    if fence := _CODE_FENCE.fullmatch(candidate):
+        candidate = fence["body"].strip()
+    elif start := _JSON_FENCE_START.match(candidate):
+        candidate = candidate[start.end() :].lstrip()
+    start = _LEADING_REPLY.match(candidate)
+    if start is None:
+        return None
+    try:
+        # strict=False permits literal newlines in an otherwise complete string.
+        # Python owns quote/escape decoding and returns the exact end boundary.
+        reply, end = json.JSONDecoder(strict=False).raw_decode(candidate, start.end())
+        reply = _valid_reply(reply)
+    except (ValueError, TypeError, RecursionError):
+        return None
+    tail = candidate[end:].lstrip()
+    if _REPLY_MEMBER.search(tail):
+        return None  # An ambiguous second reply must never replace the streamed one.
+    if tail and not tail.startswith("}") and not _AUXILIARY_TAIL.match(tail):
+        return None
+    return reply
 
 
 def decode_optional_dialogue(raw):
     """Accept complete dialogue; never display an invalid annotation envelope."""
-    candidate = raw.strip()
-    if fence := _JSON_FENCE.fullmatch(candidate):
-        return decode_dialogue(fence[1])
-    if candidate.startswith(("{", "[", "```")) or _METADATA_MEMBER.search(candidate):
-        # A malformed/truncated envelope is not a plain-text chat fallback.
+    _valid_reply(raw)
+    candidate = raw.strip().lstrip("\ufeff").lstrip()
+    declared_json = False
+    if fence := _CODE_FENCE.fullmatch(candidate):
+        declared_json = fence["language"].lower() == "json"
+        candidate = fence["body"].strip()
+    elif start := _JSON_FENCE_START.match(candidate):
+        declared_json = candidate[: start.end()].strip().lower() == "```json"
+        candidate = candidate[start.end() :].lstrip()
+    if not declared_json and not _ENVELOPE_START.match(candidate):
+        return AnnotatedDialogue(raw)
+    try:
         return decode_dialogue(candidate)
-    if not candidate or len(raw.encode("utf-8")) > 65536:
-        raise ValueError("chat_reply_invalid")
-    return AnnotatedDialogue(raw)
+    except DialogueFormatError as error:
+        if error.reason != "invalid_json":
+            raise
+        reply = completed_reply(candidate)
+        if reply is None:
+            raise
+        # Keep only the already complete body; discard every untrusted auxiliary field.
+        return AnnotatedDialogue(reply)
 
 
 def decode_dialogue(raw):
     try:
         value = json.loads(raw, object_pairs_hook=_unique_json, parse_constant=_reject_non_finite)
-    except (ValueError, TypeError):
+    except DialogueFormatError:
+        raise
+    except (ValueError, TypeError, RecursionError):
         raise DialogueFormatError("invalid_json") from None
     if not isinstance(value, dict):
         raise DialogueFormatError("invalid_envelope")
     if "reply" not in value:
         raise DialogueFormatError("missing_reply")
-    reply = value["reply"]
-    if not isinstance(reply, str):
-        raise DialogueFormatError("invalid_reply_type")
-    if not reply.strip():
-        raise DialogueFormatError("empty_reply")
-    if len(reply.encode("utf-8")) > 65536:
-        raise DialogueFormatError("oversized_reply")
+    reply = _valid_reply(value["reply"])
     candidates = value.get("events", [])
     if not isinstance(candidates, list) or len(candidates) > 3:
         candidates = []

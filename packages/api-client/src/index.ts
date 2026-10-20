@@ -1,4 +1,7 @@
-import { isPlayerPersonaSnapshot, isPlayerPersonaPreview, isPersonaSourcePage } from "./contracts.generated";
+import { isWorldStyleSnapshot, isWorldStylePreview } from "./contracts.generated";
+import type { WorldStyleSnapshot, WorldStylePreview, HttpWorldStyleStyleDraft, HttpWorldStyleStyleConfirm } from "./contracts.generated";
+export type { WorldStyleSnapshot, WorldStylePreview } from "./contracts.generated";
+import { isPlayerPersonaSnapshot, isPlayerPersonaPreview, isPersonaSourcePage, isPersonaSourceChoice } from "./contracts.generated";
 import type { PlayerPersonaSnapshot, PlayerPersonaPreview, PlayerPersonaDraft, PersonaSourcePage, HttpPlayerPersonaPersonaPreviewRequest, HttpPlayerPersonaPersonaCommitRequest } from "./contracts.generated";
 export type { PlayerPersonaSnapshot, PlayerPersonaPreview, PlayerPersonaDraft, PersonaSourcePage, PersonaSourceChoice, InitialRecognition } from "./contracts.generated";
 
@@ -703,19 +706,43 @@ export class CoreClient {
   playerPersona(worldId: string, signal?: AbortSignal): Promise<PlayerPersonaSnapshot> {
     return this.contractRequest(`/worlds/${encodeURIComponent(worldId)}/me/persona`, isPlayerPersonaSnapshot, { signal });
   }
-  playerPersonaSources(worldId: string, query = "", after?: string, characters = false, signal?: AbortSignal): Promise<PersonaSourcePage> {
+  playerPersonaSources(worldId: string, query = "", after?: string, characters = false, signal?: AbortSignal, lorebooksOnly = false): Promise<PersonaSourcePage> {
     const params = new URLSearchParams({ query, characters: String(characters) });
     if (after) params.set("after", after);
+    if (lorebooksOnly) params.set("lorebooks_only", "true");
     return this.contractRequest(`/worlds/${encodeURIComponent(worldId)}/me/persona/sources?${params}`, isPersonaSourcePage, { signal });
+  }
+  importPlayerCard(worldId: string, file: Blob, revision: number, playerId: string): Promise<import("./contracts.generated").PersonaSourceChoice> {
+    const params = new URLSearchParams({ expected_revision: String(revision), expected_player_id: playerId });
+    return this.contractRequest(`/worlds/${encodeURIComponent(worldId)}/me/persona/card?${params}`, isPersonaSourceChoice, {
+      method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: file,
+    });
   }
   previewPlayerPersona(worldId: string, draft: PlayerPersonaDraft, expectedRevision: number, expectedPlayerId: string): Promise<PlayerPersonaPreview> {
     return this.contractRequest(`/worlds/${encodeURIComponent(worldId)}/me/persona/preview`, isPlayerPersonaPreview, {
-      method: "POST", body: JSON.stringify({ draft, expected_revision: expectedRevision, expected_player_id: expectedPlayerId } satisfies HttpPlayerPersonaPersonaPreviewRequest),
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ draft, expected_revision: expectedRevision, expected_player_id: expectedPlayerId } satisfies HttpPlayerPersonaPersonaPreviewRequest),
     });
   }
   confirmPlayerPersona(worldId: string, previewId: string): Promise<PlayerPersonaSnapshot> {
     return this.contractRequest(`/worlds/${encodeURIComponent(worldId)}/me/persona/commit`, isPlayerPersonaSnapshot, {
-      method: "POST", body: JSON.stringify({ preview_id: previewId, confirmed: true } satisfies HttpPlayerPersonaPersonaCommitRequest),
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ preview_id: previewId, confirmed: true } satisfies HttpPlayerPersonaPersonaCommitRequest),
+    });
+  }
+  worldStyle(worldId: string, signal?: AbortSignal): Promise<WorldStyleSnapshot> {
+    return this.contractRequest(`/worlds/${encodeURIComponent(worldId)}/style`, isWorldStyleSnapshot, { signal });
+  }
+  previewWorldStyle(worldId: string, instructions: string, revision: number): Promise<WorldStylePreview> {
+    return this.contractRequest(`/worlds/${encodeURIComponent(worldId)}/style/preview`, isWorldStylePreview, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ instructions, expected_revision: revision } satisfies HttpWorldStyleStyleDraft),
+    });
+  }
+  confirmWorldStyle(worldId: string, preview: WorldStylePreview): Promise<WorldStyleSnapshot> {
+    return this.contractRequest(`/worlds/${encodeURIComponent(worldId)}/style/commit`, isWorldStyleSnapshot, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ instructions: preview.instructions, expected_revision: preview.revision, preview_id: preview.preview_id, confirmed: true } satisfies HttpWorldStyleStyleConfirm),
     });
   }
   profile(worldId?: string): Promise<LocalProfile> {

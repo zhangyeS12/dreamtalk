@@ -76,6 +76,7 @@ from livingworld.infrastructure.persistence.player_persona import (
     read_player_persona,
 )
 from livingworld.infrastructure.persistence.world_story import record_contact_invitation
+from livingworld.infrastructure.persistence.world_style import style_is_current, style_snapshot
 
 
 async def _write(session):
@@ -341,6 +342,7 @@ class SqlAlchemyOfflineContactStore:
             # Do not bypass exposure checks or substitute private lore.
             background, background_omitted = [], True
         snapshot = {
+            **await style_snapshot(session, cfg.world_id),
             "player_epoch": await self._epoch(session, cfg.world_id, cfg.player_id),
             "player_identity_stamp": await player_persona_stamp(session, world, cfg.player_id),
             "utc_offset_minutes": int(now.astimezone().utcoffset().total_seconds() // 60),
@@ -543,6 +545,8 @@ class SqlAlchemyOfflineContactStore:
         ):
             return False
         data = json.loads(ep.input_json)
+        if not await style_is_current(session, ep.world_id, data):
+            return False
         if await player_persona_stamp(session, WorldId(ep.world_id), ep.player_id) != data.get(
             "player_identity_stamp"
         ):

@@ -38,6 +38,7 @@ if TYPE_CHECKING:
     from livingworld.application.world_model_config import WorldModelValue
     from livingworld.application.world_settings import WorldSettingsService
     from livingworld.application.world_story import WorldStoryService
+    from livingworld.application.world_style import WorldStyleService
     from livingworld.infrastructure.persistence.factions import SqlAlchemyFactionStore
 
 
@@ -49,6 +50,7 @@ class HttpServices:
     world_settings: WorldSettingsService | None = None
     player_event_feed: PlayerEventFeedService | None = None
     local_profiles: LocalProfileStore | None = None
+    world_style: WorldStyleService | None = None
     player_persona: PlayerPersonaService | None = None
     world_content: WorldContentService | None = None
     player_onboarding: LocalPlayerOnboardingService | None = None
