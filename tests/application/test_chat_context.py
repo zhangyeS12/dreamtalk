@@ -147,7 +147,7 @@ def test_context_tracks_current_accepted_persona_and_only_own_chat(tmp_path):
                 and item.content[0].text.lstrip().startswith("{")
                 and '"character"' in item.content[0].text
             )
-            assert persona["character"]["name"] == "Fixture Billy"
+            assert persona["character"]["name"] == "Fixture Alice"
             assert "Curious" in context.messages[0].content[0].text
             assert "GREETING_STYLE_CANARY" not in context.messages[0].content[0].text
             assert any(

@@ -544,7 +544,7 @@ def test_v2_secondary_string_is_preserved_as_ambiguous_source():
     book["entries"][0]["secondary_keys"] = "a,b"
     imported = LorebookImporter().normalize_embedded(preserved_card(2, book))
     _, entries, _ = roots(imported)
-    assert entries[0].secondary_keywords == ()
+    assert entries[0].secondary_keywords == ("a,b",)
     assert entries[0].extensions[LOREBOOK_METADATA_KEY]["source_entry"]["secondary_keys"] == "a,b"
 
 
