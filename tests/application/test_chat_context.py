@@ -137,12 +137,16 @@ def test_context_tracks_current_accepted_persona_and_only_own_chat(tmp_path):
                 RequestId(uuid4()), conversation.conversation_id, "你好", 50000
             )
             context = await builder.build(sent)
-            assert [item.role for item in context.messages] == [
-                MessageRole.SYSTEM,
-                MessageRole.USER,
-                MessageRole.USER,
-            ]
-            persona = json.loads(context.messages[1].content[0].text)
+            assert context.messages[0].role is MessageRole.SYSTEM
+            assert context.messages[-1].role is MessageRole.USER
+            persona = next(
+                json.loads(item.content[0].text)
+                for item in context.messages
+                if item.role is MessageRole.USER
+                and item.content
+                and item.content[0].text.lstrip().startswith("{")
+                and '"character"' in item.content[0].text
+            )
             assert persona["character"]["personality"] == "Curious"
             assert persona["character"]["opening_style_example"] == (
                 "GREETING_STYLE_CANARY {{user}}"

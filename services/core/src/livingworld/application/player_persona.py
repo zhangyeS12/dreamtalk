@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from livingworld.application.imports import ContentImporter
 from livingworld.application.input_budget import bounded_text, json_size
 from livingworld.application.player_card import PlayerCardImport, parse_player_card
+from livingworld.application.ports import WallClock
 from livingworld.domain.identifiers import CharacterId, PlayerId, WorldId
 
 PERSONA_GROUNDING = (
@@ -129,10 +130,14 @@ class PlayerPersonaStore(Protocol):
 
 class PlayerPersonaService:
     def __init__(
-        self, store: PlayerPersonaStore, card_importer: ContentImporter | None = None
+        self,
+        store: PlayerPersonaStore,
+        card_importer: ContentImporter | None = None,
+        wall_clock: WallClock | None = None,
     ) -> None:
         self.store = store
         self._card_importer = card_importer
+        self._wall_clock = wall_clock
         self._cards: dict[UUID, tuple[float, WorldId, UUID, PlayerCardImport]] = {}
         self._pending: dict[
             UUID, tuple[float, WorldId, UUID, int, PlayerPersonaDraft, PlayerCardImport | None]
@@ -155,7 +160,12 @@ class PlayerPersonaService:
         }
         if len(active) >= 2:
             raise PlayerPersonaError("persona_card_preview_capacity")
-        card = parse_player_card(self._card_importer, payload, datetime.now(UTC))
+        imported_at = (
+            self._wall_clock.now_utc()
+            if self._wall_clock is not None
+            else datetime.fromtimestamp(0, UTC)
+        )
+        card = parse_player_card(self._card_importer, payload, imported_at)
         self._cards = {**active, card.card_id: (monotonic() + 600, world, expected_player, card)}
         return PersonaSourceChoice(
             reference=PersonaReference(

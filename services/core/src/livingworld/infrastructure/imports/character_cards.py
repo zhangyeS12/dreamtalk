@@ -139,6 +139,16 @@ class CharacterCardImporter:
                 )
             )
         spec, version, data = _validate(document, [] if container in ("png", "apng") else warnings)
+        if "source_book" in input_compatibility and not any(
+            warning.code == "character_card_embedded_lore_deferred" for warning in warnings
+        ):
+            warnings.append(
+                ImportWarning(
+                    "character_card_embedded_lore_deferred",
+                    "Complete embedded lore retained with card provenance; normalization deferred.",
+                    "data.character_book",
+                )
+            )
         unknown_top = {
             key: value
             for key, value in document.items()

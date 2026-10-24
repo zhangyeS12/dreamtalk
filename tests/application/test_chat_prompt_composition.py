@@ -226,16 +226,24 @@ def test_real_builders_pack_current_question_after_examples_and_opening(card, gr
     if group:
         history += (message(current, 4, other, "真实乙回应"),)
     sent = PlayerSend(current, question, 50000, "pending")
-    identity = SimpleNamespace(conversation_id=conversation, player_id=player, character_id=speaker)
+    identity = SimpleNamespace(
+        conversation_id=conversation,
+        player_id=player,
+        character_id=speaker,
+        root_import_id=uuid4(),
+    )
     conversations = SimpleNamespace(
         list_for_world=AsyncMock(return_value=(identity,)),
         list_groups_for_world=AsyncMock(return_value=(identity,)),
         current_direct_character=AsyncMock(return_value=card),
         current_group_characters=AsyncMock(
             return_value=(
-                (SimpleNamespace(character_id=speaker), card),
                 (
-                    SimpleNamespace(character_id=other),
+                    SimpleNamespace(character_id=speaker, root_import_id=identity.root_import_id),
+                    card,
+                ),
+                (
+                    SimpleNamespace(character_id=other, root_import_id=uuid4()),
                     replace(card, display_name=card.display_name if same_name else "角色乙"),
                 ),
             )

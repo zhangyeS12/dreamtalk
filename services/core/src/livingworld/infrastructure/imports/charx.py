@@ -1,11 +1,11 @@
 """Read only bounded CHARX card.json in memory; never extract files or fetch assets."""
 
 import io
+import posixpath
 import re
 import stat
 import zipfile
 import zlib
-from pathlib import PurePosixPath
 
 from livingworld.application.imports import ContentImportError
 
@@ -20,13 +20,13 @@ def read_charx(payload: bytes, *, max_json_bytes: int, max_entries: int) -> byte
             expanded = 0
             for entry in files:
                 name = entry.orig_filename
-                path = PurePosixPath(name)
+                path = posixpath.normpath(name)
                 if (
                     not name
                     or "\0" in name
                     or "\\" in name
-                    or path.is_absolute()
-                    or ".." in path.parts
+                    or posixpath.isabs(path)
+                    or ".." in path.split("/")
                     or re.match(r"^[A-Za-z]:", name)
                     or name in seen
                     or entry.flag_bits & 1

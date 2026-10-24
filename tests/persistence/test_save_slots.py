@@ -335,8 +335,21 @@ def test_corrupt_archive_never_changes_current_data(isolated):
 def test_previous_schema_migrates_only_working_copy(isolated):
     app = configured(isolated)
     with connect(app / "data/runtime.sqlite3") as connection:
-        connection.execute("DROP TABLE world_player_personas")
-        connection.execute("DROP TABLE example_world_setups")
+        for table in (
+            "example_world_setups",
+            "world_player_personas",
+            "world_styles",
+            "world_player_cards",
+            "chat_lore_activations",
+            "chat_paths",
+            "chat_path_states",
+            "chat_path_messages",
+            "chat_path_turns",
+            "chat_path_operations",
+            "chat_memory_origins",
+            "character_card_evolution",
+        ):
+            connection.execute(f'DROP TABLE "{table}"')
         connection.execute(
             "UPDATE alembic_version SET version_num='0052_sticker_entry_description'"
         )
@@ -346,7 +359,7 @@ def test_previous_schema_migrates_only_working_copy(isolated):
     )
     digest = safety.digest(sealed)
     slots.load(app, "0.1.81", 1, slots.status()["revision"])
-    assert safety.metadata(app / "data")["revisions"] == ["0054_player_personas"]
+    assert safety.metadata(app / "data")["revisions"] == ["0058_character_evolution"]
     assert safety.digest(sealed) == digest
 
 

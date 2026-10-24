@@ -528,18 +528,22 @@ def test_strict_json_rejects_duplicate_keys_nonfinite_surrogates_and_nonobject_r
         lambda book: book["entries"][0].update(content=None),
     ],
 )
-def test_embedded_known_structure_validation_does_not_guess(mutation):
+def test_embedded_known_structure_is_preserved_without_blocking(mutation):
     document = book_document(True)
     mutation(document)
-    with pytest.raises(ContentImportError):
-        LorebookImporter().normalize_embedded(preserved_card(3, document))
+    imported = LorebookImporter().normalize_embedded(preserved_card(3, document))
+    assert imported.draft.contents
+    assert any(
+        warning.code.startswith(("character_card_book_", "lore_"))
+        for warning in imported.preview().warnings
+    )
 
 
-def test_v2_secondary_string_is_structurally_invalid():
+def test_v2_secondary_string_is_preserved_as_ambiguous_source():
     book = book_document(True)
     book["entries"][0]["secondary_keys"] = "a,b"
-    with pytest.raises(ContentImportError):
-        LorebookImporter().normalize_embedded(preserved_card(2, book))
+    imported = LorebookImporter().normalize_embedded(preserved_card(2, book))
+    assert "lore_secondary_keys_ambiguous_string_preserved" in codes(imported)
 
 
 def test_empty_collection_unnamed_book_and_explicit_settings_are_preserved(tmp_path):

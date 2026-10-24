@@ -413,7 +413,11 @@ def test_running_or_unknown_reply_blocks_changes_and_export_switch_is_rejected(t
 
 def test_0056_upgrade_preserves_all_original_rows_and_backfills_memory_origin(tmp_path):
     from livingworld.application.long_chat_memory import MemoryAnnotation
-    from livingworld.infrastructure.persistence.migration import CHAT_PATH_TABLES, HEAD_REVISION
+    from livingworld.infrastructure.persistence.migration import (
+        CHARACTER_EVOLUTION_TABLES,
+        CHAT_PATH_TABLES,
+        HEAD_REVISION,
+    )
     from sqlalchemy import text
 
     async def run():
@@ -448,6 +452,8 @@ def test_0056_upgrade_preserves_all_original_rows_and_backfills_memory_origin(tm
                     "chat_paths",
                 ):
                     assert name in CHAT_PATH_TABLES
+                    await connection.execute(text(f'DROP TABLE "{name}"'))
+                for name in CHARACTER_EVOLUTION_TABLES:
                     await connection.execute(text(f'DROP TABLE "{name}"'))
                 await connection.execute(
                     text("UPDATE alembic_version SET version_num='0056_player_cards'")

@@ -517,7 +517,7 @@ async def run(
                 world_style=WorldStyleService(database.world_style_store()),
                 character_evolution=database.character_evolution_store(),
                 player_persona=PlayerPersonaService(
-                    database.player_persona_store(), CharacterCardImporter()
+                    database.player_persona_store(), CharacterCardImporter(), wall_clock
                 ),
                 world_content=world_content,
                 player_onboarding=onboarding,

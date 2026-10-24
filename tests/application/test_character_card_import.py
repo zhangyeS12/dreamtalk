@@ -193,8 +193,16 @@ def test_corrupt_card_payload_explicitly_fails_even_nonselected_chunks(keyword, 
         if keyword == "ccv3"
         else card_text("ccv3", card_document(3))
     )
-    with pytest.raises(ContentImportError, match=code):
-        parse(png_bytes(other, bad))
+    imported = parse(png_bytes(other, bad))
+    assert imported.draft.contents
+    assert any(
+        warning.code
+        in {
+            "character_card_v2_fallback_review_required",
+            "character_card_unused_chunk_unreadable",
+        }
+        for warning in imported.preview().warnings
+    )
 
 
 @pytest.mark.parametrize(
@@ -208,7 +216,7 @@ def test_corrupt_card_payload_explicitly_fails_even_nonselected_chunks(keyword, 
         (b'{"unknown":"\\ud800"}', "invalid_character_card_json"),
         (b"[]", "invalid_character_card_structure"),
         (b'{"spec":"vendor-export"}', "unsupported_character_card_spec"),
-        (b"PK\x03\x04archive", "unsupported_character_card_charx"),
+        (b"PK\x03\x04archive", "invalid_character_card_archive"),
         (b"\x89PNGbad", "invalid_png_signature"),
     ],
 )
@@ -218,14 +226,15 @@ def test_invalid_external_json_and_unsupported_containers_fail(payload, code):
 
 
 @pytest.mark.parametrize("container", ["json", "png"])
-def test_v1_is_explicitly_unsupported(container):
+def test_v1_is_converted_to_v2_with_source_warning(container):
     v1 = {
         key: card_document(2)["data"][key]
         for key in ("name", "description", "personality", "scenario", "first_mes", "mes_example")
     }
     payload = json_bytes(v1) if container == "json" else png_bytes(card_text("chara", v1))
-    with pytest.raises(ContentImportError, match="unsupported_character_card_v1"):
-        parse(payload)
+    imported = parse(payload)
+    assert imported.draft.contents[0].display_name == v1["name"]
+    assert "character_card_legacy_converted" in codes(imported)
 
 
 @pytest.mark.parametrize(
@@ -233,7 +242,6 @@ def test_v1_is_explicitly_unsupported(container):
     [
         (lambda d: d["data"].pop("description"), "data.description"),
         (lambda d: d["data"].update(tags=[1]), "data.tags"),
-        (lambda d: d["data"].update(name="   "), "data.name"),
         (lambda d: d["data"].update(extensions=[]), "data.extensions"),
         (lambda d: d["data"].pop("group_only_greetings"), "data.group_only_greetings"),
         (lambda d: d["data"].update(assets=[{"type": "icon"}]), "data.assets[0]"),
@@ -258,9 +266,15 @@ def test_v1_is_explicitly_unsupported(container):
 def test_known_required_structure_is_not_guessed(mutation, path):
     document = card_document(3)
     mutation(document)
-    with pytest.raises(ContentImportError) as caught:
+    imported = parse(json_bytes(document))
+    assert any(warning.path == path for warning in imported.preview().warnings)
+
+
+def test_blank_character_name_remains_rejected():
+    document = card_document(3)
+    document["data"]["name"] = "   "
+    with pytest.raises(ContentImportError, match="character_card_name_not_representable"):
         parse(json_bytes(document))
-    assert caught.value.path == path
 
 
 def test_extensions_only_spec_defined_default_and_forward_compatibility():
