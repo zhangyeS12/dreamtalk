@@ -36,9 +36,7 @@ def character_evolution_router(store, authorize) -> APIRouter:
             raise HTTPException(404, str(error)) from None
 
     @router.post("", response_model=wire.CharacterEvolutionEntry)
-    async def change_evolution(
-        world_id: UUID, root_import_id: UUID, body: EvolutionChange
-    ) -> dict:
+    async def change_evolution(world_id: UUID, root_import_id: UUID, body: EvolutionChange) -> dict:
         try:
             return await store.change(
                 WorldId(world_id),

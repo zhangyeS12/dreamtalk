@@ -151,7 +151,11 @@ def _single_direct_chat_reply(
     if configured is None:
         return None
     return DirectChatReplyService(
-        messages, context, *configured, event_capture=_capture_available(session), journal=journal,
+        messages,
+        context,
+        *configured,
+        event_capture=_capture_available(session),
+        journal=journal,
         evolution_writer=evolution_writer,
     )
 
@@ -171,9 +175,7 @@ def configure_group_chat_reply(
                 scoped, messages, context, journal, logger, evolution_writer
             ),
         )
-    return _single_group_chat_reply(
-        session, messages, context, journal, logger, evolution_writer
-    )
+    return _single_group_chat_reply(session, messages, context, journal, logger, evolution_writer)
 
 
 def _single_group_chat_reply(
