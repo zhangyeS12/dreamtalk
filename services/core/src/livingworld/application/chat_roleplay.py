@@ -11,6 +11,11 @@ from livingworld.domain.identifiers import CharacterId
 
 _CARD_MACRO = re.compile(r"\{\{(char|user|original)\}\}", re.IGNORECASE)
 _EXAMPLE_START = re.compile(r"(?im)^[ \t]*<START>[ \t]*(?:\r?\n|$)")
+_AUTHORED_PERMISSION_PATTERN = re.compile(
+    r"(?i)\b(?:ignore|disregard|forget)\b.{0,48}\b(?:previous|prior|above|system)\b"
+    r"|\b(?:reveal|show|expose)\b.{0,32}\b(?:secret|private|hidden)"
+    r"|\b(?:run|execute)\b.{0,32}\b(?:command|script|program)"
+)
 
 DEFAULT_WRITING_INSTRUCTIONS = (
     "扮演指定角色，承接玩家当前的故事与互动。"
@@ -57,6 +62,16 @@ def _substitute(
     return _CARD_MACRO.sub(lambda match: values.get(match[1].lower(), match[0]), value)
 
 
+def _safe_authored_instruction(value: str) -> str:
+    """Keep ordinary roleplay guidance while dropping tool/permission directives."""
+    parts = re.split(r"(?<=[。！？!?；;])\s*", value)
+    return " ".join(
+        part.strip()
+        for part in parts
+        if part.strip() and not _AUTHORED_PERMISSION_PATTERN.search(part)
+    )
+
+
 def _example_messages(block: str, character_name: str, player_name: str) -> tuple[LLMMessage, ...]:
     # Recognize only the two named speakers, never arbitrary role/system headers.
     headers = [(character_name, MessageRole.ASSISTANT), (player_name, MessageRole.USER)]
@@ -98,7 +113,10 @@ def roleplay_prompt(
     def text(value: str, original: str | None = None) -> str:
         return _substitute(value, name, player_name, original)
 
-    main = text(_authored_text(character, "system_prompt"), DEFAULT_WRITING_INSTRUCTIONS)
+    main = text(
+        _safe_authored_instruction(_authored_text(character, "system_prompt")),
+        DEFAULT_WRITING_INSTRUCTIONS,
+    )
     sections = [
         world_style_prompt(world_style),
         ROLEPLAY_INSTRUCTIONS,
@@ -153,7 +171,10 @@ def roleplay_prompt(
                 LLMMessage(MessageRole.ASSISTANT, (TextContent(opening),)),
             )
         )
-    tail = text(_authored_text(character, "post_history_instructions"), DEFAULT_POST_HISTORY)
+    tail = text(
+        _safe_authored_instruction(_authored_text(character, "post_history_instructions")),
+        DEFAULT_POST_HISTORY,
+    )
     return RoleplayPrompt(
         "\n\n".join(filter(None, sections)),
         tuple(demonstrations),
