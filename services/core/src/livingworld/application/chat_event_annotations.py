@@ -22,14 +22,21 @@ _CODE_FENCE = re.compile(
     r"\A```(?P<language>[\w+-]*)[ \t]*\r?\n(?P<body>.*?)\r?\n```[ \t]*\Z",
     re.IGNORECASE | re.DOTALL,
 )
-_ENVELOPE_START = re.compile(r'\A(?:\{\s*(?:["}]|(?:reply|events|memories|media)\s*:)|\[\s*\{\s*")')
+_ENVELOPE_START = re.compile(
+    r'\A(?:\{\s*(?:["}]|(?:reply|events|memories|media|character_updates)\s*:)|\[\s*\{\s*")'
+)
 _LEADING_REPLY = re.compile(r'\A\{\s*"reply"\s*:\s*')
-_AUXILIARY_TAIL = re.compile(r'\A,\s*"(?:events|memories|media)"\s*:')
+_AUXILIARY_TAIL = re.compile(r'\A,\s*"(?:events|memories|media|character_updates)"\s*:')
 _REPLY_MEMBER = re.compile(r'(?<!\\)"reply"\s*:')
 
 ANNOTATION_SCHEMA = {
     "type": "object",
-    "properties": {"reply": {"type": "string", "minLength": 1}, "events": {}, "memories": {}},
+    "properties": {
+        "reply": {"type": "string", "minLength": 1},
+        "events": {},
+        "memories": {},
+        "character_updates": {},
+    },
     "required": ["reply"],
     "additionalProperties": True,
 }
@@ -41,6 +48,9 @@ ANNOTATION_INSTRUCTIONS = (
     "没有重要辅助信息时，events和memories为空数组；不要以空正文或空reply代替回答。"
     "reply是完整角色回复，可含台词、动作、神态、心理和场景描写，不向玩家显示字段。"
     "辅助字段不规定人物口吻、篇幅或情节；reply遵循角色卡和当前互动。"
+    "character_updates是可选的角色卡成长建议，不是已确认事实；只建议reply明确体现、且长期稳定的角色变化。"
+    "每条包含field(description/personality/background/scenario/speech_guidance)、scope(global或player)、"
+    "text(建议新增的完整词条)、quote(reply中的逐字证据)、confidence(0到1)。最多4条；不确定或只是一次性情绪时留空。"
     "events是本次reply明确告知玩家的具体活动、未来计划、传闻、邀请或计划改变，最多3条；"
     "寒暄、感受、性格习惯、纯假设、玩笑和重复闲聊不记录，允许events为空数组，不为记录而编造剧情。"
     "明确表达可约时间或带条件的实际邀约仍应记录；标题与quote保留全部条件和取消分支，"
@@ -63,12 +73,22 @@ class ChatEventAnnotation(BaseModel):
     updates_entry_id: str | None = Field(default=None, max_length=36)
 
 
+class CharacterEvolutionProposal(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    field: Literal["description", "personality", "background", "scenario", "speech_guidance"]
+    scope: Literal["global", "player"] = "global"
+    text: str = Field(min_length=1, max_length=4000)
+    quote: str = Field(min_length=3, max_length=1000)
+    confidence: float = Field(ge=0, le=1)
+
+
 @dataclass(frozen=True, slots=True)
 class AnnotatedDialogue:
     text: str
     events: tuple[ChatEventAnnotation, ...] = ()
     memories: tuple[MemoryAnnotation, ...] = ()
     media: MediaIntent | None = None
+    character_updates: tuple[CharacterEvolutionProposal, ...] = ()
 
 
 class DialogueFormatError(ValueError):
@@ -267,4 +287,15 @@ def decode_dialogue(raw):
             media = MediaIntent.model_validate_json(json.dumps(value["media"]))
         except (ValueError, TypeError):
             pass
-    return AnnotatedDialogue(reply, tuple(result), tuple(memories), media)
+    updates = []
+    proposals = value.get("character_updates", [])
+    if isinstance(proposals, list) and len(proposals) <= 4:
+        for proposal in proposals:
+            try:
+                item = CharacterEvolutionProposal.model_validate(proposal)
+                if item.quote not in reply or item.confidence < 0.6:
+                    continue
+                updates.append(item)
+            except (ValueError, TypeError):
+                continue
+    return AnnotatedDialogue(reply, tuple(result), tuple(memories), media, tuple(updates))

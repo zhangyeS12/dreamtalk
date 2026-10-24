@@ -196,8 +196,8 @@ def test_native_group_history_is_sent_once_and_selector_keeps_json(card):
     assert json.loads(text(selector.messages[1]))["transcript"] == data["transcript"]
 
 
-@pytest.mark.parametrize("group", [False, True])
-def test_real_builders_pack_current_question_after_examples_and_opening(card, group):
+@pytest.mark.parametrize(("group", "same_name"), [(False, False), (True, False), (True, True)])
+def test_real_builders_pack_current_question_after_examples_and_opening(card, group, same_name):
     world = WorldId(uuid4())
     player, speaker, other = (
         PlayerId(world, uuid4()),
@@ -215,7 +215,12 @@ def test_real_builders_pack_current_question_after_examples_and_opening(card, gr
     question = message(current, 3, player, "真实最新问题")
     history = (
         message(older, 1, player, "真实旧问题"),
-        message(older, 2, speaker, "真实旧回应"),
+        message(
+            older,
+            2,
+            speaker,
+            f"旧名称（发言者标识：{speaker.value}）：\n真实旧回应" if group else "真实旧回应",
+        ),
         question,
     )
     if group:
@@ -229,7 +234,10 @@ def test_real_builders_pack_current_question_after_examples_and_opening(card, gr
         current_group_characters=AsyncMock(
             return_value=(
                 (SimpleNamespace(character_id=speaker), card),
-                (SimpleNamespace(character_id=other), replace(card, display_name="角色乙")),
+                (
+                    SimpleNamespace(character_id=other),
+                    replace(card, display_name=card.display_name if same_name else "角色乙"),
+                ),
             )
         ),
     )
@@ -257,7 +265,16 @@ def test_real_builders_pack_current_question_after_examples_and_opening(card, gr
         assert text(fitted.messages[-1]).endswith("尾部标记：承接玩家甲的最新一句。")
         if group:
             other_message = next(body for body in bodies if "真实乙回应" in body)
-            assert other_message.startswith(f"角色乙（发言者标识：{other.value}）：\n")
+            assert other_message.startswith(
+                f"【群聊历史发言者：{'角色甲' if same_name else '角色乙'}；成员"
+            )
+            assert next(body for body in bodies if "真实旧回应" in body) == "真实旧回应"
+            group_history = "\n".join(map(text, context.layout.group_dialogue))
+            assert str(speaker.value) not in group_history and str(other.value) not in group_history
+            roster = json.loads(text(fitted.messages[1]))["group_speakers"]
+            assert len({item["label"] for item in roster}) == 2
+            assert sum(item["current"] for item in roster) == 1
+            assert "发言者标识" in history[1].text  # Only the prompt copy was normalized.
             selector = await builder.build_selection(sent)
             assert not selector.layout.group_dialogue
             assert "角色卡开场" not in "\n".join(map(text, selector.messages))

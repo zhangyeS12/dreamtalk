@@ -133,6 +133,30 @@ def test_at_mention_skips_selector_and_finishes_after_one_reply(tmp_path):
     asyncio.run(run())
 
 
+def test_echoed_internal_header_is_removed_before_durable_group_message(tmp_path):
+    async def run():
+        db, group, messages, context = await _environment(tmp_path)
+        try:
+            target = next(p for p in group.participants if p.character_name == "角色乙")
+            provider = ScriptedProvider(
+                (f"角色乙（发言者标识：{target.character_id.value}）：\n乙的回复", "STOP")
+            )
+            sent = await messages.send_group_player(
+                RequestId(uuid4()), group.conversation_id, "@角色乙 你好", 500
+            )
+            finished = await _service(messages, context, provider).reply(sent)
+            assert finished.state == "completed"
+            assert [(reply.sender_id, reply.text) for reply in finished.replies] == [
+                (target.character_id, "乙的回复")
+            ]
+            assert await messages.group_turn(group.conversation_id, sent.turn_id) == finished
+            assert provider.calls == 2  # One reply and the unchanged STOP selection, no repair.
+        finally:
+            await db.close()
+
+    asyncio.run(run())
+
+
 def test_group_http_send_reply_and_retry_keep_one_durable_turn(tmp_path):
     db, group, messages, context = asyncio.run(_environment(tmp_path))
     provider = ScriptedProvider(("乙的回复", "STOP"))

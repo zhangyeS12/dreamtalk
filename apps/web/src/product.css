@@ -211,6 +211,21 @@
 .accepted-item summary { cursor: pointer; padding: 16px 0; }
 .accepted-item .content-details { padding: 0 0 20px; }
 .content-details pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; color: var(--muted); }
+.content-evolution-field { padding-bottom: 8px; }
+.inline-evolution-history { display: grid; gap: 8px; margin: -2px 0 12px; }
+.inline-evolution { border-top: 1px solid var(--line); padding-top: 8px; }
+.inline-evolution > summary { display: flex; align-items: baseline; gap: 10px; cursor: pointer; line-height: 1.6; }
+.inline-evolution > summary small { color: var(--muted); font-size: .76rem; }
+.evolution-mark { overflow-wrap: anywhere; text-underline-offset: 3px; }
+.evolution-changed { text-decoration: underline; text-decoration-thickness: 2px; text-decoration-color: var(--green-hover); }
+.evolution-added { text-decoration-line: underline; text-decoration-style: wavy; text-decoration-color: var(--green-hover); }
+.evolution-deleted { color: var(--muted); opacity: .68; text-decoration: line-through; text-decoration-thickness: 1px; }
+.inline-evolution-timeline { display: grid; gap: 8px; margin-top: 8px; }
+.inline-evolution-version { display: flex; align-items: start; justify-content: space-between; gap: 14px; padding: 9px 0; border-top: 1px dashed var(--line); line-height: 1.55; }
+.inline-evolution-version > div:first-child { min-width: 0; overflow-wrap: anywhere; }
+.inline-evolution-version small { display: block; margin-top: 4px; color: var(--muted); font-size: .76rem; }
+.inline-evolution-actions { display: flex; flex: 0 0 auto; flex-wrap: wrap; justify-content: end; gap: 4px; }
+@media (max-width: 700px) { .inline-evolution > summary, .inline-evolution-version { display: block; } .inline-evolution-actions { margin-top: 7px; justify-content: start; } }
 
 .content-editor { border-block: 1px solid var(--line); margin-block: 24px; padding-block: 24px; }
 .editor-heading { display: flex; align-items: start; justify-content: space-between; gap: 16px; }

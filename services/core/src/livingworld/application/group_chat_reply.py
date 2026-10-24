@@ -88,6 +88,8 @@ class GroupChatReplyService(ChatReplyConfiguration[GroupChatContextBuilder]):
 
     async def _dialogue(self, context, source, speaker, output):
         request = self._request(context.messages, output)
+        # Local decoding hint only; adapters do not add request metadata to messages.
+        request = replace(request, metadata={"reply_speaker_name": context.speaker_name})
         if self._journal is not None:
             request = replace(
                 request,
@@ -143,7 +145,7 @@ class GroupChatReplyService(ChatReplyConfiguration[GroupChatContextBuilder]):
             raise ChatReplyValidationError("chat_reply_invalid")
         return response
 
-    async def _selection_request(self, context, remaining: int) -> LLMRequest:
+    async def _selection_request(self, context, remaining: int) -> tuple[LLMRequest, dict]:
         return await self._preflight(
             self._request(context.messages, min(_SELECT_OUTPUT_TOKENS, self._max_output_tokens)),
             remaining,
@@ -216,7 +218,7 @@ class GroupChatReplyService(ChatReplyConfiguration[GroupChatContextBuilder]):
             raise ChatReplyBudgetError("turn_token_limit_exceeded")
         if prepared is None:
             context = await self._context.build_reply(source, speaker)
-            prepared, report = await self._preflight(
+            reply_request, report = await self._preflight(
                 dialogue_request(
                     self._gateway,
                     await self._dialogue(
@@ -229,24 +231,47 @@ class GroupChatReplyService(ChatReplyConfiguration[GroupChatContextBuilder]):
                 context.layout,
             )
         else:
-            prepared, report = prepared
+            reply_request, report = prepared
         await self._messages.save_context_report(source, speaker, report)
         if progress is not None:
             await progress(ChatProgress("replying", speaker))
         _count_group_fact("reply_calls")
         started = perf_counter()
         try:
-            return await dialogue_text(
+            text = await dialogue_text(
                 self._gateway,
-                prepared,
+                reply_request,
                 budget,
                 self._selection,
                 progress,
                 speaker,
                 format_failure=self._media.reply_format_failure
-                if self._media is not None and prepared.metadata.get("chat_media_requested")
+                if self._media is not None and reply_request.metadata.get("chat_media_requested")
                 else None,
             )
+            if isinstance(text, AnnotatedDialogue) and text.character_updates:
+                participants = await self._context._conversations.current_group_characters(
+                    source.message.conversation_id
+                    if isinstance(source, PlayerSend)
+                    else source.conversation_id
+                )
+                root_import_id = next(
+                    participant.root_import_id
+                    for participant, _ in participants
+                    if participant.character_id == speaker
+                )
+                player_id = (
+                    source.message.sender_id if isinstance(source, PlayerSend) else source.player_id
+                )
+                await self._save_character_updates(
+                    source.message.conversation_id.world_id
+                    if isinstance(source, PlayerSend)
+                    else source.conversation_id.world_id,
+                    root_import_id,
+                    player_id,
+                    text.character_updates,
+                )
+            return text
         except ChatReplyBudgetError:
             _count_group_fact("admission_blocks")
             raise
@@ -297,7 +322,8 @@ class GroupChatReplyService(ChatReplyConfiguration[GroupChatContextBuilder]):
             mentioned = await self._context.mentioned_character(sent)
         except ValueError:
             raise ChatReplyValidationError("group_mention_ambiguous") from None
-        first_request = None
+        first_request: tuple[LLMRequest, dict] | None = None
+        first_selection: LLMRequest | None = None
         if mentioned is not None:
             context = await self._context.build_reply(sent, mentioned)
             first_request = await self._preflight(
@@ -315,16 +341,16 @@ class GroupChatReplyService(ChatReplyConfiguration[GroupChatContextBuilder]):
         else:
             # A route/usage-bound failure must not consume the one-time claim.
             selection = await self._context.build_selection(sent)
-            first_request, _report = await self._selection_request(selection, budget.remaining)
+            first_selection, _report = await self._selection_request(selection, budget.remaining)
         claim = await self._messages.claim_group(sent.message.conversation_id, sent.turn_id)
         async with claimed_reply_execution(self._messages, sent):
             if claim.player_message != sent.message or claim.token_ceiling != sent.token_ceiling:
                 raise ChatReplyValidationError("chat_send_changed")
             if mentioned is None:
-                assert first_request is not None
+                assert first_selection is not None
                 if progress is not None:
                     await progress(ChatProgress("selecting"))
-                choice = await self._generate(first_request, budget)
+                choice = await self._generate(first_selection, budget)
                 speaker = self._selection_result(choice, claim, allow_stop=False)
                 assert speaker is not None
                 if budget.closed or budget.remaining < 1:

@@ -11,6 +11,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from livingworld.adapters.http.character_activity_setup import character_activity_setup_router
+from livingworld.adapters.http.character_evolution import character_evolution_router
 from livingworld.adapters.http.chat_conversations import chat_conversation_router
 from livingworld.adapters.http.chat_media import chat_media_router, media_error_handler
 from livingworld.adapters.http.chat_messages import chat_message_router
@@ -157,6 +158,8 @@ def create_app(
                     logger,
                 )
             )
+    if services.character_evolution is not None:
+        app.include_router(character_evolution_router(services.character_evolution, authorize))
 
     if services.chat_conversations is not None:
         app.include_router(chat_conversation_router(services.chat_conversations, authorize))

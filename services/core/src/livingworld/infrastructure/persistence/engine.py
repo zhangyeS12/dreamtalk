@@ -325,6 +325,13 @@ class Database:
             SystemWallClock(),
         )
 
+    def character_evolution_store(self):
+        from livingworld.infrastructure.persistence.character_evolution import (
+            CharacterEvolutionStore,
+        )
+
+        return CharacterEvolutionStore(self._sessions)
+
     def example_world_store(self):
         from livingworld.infrastructure.persistence.example_worlds import (
             SqlAlchemyExampleWorldStore,

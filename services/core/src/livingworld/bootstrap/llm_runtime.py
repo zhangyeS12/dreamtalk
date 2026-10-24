@@ -126,13 +126,17 @@ def configure_direct_chat_reply(
     messages: ChatMessageService,
     context: DirectChatContextBuilder,
     journal=None,
+    evolution_writer=None,
 ) -> DirectChatReplyService | WorldModelValue[DirectChatReplyService | None] | None:
     """Use the explicit BALANCED route, or the sole eligible configured model."""
     if session.world_runtimes:
         return _scoped_value(
-            session, lambda scoped: _single_direct_chat_reply(scoped, messages, context, journal)
+            session,
+            lambda scoped: _single_direct_chat_reply(
+                scoped, messages, context, journal, evolution_writer
+            ),
         )
-    return _single_direct_chat_reply(session, messages, context, journal)
+    return _single_direct_chat_reply(session, messages, context, journal, evolution_writer)
 
 
 def _single_direct_chat_reply(
@@ -140,13 +144,15 @@ def _single_direct_chat_reply(
     messages: ChatMessageService,
     context: DirectChatContextBuilder,
     journal=None,
+    evolution_writer=None,
 ) -> DirectChatReplyService | None:
     """Use the explicit BALANCED route, or the sole eligible configured model."""
     configured = _chat_reply_configuration(session)
     if configured is None:
         return None
     return DirectChatReplyService(
-        messages, context, *configured, event_capture=_capture_available(session), journal=journal
+        messages, context, *configured, event_capture=_capture_available(session), journal=journal,
+        evolution_writer=evolution_writer,
     )
 
 
@@ -156,13 +162,18 @@ def configure_group_chat_reply(
     context: GroupChatContextBuilder,
     journal=None,
     logger=None,
+    evolution_writer=None,
 ) -> GroupChatReplyService | WorldModelValue[GroupChatReplyService | None] | None:
     if session.world_runtimes:
         return _scoped_value(
             session,
-            lambda scoped: _single_group_chat_reply(scoped, messages, context, journal, logger),
+            lambda scoped: _single_group_chat_reply(
+                scoped, messages, context, journal, logger, evolution_writer
+            ),
         )
-    return _single_group_chat_reply(session, messages, context, journal, logger)
+    return _single_group_chat_reply(
+        session, messages, context, journal, logger, evolution_writer
+    )
 
 
 def _single_group_chat_reply(
@@ -171,6 +182,7 @@ def _single_group_chat_reply(
     context: GroupChatContextBuilder,
     journal=None,
     logger=None,
+    evolution_writer=None,
 ) -> GroupChatReplyService | None:
     configured = _chat_reply_configuration(session)
     if configured is None:
@@ -182,6 +194,7 @@ def _single_group_chat_reply(
         event_capture=_capture_available(session),
         journal=journal,
         logger=logger,
+        evolution_writer=evolution_writer,
     )
 
 

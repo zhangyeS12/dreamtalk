@@ -39,6 +39,9 @@ from livingworld.adapters.http.wire_contracts.background import (
 from livingworld.adapters.http.wire_contracts.background import (
     WorldStoryEntries as WorldStoryEntries,
 )
+from livingworld.adapters.http.wire_contracts.character_evolution import (
+    CharacterEvolutionEntry as CharacterEvolutionEntry,
+)
 from livingworld.adapters.http.wire_contracts.chat import (
     ChatContextReports as ChatContextReports,
 )

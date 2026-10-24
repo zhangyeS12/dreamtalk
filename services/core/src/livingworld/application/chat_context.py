@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
+from uuid import UUID
 
 from livingworld.application.character_activity_context import (
     ACTIVITY_GROUNDING_INSTRUCTIONS,
@@ -203,6 +204,7 @@ class DirectChatContext:
     messages: tuple[LLMMessage, ...] = field(repr=False)
     character_id: CharacterId | None = None
     layout: ContextLayout | None = None
+    root_import_id: UUID | None = None
 
 
 def character_chat_persona(owner: CharacterId, character: CharacterDefinition) -> dict:
@@ -240,6 +242,7 @@ class ChatContextSources:
         persona_reader: PersonaReader | None = None,
         style_reader: WorldStyleStore | None = None,
         lore_activation_reader=None,
+        evolution_reader=None,
     ) -> None:
         self._conversations = conversations
         self._messages = messages
@@ -255,6 +258,7 @@ class ChatContextSources:
         self._persona_reader = persona_reader
         self._style_reader = style_reader
         self._lore_activation_reader = lore_activation_reader
+        self._evolution_reader = evolution_reader
 
     def _lore_commit(self, conversation, anchor):
         commit = getattr(self._lore_activation_reader, "commit", None)
@@ -367,6 +371,15 @@ class DirectChatContextBuilder(ChatContextSources):
             (await self._style_reader.load(conversation_id.world_id)).instructions
             if self._style_reader is not None
             else "",
+            tuple(
+                await self._evolution_reader(
+                    conversation_id.world_id,
+                    conversation.root_import_id,
+                    ("global", f"player:{conversation.player_id.value}"),
+                )
+                if self._evolution_reader is not None
+                else ()
+            ),
         )
         result = [
             LLMMessage(
@@ -416,6 +429,7 @@ class DirectChatContextBuilder(ChatContextSources):
                 reply_instructions=roleplay.post_history,
                 lore_commit=self._lore_commit(conversation_id, sent.message),
             ),
+            conversation.root_import_id,
         )
 
     @staticmethod

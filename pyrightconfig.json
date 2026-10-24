@@ -1,5 +1,6 @@
 {
   "include": [
+    "services/core/src/livingworld/application/chat_speaker_labels.py",
     "services/core/src/livingworld/application/chat_paths.py",
     "services/core/src/livingworld/application/lore_controls.py",
     "services/core/src/livingworld/application/lore_activation.py",

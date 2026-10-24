@@ -7,7 +7,7 @@ import { InitialLocationChoice } from "./InitialLocationChoice";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CharacterLocationEditor, LocationManager, LocationMap, useLocationDirectory } from "./LocationWorkspace";
 import { ContentEditor, ResearchDetails } from "./ContentEditor";
-import { CoreClient, CoreRequestError, type WorldContentItem } from "@dreamtalk/api-client";
+import { CoreClient, CoreRequestError, type CharacterEvolutionEntry, type CharacterEvolutionField, type CharacterEvolutionOperation, type WorldContentItem } from "@dreamtalk/api-client";
 import { ContactAvatar, FactionManager, SocialGraph } from "./ContactSocial";
 import type { SocialSnapshot } from "@dreamtalk/api-client";
 import { CelestialEmpty, DirectorySearch, WorkspaceIcon } from "./WorkspacePrimitives";
@@ -23,13 +23,98 @@ function originalCardGreeting(authored: Record<string, unknown>): string | null 
 
 type ExposureFeedback = { entryId: string; message: string; error: boolean };
 
-export function ContentDetails({ item, onCommonChange, changingEntry, commonDisabled = false, exposureFeedback, onCommonRefresh, hideCharacterTitle = false }: {
+const EVOLUTION_FIELDS: Record<CharacterEvolutionField, string> = {
+  description: "角色描述",
+  personality: "性格",
+  background: "背景",
+  scenario: "情境",
+  speech_guidance: "说话方式",
+};
+
+function evolutionError(error: unknown): string {
+  return error instanceof CoreRequestError && error.code === "character_evolution_locked"
+    ? "当前版本已锁定，请先解锁后再切换。"
+    : "角色卡版本没有保存成功，请刷新后重试。";
+}
+
+function EvolutionFieldTimeline({ entries, onChange, busy }: {
+  entries: CharacterEvolutionEntry[];
+  onChange: (entry: CharacterEvolutionEntry, operation: CharacterEvolutionOperation) => void;
+  busy: boolean;
+}) {
+  const grouped = new Map<string, CharacterEvolutionEntry[]>();
+  for (const entry of entries) {
+    const key = entry.scope;
+    grouped.set(key, [...(grouped.get(key) ?? []), entry]);
+  }
+  return <div className="inline-evolution-history">
+    {[...grouped.entries()].map(([scope, values]) => {
+      const history = [...values].sort((left, right) => left.created_at_utc.localeCompare(right.created_at_utc));
+      const current = history.find(entry => entry.selected && entry.state === "active");
+      const visible = current ?? history.at(-1);
+      if (!visible) return null;
+      return <details key={scope} className="inline-evolution">
+        <summary><span className={current ? visible.source === "model" || visible.source === "user" ? "evolution-mark evolution-added" : "evolution-mark evolution-changed" : "evolution-mark evolution-deleted"}>{visible.text}</span><small>{scope === "global" ? "当前世界" : scope}</small></summary>
+        <div className="inline-evolution-timeline">
+          {history.map(entry => <div key={entry.entry_id} className={`inline-evolution-version ${entry.state === "inactive" ? "evolution-deleted" : entry.selected ? "evolution-active" : ""}`}>
+            <div><span>{entry.text}</span><small>{new Date(entry.created_at_utc).toLocaleString()} · {entry.source === "model" ? "模型建议" : entry.source === "import" ? "导入版本" : "用户版本"}{entry.locked ? " · 已锁定" : ""}{entry.state === "inactive" ? " · 已停用" : ""}</small></div>
+            <div className="inline-evolution-actions">
+              <button type="button" className="text-action" disabled={busy || (entry.selected && entry.state === "active")} onClick={() => onChange(entry, entry.state === "inactive" ? "restore" : "select")}>{entry.state === "inactive" ? "恢复" : "采用"}</button>
+              <button type="button" className="text-action" disabled={busy || entry.locked} onClick={() => onChange(entry, "deactivate")}>停用</button>
+              <button type="button" className="text-action" disabled={busy} onClick={() => onChange(entry, entry.locked ? "unlock" : "lock")}>{entry.locked ? "解锁" : "锁定"}</button>
+            </div>
+          </div>)}
+        </div>
+      </details>;
+    })}
+  </div>;
+}
+
+export function ContentDetails({ item, onCommonChange, changingEntry, commonDisabled = false, exposureFeedback, onCommonRefresh, hideCharacterTitle = false, evolutionCard }: {
   item: WorldContentItem;
   hideCharacterTitle?: boolean;
   onCommonChange?: (entryId: string, common: boolean) => void;
   changingEntry?: string | null;
   commonDisabled?: boolean; exposureFeedback?: ExposureFeedback | null; onCommonRefresh?: () => void;
+  evolutionCard?: { client: CoreClient; worldId: string; rootImportId: string };
 }) {
+  const [evolutionEntries, setEvolutionEntries] = useState<CharacterEvolutionEntry[]>([]);
+  const [evolutionBusy, setEvolutionBusy] = useState(false);
+  const [evolutionErrorMessage, setEvolutionErrorMessage] = useState("");
+  const evolutionRead = useRef(0);
+  const refreshEvolution = () => {
+    if (!evolutionCard) return;
+    const read = ++evolutionRead.current;
+    setEvolutionErrorMessage("");
+    void evolutionCard.client.characterEvolution(evolutionCard.worldId, evolutionCard.rootImportId)
+      .then(value => { if (read === evolutionRead.current) setEvolutionEntries(value); })
+      .catch(() => { if (read === evolutionRead.current) setEvolutionErrorMessage("无法读取角色卡的历史版本。请刷新角色资料后重试。"); });
+  };
+  useEffect(() => {
+    if (!evolutionCard) { setEvolutionEntries([]); return; }
+    refreshEvolution();
+  }, [evolutionCard?.client, evolutionCard?.worldId, evolutionCard?.rootImportId]);
+  const changeEvolution = async (entry: CharacterEvolutionEntry, operation: CharacterEvolutionOperation) => {
+    if (!evolutionCard) return;
+    setEvolutionBusy(true);
+    setEvolutionErrorMessage("");
+    try {
+      await evolutionCard.client.changeCharacterEvolution(evolutionCard.worldId, evolutionCard.rootImportId, {
+        field: entry.field,
+        scope: entry.scope,
+        text: entry.text,
+        operation,
+        entry_id: entry.entry_id,
+        locked: entry.locked,
+        source: entry.source,
+      });
+      refreshEvolution();
+    } catch (failure) {
+      setEvolutionErrorMessage(evolutionError(failure));
+    } finally {
+      setEvolutionBusy(false);
+    }
+  };
   return <div className="content-details">
     {item.characters.map(character => {
       const greeting = originalCardGreeting(character.authored_instructions);
@@ -38,10 +123,15 @@ export function ContentDetails({ item, onCommonChange, changingEntry, commonDisa
       ["背景", character.background], ["情境", character.scenario],
       ["说话方式", character.speech_guidance], ["创作者备注", character.creator_notes],
       ["标签", character.tags.join("、")], ["对话示例", character.example_dialogue.join("\n")],
-    ] as const).filter(([, value]) => value).map(([label, value]) => <div key={label}><h3>{label}</h3><p>{value}</p></div>)}
+    ] as const).filter(([, value]) => value).map(([label, value]) => {
+      const field = Object.entries(EVOLUTION_FIELDS).find(([, name]) => name === label)?.[0] as CharacterEvolutionField | undefined;
+      const entries = field ? evolutionEntries.filter(entry => entry.field === field) : [];
+      return <div key={label} className={entries.length > 0 ? "content-evolution-field" : undefined}><h3>{label}</h3><p>{value}</p>{entries.length > 0 && <EvolutionFieldTimeline entries={entries} busy={evolutionBusy} onChange={(entry, operation) => void changeEvolution(entry, operation)} />}</div>;
+    })}
       {greeting && <div><h3>角色卡开场白（原文）</h3><p>{greeting}</p><small>回复可参考其语气；不会自动作为消息发送。</small></div>}
     </section>;
     })}
+    {evolutionCard && evolutionErrorMessage && <p className="app-alert" role="alert">{evolutionErrorMessage}<button type="button" className="text-action" disabled={evolutionBusy} onClick={refreshEvolution}>刷新版本</button></p>}
     {item.characters.some(character => Object.keys(character.authored_instructions).length > 0) && <details><summary>角色卡附加设定</summary>{item.characters.map(character => <pre key={character.id}>{JSON.stringify(character.authored_instructions, null, 2)}</pre>)}</details>}
     {item.research && <ResearchDetails research={item.research} />}
     {item.lorebooks.map(book => <section key={book.id}><h2>{book.name}</h2><p>{book.description}</p></section>)}
@@ -203,7 +293,7 @@ export function WorldImports({ client, worldId, onlyKind, onSaved, onDirtyChange
       {!!preview.warnings?.length && <div className="compatibility-notice"><p>部分来源内容无法完整映射，原始数据仍会保留。确认前请检查以下提示。</p><ul>{groupImportWarnings(preview.warnings).map(warning => <li key={warning.code}>{contentImportWarning(warning.code)}{warning.count > 1 && <small>（共 {warning.count} 项）</small>}{warning.paths.length > 0 && <details><summary>查看涉及字段</summary><p>{warning.paths.join("、")}</p></details>}</li>)}</ul></div>}
       <div className="profile-actions"><button className="primary-button" type="button" disabled={busy || (preview.kind === "character" && !replacement && !initialLocation)} onClick={() => void commit()}>{preview.warnings?.some(w => w.code === "character_card_v2_fallback_review_required") ? "确认使用 V2 内容" : replacement ? "确认更新当前世界" : "确认加入当前世界"}</button><button className="secondary-button" type="button" disabled={busy} onClick={() => { pendingId.current = null; void client.discardWorldContent(worldId, preview.import_id).catch(() => undefined); setPreview(null); }}>取消</button></div>
     </div>}
-    {visibleItems.length > 0 && <div className="accepted-content"><h3>当前世界已保存</h3><button type="button" className="text-action" disabled={commonDisabled || !!changingEntry} onClick={refreshAccepted}>刷新已保存内容与范围</button>{onlyKind === "lorebook" && <p className="inline-hint">公开范围选择后立即保存。通过界面编辑世界书时，完全未变且有原条目对应的内容保留原范围；新增、修改正文或触发条件、从文件替换的条目需要重新确认公开。编辑或预览期间，请先完成内容保存，再设置范围。</p>}{visibleItems.map(item => <div key={item.import_id} className="accepted-item"><details><summary>{item.characters[0]?.name ?? item.lorebooks[0]?.name ?? "导入内容"} · {item.kind === "character" ? "角色卡" : "世界书"}</summary><ContentDetails item={item} onCommonChange={item.kind === "lorebook" ? (entryId, common) => void setCommon(item.import_id, entryId, common) : undefined} changingEntry={changingEntry} commonDisabled={commonDisabled} exposureFeedback={exposureFeedback} onCommonRefresh={refreshAccepted} /></details><button type="button" className="text-action" disabled={loading || loadFailed || busy || !!changingEntry || !!preview || !!editor} onClick={() => { setEditor({ kind: item.kind, item }); setError(""); setMessage(""); }}>编辑</button><button type="button" className="text-action" disabled={loading || loadFailed || busy || !!changingEntry || !!preview || !!editor} onClick={() => { setReplacement(item); setKind(item.kind); setMessage(""); }}>从文件更新</button><ContentExportButton client={client} worldId={worldId} item={item} disabled={commonDisabled || !!changingEntry} />{item.kind === "character" && <button type="button" className="text-action destructive-action" disabled={commonDisabled || !!changingEntry} onClick={() => void removeCard(item)}>删除角色卡</button>}</div>)}</div>}
+    {visibleItems.length > 0 && <div className="accepted-content"><h3>当前世界已保存</h3><button type="button" className="text-action" disabled={commonDisabled || !!changingEntry} onClick={refreshAccepted}>刷新已保存内容与范围</button>{onlyKind === "lorebook" && <p className="inline-hint">公开范围选择后立即保存。通过界面编辑世界书时，完全未变且有原条目对应的内容保留原范围；新增、修改正文或触发条件、从文件替换的条目需要重新确认公开。编辑或预览期间，请先完成内容保存，再设置范围。</p>}{visibleItems.map(item => <div key={item.import_id} className="accepted-item"><details><summary>{item.characters[0]?.name ?? item.lorebooks[0]?.name ?? "导入内容"} · {item.kind === "character" ? "角色卡" : "世界书"}</summary><ContentDetails item={item} onCommonChange={item.kind === "lorebook" ? (entryId, common) => void setCommon(item.import_id, entryId, common) : undefined} changingEntry={changingEntry} commonDisabled={commonDisabled} exposureFeedback={exposureFeedback} onCommonRefresh={refreshAccepted} evolutionCard={item.kind === "character" ? { client, worldId, rootImportId: item.import_id } : undefined} /></details><button type="button" className="text-action" disabled={loading || loadFailed || busy || !!changingEntry || !!preview || !!editor} onClick={() => { setEditor({ kind: item.kind, item }); setError(""); setMessage(""); }}>编辑</button><button type="button" className="text-action" disabled={loading || loadFailed || busy || !!changingEntry || !!preview || !!editor} onClick={() => { setReplacement(item); setKind(item.kind); setMessage(""); }}>从文件更新</button><ContentExportButton client={client} worldId={worldId} item={item} disabled={commonDisabled || !!changingEntry} />{item.kind === "character" && <button type="button" className="text-action destructive-action" disabled={commonDisabled || !!changingEntry} onClick={() => void removeCard(item)}>删除角色卡</button>}</div>)}</div>}
   </section>;
 }
 
@@ -319,6 +409,6 @@ export function WorldContacts({ client, worldId, onSettings, onIdentity, onOpenC
         {current && <details className="dossier-avatar-options"><summary>编辑角色头像</summary><div className="contact-avatar-edit"><label>上传角色头像（JPG、PNG 或 WebP，最大 10 MB）<input type="file" accept="image/jpeg,image/png,image/webp" disabled={socialBusy} onChange={event => { void uploadAvatar(event.target.files?.[0]); event.target.value = ""; }} /></label>{current.avatar_digest && <button type="button" className="text-action" disabled={socialBusy} onClick={() => void change(() => client.setCharacterAvatar(worldId, current.root_import_id, null))}>移除头像</button>}</div></details>}
         {current && <CharacterLocationEditor key={`${identityKey}:${current.root_import_id}`} client={client} worldId={worldId} person={current} activity={places.directory?.items.find(person => person.root_import_id === current.root_import_id)} directory={places.directory} locations={places.locations} refresh={places.refresh} onDirtyChange={reportPositionDirty} />}
         {current && <CharacterVoice key={`voice:${current.root_import_id}`} client={client} worldId={worldId} root={current.root_import_id} name={selected.characters[0].name} visible={visible} onDirtyChange={setVoiceDirty} />}
-        <p className="inline-hint">同阵营直接成员默认相互认识；相遇仍可记录新见闻。</p><ContentDetails item={selected} hideCharacterTitle /><div className="profile-actions"><button type="button" className="secondary-button destructive-action" disabled={socialBusy || removing || loading || removalDisabled} onClick={() => void removeSelected()}>{removing ? "正在删除…" : "删除角色卡"}</button><small>历史会话和世界事件保留。</small></div></div></> : <CelestialEmpty title="在这里，认识彼此">选择一个名字，打开人物档案。<br />他们的资料、所属阵营和相识关系，都在这里。</CelestialEmpty>}
+        <p className="inline-hint">同阵营直接成员默认相互认识；相遇仍可记录新见闻。</p><ContentDetails item={selected} hideCharacterTitle evolutionCard={{ client, worldId, rootImportId: selected.import_id }} /><div className="profile-actions"><button type="button" className="secondary-button destructive-action" disabled={socialBusy || removing || loading || removalDisabled} onClick={() => void removeSelected()}>{removing ? "正在删除…" : "删除角色卡"}</button><small>历史会话和世界事件保留。</small></div></div></> : <CelestialEmpty title="在这里，认识彼此">选择一个名字，打开人物档案。<br />他们的资料、所属阵营和相识关系，都在这里。</CelestialEmpty>}
   </div></div></>;
 }

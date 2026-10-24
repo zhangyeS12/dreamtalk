@@ -90,6 +90,7 @@ def roleplay_prompt(
     character: CharacterDefinition,
     player_name: str,
     world_style: str = "",
+    evolution: tuple[dict, ...] = (),
 ) -> RoleplayPrompt:
     """Keep complete authored content, separate writing overrides from examples/history."""
     name = character.display_name
@@ -114,6 +115,18 @@ def roleplay_prompt(
     ):
         if value.strip():
             sections.append(f"【{label}】\n" + text(value))
+    if evolution:
+        sections.append(
+            "【当前角色卡动态词条；只覆盖对应字段，原始角色卡仍保留】\n"
+            + "\n".join(
+                f"- {item.get('field', 'personality')}"
+                + (f"（{item.get('scope')}）" if item.get("scope") not in {None, "global"} else "")
+                + f"：{item.get('text', '')}"
+                for item in evolution
+                if isinstance(item, dict) and item.get("text")
+            )
+            + "\n动态词条是有来源的当前版本；不要把已停用或历史版本当作当前设定。"
+        )
     if context_rules:
         sections.append("【补充资料的来源解释；不替代卡片文风】\n" + context_rules)
 

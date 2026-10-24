@@ -14,6 +14,7 @@ from livingworld.application.chat_capacity import ContextCapacityError, fit_chat
 from livingworld.application.chat_context import DirectChatContextBuilder
 from livingworld.application.chat_event_annotations import (
     AnnotatedDialogue,
+    CharacterEvolutionProposal,
     DialogueFormatError,
     annotate_request,
     annotation_request,
@@ -26,6 +27,8 @@ from livingworld.application.chat_event_annotations import (
 )
 from livingworld.application.chat_media import media_request
 from livingworld.application.chat_messages import ChatMessage, ChatMessageService, PlayerSend
+from livingworld.application.chat_speaker_labels import SpeakerReplyText
+from livingworld.application.errors import EntityNotFoundError
 from livingworld.application.llm import (
     FinishReason,
     InvocationId,
@@ -190,6 +193,12 @@ async def dialogue_text(
 ) -> str | AnnotatedDialogue:
     """Reuse governed execution; stream deltas stay provisional until settlement."""
     visible = ""
+    speaker_name = request.metadata.get("reply_speaker_name")
+    speaker_text = (
+        SpeakerReplyText(speaker_name, speaker)
+        if isinstance(speaker_name, str) and speaker_name
+        else None
+    )
     try:
         if request.streaming:
             pieces: list[str] = []
@@ -218,25 +227,28 @@ async def dialogue_text(
                         if event.text:
                             pieces.append(event.text)
                             if progress is not None:
-                                delta = event.text
+                                if preview_diverged:
+                                    continue
                                 if annotation_request(request):
-                                    if preview_diverged:
-                                        continue
                                     decoded = (
                                         partial_optional_reply("".join(pieces))
                                         if optional_annotation_request(request)
                                         else partial_reply("".join(pieces))
                                     )
-                                    if decoded is None:
+                                else:
+                                    decoded = "".join(pieces)
+                                if decoded is not None and speaker_text is not None:
+                                    decoded = speaker_text.preview(decoded)
+                                if decoded is None:
+                                    continue
+                                if not decoded.startswith(visible):
+                                    if optional_annotation_request(request):
+                                        # Stop provisional deltas; a validated terminal
+                                        # message replaces the preview on the client.
+                                        preview_diverged = True
                                         continue
-                                    if not decoded.startswith(visible):
-                                        if optional_annotation_request(request):
-                                            # Stop provisional deltas; a validated terminal
-                                            # message replaces the preview on the client.
-                                            preview_diverged = True
-                                            continue
-                                        raise ChatReplyValidationError("chat_reply_invalid")
-                                    delta, visible = decoded[len(visible) :], decoded
+                                    raise ChatReplyValidationError("chat_reply_invalid")
+                                delta, visible = decoded[len(visible) :], decoded
                                 if delta:
                                     await progress(ChatProgress("delta", speaker, delta))
                     elif isinstance(event, StreamCompleted):
@@ -288,6 +300,20 @@ async def dialogue_text(
                 if optional_annotation_request(request)
                 else decode_dialogue(text)
             )
+            if speaker_text is not None:
+                body = speaker_text.complete(annotated.text)
+                if not body.strip():
+                    raise DialogueFormatError("empty_reply")
+                annotated = replace(
+                    annotated,
+                    text=body,
+                    events=tuple(item for item in annotated.events if item.quote in body),
+                    memories=tuple(
+                        item
+                        for item in annotated.memories
+                        if item.source != "reply" or item.quote in body
+                    ),
+                )
             if (
                 request.streaming
                 and progress is not None
@@ -307,6 +333,10 @@ async def dialogue_text(
             # terminal validation, so metadata never becomes a displayed delta.
             await progress(ChatProgress("delta", speaker, annotated.text))
         return annotated
+    if speaker_text is not None:
+        text = speaker_text.complete(text)
+        if not text.strip():
+            raise ChatReplyValidationError("chat_reply_empty")
     return text
 
 
@@ -327,6 +357,7 @@ class ChatReplyConfiguration[ChatContext]:
         event_capture: bool = False,
         journal=None,
         logger=None,
+        evolution_writer=None,
     ) -> None:
         if (
             not isinstance(model, ModelRef)
@@ -349,6 +380,31 @@ class ChatReplyConfiguration[ChatContext]:
         self._event_capture, self._journal = event_capture, journal
         self._media = getattr(messages, "media", None)
         self._logger = logger
+        self._evolution_writer = evolution_writer
+
+    async def _save_character_updates(self, world_id, root_import_id, player_id, updates) -> None:
+        if self._evolution_writer is None or root_import_id is None:
+            return
+        for update in updates:
+            if not isinstance(update, CharacterEvolutionProposal):
+                continue
+            scope = f"player:{player_id.value}" if update.scope == "player" else "global"
+            try:
+                await self._evolution_writer(
+                    world_id,
+                    root_import_id,
+                    field=update.field,
+                    scope=scope,
+                    text=update.text,
+                )
+            except (EntityNotFoundError, ValueError):
+                # A model proposal is auxiliary to the reply. Invalid or stale
+                # proposals must never turn a valid dialogue into a failed turn.
+                continue
+            except Exception:
+                # A storage outage is also auxiliary; the durable chat reply has
+                # already completed and must remain successful.
+                continue
 
     @property
     def input_token_reservation(self) -> int | None:
@@ -446,6 +502,13 @@ class DirectChatReplyService(ChatReplyConfiguration[DirectChatContextBuilder]):
                 if isinstance(text, AnnotatedDialogue)
                 else await self._messages.complete_direct(claim, text)
             )
+            if isinstance(text, AnnotatedDialogue) and not only_media:
+                await self._save_character_updates(
+                    sent.message.conversation_id.world_id,
+                    context.root_import_id,
+                    claim.player_id,
+                    text.character_updates,
+                )
             if progress is not None:
                 await progress(ChatProgress("message", message=message))
             return message

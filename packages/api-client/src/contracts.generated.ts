@@ -181,6 +181,20 @@ export type WorldNewsStatus = {
 export function isWorldNewsStatus(value: unknown): value is WorldNewsStatus {
   return (isObject(value)) && (typeof value.enabled === "boolean") && (typeof value.consented === "boolean") && (isWireNumber(value.revision)) && ((value.state === "off" || value.state === "idle" || value.state === "generating" || value.state === "ready" || value.state === "attention")) && ((typeof value.error === "string" || value.error === null)) && (isWireNumber(value.pending)) && (isWireNumber(value.batch_total)) && (isWireNumber(value.batch_processed)) && (typeof value.model_available === "boolean") && ((typeof value.model === "string" || value.model === null));
 }
+export type CharacterEvolutionEntry = {
+  entry_id: string;
+  field: ("description" | "personality" | "background" | "scenario" | "speech_guidance");
+  scope: string;
+  text: string;
+  state: ("active" | "inactive");
+  selected: boolean;
+  locked: boolean;
+  source: ("user" | "model" | "import");
+  created_at_utc: string;
+};
+export function isCharacterEvolutionEntry(value: unknown): value is CharacterEvolutionEntry {
+  return (isObject(value)) && (typeof value.entry_id === "string") && ((value.field === "description" || value.field === "personality" || value.field === "background" || value.field === "scenario" || value.field === "speech_guidance")) && (typeof value.scope === "string") && (typeof value.text === "string") && ((value.state === "active" || value.state === "inactive")) && (typeof value.selected === "boolean") && (typeof value.locked === "boolean") && ((value.source === "user" || value.source === "model" || value.source === "import")) && (typeof value.created_at_utc === "string");
+}
 export type ConversationMemoryContent = {
   base_revision: WireNumber;
   through_position: WireNumber;
@@ -1620,6 +1634,18 @@ export type HttpCharacterActivitySetupCardInitialRequest = {
 };
 export function isHttpCharacterActivitySetupCardInitialRequest(value: unknown): value is HttpCharacterActivitySetupCardInitialRequest {
   return (isObject(value)) && (typeof value.location_id === "string");
+}
+export type HttpCharacterEvolutionEvolutionChange = {
+  field: string;
+  scope: string;
+  text?: string;
+  operation?: string;
+  entry_id?: (string | null);
+  locked?: boolean;
+  source?: string;
+};
+export function isHttpCharacterEvolutionEvolutionChange(value: unknown): value is HttpCharacterEvolutionEvolutionChange {
+  return (isObject(value)) && (typeof value.field === "string") && (typeof value.scope === "string") && ((!("text" in value) || (typeof value.text === "string"))) && ((!("operation" in value) || (typeof value.operation === "string"))) && ((!("entry_id" in value) || ((typeof value.entry_id === "string" || value.entry_id === null)))) && ((!("locked" in value) || (typeof value.locked === "boolean"))) && ((!("source" in value) || (typeof value.source === "string")));
 }
 export type HttpChatMediaStickerEdit = {
   description: string;

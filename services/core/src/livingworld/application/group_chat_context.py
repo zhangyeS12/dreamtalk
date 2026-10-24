@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass, field, replace
+from uuid import UUID
 
 from livingworld.application.character_activity_context import (
     character_activity_context,
@@ -27,6 +28,7 @@ from livingworld.application.chat_messages import (
     PlayerSend,
 )
 from livingworld.application.chat_roleplay import roleplay_prompt
+from livingworld.application.chat_speaker_labels import without_legacy_speaker_header
 from livingworld.application.errors import EntityNotFoundError
 from livingworld.application.llm import LLMMessage, MessageRole, TextContent
 from livingworld.application.observed_events import (
@@ -47,8 +49,9 @@ _SELECT_SYSTEM = (
 )
 _REPLY_SYSTEM = (
     "你正在扮演多人对话中指定的虚构角色，只编写当前角色的回应。"
-    "群内历史中角色消息前缀及标识区分当时的发言者，同名角色也不能混同；"
-    "只扮演当前角色，不向玩家复述前缀或内部标识。"
+    "当前角色的历史直接保留正文；其他角色的历史以群聊历史发言者标记区分来源。"
+    "group_speakers中的成员编号仅用于区分同名角色，不是台词；"
+    "只扮演current为true的当前角色，直接写正文，不复述姓名前缀、成员编号或内部标识。"
     "群内发出的消息所有成员都已看到，但其中说法未必真实。"
     "角色卡开场用于建立当前角色的场景与文风，不代表其他成员看过该角色的私聊。"
     "多人对话不自动限定为远程群消息，也不授权读取其他角色的私人经历。"
@@ -60,6 +63,8 @@ _REPLY_SYSTEM = (
 class GroupChatContext:
     messages: tuple[LLMMessage, ...] = field(repr=False)
     layout: ContextLayout | None = None
+    speaker_name: str = field(default="", repr=False)
+    root_import_id: UUID | None = field(default=None, repr=False)
 
 
 class GroupChatContextBuilder(ChatContextSources):
@@ -200,6 +205,15 @@ class GroupChatContextBuilder(ChatContextSources):
         persona = next((item for identity, item in participants if identity == speaker), None)
         if persona is None:
             raise EntityNotFoundError("group_speaker_invalid")
+        speaker_root_import_id = next(
+            participant.root_import_id
+            for participant, _ in await self._conversations.current_group_characters(
+                source.message.conversation_id
+                if isinstance(source, PlayerSend)
+                else source.conversation_id
+            )
+            if participant.character_id == speaker
+        )
         general = await self._profiles.load()
         world = await self._profiles.load(
             source.message.conversation_id.world_id
@@ -210,8 +224,17 @@ class GroupChatContextBuilder(ChatContextSources):
         player = current.sender_id
         if not isinstance(player, PlayerId):
             raise EntityNotFoundError("chat_message_invalid")
+        names = {identity: card.display_name for identity, card in participants}
+        labels = {
+            identity: f"成员{index}"
+            for index, identity in enumerate(sorted(names, key=lambda key: str(key.value)), 1)
+        }
         data = {
             "character": character_chat_persona(speaker, persona),
+            "group_speakers": [
+                {"name": names[identity], "label": label, "current": identity == speaker}
+                for identity, label in labels.items()
+            ],
             "player": player_chat_persona(general, world),
             "character_memories": await private_chat_memories(self._memory_reader, speaker),
             "known_faction_contacts": (
@@ -300,6 +323,23 @@ class GroupChatContextBuilder(ChatContextSources):
             data["long_term_original_quotes"] = [
                 q for q in data["long_term_original_quotes"] if q.get("message_id") not in quote_ids
             ]
+        evolution = ()
+        if self._evolution_reader is not None:
+            current_participants = await self._conversations.current_group_characters(
+                current.conversation_id
+            )
+            root_import_id = next(
+                participant.root_import_id
+                for participant, _ in current_participants
+                if participant.character_id == speaker
+            )
+            evolution = tuple(
+                await self._evolution_reader(
+                    current.conversation_id.world_id,
+                    root_import_id,
+                    ("global", f"player:{player.value}"),
+                )
+            )
         roleplay = roleplay_prompt(
             _REPLY_SYSTEM + chat_context_rules(data),
             speaker,
@@ -308,8 +348,8 @@ class GroupChatContextBuilder(ChatContextSources):
             (await self._style_reader.load(current.conversation_id.world_id)).instructions
             if self._style_reader is not None
             else "",
+            evolution,
         )
-        names = {identity: card.display_name for identity, card in participants}
         dialogue = tuple(
             LLMMessage(
                 MessageRole.ASSISTANT
@@ -317,9 +357,15 @@ class GroupChatContextBuilder(ChatContextSources):
                 else MessageRole.USER,
                 (
                     TextContent(
-                        names[item.sender_id]
-                        + f"（发言者标识：{item.sender_id.value}）：\n"
-                        + prompt_text(item)
+                        (
+                            ""
+                            if item.sender_id == speaker
+                            else (
+                                f"【群聊历史发言者：{names[item.sender_id]}；"
+                                f"{labels[item.sender_id]}】\n"
+                            )
+                        )
+                        + without_legacy_speaker_header(prompt_text(item), item.sender_id)
                         if isinstance(item.sender_id, CharacterId)
                         else prompt_text(item)
                     ),
@@ -355,4 +401,6 @@ class GroupChatContextBuilder(ChatContextSources):
                 reply_instructions=roleplay.post_history,
                 lore_commit=self._lore_commit(current.conversation_id, current),
             ),
+            speaker_name=persona.display_name,
+            root_import_id=speaker_root_import_id,
         )

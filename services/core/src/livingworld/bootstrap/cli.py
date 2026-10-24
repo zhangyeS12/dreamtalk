@@ -395,8 +395,10 @@ async def run(
                 persona_reader=database.player_persona_store().context_for_character,
                 style_reader=database.world_style_store(),
                 lore_activation_reader=database.chat_lore_reader(),
+                evolution_reader=database.character_evolution_store().list,
             ),
             journal=story_store,
+            evolution_writer=database.character_evolution_store().propose,
         )
         group_chat_reply = configure_group_chat_reply(
             llm_session,
@@ -416,9 +418,11 @@ async def run(
                 persona_reader=database.player_persona_store().context_for_character,
                 style_reader=database.world_style_store(),
                 lore_activation_reader=database.chat_lore_reader(),
+                evolution_reader=database.character_evolution_store().list,
             ),
             journal=story_store,
             logger=logger,
+            evolution_writer=database.character_evolution_store().propose,
         )
         from livingworld.application.content_builder import ContentBuilder
         from livingworld.infrastructure.content_research import DDGSContentResearch
@@ -511,6 +515,7 @@ async def run(
                 player_event_feed=player_event_feed,
                 local_profiles=database.local_profile_store(),
                 world_style=WorldStyleService(database.world_style_store()),
+                character_evolution=database.character_evolution_store(),
                 player_persona=PlayerPersonaService(
                     database.player_persona_store(), CharacterCardImporter()
                 ),

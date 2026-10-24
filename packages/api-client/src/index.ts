@@ -1,6 +1,7 @@
-import { isChatPathSnapshot, isChatPathPreview, isChatPathResult } from "./contracts.generated";
+import { isChatPathSnapshot, isChatPathPreview, isChatPathResult, isCharacterEvolutionEntry } from "./contracts.generated";
 import type { ChatPathSnapshot, ChatPathPreview, ChatPathResult, PathDraft, PathConfirm } from "./contracts.generated";
-export type { ChatPath, ChatPathSnapshot, ChatPathPreview, ChatPathResult, PathDraft, PathConfirm, LoreControls } from "./contracts.generated";
+export type { ChatPath, ChatPathSnapshot, ChatPathPreview, ChatPathResult, PathDraft, PathConfirm, LoreControls, CharacterEvolutionEntry } from "./contracts.generated";
+import type { CharacterEvolutionEntry } from "./contracts.generated";
 import { isWorldStyleSnapshot, isWorldStylePreview } from "./contracts.generated";
 import type { WorldStyleSnapshot, WorldStylePreview, HttpWorldStyleStyleDraft, HttpWorldStyleStyleConfirm } from "./contracts.generated";
 export type { WorldStyleSnapshot, WorldStylePreview } from "./contracts.generated";
@@ -47,6 +48,19 @@ export function fileExportPath(request: FileExportRequest): string {
   return `/worlds/${encodeURIComponent(request.world_id)}/${segment}/${encodeURIComponent(request.item_id)}/export?${params}`;
 }
 export interface CoreConnection { endpoint: string; token: string; generation: string }
+
+export type CharacterEvolutionField = "description" | "personality" | "background" | "scenario" | "speech_guidance";
+export type CharacterEvolutionOperation = "add" | "select" | "deactivate" | "restore" | "lock" | "unlock";
+export type CharacterEvolutionSource = "user" | "model" | "import";
+export interface CharacterEvolutionChange {
+  field: CharacterEvolutionField;
+  scope: string;
+  text?: string;
+  operation?: CharacterEvolutionOperation;
+  entry_id?: string;
+  locked?: boolean;
+  source?: CharacterEvolutionSource;
+}
 
 
 
@@ -390,6 +404,24 @@ export class CoreClient {
 
   worldContent(worldId: string): Promise<WorldContentItem[]> {
     return this.contractRequest(`/worlds/${encodeURIComponent(worldId)}/content`, (value): value is WorldContentItem[] => Array.isArray(value) && value.every(isWorldContentItem));
+  }
+  characterEvolution(worldId: string, rootImportId: string, signal?: AbortSignal): Promise<CharacterEvolutionEntry[]> {
+    return this.contractRequest(
+      `/worlds/${encodeURIComponent(worldId)}/characters/${encodeURIComponent(rootImportId)}/evolution`,
+      (value): value is CharacterEvolutionEntry[] => Array.isArray(value) && value.every(isCharacterEvolutionEntry),
+      { signal },
+    );
+  }
+  changeCharacterEvolution(worldId: string, rootImportId: string, change: CharacterEvolutionChange): Promise<CharacterEvolutionEntry> {
+    return this.contractRequest(
+      `/worlds/${encodeURIComponent(worldId)}/characters/${encodeURIComponent(rootImportId)}/evolution`,
+      isCharacterEvolutionEntry,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(change),
+      },
+    );
   }
   setCommonLore(worldId: string, importId: string, entryId: string, common: boolean): Promise<SetCommonLoreResult> {
     return this.contractRequest(`/worlds/${encodeURIComponent(worldId)}/content/${encodeURIComponent(importId)}/entries/${encodeURIComponent(entryId)}/common`, isSetCommonLoreResult, {

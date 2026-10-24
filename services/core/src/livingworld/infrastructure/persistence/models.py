@@ -4,16 +4,19 @@ from __future__ import annotations
 
 from datetime import datetime
 from decimal import Decimal
+from typing import cast
 from uuid import UUID
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     CheckConstraint,
     ForeignKey,
     ForeignKeyConstraint,
     Index,
     Integer,
     String,
+    Table,
     Text,
     UniqueConstraint,
     text,
@@ -1020,23 +1023,23 @@ for _record in (
     CommandReceiptRecord,
     ScheduledSimulationTriggerRecord,
 ):
-    _record.__table__.append_constraint(
+    cast(Table, _record.__table__).append_constraint(
         CheckConstraint("revision >= 0", name=f"ck_{_record.__tablename__}_revision")
     )
 
-WorldClockRecord.__table__.append_constraint(
+cast(Table, WorldClockRecord.__table__).append_constraint(
     CheckConstraint("typeof(logical_time) = 'integer'", name="ck_world_clock_logical_time_type")
 )
-WorldEventRecord.__table__.append_constraint(
+cast(Table, WorldEventRecord.__table__).append_constraint(
     CheckConstraint("typeof(occurred_at) = 'integer'", name="ck_world_event_occurred_type")
 )
-KnowledgeAssertionRecord.__table__.append_constraint(
+cast(Table, KnowledgeAssertionRecord.__table__).append_constraint(
     CheckConstraint(
         "typeof(valid_from) = 'integer' AND (valid_to IS NULL OR typeof(valid_to) = 'integer')",
         name="ck_knowledge_world_time_type",
     )
 )
-ObservationRecord.__table__.append_constraint(
+cast(Table, ObservationRecord.__table__).append_constraint(
     CheckConstraint("typeof(observed_at) = 'integer'", name="ck_observation_world_time_type")
 )
 
@@ -1060,6 +1063,46 @@ class WorldContentImportRecord(Base):
         CheckConstraint("length(reviewed_hash) = 64", name="ck_world_content_import_hash"),
         Index("ix_world_content_import_world", "world_id"),
         Index("uq_world_content_replaces", "replaces_import_id", unique=True),
+    )
+
+
+class CharacterCardEvolutionRecord(Base):
+    """Versioned user/model overlays; the imported card snapshot remains immutable."""
+
+    __tablename__ = "character_card_evolution"
+    entry_id: Mapped[UUID] = mapped_column(UUIDStorage(), primary_key=True)
+    world_id: Mapped[UUID] = mapped_column(
+        UUIDStorage(), ForeignKey("worlds.world_id"), nullable=False
+    )
+    root_import_id: Mapped[UUID] = mapped_column(
+        UUIDStorage(), ForeignKey("world_content_imports.import_id"), nullable=False
+    )
+    field: Mapped[str] = mapped_column(String(32), nullable=False)
+    scope: Mapped[str] = mapped_column(String(120), nullable=False)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    state: Mapped[str] = mapped_column(String(16), nullable=False)
+    selected: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    locked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    source: Mapped[str] = mapped_column(String(16), nullable=False)
+    created_at_utc: Mapped[datetime] = mapped_column(UTCTimestampStorage(), nullable=False)
+    __table_args__ = (
+        CheckConstraint(
+            "field IN ('description','personality','background','scenario','speech_guidance')",
+            name="ck_character_evolution_field",
+        ),
+        CheckConstraint("state IN ('active','inactive')", name="ck_character_evolution_state"),
+        CheckConstraint(
+            "source IN ('user','model','import')", name="ck_character_evolution_source"
+        ),
+        CheckConstraint("length(trim(scope)) > 0", name="ck_character_evolution_scope"),
+        Index(
+            "ix_character_evolution_lookup",
+            "world_id",
+            "root_import_id",
+            "field",
+            "scope",
+            "created_at_utc",
+        ),
     )
 
 
