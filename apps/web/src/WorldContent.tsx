@@ -84,6 +84,10 @@ export function ContentDetails({ item, onCommonChange, changingEntry, commonDisa
   const evolutionRead = useRef(0);
   const refreshEvolution = () => {
     if (!evolutionCard) return;
+    if (typeof evolutionCard.client.characterEvolution !== "function") {
+      setEvolutionEntries([]);
+      return;
+    }
     const read = ++evolutionRead.current;
     setEvolutionErrorMessage("");
     void evolutionCard.client.characterEvolution(evolutionCard.worldId, evolutionCard.rootImportId)
@@ -96,6 +100,10 @@ export function ContentDetails({ item, onCommonChange, changingEntry, commonDisa
   }, [evolutionCard?.client, evolutionCard?.worldId, evolutionCard?.rootImportId]);
   const changeEvolution = async (entry: CharacterEvolutionEntry, operation: CharacterEvolutionOperation) => {
     if (!evolutionCard) return;
+    if (typeof evolutionCard.client.changeCharacterEvolution !== "function") {
+      setEvolutionErrorMessage("当前核心不支持角色卡版本操作，请更新核心后重试。");
+      return;
+    }
     setEvolutionBusy(true);
     setEvolutionErrorMessage("");
     try {
