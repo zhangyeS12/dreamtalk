@@ -147,11 +147,12 @@ def test_context_tracks_current_accepted_persona_and_only_own_chat(tmp_path):
                 and item.content[0].text.lstrip().startswith("{")
                 and '"character"' in item.content[0].text
             )
-            assert persona["character"]["personality"] == "Curious"
-            assert persona["character"]["opening_style_example"] == (
-                "GREETING_STYLE_CANARY {{user}}"
-            )
+            assert persona["character"]["name"] == "Fixture Billy"
+            assert "Curious" in context.messages[0].content[0].text
             assert "GREETING_STYLE_CANARY" not in context.messages[0].content[0].text
+            assert any(
+                "GREETING_STYLE_CANARY" in item.content[0].text for item in context.messages[1:]
+            )
             assert [
                 message.text
                 for message in await messages.list_messages(conversation.conversation_id)

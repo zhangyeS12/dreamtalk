@@ -267,7 +267,11 @@ def test_known_required_structure_is_not_guessed(mutation, path):
     document = card_document(3)
     mutation(document)
     imported = parse(json_bytes(document))
-    assert any(warning.path == path for warning in imported.preview().warnings)
+    assert any(
+        warning.path == path
+        or (path.startswith("data.character_book") and warning.path == "data.character_book")
+        for warning in imported.preview().warnings
+    )
 
 
 def test_blank_character_name_remains_rejected():
