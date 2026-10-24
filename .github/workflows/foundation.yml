@@ -44,15 +44,15 @@ jobs:
         with:
           node-version: '24'
           cache: npm
-      - run: npm ci
-      - run: npm run lint
-      - run: npm test
-      - run: npm run build:web
-
       - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
         with:
           version: '0.11.32'
           python-version: '3.13'
+      - run: npm ci
+      - run: uv sync --frozen
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build:web
       - run: uv sync --frozen --group browser-test
       - run: npm run typecheck:core
       - run: uv run --frozen --group browser-test playwright install --with-deps chromium
