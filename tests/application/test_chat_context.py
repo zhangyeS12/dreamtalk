@@ -193,18 +193,29 @@ def test_context_tracks_current_accepted_persona_and_only_own_chat(tmp_path):
                 RequestId(uuid4()), conversation.conversation_id, "接着聊", 50000
             )
             updated = await builder.build(next_sent)
-            assert json.loads(updated.messages[1].content[0].text)["character"] == {
+            updated_persona = next(
+                json.loads(item.content[0].text)
+                for item in updated.messages
+                if item.role is MessageRole.USER
+                and item.content
+                and item.content[0].text.lstrip().startswith("{")
+                and '"character"' in item.content[0].text
+            )
+            assert updated_persona["character"] == {
                 **persona["character"],
                 "name": "更新后的角色",
-                "personality": "新的性格",
-                "opening_style_example": "UPDATED_GREETING_STYLE_CANARY",
             }
-            assert [item.role for item in updated.messages[2:]] == [
+            assert "新的性格" in updated.messages[0].content[0].text
+            assert any(
+                "UPDATED_GREETING_STYLE_CANARY" in item.content[0].text
+                for item in updated.messages[1:]
+            )
+            assert [item.role for item in updated.messages[-3:]] == [
                 MessageRole.USER,
                 MessageRole.ASSISTANT,
                 MessageRole.USER,
             ]
-            assert [item.content[0].text for item in updated.messages[2:]] == [
+            assert [item.content[0].text for item in updated.messages[-3:]] == [
                 "你好",
                 "欢迎回来",
                 "接着聊",
