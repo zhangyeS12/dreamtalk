@@ -24,7 +24,7 @@ document可见性与Tauri原生窗口visible/minimized状态共同控制：原�
 
 初版调查见[成熟实现记录](research/2026-10-04-celestial-startup-reuse.md)，本版成品参考与取舍见[观星室设计](research/2026-10-05-observatory-design.md)。Three.js MIT许可沿现有[关系网依赖说明](CHARACTER_FACTIONS.md)和`docs/licenses/relationship-network/`随包保留。原Logo是用户提供的项目标识，不宣称另有第三方许可。
 
-当前版本的开屏实现、静态门禁、CI、发布和用户验收边界见[0.1.89发行记录](maintenance/2026-10-24-release-0189.md)与[状态清单](PROJECT_STATUS.md)。静态构建成功不等于视觉、帧率或真实启动验收通过。
+当前版本的开屏实现、静态门禁、CI、发布和用户验收边界见[0.1.90发行记录](maintenance/2026-10-25-release-0190.md)与[状态清单](PROJECT_STATUS.md)。静态构建成功不等于视觉、帧率或真实启动验收通过。
 
 ## 用户验收
 
