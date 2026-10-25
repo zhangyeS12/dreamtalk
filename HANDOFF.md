@@ -6,7 +6,7 @@
 
 - 项目已有完整Windows体验版，聊天、资料、记忆／检索、有限世界活动及媒体链路均有实现；完成实现、工程检查通过和用户验收是三种证据。
 - [已通过](docs/PROJECT_STATUS.md#用户已通过的具体场景)只收录明确使用反馈；[待验收](docs/PROJECT_STATUS.md#已实现但仍待验收)不是待开发列表；[未实现](docs/PROJECT_STATUS.md#尚未实现)不自动成为新需求。
-- 文档整理、双人联系及协调层整改已交付，接手路径见[协调边界](docs/architecture/SYSTEM_OVERVIEW.md#组合与协调的源码边界)。离线容量及六项容量边界优化入口为 application/input_budget.py、content_editor_pages.py、persistence/director_background.py、character_lineage.py、chat_unread.py、proactive_contact.py 及前端 contentEditorPages.ts；实际检查见[状态表](docs/PROJECT_STATUS.md#已有工程检查通过的部分)。用户已授权推送并作为一次更新，发行结果见[记录](docs/maintenance/2026-10-19-release-0184.md)；真实模型、存档和安装器运行不在本轮范围。
+- 文档整理、双人联系及协调层整改已交付，接手路径见[协调边界](docs/architecture/SYSTEM_OVERVIEW.md#组合与协调的源码边界)。离线容量及六项容量边界优化入口为 application/input_budget.py、content_editor_pages.py、persistence/director_background.py、character_lineage.py、chat_unread.py、proactive_contact.py 及前端 contentEditorPages.ts；实际检查见[状态表](docs/PROJECT_STATUS.md#已有工程检查通过的部分)。0.1.90源码、便携包和安装器均已完成 build-only，完整证据见[发行记录](docs/maintenance/2026-10-25-release-0190.md)；GitHub Release、更新频道和真实升级仍待完成／验收。
 - 共同联系此前由用户决定先等待；没有新故障证据时，不主动触发、放宽门禁或调用模型排查。
 
 ## 2. 仓库、运行和版本现场

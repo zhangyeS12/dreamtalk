@@ -8,7 +8,7 @@
 | --- | --- |
 | 公开发行基线 | 远端源码标签 **v0.1.90** 指向提交`4966e94`；完整Windows安装器和便携包已完成 build-only，GitHub Release附件及原更新频道尚未发布。 |
 | 接口与数据结构 | API 1；Core/Web 0.1.0；公开包Alembic head `0058_character_evolution`（前置 `0057_chat_paths`）；配音revision 8。保留`livingworld`协议、数据位置及`app.livingworld.desktop`。 |
-| 本次工作基点 | 从审查收口提交`9c05e6b`完成0.1.90版本同步、文档收口和发行准备；`v0.1.90`固定指向`4966e94`，`main`与`codex/world-archive`已包含其后的文档提交`c757038`。GitHub Actions #26 已通过；原签名、公钥及频道配置未改。 |
+| 本次工作基点 | 从审查收口提交`9c05e6b`完成0.1.90版本同步、文档收口和发行准备；`v0.1.90`固定指向`4966e94`，`main`与`codex/world-archive`已包含其后的发行文档提交`a8825db`。GitHub Actions #26 已通过；原签名、公钥及频道配置未改。 |
 | 本机交付入口 | 2026-10-25已更新规范入口`artifacts/local-desktop/dreamtalk-desktop.exe`，版本为0.1.90、身份`app.livingworld.desktop`；31,209,984字节，SHA-256为`5977d3a8dfe60c2019b9935ec7211f8825104f752dc920b9f8abf3601366f343`，与`entry.json`及独立Cargo构建回执一致。未运行真实应用、用户库或模型。 |
 | 最近公开发行改动 | 消息编辑保留原文，显式创建并切换候选；聊天分支／只读检查点保留旧路线，记忆、摘要、检索和导出按路线读取，不回退权威世界状态或费用；公开世界书支持概率、递归、消息数持续／冷却／延迟、互斥组及历史深度。入口见[模块契约](CHAT_PATHS_AND_LORE.md)。 |
 
