@@ -8,7 +8,7 @@ dreamtalk 是一款开源桌面应用。你可以创建自己的世界，导入�
 
 每个世界有自己的角色、地点、聊天和记忆。你可以在一个世界是璃月的旅人，在另一个世界是新艾利都的居民，随时回到书架换一本书。
 
-[下载 Windows 体验版](https://github.com/zhangyeS12/dreamtalk/releases/tag/v0.1.90) · [本次更新内容](docs/releases/v0.1.90.md) · [完整设置说明](docs/SETTINGS_HANDBOOK.md) · [反馈问题](https://github.com/zhangyeS12/dreamtalk/issues)
+[0.1.90 源码标签](https://github.com/zhangyeS12/dreamtalk/tree/v0.1.90) · [本次更新内容](docs/releases/v0.1.90.md) · [完整设置说明](docs/SETTINGS_HANDBOOK.md) · [反馈问题](https://github.com/zhangyeS12/dreamtalk/issues)
 
 目前提供 **Windows 10 / 11 的 64 位体验版**。应用免费开源；聊天所用的模型服务需要你自己提供 API 密钥，服务商可能按使用量收费。当前版本仍在持续完善，欢迎反馈实际体验。
 
@@ -22,11 +22,11 @@ dreamtalk 是一款开源桌面应用。你可以创建自己的世界，导入�
 
 ### 1. 安装
 
-推荐下载 [Windows 安装包](https://github.com/zhangyeS12/dreamtalk/releases/download/v0.1.90/dreamtalk_0.1.90_x64-setup.exe)，按提示安装。
+0.1.90 的完整 Windows 安装器和 GitHub Release 附件尚未发布；当前可查看[源码标签](https://github.com/zhangyeS12/dreamtalk/tree/v0.1.90)与[CI 运行记录](https://github.com/zhangyeS12/dreamtalk/actions/runs/40159291051)。安装器 build-only 受本机缺少归档读取器影响而未生成，不能用源码构建替代发布安装包。
 
 本版提供[数据与备份](docs/DATA_BACKUPS.md)，新版卸载保留数据，安装／升级前先备份。旧版卸载器若仍出现“删除应用程序数据”，不要选择；重要备份建议另存其他磁盘。备份／恢复及升级故障场景仍待实际验收。
 
-也可以使用 [便携版压缩包](https://github.com/zhangyeS12/dreamtalk/releases/download/v0.1.90/dreamtalk-0.1.90-windows-x64.zip)：完整解压到一个固定目录，打开 dreamtalk 文件夹里的 dreamtalk-desktop.exe。不要直接在压缩包中运行，也不要只复制其中的程序文件。
+便携版已在本机完成 build-only，但尚未作为 GitHub Release 附件公开；发布后再从 Release 页面下载并完整解压到固定目录，打开 dreamtalk 文件夹里的 dreamtalk-desktop.exe。不要直接在压缩包中运行，也不要只复制其中的程序文件。
 
 下载页中的 **Source code** 是给开发者看的源码，请选择上面的安装包或便携包。若系统缺少网页显示组件，可安装 [Microsoft WebView2](https://developer.microsoft.com/microsoft-edge/webview2/)。首次安装可能提示未知发布者：目前已有应用更新签名，但尚无 Windows 发布者证书。
 
