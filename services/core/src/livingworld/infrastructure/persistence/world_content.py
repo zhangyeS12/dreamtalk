@@ -80,6 +80,35 @@ class SqlAlchemyWorldContentStore:
             row = await session.get(WorldContentImportRecord, import_id)
             return _load(row) if row is not None else None
 
+    async def current_for_root(
+        self, world_id: WorldId, root_import_id: UUID
+    ) -> AcceptedWorldContent | None:
+        """Resolve one character lineage without scanning every world import."""
+
+        async with self._sessions() as session:
+            row = await session.get(WorldContentImportRecord, root_import_id)
+            if row is None or row.world_id != world_id.value or row.kind != "character":
+                return None
+            seen: set[UUID] = set()
+            while True:
+                if row.import_id in seen:
+                    raise EntityNotFoundError("content_lineage_invalid")
+                seen.add(row.import_id)
+                successor_id = await session.scalar(
+                    select(WorldContentImportRecord.import_id).where(
+                        WorldContentImportRecord.world_id == world_id.value,
+                        WorldContentImportRecord.replaces_import_id == row.import_id,
+                    )
+                )
+                if successor_id is None:
+                    break
+                row = await session.get(WorldContentImportRecord, successor_id)
+                if row is None or row.kind != "character":
+                    raise EntityNotFoundError("content_lineage_invalid")
+            if row.removed_at is not None:
+                return None
+            return _load(row)
+
     async def is_current(self, import_id: UUID) -> bool:
         async with self._sessions() as session:
             imported = await session.get(WorldContentImportRecord, import_id)

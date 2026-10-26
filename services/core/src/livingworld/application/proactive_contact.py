@@ -8,6 +8,12 @@ from uuid import uuid5
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from livingworld.application.background_diagnostics import (
+    BackgroundDiagnosticSink,
+    BackgroundTaskDiagnostic,
+    NullBackgroundDiagnosticSink,
+    emit_background_diagnostic,
+)
 from livingworld.application.content_builder import generate_bounded_text
 from livingworld.application.llm import (
     InvocationId,
@@ -56,11 +62,13 @@ class ProactiveContactService:
         *,
         credentials_ready=lambda: True,
         json_output: bool | WorldModelValue[bool] = False,
+        diagnostics: BackgroundDiagnosticSink | None = None,
     ):
         self.maintenance: UpdateMaintenance | None = None
         self.store, self.unread, self.players, self.configured = store, unread, players, configured
         self.credentials_ready = credentials_ready
         self.json_output = json_output
+        self._diagnostics = diagnostics or NullBackgroundDiagnosticSink()
         self.worker = None
         self.wake = asyncio.Event()
 
@@ -118,6 +126,15 @@ class ProactiveContactService:
                 raise
             except Exception:
                 # Storage/metadata failure never invokes a provider or replays a claim.
+                emit_background_diagnostic(
+                    self._diagnostics,
+                    BackgroundTaskDiagnostic(
+                        "proactive_contact",
+                        "failed",
+                        "scheduler",
+                        "proactive_runtime_failed",
+                    ),
+                )
                 pass
             try:
                 await asyncio.wait_for(self.wake.wait(), 60)
@@ -193,15 +210,46 @@ class ProactiveContactService:
                 raise ProactiveContactError("proactive_dialogue_invalid")
             await self.store.deliver(claim, lines, bound)
         except asyncio.CancelledError:
+            emit_background_diagnostic(
+                self._diagnostics,
+                BackgroundTaskDiagnostic(
+                    "proactive_contact",
+                    "cancelled",
+                    "dialogue",
+                    "proactive_interrupted",
+                    task_id=claim["episode_id"],
+                ),
+            )
             await asyncio.shield(self.store.finish(claim, "interrupted", "proactive_interrupted"))
             raise
         except ProactiveContactError as error:
+            code = str(error)
+            emit_background_diagnostic(
+                self._diagnostics,
+                BackgroundTaskDiagnostic(
+                    "proactive_contact",
+                    "cancelled" if code == "proactive_context_changed" else "failed",
+                    "dialogue",
+                    code,
+                    task_id=claim["episode_id"],
+                ),
+            )
             await self.store.finish(
                 claim,
                 "cancelled" if str(error) == "proactive_context_changed" else "failed",
                 str(error),
             )
         except Exception:
+            emit_background_diagnostic(
+                self._diagnostics,
+                BackgroundTaskDiagnostic(
+                    "proactive_contact",
+                    "failed",
+                    "dialogue",
+                    "proactive_generation_failed",
+                    task_id=claim["episode_id"],
+                ),
+            )
             await self.store.finish(claim, "failed", "proactive_generation_failed")
 
     async def aclose(self):

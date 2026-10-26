@@ -43,7 +43,9 @@
     "services/core/src/livingworld/bootstrap/llm_runtime.py",
     "services/core/src/livingworld/adapters/http",
     "services/core/src/livingworld/infrastructure/persistence/mapping.py",
-    "services/core/src/livingworld/application/world_model_config.py"
+    "services/core/src/livingworld/application/world_model_config.py",
+    "services/core/src/livingworld/application/background_diagnostics.py",
+    "services/core/src/livingworld/infrastructure/background_diagnostics.py"
   ],
   "extraPaths": [
     "services/core/src"

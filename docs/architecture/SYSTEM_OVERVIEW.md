@@ -19,7 +19,7 @@ flowchart LR
 | --- | --- | --- |
 | UI／API client | 用户交互、草稿／预览、有限窗口与实时事件 | 不直接写数据库或把隐藏状态展示成全知消息 |
 | Tauri宿主 | Core监督、安全凭据管道、本地模型服务、文件／系统操作和更新 | 保持应用标识／存档位置；未知任务不重放、未知进程不关闭 |
-| Application／Director | 编排一次性任务、批量提案、预算／路由与获准输入 | 不直接把LLM结果变权威事实，失败不静默重复付费请求 |
+| Application／Director | 编排一次性任务、批量提案、预算／路由与获准输入，并记录有界后台诊断 | 不直接把LLM结果变权威事实，失败不静默重复付费请求；诊断不含私密正文或凭据 |
 | Character Agent | 基于本人权限、人格与记忆表达 | 不接收全部世界秘密，不伪造活动／关系成果 |
 | Domain／Kernel | 验证命令、计划与revision，原子提交canonical事件／投影／回执 | CAS、幂等、知识来源和旧事件重放兼容 |
 | Persistence | SQLite WAL、FTS5、资产／来源索引、Alembic迁移 | Alembic为唯一迁移authority；聊天／内容与canonical事件不是同一种数据 |

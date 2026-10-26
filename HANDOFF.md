@@ -6,7 +6,7 @@
 
 - 项目已有完整Windows体验版，聊天、资料、记忆／检索、有限世界活动及媒体链路均有实现；完成实现、工程检查通过和用户验收是三种证据。
 - [已通过](docs/PROJECT_STATUS.md#用户已通过的具体场景)只收录明确使用反馈；[待验收](docs/PROJECT_STATUS.md#已实现但仍待验收)不是待开发列表；[未实现](docs/PROJECT_STATUS.md#尚未实现)不自动成为新需求。
-- 文档整理、双人联系及协调层整改已交付，接手路径见[协调边界](docs/architecture/SYSTEM_OVERVIEW.md#组合与协调的源码边界)。离线容量及六项容量边界优化入口为 application/input_budget.py、content_editor_pages.py、persistence/director_background.py、character_lineage.py、chat_unread.py、proactive_contact.py 及前端 contentEditorPages.ts；实际检查见[状态表](docs/PROJECT_STATUS.md#已有工程检查通过的部分)。0.1.90源码、便携包和安装器均已完成 build-only，完整证据见[发行记录](docs/maintenance/2026-10-25-release-0190.md)；GitHub Release、更新频道和真实升级仍待完成／验收。
+- 文档整理、双人联系及协调层整改已交付，接手路径见[协调边界](docs/architecture/SYSTEM_OVERVIEW.md#组合与协调的源码边界)。离线容量及六项容量边界优化入口为 application/input_budget.py、content_editor_pages.py、persistence/director_background.py、character_lineage.py、chat_unread.py、proactive_contact.py 及前端 contentEditorPages.ts；本轮又加入聊天会话精确读取和后台任务诊断，实际检查见[状态表](docs/PROJECT_STATUS.md#已有工程检查通过的部分)。0.1.91源码、便携包、安装器、GitHub Release 和更新频道均已完成，完整证据见[发行记录](docs/maintenance/2026-10-26-release-0191.md)；当前工作树另有未发布的角色卡建议来源元数据和上述优化改动，真实升级及后台运行仍待用户验收。
 - 共同联系此前由用户决定先等待；没有新故障证据时，不主动触发、放宽门禁或调用模型排查。
 
 ## 2. 仓库、运行和版本现场
@@ -23,7 +23,7 @@
 | --- | --- | --- |
 | 世界书架、角色卡／世界书、卡内动态版本、身份 | WorldArchivePage.tsx／WorldContent.tsx／ProfileEditor.tsx → packages/api-client → adapters/http → application/content.py、world_content.py、infrastructure/persistence/character_evolution.py | [产品入口](PRODUCT.md)、[导入契约](docs/architecture/IMPORT_MODEL.md)、[聊天契约](docs/architecture/CHAT_MODEL.md) |
 | 设定身份与逐角色初始认识 | PlayerPersonaEditor.tsx → player_persona.py的预览／确认 → 世界范围持久化；直接／群聊及主动联系在输入前过滤 | [身份契约](docs/PLAYER_PERSONA.md) |
-| 消息编辑、候选与聊天路线；高级世界书 | ChatPathTools.tsx／LoreAdvancedControls.tsx → chat_paths.py／lore_activation.py → chat_path_queries.py／chat_lore.py；0057迁移（当前 head 为0058） | [入口与契约](docs/CHAT_PATHS_AND_LORE.md) |
+| 消息编辑、候选与聊天路线；高级世界书 | ChatPathTools.tsx／LoreAdvancedControls.tsx → chat_paths.py／lore_activation.py → chat_path_queries.py／chat_lore.py；0057迁移（当前源码 head 为0059，公开包 head 为0058） | [入口与契约](docs/CHAT_PATHS_AND_LORE.md) |
 | 私聊、群聊与流式 | ProductApp.tsx／ChatTranscript.tsx／GroupChat.tsx／useReplyStream.ts → application/chat_reply.py、group_chat_reply.py | [聊天模型](docs/architecture/CHAT_MODEL.md)、[恢复说明](docs/CHAT_FUNCTIONAL_EXPERIENCE.md) |
 | 模型配置、费用和硬额度 | ModelSetup.tsx → Tauri llm_config.rs／凭据管道 → bootstrap/llm_runtime.py、application/chat_capacity.py、llm_execution.py | [生产组装](docs/architecture/LLM_PRODUCTION_COMPOSITION.md)、[账本](docs/architecture/LLM_ACCOUNTING.md) |
 | 记忆与RAG | LongChatMemoryPanel.tsx／ConversationMemoryPanel.tsx → long_chat_memory.py → persistence/long_chat_memory.py、semantic_chat_retrieval.py、recall_index.py | [上下文与召回](docs/CONTEXT_AND_RECALL.md)、[亲历召回](docs/EXPERIENCE_RECALL.md) |

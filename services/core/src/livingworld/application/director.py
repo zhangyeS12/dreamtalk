@@ -6,6 +6,12 @@ from uuid import UUID, uuid4, uuid5
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from livingworld.application.background_diagnostics import (
+    BackgroundDiagnosticSink,
+    BackgroundTaskDiagnostic,
+    NullBackgroundDiagnosticSink,
+    emit_background_diagnostic,
+)
 from livingworld.application.character_encounters import EncounterKernel
 from livingworld.application.content_builder import generate_bounded_text
 from livingworld.application.encounter_policy import MAX_ENCOUNTERS_PER_BATCH
@@ -237,7 +243,15 @@ def validate_encounters(text, snapshot, routines):
 
 class DirectorService:
     def __init__(
-        self, store, players, configured, actions, wake_signal, credentials_ready=lambda: True
+        self,
+        store,
+        players,
+        configured,
+        actions,
+        wake_signal,
+        credentials_ready=lambda: True,
+        *,
+        diagnostics: BackgroundDiagnosticSink | None = None,
     ):
         self.store, self.players, self.configured = store, players, configured
         self.actions, self.wake_signal = actions, wake_signal
@@ -245,6 +259,7 @@ class DirectorService:
         self._jobs = {}
         self._worlds = set()
         self._credentials_ready = credentials_ready
+        self._diagnostics = diagnostics or NullBackgroundDiagnosticSink()
         self._closing = False
         self._encounters = EncounterKernel(actions)
         self._shared = SharedActivityKernel(actions)
@@ -294,6 +309,16 @@ class DirectorService:
         try:
             return await self._tick(world, now)
         except Exception:
+            emit_background_diagnostic(
+                self._diagnostics,
+                BackgroundTaskDiagnostic(
+                    "director",
+                    "failed",
+                    "tick",
+                    "director_runtime_failed",
+                    world_id=world.world_id,
+                ),
+            )
             try:
                 await self.store.runtime_failed(world.world_id)
             except Exception:
@@ -339,6 +364,17 @@ class DirectorService:
                 except WorldRuntimeUnavailableError:
                     return None
                 except Exception:
+                    emit_background_diagnostic(
+                        self._diagnostics,
+                        BackgroundTaskDiagnostic(
+                            "director",
+                            "failed",
+                            "action",
+                            "director_execution_failed",
+                            world_id=world_id,
+                            task_id=row["candidate_id"],
+                        ),
+                    )
                     # A committed receipt/candidate is recovered on the next tick. Unknown
                     # storage failures stop this world, rather than spin or replay an LLM.
                     await self.store.runtime_failed(world_id)
@@ -461,13 +497,49 @@ class DirectorService:
             shared = validate_shared_activities(response.text, snapshot, candidates)
             await self.store.finish(world, request_id, generation, candidates, encounters, shared)
         except asyncio.CancelledError:
+            emit_background_diagnostic(
+                self._diagnostics,
+                BackgroundTaskDiagnostic(
+                    "director",
+                    "cancelled",
+                    "planning",
+                    "director_interrupted",
+                    world_id=world,
+                    task_id=request_id.value,
+                    generation=generation,
+                ),
+            )
             await asyncio.shield(
                 self.store.fail(world, request_id, generation, "director_interrupted")
             )
             raise
         except DirectorError as error:
+            emit_background_diagnostic(
+                self._diagnostics,
+                BackgroundTaskDiagnostic(
+                    "director",
+                    "failed",
+                    "planning",
+                    str(error),
+                    world_id=world,
+                    task_id=request_id.value,
+                    generation=generation,
+                ),
+            )
             await self.store.fail(world, request_id, generation, str(error))
         except Exception:
+            emit_background_diagnostic(
+                self._diagnostics,
+                BackgroundTaskDiagnostic(
+                    "director",
+                    "failed",
+                    "planning",
+                    "director_model_failed",
+                    world_id=world,
+                    task_id=request_id.value,
+                    generation=generation,
+                ),
+            )
             await self.store.fail(world, request_id, generation, "director_model_failed")
         finally:
             self._jobs.pop(world, None)

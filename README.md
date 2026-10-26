@@ -8,11 +8,11 @@ dreamtalk 是一款开源桌面应用。你可以创建自己的世界，导入�
 
 每个世界有自己的角色、地点、聊天和记忆。你可以在一个世界是璃月的旅人，在另一个世界是新艾利都的居民，随时回到书架换一本书。
 
-[0.1.90 源码标签](https://github.com/zhangyeS12/dreamtalk/tree/v0.1.90) · [本次更新内容](docs/releases/v0.1.90.md) · [完整设置说明](docs/SETTINGS_HANDBOOK.md) · [反馈问题](https://github.com/zhangyeS12/dreamtalk/issues)
+[0.1.91 源码标签](https://github.com/zhangyeS12/dreamtalk/tree/v0.1.91) · [本次更新内容](docs/releases/v0.1.91.md) · [完整设置说明](docs/SETTINGS_HANDBOOK.md) · [反馈问题](https://github.com/zhangyeS12/dreamtalk/issues)
 
 目前提供 **Windows 10 / 11 的 64 位体验版**。应用免费开源；聊天所用的模型服务需要你自己提供 API 密钥，服务商可能按使用量收费。当前版本仍在持续完善，欢迎反馈实际体验。
 
-0.1.90新增角色卡动态词条时间线、迁移链修复，以及消息编辑与多候选回复、聊天分支与检查点和高级世界书触发。消息旁可编辑、另建候选或从此分支，旧路线与原文保留；世界书可设置概率、递归、持续／冷却／延迟和历史插入位置。分支只切换聊天及相关上下文，保留原有世界状态和费用；真实升级与迁移仍待验收。
+0.1.91新增角色卡动态词条时间线、迁移链修复，以及消息编辑与多候选回复、聊天分支与检查点和高级世界书触发。消息旁可编辑、另建候选或从此分支，旧路线与原文保留；世界书可设置概率、递归、持续／冷却／延迟和历史插入位置。分支只切换聊天及相关上下文，保留原有世界状态和费用；真实升级与迁移仍待验收。
 
 0.1.78新增整份存档备份／恢复、卸载保留及升级保护，修复云端图片密钥的完整调用链、图库说明串改和联网图片保存问题。此前配音、表情与图片能力保持：角色可使用公共／专属表情，用户有自己的表情库；支持按聊天环境配图、可选联网与图片分析。用户已确认角色发送和新增表情识别有效，使用方法见[表情与图片](docs/CHAT_MEDIA.md)。
 
@@ -22,11 +22,11 @@ dreamtalk 是一款开源桌面应用。你可以创建自己的世界，导入�
 
 ### 1. 安装
 
-0.1.90 的完整 Windows 安装器和便携包已完成 build-only 与静态检查；GitHub Release 附件和固定更新频道尚未公开。当前可查看[源码标签](https://github.com/zhangyeS12/dreamtalk/tree/v0.1.90)与[CI 运行记录](https://github.com/zhangyeS12/dreamtalk/actions/runs/40159291051)。安装器未运行，真实升级仍需验收。
+0.1.91 的完整 Windows 安装器、便携包、[GitHub Release](https://github.com/zhangyeS12/dreamtalk/releases/tag/v0.1.91)和固定更新频道已公开。当前可查看[源码标签](https://github.com/zhangyeS12/dreamtalk/tree/v0.1.91)与[CI 运行记录](https://github.com/zhangyeS12/dreamtalk/actions/runs/40159291051)。安装器未在工程端运行，真实应用内升级仍需用户验收。
 
 本版提供[数据与备份](docs/DATA_BACKUPS.md)，新版卸载保留数据，安装／升级前先备份。旧版卸载器若仍出现“删除应用程序数据”，不要选择；重要备份建议另存其他磁盘。备份／恢复及升级故障场景仍待实际验收。
 
-便携版已在本机完成 build-only，但尚未作为 GitHub Release 附件公开；附件发布后再从 Release 页面下载并完整解压到固定目录，打开 dreamtalk 文件夹里的 dreamtalk-desktop.exe。不要直接在压缩包中运行，也不要只复制其中的程序文件。
+便携版已作为 GitHub Release 附件公开；请从 Release 页面下载后完整解压到固定目录，打开 dreamtalk 文件夹里的 dreamtalk-desktop.exe。不要直接在压缩包中运行，也不要只复制其中的程序文件。
 
 下载页中的 **Source code** 是给开发者看的源码，请选择上面的安装包或便携包。若系统缺少网页显示组件，可安装 [Microsoft WebView2](https://developer.microsoft.com/microsoft-edge/webview2/)。首次安装可能提示未知发布者：目前已有应用更新签名，但尚无 Windows 发布者证书。
 

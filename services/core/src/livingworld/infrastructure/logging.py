@@ -30,6 +30,54 @@ class StructuredLogger:
             record["trace_id"] = str(RequestId.parse(trace_id))
         self._write(record)
 
+    def emit_background_task(
+        self,
+        *,
+        component: str,
+        outcome: str,
+        phase: str,
+        code: str,
+        world_id: str | None = None,
+        task_id: str | None = None,
+        generation: int | None = None,
+    ) -> None:
+        """Emit only allowlisted metadata for Director/contact background work."""
+
+        from uuid import UUID
+
+        if component not in {"director", "proactive_contact", "offline_contact"}:
+            raise ValueError("invalid_background_component")
+        if outcome not in {"failed", "cancelled"}:
+            raise ValueError("invalid_background_outcome")
+        if phase not in {"scheduler", "tick", "action", "planning", "dialogue"}:
+            raise ValueError("invalid_background_phase")
+        if not re.fullmatch(r"[a-z][a-z0-9_.-]{0,79}", code):
+            raise ValueError("invalid_background_code")
+        if world_id is not None:
+            UUID(world_id)
+        if task_id is not None:
+            UUID(task_id)
+        if generation is not None and (
+            type(generation) is not int or not 0 <= generation <= 2**31 - 1
+        ):
+            raise ValueError("invalid_background_generation")
+        record: dict[str, object] = {
+            "timestamp": datetime.now(UTC).isoformat(),
+            "level": "WARNING" if outcome == "cancelled" else "ERROR",
+            "component": component,
+            "event": "background_task_" + outcome,
+            "phase": phase,
+            "code": code,
+        }
+        for name, value in {
+            "world_id": world_id,
+            "task_id": task_id,
+            "generation": generation,
+        }.items():
+            if value is not None:
+                record[name] = value
+        self._write(record)
+
     def emit_llm_reply_facts(
         self,
         *,

@@ -181,6 +181,22 @@ class SqlAlchemyChatConversationStore:
         row, participant, name = rows[0]
         return _conversation(world_id, row, participant, name)
 
+    async def find_direct(self, conversation_id, player_id):
+        if conversation_id.world_id != player_id.world_id:
+            raise EntityNotFoundError("chat_world_mismatch")
+        async with self._sessions() as session:
+            row = await session.get(
+                ChatConversationRecord,
+                (conversation_id.world_id.value, conversation_id.value),
+            )
+            if (
+                row is None
+                or row.player_id != player_id.value
+                or row.kind != "direct"
+            ):
+                return None
+            return await self._read(session, conversation_id.world_id, conversation_id.value)
+
     async def _read_group(
         self, session, world_id: WorldId, row: ChatConversationRecord
     ) -> GroupChatConversation:

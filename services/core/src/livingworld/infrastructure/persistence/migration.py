@@ -123,7 +123,8 @@ WORLD_STYLE_REVISION = "0055_world_styles"
 PLAYER_CARD_REVISION = "0056_player_cards"
 CHAT_PATH_REVISION = "0057_chat_paths"
 CHARACTER_EVOLUTION_REVISION = "0058_character_evolution"
-HEAD_REVISION = CHARACTER_EVOLUTION_REVISION
+CHARACTER_EVOLUTION_PROVENANCE_REVISION = "0059_character_evolution_provenance"
+HEAD_REVISION = CHARACTER_EVOLUTION_PROVENANCE_REVISION
 
 # One reviewed linear chain replaces repeated hand-maintained suffix sets.
 _SUPPORTED_REVISIONS = (
@@ -184,6 +185,7 @@ _SUPPORTED_REVISIONS = (
     WORLD_STYLE_REVISION,
     PLAYER_CARD_REVISION,
     CHAT_PATH_REVISION,
+    CHARACTER_EVOLUTION_REVISION,
     HEAD_REVISION,
 )
 _REVISION_RANGES = {
@@ -420,6 +422,9 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
     pre_character_evolution_revision = (
         revision not in _REVISION_RANGES[CHARACTER_EVOLUTION_REVISION]
     )
+    pre_character_evolution_provenance_revision = (
+        revision not in _REVISION_RANGES[CHARACTER_EVOLUTION_PROVENANCE_REVISION]
+    )
     pre_example_revision = revision not in _REVISION_RANGES[EXAMPLE_WORLD_REVISION]
     pre_recall_revision = revision not in _REVISION_RANGES[RECALL_REVISION]
     pre_location_policy_revision = revision not in _REVISION_RANGES[LOCATION_REVISION]
@@ -489,6 +494,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         CHAT_MESSAGE_REVISION,
         CHAT_DISPATCH_REVISION,
         CHARACTER_EVOLUTION_REVISION,
+        CHARACTER_EVOLUTION_PROVENANCE_REVISION,
     }:
         _fail("alembic_revision_unsupported")
     # Through 0020, chat revisions only add tables. Validate each historical
@@ -691,6 +697,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
             pre_player_card_revision=pre_player_card_revision,
             pre_chat_path_revision=pre_chat_path_revision,
             pre_character_evolution_revision=pre_character_evolution_revision,
+            pre_character_evolution_provenance_revision=pre_character_evolution_provenance_revision,
             pre_example_revision=pre_example_revision,
             pre_chat_revision=pre_chat_revision,
             pre_message_revision=pre_message_revision,
@@ -803,6 +810,7 @@ def _validate_domain_shape(
     pre_player_card_revision: bool = True,
     pre_chat_path_revision: bool = True,
     pre_character_evolution_revision: bool = True,
+    pre_character_evolution_provenance_revision: bool = True,
     pre_chat_revision: bool | None = None,
     pre_message_revision: bool | None = None,
     pre_dispatch_revision: bool | None = None,
@@ -1205,6 +1213,11 @@ def _validate_domain_shape(
                 revision == CONTENT_REVISION
                 and table.name == "content_lore_entries"
                 and column.name == "collection_id"
+            )
+            and not (
+                pre_character_evolution_provenance_revision
+                and table.name == "character_card_evolution"
+                and column.name in {"quote", "confidence"}
             )
         ]
         if actual != expected:

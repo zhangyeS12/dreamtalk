@@ -190,6 +190,8 @@ class CharacterEvolutionStore:
         field: str,
         scope: str,
         text: str,
+        quote: str,
+        confidence: float,
     ) -> dict:
         """Stage a model suggestion without selecting it for prompt use."""
         fields = {"description", "personality", "background", "scenario", "speech_guidance"}
@@ -201,6 +203,11 @@ class CharacterEvolutionStore:
             raise ValueError("character_evolution_text_empty")
         if len(text) > 4000:
             raise ValueError("character_evolution_capacity")
+        quote = quote.strip()
+        if len(quote) < 3 or len(quote) > 1000:
+            raise ValueError("character_evolution_quote_invalid")
+        if type(confidence) is not float or not 0.6 <= confidence <= 1:
+            raise ValueError("character_evolution_confidence_invalid")
         async with self._sessions() as session, session.begin():
             await session.connection(execution_options={"livingworld_write_intent": True})
             if await session.get(WorldRecord, world.value) is None:
@@ -228,6 +235,8 @@ class CharacterEvolutionStore:
                 field=field,
                 scope=scope,
                 text=text,
+                quote=quote,
+                confidence=confidence,
                 state="inactive",
                 selected=False,
                 locked=False,
@@ -245,6 +254,8 @@ class CharacterEvolutionStore:
             "field": row.field,
             "scope": row.scope,
             "text": row.text,
+            "quote": row.quote,
+            "confidence": row.confidence,
             "state": row.state,
             "selected": row.selected,
             "locked": row.locked,

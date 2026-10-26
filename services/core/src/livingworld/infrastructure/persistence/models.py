@@ -1080,6 +1080,9 @@ class CharacterCardEvolutionRecord(Base):
     field: Mapped[str] = mapped_column(String(32), nullable=False)
     scope: Mapped[str] = mapped_column(String(120), nullable=False)
     text: Mapped[str] = mapped_column(Text, nullable=False)
+    # Older user/import entries predate model suggestion provenance.
+    quote: Mapped[str | None] = mapped_column(Text, nullable=True)
+    confidence: Mapped[float | None] = mapped_column(nullable=True)
     state: Mapped[str] = mapped_column(String(16), nullable=False)
     selected: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     locked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

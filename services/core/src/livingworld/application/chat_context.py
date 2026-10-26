@@ -268,7 +268,9 @@ class ChatContextSources:
 class DirectChatContextBuilder(ChatContextSources):
     async def build(self, sent: PlayerSend) -> DirectChatContext:
         conversation_id = sent.message.conversation_id
-        conversations = await self._conversations.list_for_world(conversation_id.world_id)
+        conversations = await self._conversations.list_for_world(
+            conversation_id.world_id, conversation_id=conversation_id
+        )
         conversation = next(
             (item for item in conversations if item.conversation_id == conversation_id), None
         )
@@ -278,7 +280,9 @@ class DirectChatContextBuilder(ChatContextSources):
             or sent.message.turn_id != (sent.source_turn_id or sent.turn_id)
         ):
             raise EntityNotFoundError("conversation_not_found")
-        character = await self._conversations.current_direct_character(conversation_id)
+        character = await self._conversations.current_direct_character(
+            conversation_id, conversation=conversation
+        )
         general = await self._profiles.load()
         world = await self._profiles.load(conversation_id.world_id)
         transcript = await self._messages.context_messages(

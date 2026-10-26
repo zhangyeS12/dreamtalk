@@ -396,6 +396,8 @@ class ChatReplyConfiguration[ChatContext]:
                     field=update.field,
                     scope=scope,
                     text=update.text,
+                    quote=update.quote,
+                    confidence=update.confidence,
                 )
             except (EntityNotFoundError, ValueError):
                 # A model proposal is auxiliary to the reply. Invalid or stale

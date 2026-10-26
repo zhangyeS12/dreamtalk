@@ -8,6 +8,8 @@ class CharacterEvolutionEntry(TypedDict):
     field: Literal["description", "personality", "background", "scenario", "speech_guidance"]
     scope: str
     text: str
+    quote: str | None
+    confidence: float | None
     state: Literal["active", "inactive"]
     selected: bool
     locked: bool

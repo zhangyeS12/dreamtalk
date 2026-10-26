@@ -58,6 +58,7 @@ from livingworld.bootstrap.llm_runtime import (
 )
 from livingworld.bootstrap.reader import derive_session, read_bootstrap
 from livingworld.domain.contracts import API_PROTOCOL, LOOPBACK_HOST
+from livingworld.infrastructure.background_diagnostics import StructuredBackgroundDiagnosticSink
 from livingworld.infrastructure.chat_retrieval import Fts5ChatRecallRanker
 from livingworld.infrastructure.clock import SystemWallClock
 from livingworld.infrastructure.database import bootstrap_database
@@ -282,6 +283,7 @@ async def run(
         from livingworld.application.action_resolution import ActionResolutionService
         from livingworld.application.conversation_memory import ConversationMemoryService
         from livingworld.application.director import DirectorService
+        background_diagnostics = StructuredBackgroundDiagnosticSink(logger)
 
         director = DirectorService(
             database.director_store(),
@@ -297,6 +299,7 @@ async def run(
             credentials_ready=lambda: (
                 not maintenance.preparing and (not desktop or llm_session.credentials.sync_complete)
             ),
+            diagnostics=background_diagnostics,
         )
         from livingworld.application.world_story import WorldNewsKernel, WorldStoryService
 
@@ -336,6 +339,7 @@ async def run(
             credentials_ready=lambda: (
                 not maintenance.preparing and (not desktop or llm_session.credentials.sync_complete)
             ),
+            diagnostics=background_diagnostics,
         )
         offline_contact.maintenance = maintenance
         await offline_contact.start()
@@ -353,6 +357,7 @@ async def run(
                 not maintenance.preparing and (not desktop or llm_session.credentials.sync_complete)
             ),
             json_output=proactive_json,
+            diagnostics=background_diagnostics,
         )
         proactive_contact.maintenance = maintenance
         await proactive_contact.start()

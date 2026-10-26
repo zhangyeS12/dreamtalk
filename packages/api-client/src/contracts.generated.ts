@@ -186,6 +186,8 @@ export type CharacterEvolutionEntry = {
   field: ("description" | "personality" | "background" | "scenario" | "speech_guidance");
   scope: string;
   text: string;
+  quote: (string | null);
+  confidence: (number | null);
   state: ("active" | "inactive");
   selected: boolean;
   locked: boolean;
@@ -193,7 +195,7 @@ export type CharacterEvolutionEntry = {
   created_at_utc: string;
 };
 export function isCharacterEvolutionEntry(value: unknown): value is CharacterEvolutionEntry {
-  return (isObject(value)) && (typeof value.entry_id === "string") && ((value.field === "description" || value.field === "personality" || value.field === "background" || value.field === "scenario" || value.field === "speech_guidance")) && (typeof value.scope === "string") && (typeof value.text === "string") && ((value.state === "active" || value.state === "inactive")) && (typeof value.selected === "boolean") && (typeof value.locked === "boolean") && ((value.source === "user" || value.source === "model" || value.source === "import")) && (typeof value.created_at_utc === "string");
+  return (isObject(value)) && (typeof value.entry_id === "string") && ((value.field === "description" || value.field === "personality" || value.field === "background" || value.field === "scenario" || value.field === "speech_guidance")) && (typeof value.scope === "string") && (typeof value.text === "string") && ((typeof value.quote === "string" || value.quote === null)) && ((typeof value.confidence === "number" || value.confidence === null)) && ((value.state === "active" || value.state === "inactive")) && (typeof value.selected === "boolean") && (typeof value.locked === "boolean") && ((value.source === "user" || value.source === "model" || value.source === "import")) && (typeof value.created_at_utc === "string");
 }
 export type ConversationMemoryContent = {
   base_revision: WireNumber;

@@ -9,6 +9,12 @@ from uuid import uuid5
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from livingworld.application.background_diagnostics import (
+    BackgroundDiagnosticSink,
+    BackgroundTaskDiagnostic,
+    NullBackgroundDiagnosticSink,
+    emit_background_diagnostic,
+)
 from livingworld.application.content_builder import generate_bounded_text
 from livingworld.application.llm import (
     InvocationId,
@@ -36,11 +42,21 @@ class ContactPlan(BaseModel):
 
 
 class OfflineContactService:
-    def __init__(self, store, players, planner, dialogue, credentials_ready=lambda: True):
+    def __init__(
+        self,
+        store,
+        players,
+        planner,
+        dialogue,
+        credentials_ready=lambda: True,
+        *,
+        diagnostics: BackgroundDiagnosticSink | None = None,
+    ):
         self.maintenance: UpdateMaintenance | None = None
         self.store, self.players = store, players
         self.planner, self.dialogue = planner, dialogue
         self._credentials_ready = credentials_ready
+        self._diagnostics = diagnostics or NullBackgroundDiagnosticSink()
         self._wake = asyncio.Event()
         self._closing = False
         self._worker = self._job = None
@@ -96,6 +112,15 @@ class OfflineContactService:
             except asyncio.CancelledError:
                 raise
             except Exception:
+                emit_background_diagnostic(
+                    self._diagnostics,
+                    BackgroundTaskDiagnostic(
+                        "offline_contact",
+                        "failed",
+                        "scheduler",
+                        "offline_runtime_failed",
+                    ),
+                )
                 pass  # Storage failure never authorizes a model invocation.
             try:
                 await asyncio.wait_for(self._wake.wait(), timeout=60)
@@ -192,15 +217,46 @@ class OfflineContactService:
                 raise OfflineContactError("offline_dialogue_invalid")
             await self.store.deliver(identity, text, plan_bound + dialogue_bound)
         except asyncio.CancelledError:
+            emit_background_diagnostic(
+                self._diagnostics,
+                BackgroundTaskDiagnostic(
+                    "offline_contact",
+                    "cancelled",
+                    "dialogue",
+                    "offline_interrupted",
+                    task_id=identity,
+                ),
+            )
             await self.store.finish(identity, "interrupted", "offline_interrupted")
             raise
         except OfflineContactError as error:
+            code = str(error)
+            emit_background_diagnostic(
+                self._diagnostics,
+                BackgroundTaskDiagnostic(
+                    "offline_contact",
+                    "cancelled" if code == "offline_context_changed" else "failed",
+                    "dialogue",
+                    code,
+                    task_id=identity,
+                ),
+            )
             await self.store.finish(
                 identity,
                 "skipped" if str(error) == "offline_context_changed" else "failed",
                 str(error),
             )
         except Exception:
+            emit_background_diagnostic(
+                self._diagnostics,
+                BackgroundTaskDiagnostic(
+                    "offline_contact",
+                    "failed",
+                    "dialogue",
+                    "offline_generation_failed",
+                    task_id=identity,
+                ),
+            )
             await self.store.finish(identity, "failed", "offline_generation_failed")
         finally:
             self._job = None

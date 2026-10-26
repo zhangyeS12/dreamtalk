@@ -57,7 +57,7 @@ function EvolutionFieldTimeline({ entries, onChange, busy }: {
         <summary><span className={current ? visible.source === "model" || visible.source === "user" ? "evolution-mark evolution-added" : "evolution-mark evolution-changed" : "evolution-mark evolution-deleted"}>{visible.text}</span><small>{scope === "global" ? "当前世界" : scope}</small></summary>
         <div className="inline-evolution-timeline">
           {history.map(entry => <div key={entry.entry_id} className={`inline-evolution-version ${entry.state === "inactive" ? "evolution-deleted" : entry.selected ? "evolution-active" : ""}`}>
-            <div><span>{entry.text}</span><small>{new Date(entry.created_at_utc).toLocaleString()} · {entry.source === "model" ? "模型建议" : entry.source === "import" ? "导入版本" : "用户版本"}{entry.locked ? " · 已锁定" : ""}{entry.state === "inactive" ? " · 已停用" : ""}</small></div>
+            <div><span>{entry.text}</span><small>{new Date(entry.created_at_utc).toLocaleString()} · {entry.source === "model" ? "模型建议" : entry.source === "import" ? "导入版本" : "用户版本"}{entry.locked ? " · 已锁定" : ""}{entry.state === "inactive" ? " · 已停用" : ""}{entry.quote ? ` · 依据：“${entry.quote}”` : ""}{entry.confidence !== null && entry.confidence !== undefined ? ` · 置信度 ${(entry.confidence * 100).toFixed(0)}%` : ""}</small></div>
             <div className="inline-evolution-actions">
               <button type="button" className="text-action" disabled={busy || (entry.selected && entry.state === "active")} onClick={() => onChange(entry, entry.state === "inactive" ? "restore" : "select")}>{entry.state === "inactive" ? "恢复" : "采用"}</button>
               <button type="button" className="text-action" disabled={busy || entry.locked} onClick={() => onChange(entry, "deactivate")}>停用</button>

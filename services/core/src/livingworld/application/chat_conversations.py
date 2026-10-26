@@ -57,6 +57,10 @@ class ChatConversationStore(Protocol):
 
     async def list_for_player(self, player_id: PlayerId) -> tuple[ChatConversation, ...]: ...
 
+    async def find_direct(
+        self, conversation_id: ConversationId, player_id: PlayerId
+    ) -> ChatConversation | None: ...
+
     async def find_group(
         self, conversation_id: ConversationId, player_id: PlayerId
     ) -> GroupChatConversation | None: ...
@@ -248,10 +252,24 @@ class ChatConversationService:
             for group in await self._store.list_groups_for_player(player)
         )
 
-    async def list_for_world(self, world_id: WorldId) -> tuple[ChatConversation, ...]:
+    async def list_for_world(
+        self, world_id: WorldId, *, conversation_id: ConversationId | None = None
+    ) -> tuple[ChatConversation, ...]:
         player = await self._players.selected_player(world_id)
         if player is None:
             return ()
+        if conversation_id is not None:
+            if conversation_id.world_id != world_id:
+                raise EntityNotFoundError("chat_world_mismatch")
+            conversation = await self._store.find_direct(conversation_id, player)
+            if conversation is None:
+                return ()
+            current = await self._imports.current_for_root(
+                world_id, conversation.root_import_id
+            )
+            if current is None:
+                return ()
+            return (replace(conversation, character_name=_character(current).display_name),)
         conversations = await self._store.list_for_player(player)
         if not conversations:
             return ()
@@ -268,23 +286,26 @@ class ChatConversationService:
         )
 
     async def current_direct_character(
-        self, conversation_id: ConversationId
+        self,
+        conversation_id: ConversationId,
+        *,
+        conversation: ChatConversation | None = None,
     ) -> CharacterDefinition:
         """Resolve the current accepted persona for this Player's existing direct chat."""
 
-        conversations = await self.list_for_world(conversation_id.world_id)
-        conversation = next(
-            (item for item in conversations if item.conversation_id == conversation_id), None
-        )
+        if conversation is None:
+            player = await self._players.selected_player(conversation_id.world_id)
+            if player is None:
+                raise EntityNotFoundError("selected_player_required")
+            conversation = await self._store.find_direct(conversation_id, player)
         if conversation is None:
             raise EntityNotFoundError("conversation_not_found")
-        for item in await self._imports.list_imports(conversation_id.world_id):
-            if (
-                item.kind == "character"
-                and (await self._root(item)).import_id == conversation.root_import_id
-            ):
-                return _character(item)
-        raise EntityNotFoundError("contact_not_found")
+        current = await self._imports.current_for_root(
+            conversation_id.world_id, conversation.root_import_id
+        )
+        if current is None:
+            raise EntityNotFoundError("contact_not_found")
+        return _character(current)
 
     async def current_group_characters(
         self, conversation_id: ConversationId

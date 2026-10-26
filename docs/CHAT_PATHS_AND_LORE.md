@@ -53,6 +53,6 @@
 
 ## 实现与参考
 
-持久化入口：`chat_path_models.py`、`chat_paths.py`、`chat_path_queries.py`、`chat_lore.py`；聊天路线结构由冻结的 Alembic `0057_chat_paths` 创建，当前公开包继续由后续 `0058_character_evolution` 迁移到最新 head，不改写旧消息或财务回执。协议定义经现有生成器进入 API 客户端，界面入口为 `ChatPathTools.tsx`、`useChatPaths.ts`、`LoreAdvancedControls.tsx`。
+持久化入口：`chat_path_models.py`、`chat_paths.py`、`chat_path_queries.py`、`chat_lore.py`；聊天路线结构由冻结的 Alembic `0057_chat_paths` 创建，当前源码继续由 `0058_character_evolution` 与 `0059_character_evolution_provenance` 迁移到最新 head，不改写旧消息或财务回执。公开 0.1.91 包仍停留在 `0058_character_evolution`。协议定义经现有生成器进入 API 客户端，界面入口为 `ChatPathTools.tsx`、`useChatPaths.ts`、`LoreAdvancedControls.tsx`。
 
 行为参考 SillyTavern 1.19.0 的[聊天管理](https://docs.sillytavern.app/usage/core-concepts/chatfilemanagement/)、[消息操作](https://docs.sillytavern.app/usage/chatting/)和[World Info](https://docs.sillytavern.app/usage/core-concepts/worldinfo/)说明。SillyTavern 为 AGPL-3.0 项目；本仓 Apache-2.0，沿[复用决策](architecture/ADR/0001_reuse_mature_projects.md)只参考交互与格式，在现有 React／Python／SQLite 架构独立实现，不并入其源码，不新增依赖。
