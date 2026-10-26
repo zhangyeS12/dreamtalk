@@ -1,16 +1,16 @@
 # dreamtalk 当前功能与验收状态
 
-更新日期：2026-10-26。本页是版本与功能状态的统一入口；调用链见[HANDOFF](../HANDOFF.md)，批准行为见[PRODUCT](../PRODUCT.md)。**0.1.91源码标签、Web／本机入口、便携ZIP、完整Windows安装器、GitHub Release、固定更新频道和本轮 GitHub Actions #26 均已完成；真实升级仍待用户验收**。本轮包含角色卡动态词条时间线、迁移链修复，以及消息编辑／候选、聊天分支／检查点及高级世界书触发。未访问真实存档、模型、凭据或已安装应用。旧用户库迁移、恢复及实际模型效果仍待用户验收。
+更新日期：2026-10-26。本页是版本与功能状态的统一入口；调用链见[HANDOFF](../HANDOFF.md)，批准行为见[PRODUCT](../PRODUCT.md)。**0.1.91源码标签、Web／本机入口、便携ZIP、完整Windows安装器、GitHub Release 和固定更新频道均已完成；本轮未触发 GitHub Actions，真实升级仍待用户验收**。本轮包含角色卡动态词条时间线、迁移链修复、聊天上下文精确读取和后台诊断，以及消息编辑／候选、聊天分支／检查点及高级世界书触发。未访问真实存档、模型、凭据或已安装应用。旧用户库迁移、恢复及实际模型效果仍待用户验收。
 
 ## 当前基线
 
 | 项目 | 当前事实 |
 | --- | --- |
-| 公开发行基线 | GitHub 预发布 **v0.1.91** 已公开，Release ID `423271161`，固定提交`4966e94`；六项附件和 `update-preview/windows.json` 已上传，频道清单版本为 `0.1.91`。 |
-| 接口与数据结构 | API 1；Core/Web 0.1.0；当前源码 Alembic head 为 `0059_character_evolution_provenance`（公开 0.1.91 包的 head 仍为 `0058_character_evolution`）；配音revision 8。保留`livingworld`协议、数据位置及`app.livingworld.desktop`。 |
-| 本次工作基点 | 从审查收口提交`9c05e6b`完成0.1.91版本同步、文档收口和发行准备；`v0.1.91`固定指向`4966e94`，`main`与`codex/world-archive`已包含其后的发行文档提交`a8825db`。GitHub Actions #26 已通过；0.1.91 Release 与固定更新频道已公开。当前工作树另有未发布的 `0059_character_evolution_provenance` 及来源展示改动，尚未提交、打包或发布。 |
-| 当前工作树优化 | 已将私聊上下文的会话／角色卡读取改为目标会话和根导入的精确解析；Director、在线主动联系和离线联系共用脱敏结构化后台诊断。Python 编译、Ruff、Pyright 和 Git 差异核对通过；这些改动尚未提交、打包或发布，真实后台运行仍待验收。 |
-| 本机交付入口 | 2026-10-25已更新规范入口`artifacts/local-desktop/dreamtalk-desktop.exe`，版本为0.1.91、身份`app.livingworld.desktop`；31,209,984字节，SHA-256为`5977d3a8dfe60c2019b9935ec7211f8825104f752dc920b9f8abf3601366f343`，与`entry.json`及独立Cargo构建回执一致。未运行真实应用、用户库或模型。 |
+| 公开发行基线 | GitHub 预发布 **v0.1.91** 已公开，Release ID `424286400`，固定提交`a650bc6`；六项附件和 `update-preview/windows.json` 已上传，频道清单版本为 `0.1.91`。 |
+| 接口与数据结构 | API 1；Core/Web 0.1.0；当前源码和公开 0.1.91 包的 Alembic head 均为 `0059_character_evolution_provenance`；配音revision 8。保留`livingworld`协议、数据位置及`app.livingworld.desktop`。 |
+| 本次工作基点 | 发行提交 `a650bc6` 已快进到 `main` 与 `codex/world-archive`；0.1.91 Release 与固定更新频道已公开。源码隐私、build-only、签名和归档载荷核对通过；本轮没有对应提交的 GitHub Actions 成功运行。 |
+| 当前发行优化 | 私聊上下文的会话／角色卡读取已改为目标会话和根导入的精确解析；Director、在线主动联系和离线联系共用脱敏结构化后台诊断；角色卡建议保存逐字引用与置信度。上述改动已进入 0.1.91，真实后台运行仍待验收。 |
+| 本机交付入口 | 规范本机入口仍是 2026-10-25 构建的 0.1.90 版本 `artifacts/local-desktop/dreamtalk-desktop.exe`；0.1.91 已完成独立发行 build-only，未运行真实应用、用户库或模型。 |
 | 最近公开发行改动 | 消息编辑保留原文，显式创建并切换候选；聊天分支／只读检查点保留旧路线，记忆、摘要、检索和导出按路线读取，不回退权威世界状态或费用；公开世界书支持概率、递归、消息数持续／冷却／延迟、互斥组及历史深度。入口见[模块契约](CHAT_PATHS_AND_LORE.md)。 |
 
 本轮构建、签名、CI、附件摘要、频道及匿名下载证据见[0.1.91发行记录](maintenance/2026-10-26-release-0191.md)；前次公开结果见[0.1.88记录](maintenance/2026-10-20-release-0188.md)。0.1.91 已公开，真实应用内升级仍由用户验收。
@@ -41,8 +41,8 @@
 
 | 范围 | 已有证据 | 尚不能证明 |
 | --- | --- | --- |
-| 群聊内部发言者标签（0.1.91已发布） | 当前角色历史仅正文，其他角色按姓名／成员编号区分；旧前缀只整理模型输入副本，新回复前缀按本次角色姓名及UUID精确处理，流式暂存潜在标签。既有合成回归、界面回归、Pyright、Ruff／格式和本轮 CI 共同覆盖；见[契约](architecture/CHAT_MODEL.md#群聊内部标签与正文)。 | 真实模型仍待验收；旧聊天原文保持，不批量去除旧标识。 |
-| 0.1.91源码、Release 与 CI | 本轮版本同步、前端 lint／TypeScript、Pyright、生成契约、文档链接、源码／提交隐私检查、本机入口、便携 build-only、安装器静态解包及 GitHub Actions #26 全部通过；GitHub Release ID `423271161` 六项附件和固定频道清单均与本地摘要一致，证据见[发行记录](maintenance/2026-10-26-release-0191.md)。 | 应用内更新、真实应用、模型或真实存档均未验证。 |
+| 群聊内部发言者标签（0.1.91已发布） | 当前角色历史仅正文，其他角色按姓名／成员编号区分；旧前缀只整理模型输入副本，新回复前缀按本次角色姓名及UUID精确处理，流式暂存潜在标签。既有合成回归、界面回归、Pyright、Ruff／格式覆盖；见[契约](architecture/CHAT_MODEL.md#群聊内部标签与正文)。 | 真实模型仍待验收；旧聊天原文保持，不批量去除旧标识。 |
+| 0.1.91源码、Release 与 build-only | 本轮版本同步、前端 lint／TypeScript、Pyright、生成契约、文档链接、源码／提交隐私检查、便携 build-only、签名安装器静态解包和六项公开资产摘要均通过；GitHub Release ID `424286400` 与固定频道清单均与本地摘要一致，证据见[发行记录](maintenance/2026-10-26-release-0191.md)。本轮没有对应提交的 GitHub Actions 成功运行。 | 应用内更新、真实应用、模型或真实存档均未验证。 |
 | 本轮聊天路线与高级世界书 | 合成数据库／模拟服务／内存界面回归及静态检查通过，本机入口编译与摘要核对完成，详见[交付记录](maintenance/2026-10-20-chat-paths-and-lore.md)；本次 CI 再次覆盖相关前后端路径。 | 真实模型效果、旧用户库、实际界面长期使用与发行更新；未运行真实应用。 |
 | 发行提交 CI | `06c2ad6`的[完整CI](https://github.com/zhangyeS12/dreamtalk/actions/runs/39232983675)四组Python、前端、Windows桌面和CI Gate通过；Windows各1816项，Linux各1815项及1项平台跳过，前端104项。包含远端隔离浏览器、原生启动／退出及便携生命周期检查。 | 用户机器上的安装、真实数据升级和实际模型兼容。 |
 | 前版发行完整性（0.1.86） | 0.1.86完整安装器／便携包、载荷隐私、原公钥签名、频道及匿名完整下载核对通过；339份Core源码与提交一致，NSIS静态解包1407个文件；见[发行记录](maintenance/2026-10-19-release-0186.md)。 | 已安装或应用内升级成功。该发行轮未运行CI、自动化测试、产品或安装器；本次发行完整性另列。 |
