@@ -1080,14 +1080,16 @@ class CharacterCardEvolutionRecord(Base):
     field: Mapped[str] = mapped_column(String(32), nullable=False)
     scope: Mapped[str] = mapped_column(String(120), nullable=False)
     text: Mapped[str] = mapped_column(Text, nullable=False)
-    # Older user/import entries predate model suggestion provenance.
-    quote: Mapped[str | None] = mapped_column(Text, nullable=True)
-    confidence: Mapped[float | None] = mapped_column(nullable=True)
     state: Mapped[str] = mapped_column(String(16), nullable=False)
     selected: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     locked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     source: Mapped[str] = mapped_column(String(16), nullable=False)
     created_at_utc: Mapped[datetime] = mapped_column(UTCTimestampStorage(), nullable=False)
+    # Older user/import entries predate model suggestion provenance. These
+    # columns were appended by migration 0059 and must stay at the end of the
+    # declaration order so strict schema validation matches SQLite's layout.
+    quote: Mapped[str | None] = mapped_column(Text, nullable=True)
+    confidence: Mapped[float | None] = mapped_column(nullable=True)
     __table_args__ = (
         CheckConstraint(
             "field IN ('description','personality','background','scenario','speech_guidance')",

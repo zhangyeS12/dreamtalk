@@ -6,7 +6,7 @@
 
 - 项目已有完整Windows体验版，聊天、资料、记忆／检索、有限世界活动及媒体链路均有实现；完成实现、工程检查通过和用户验收是三种证据。
 - [已通过](docs/PROJECT_STATUS.md#用户已通过的具体场景)只收录明确使用反馈；[待验收](docs/PROJECT_STATUS.md#已实现但仍待验收)不是待开发列表；[未实现](docs/PROJECT_STATUS.md#尚未实现)不自动成为新需求。
-- 文档整理、双人联系及协调层整改已交付，接手路径见[协调边界](docs/architecture/SYSTEM_OVERVIEW.md#组合与协调的源码边界)。离线容量及六项容量边界优化入口为 application/input_budget.py、content_editor_pages.py、persistence/director_background.py、character_lineage.py、chat_unread.py、proactive_contact.py 及前端 contentEditorPages.ts；本轮又加入聊天会话精确读取和后台任务诊断，实际检查见[状态表](docs/PROJECT_STATUS.md#已有工程检查通过的部分)。0.1.91源码、便携包、安装器、GitHub Release 和更新频道均已完成，完整证据见[发行记录](docs/maintenance/2026-10-26-release-0191.md)；当前工作树另有未发布的角色卡建议来源元数据和上述优化改动，真实升级及后台运行仍待用户验收。
+- 文档整理、双人联系及协调层整改已交付，接手路径见[协调边界](docs/architecture/SYSTEM_OVERVIEW.md#组合与协调的源码边界)。离线容量及六项容量边界优化入口为 application/input_budget.py、content_editor_pages.py、persistence/director_background.py、character_lineage.py、chat_unread.py、proactive_contact.py 及前端 contentEditorPages.ts；本轮又修复了0059迁移后严格schema校验的字段顺序问题。0.1.92源码、便携包、安装器、GitHub Release 和更新频道均已完成，完整证据见[发行记录](docs/maintenance/2026-10-26-release-0192.md)；真实升级及后台运行仍待用户验收。
 - 共同联系此前由用户决定先等待；没有新故障证据时，不主动触发、放宽门禁或调用模型排查。
 
 ## 2. 仓库、运行和版本现场
@@ -14,7 +14,7 @@
 - 正式仓库为D:\LivingWorld；分支／HEAD／工作区以Git现场为准，不从旧工作日志推断。源码、发行标签、安装包和实际运行程序分别核对。
 - 用户入口为artifacts/local-desktop/dreamtalk-desktop.exe，依赖仓库开发环境；对外完整包包含Core及资源，两者用途不同。该入口的版本／摘要回执在同目录entry.json，必要编译规则见[验证责任](AGENTS.md#20-current-verification-responsibility)。
 - 本机入口通过仓库现有环境加载Core源码；当前工作树包含角色扮演、回复格式、提示编排及通讯录世界风格／台词高亮，以及最新的[聊天路线与高级世界书](docs/CHAT_PATHS_AND_LORE.md)。界面变化需沿规定入口重新编译，完全退出旧应用后重开生效；世界风格源码入口为application/world_style.py、persistence/world_style.py、adapters/http/world_style.py及前端WorldStyleEditor.tsx／dialogueHighlight.ts；玩家专用卡入口为application/player_card.py、player_persona.py及PlayerPersonaEditor.tsx，独立资料不走通讯录／NPC／地点初始化；迁移与检查证据见状态清单。该入口不是可搬运的完整便携包，工程检查不代表真实模型或安装升级验收。
-- 更新继续沿原应用标识、公钥和频道。不得用旧程序打开已升级存档，不移动／删除DB或WAL，不改真实API、启动项或已安装应用。
+- 更新继续沿原应用标识、公钥和频道。0.1.91的启动失败已确认是0059迁移后字段顺序校验错误；修正版应使用0.1.92，不要手动删除数据库、WAL或备份，也不要用旧程序打开已升级存档。
 - 开屏及更新失败修复的实际限制见[可靠性记录](docs/maintenance/2026-10-17-reliability-hardening.md)；发行完整性与用户运行结果见状态表的不同栏目。
 
 ## 3. 各部分怎样实现、从哪里接手

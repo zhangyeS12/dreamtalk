@@ -8,11 +8,11 @@ dreamtalk 是一款开源桌面应用。你可以创建自己的世界，导入�
 
 每个世界有自己的角色、地点、聊天和记忆。你可以在一个世界是璃月的旅人，在另一个世界是新艾利都的居民，随时回到书架换一本书。
 
-[0.1.91 源码标签](https://github.com/zhangyeS12/dreamtalk/tree/v0.1.91) · [本次更新内容](docs/releases/v0.1.91.md) · [完整设置说明](docs/SETTINGS_HANDBOOK.md) · [反馈问题](https://github.com/zhangyeS12/dreamtalk/issues)
+[0.1.92 源码标签](https://github.com/zhangyeS12/dreamtalk/tree/v0.1.92) · [本次更新内容](docs/releases/v0.1.92.md) · [完整设置说明](docs/SETTINGS_HANDBOOK.md) · [反馈问题](https://github.com/zhangyeS12/dreamtalk/issues)
 
 目前提供 **Windows 10 / 11 的 64 位体验版**。应用免费开源；聊天所用的模型服务需要你自己提供 API 密钥，服务商可能按使用量收费。当前版本仍在持续完善，欢迎反馈实际体验。
 
-0.1.91新增角色卡动态词条来源追踪、聊天上下文精确读取和后台任务诊断，并保留迁移链修复、消息编辑与多候选回复、聊天分支与检查点和高级世界书触发。消息旁可编辑、另建候选或从此分支，旧路线与原文保留；世界书可设置概率、递归、持续／冷却／延迟和历史插入位置。分支只切换聊天及相关上下文，保留原有世界状态和费用；真实升级与迁移仍待验收。
+0.1.92修复角色卡来源迁移后的启动校验，保留0.1.91新增的动态词条来源追踪、聊天上下文精确读取和后台任务诊断，以及消息编辑与多候选回复、聊天分支与检查点和高级世界书触发。真实旧存档升级仍需在应用中验收。
 
 0.1.78新增整份存档备份／恢复、卸载保留及升级保护，修复云端图片密钥的完整调用链、图库说明串改和联网图片保存问题。此前配音、表情与图片能力保持：角色可使用公共／专属表情，用户有自己的表情库；支持按聊天环境配图、可选联网与图片分析。用户已确认角色发送和新增表情识别有效，使用方法见[表情与图片](docs/CHAT_MEDIA.md)。
 
@@ -22,7 +22,7 @@ dreamtalk 是一款开源桌面应用。你可以创建自己的世界，导入�
 
 ### 1. 安装
 
-0.1.91 的完整 Windows 安装器、便携包、[GitHub Release](https://github.com/zhangyeS12/dreamtalk/releases/tag/v0.1.91)和固定更新频道已公开。当前可查看[源码标签](https://github.com/zhangyeS12/dreamtalk/tree/v0.1.91)与[发行记录](docs/maintenance/2026-10-26-release-0191.md)。安装器未在工程端运行，真实应用内升级仍需用户验收。
+0.1.92 的完整 Windows 安装器、便携包、[GitHub Release](https://github.com/zhangyeS12/dreamtalk/releases/tag/v0.1.92)和固定更新频道已公开。当前可查看[源码标签](https://github.com/zhangyeS12/dreamtalk/tree/v0.1.92)与[发行记录](docs/maintenance/2026-10-26-release-0192.md)。安装器未在工程端运行，真实应用内升级仍需用户验收。
 
 本版提供[数据与备份](docs/DATA_BACKUPS.md)，新版卸载保留数据，安装／升级前先备份。旧版卸载器若仍出现“删除应用程序数据”，不要选择；重要备份建议另存其他磁盘。备份／恢复及升级故障场景仍待实际验收。
 
