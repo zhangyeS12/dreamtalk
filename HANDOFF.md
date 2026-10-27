@@ -23,7 +23,8 @@
 | --- | --- | --- |
 | 世界书架、角色卡／世界书、卡内动态版本、身份 | WorldArchivePage.tsx／WorldContent.tsx／ProfileEditor.tsx → packages/api-client → adapters/http → application/content.py、world_content.py、infrastructure/persistence/character_evolution.py | [产品入口](PRODUCT.md)、[导入契约](docs/architecture/IMPORT_MODEL.md)、[聊天契约](docs/architecture/CHAT_MODEL.md) |
 | 设定身份与逐角色初始认识 | PlayerPersonaEditor.tsx → player_persona.py的预览／确认 → 世界范围持久化；直接／群聊及主动联系在输入前过滤 | [身份契约](docs/PLAYER_PERSONA.md) |
-| 消息编辑、候选与聊天路线；高级世界书 | ChatPathTools.tsx／LoreAdvancedControls.tsx → chat_paths.py／lore_activation.py → chat_path_queries.py／chat_lore.py；0057迁移（当前源码 head 为0059，公开包 head 为0058） | [入口与契约](docs/CHAT_PATHS_AND_LORE.md) |
+| 消息编辑、候选与聊天路线；高级世界书 | ChatPathTools.tsx／LoreAdvancedControls.tsx → chat_paths.py／lore_activation.py → chat_path_queries.py／chat_lore.py；0057迁移（当前源码 head 为0060，公开 0.1.92 包 head 为0059） | [入口与契约](docs/CHAT_PATHS_AND_LORE.md) |
+| 会话工作区、置顶与回复反馈 | ProductApp.tsx／useConversationDirectory.ts／ChatTranscript.tsx／GroupChat.tsx → chat_conversations.py、chat_messages.py、0060_chat_preferences；左侧图标导航、群聊／私聊置顶、未读排序和赞踩反馈共用当前世界／玩家范围 | 当前仅源码实现，待真实应用验收 |
 | 私聊、群聊与流式 | ProductApp.tsx／ChatTranscript.tsx／GroupChat.tsx／useReplyStream.ts → application/chat_reply.py、group_chat_reply.py | [聊天模型](docs/architecture/CHAT_MODEL.md)、[恢复说明](docs/CHAT_FUNCTIONAL_EXPERIENCE.md) |
 | 模型配置、费用和硬额度 | ModelSetup.tsx → Tauri llm_config.rs／凭据管道 → bootstrap/llm_runtime.py、application/chat_capacity.py、llm_execution.py | [生产组装](docs/architecture/LLM_PRODUCTION_COMPOSITION.md)、[账本](docs/architecture/LLM_ACCOUNTING.md) |
 | 记忆与RAG | LongChatMemoryPanel.tsx／ConversationMemoryPanel.tsx → long_chat_memory.py → persistence/long_chat_memory.py、semantic_chat_retrieval.py、recall_index.py | [上下文与召回](docs/CONTEXT_AND_RECALL.md)、[亲历召回](docs/EXPERIENCE_RECALL.md) |

@@ -434,6 +434,11 @@ export class CoreClient {
   groupConversations(worldId: string, signal?: AbortSignal): Promise<GroupChatConversation[]> {
     return this.contractRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/groups`, (value): value is GroupChatConversation[] => Array.isArray(value) && value.every(isGroupChatConversation), { signal });
   }
+  setConversationPinned(worldId: string, conversationId: string, pinned: boolean): Promise<{ pinned: boolean }> {
+    return this.contractRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/${encodeURIComponent(conversationId)}/pin`, (value): value is { pinned: boolean } =>
+      typeof value === "object" && value !== null && "pinned" in value && typeof value.pinned === "boolean",
+    { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pinned } satisfies Requests.HttpChatConversationsPinRequest) });
+  }
   createGroupConversation(worldId: string, importIds: string[], requestId: string): Promise<GroupChatConversation> {
     return this.contractRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/groups`, isGroupChatConversation, {
       method: "POST", headers: { "Content-Type": "application/json", "X-Request-Id": requestId },
@@ -449,6 +454,11 @@ export class CoreClient {
   }
   chatMessageSource(worldId: string, conversationId: string, messageId: string, signal?: AbortSignal): Promise<ChatMessagePage> {
     return this.contractRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}/source`, isChatMessagePage, { signal });
+  }
+  setMessageFeedback(worldId: string, conversationId: string, messageId: string, feedback: "up" | "down" | null): Promise<ChatMessage> {
+    return this.contractRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}/feedback`, isChatMessage, {
+      method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ feedback } satisfies Requests.HttpChatMessagesFeedbackRequest),
+    });
   }
   searchChatHistory(worldId: string, conversationId: string, query: string, beforePosition?: number, signal?: AbortSignal): Promise<ChatHistoryMatches> {
     return this.contractRequest(`/worlds/${encodeURIComponent(worldId)}/conversations/${encodeURIComponent(conversationId)}/messages/search`, isChatHistoryMatches, {

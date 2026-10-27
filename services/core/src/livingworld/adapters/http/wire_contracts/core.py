@@ -69,6 +69,7 @@ class ChatConversation(TypedDict):
     root_import_id: str
     character_name: str
     kind: Literal["direct"]
+    pinned: NotRequired[bool]
     read_only: NotRequired[bool]
 
 
@@ -82,6 +83,7 @@ class GroupChatConversation(TypedDict):
     conversation_id: str
     player_id: str
     kind: Literal["group"]
+    pinned: NotRequired[bool]
     read_only: NotRequired[bool]
     participants: list[GroupParticipant]
 

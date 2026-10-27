@@ -124,7 +124,8 @@ PLAYER_CARD_REVISION = "0056_player_cards"
 CHAT_PATH_REVISION = "0057_chat_paths"
 CHARACTER_EVOLUTION_REVISION = "0058_character_evolution"
 CHARACTER_EVOLUTION_PROVENANCE_REVISION = "0059_character_evolution_provenance"
-HEAD_REVISION = CHARACTER_EVOLUTION_PROVENANCE_REVISION
+CHAT_PREFERENCES_REVISION = "0060_chat_preferences"
+HEAD_REVISION = CHAT_PREFERENCES_REVISION
 
 # One reviewed linear chain replaces repeated hand-maintained suffix sets.
 _SUPPORTED_REVISIONS = (
@@ -186,7 +187,8 @@ _SUPPORTED_REVISIONS = (
     PLAYER_CARD_REVISION,
     CHAT_PATH_REVISION,
     CHARACTER_EVOLUTION_REVISION,
-    HEAD_REVISION,
+    CHARACTER_EVOLUTION_PROVENANCE_REVISION,
+    CHAT_PREFERENCES_REVISION,
 )
 _REVISION_RANGES = {
     revision: frozenset(_SUPPORTED_REVISIONS[index:])
@@ -425,6 +427,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
     pre_character_evolution_provenance_revision = (
         revision not in _REVISION_RANGES[CHARACTER_EVOLUTION_PROVENANCE_REVISION]
     )
+    pre_chat_preferences_revision = revision not in _REVISION_RANGES[CHAT_PREFERENCES_REVISION]
     pre_example_revision = revision not in _REVISION_RANGES[EXAMPLE_WORLD_REVISION]
     pre_recall_revision = revision not in _REVISION_RANGES[RECALL_REVISION]
     pre_location_policy_revision = revision not in _REVISION_RANGES[LOCATION_REVISION]
@@ -495,6 +498,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         CHAT_DISPATCH_REVISION,
         CHARACTER_EVOLUTION_REVISION,
         CHARACTER_EVOLUTION_PROVENANCE_REVISION,
+        CHAT_PREFERENCES_REVISION,
     }:
         _fail("alembic_revision_unsupported")
     # Through 0020, chat revisions only add tables. Validate each historical
@@ -698,6 +702,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
             pre_chat_path_revision=pre_chat_path_revision,
             pre_character_evolution_revision=pre_character_evolution_revision,
             pre_character_evolution_provenance_revision=pre_character_evolution_provenance_revision,
+            pre_chat_preferences_revision=pre_chat_preferences_revision,
             pre_example_revision=pre_example_revision,
             pre_chat_revision=pre_chat_revision,
             pre_message_revision=pre_message_revision,
@@ -811,6 +816,7 @@ def _validate_domain_shape(
     pre_chat_path_revision: bool = True,
     pre_character_evolution_revision: bool = True,
     pre_character_evolution_provenance_revision: bool = True,
+    pre_chat_preferences_revision: bool = True,
     pre_chat_revision: bool | None = None,
     pre_message_revision: bool | None = None,
     pre_dispatch_revision: bool | None = None,
@@ -1219,6 +1225,16 @@ def _validate_domain_shape(
                 and table.name == "character_card_evolution"
                 and column.name in {"quote", "confidence"}
             )
+            and not (
+                pre_chat_preferences_revision
+                and table.name == "chat_conversations"
+                and column.name == "pinned"
+            )
+            and not (
+                pre_chat_preferences_revision
+                and table.name == "chat_messages"
+                and column.name == "feedback"
+            )
         ]
         if actual != expected:
             _fail("alembic_schema_shape_mismatch")
@@ -1314,6 +1330,10 @@ def _validate_domain_shape(
                     CHAT_DISPATCH_REVISION,
                 }
                 and constraint.name == "ck_world_event_ledger_position"
+            )
+            and not (
+                pre_chat_preferences_revision
+                and constraint.name == "ck_chat_message_feedback"
             )
         }
         if (

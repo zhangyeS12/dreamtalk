@@ -20,6 +20,7 @@ from livingworld.application.chat_context import (
     private_chat_memories,
     recent_chat_transcript,
     recent_seen_group_messages,
+    reply_style_feedback,
 )
 from livingworld.application.chat_media import prompt_text
 from livingworld.application.chat_messages import (
@@ -277,6 +278,9 @@ class GroupChatContextBuilder(ChatContextSources):
                 for item in transcript
             ],
         }
+        feedback = reply_style_feedback(transcript, frozenset({speaker}))
+        if feedback:
+            data["reply_style_feedback"] = feedback
         if self._persona_reader is not None:
             identity = await self._persona_reader(current.conversation_id.world_id, player, speaker)
             if identity is not None:

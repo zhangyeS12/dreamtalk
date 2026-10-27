@@ -264,9 +264,10 @@ export type ChatMessage = {
   created_at_utc: string;
   story_sent_at_utc?: (string | null);
   media?: (ChatMediaAttachment | null);
+  feedback?: (("up" | "down") | null);
 };
 export function isChatMessage(value: unknown): value is ChatMessage {
-  return (isObject(value)) && (typeof value.message_id === "string") && (typeof value.turn_id === "string") && (typeof value.conversation_id === "string") && (isWireNumber(value.position)) && ((value.sender_kind === "player" || value.sender_kind === "character")) && (typeof value.sender_id === "string") && (typeof value.text === "string") && (typeof value.created_at_utc === "string") && ((!("story_sent_at_utc" in value) || ((typeof value.story_sent_at_utc === "string" || value.story_sent_at_utc === null)))) && ((!("media" in value) || ((isChatMediaAttachment(value.media) || value.media === null))));
+  return (isObject(value)) && (typeof value.message_id === "string") && (typeof value.turn_id === "string") && (typeof value.conversation_id === "string") && (isWireNumber(value.position)) && ((value.sender_kind === "player" || value.sender_kind === "character")) && (typeof value.sender_id === "string") && (typeof value.text === "string") && (typeof value.created_at_utc === "string") && ((!("story_sent_at_utc" in value) || ((typeof value.story_sent_at_utc === "string" || value.story_sent_at_utc === null)))) && ((!("media" in value) || ((isChatMediaAttachment(value.media) || value.media === null)))) && ((!("feedback" in value) || (((value.feedback === "up" || value.feedback === "down") || value.feedback === null))));
 }
 export type ChatReplyProgressVariant1 = {
   kind: ("preparing" | "selecting");
@@ -643,10 +644,11 @@ export type ChatConversation = {
   root_import_id: string;
   character_name: string;
   kind: ("direct");
+  pinned?: boolean;
   read_only?: boolean;
 };
 export function isChatConversation(value: unknown): value is ChatConversation {
-  return (isObject(value)) && (typeof value.conversation_id === "string") && (typeof value.player_id === "string") && (typeof value.character_id === "string") && (typeof value.root_import_id === "string") && (typeof value.character_name === "string") && ((value.kind === "direct")) && ((!("read_only" in value) || (typeof value.read_only === "boolean")));
+  return (isObject(value)) && (typeof value.conversation_id === "string") && (typeof value.player_id === "string") && (typeof value.character_id === "string") && (typeof value.root_import_id === "string") && (typeof value.character_name === "string") && ((value.kind === "direct")) && ((!("pinned" in value) || (typeof value.pinned === "boolean"))) && ((!("read_only" in value) || (typeof value.read_only === "boolean")));
 }
 export type GroupParticipant = {
   character_id: string;
@@ -660,11 +662,12 @@ export type GroupChatConversation = {
   conversation_id: string;
   player_id: string;
   kind: ("group");
+  pinned?: boolean;
   read_only?: boolean;
   participants: Array<GroupParticipant>;
 };
 export function isGroupChatConversation(value: unknown): value is GroupChatConversation {
-  return (isObject(value)) && (typeof value.conversation_id === "string") && (typeof value.player_id === "string") && ((value.kind === "group")) && ((!("read_only" in value) || (typeof value.read_only === "boolean"))) && ((Array.isArray(value.participants) && value.participants.every(item => isGroupParticipant(item))));
+  return (isObject(value)) && (typeof value.conversation_id === "string") && (typeof value.player_id === "string") && ((value.kind === "group")) && ((!("pinned" in value) || (typeof value.pinned === "boolean"))) && ((!("read_only" in value) || (typeof value.read_only === "boolean"))) && ((Array.isArray(value.participants) && value.participants.every(item => isGroupParticipant(item))));
 }
 export type StrictModel = object;
 export function isStrictModel(value: unknown): value is StrictModel { return isObject(value); }
@@ -1649,6 +1652,12 @@ export type HttpCharacterEvolutionEvolutionChange = {
 export function isHttpCharacterEvolutionEvolutionChange(value: unknown): value is HttpCharacterEvolutionEvolutionChange {
   return (isObject(value)) && (typeof value.field === "string") && (typeof value.scope === "string") && ((!("text" in value) || (typeof value.text === "string"))) && ((!("operation" in value) || (typeof value.operation === "string"))) && ((!("entry_id" in value) || ((typeof value.entry_id === "string" || value.entry_id === null)))) && ((!("locked" in value) || (typeof value.locked === "boolean"))) && ((!("source" in value) || (typeof value.source === "string")));
 }
+export type HttpChatConversationsPinRequest = {
+  pinned: boolean;
+};
+export function isHttpChatConversationsPinRequest(value: unknown): value is HttpChatConversationsPinRequest {
+  return (isObject(value)) && (typeof value.pinned === "boolean");
+}
 export type HttpChatMediaStickerEdit = {
   description: string;
 };
@@ -1676,6 +1685,12 @@ export type HttpChatMessagesChatHistorySearchRequest = {
 };
 export function isHttpChatMessagesChatHistorySearchRequest(value: unknown): value is HttpChatMessagesChatHistorySearchRequest {
   return (isObject(value)) && (typeof value.query === "string") && ((!("before_position" in value) || ((typeof value.before_position === "number" || value.before_position === null))));
+}
+export type HttpChatMessagesFeedbackRequest = {
+  feedback: (("up" | "down") | null);
+};
+export function isHttpChatMessagesFeedbackRequest(value: unknown): value is HttpChatMessagesFeedbackRequest {
+  return (isObject(value)) && (((value.feedback === "up" || value.feedback === "down") || value.feedback === null));
 }
 export type HttpContentAuthoringDraftReview = {
   draft: ContentEditorDraft;

@@ -4,7 +4,7 @@ import asyncio
 import json
 from contextlib import suppress
 from datetime import UTC
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 from anyio import CancelScope
@@ -63,6 +63,11 @@ class ChatHistorySearchRequest(BaseModel):
     before_position: int | None = Field(default=None, strict=True, ge=1, le=9223372036854775807)
 
 
+class FeedbackRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    feedback: Literal["up", "down"] | None
+
+
 def _view(message: ChatMessage) -> dict:
     return {
         "message_id": str(message.message_id.value),
@@ -77,6 +82,7 @@ def _view(message: ChatMessage) -> dict:
         "story_sent_at_utc": message.story_sent_at_utc.astimezone(UTC).isoformat()
         if message.story_sent_at_utc is not None
         else None,
+        "feedback": message.feedback,
     }
 
 
@@ -289,6 +295,26 @@ def chat_message_router(
             "items": [_view(message) for message in page.messages],
             "next_before_position": page.next_before_position,
         }
+
+    @router.patch(
+        "/{conversation_id}/messages/{message_id}/feedback", response_model=wire.ChatMessage
+    )
+    async def set_message_feedback(
+        world_id: UUID, conversation_id: UUID, message_id: UUID, body: FeedbackRequest
+    ) -> dict:
+        try:
+            message = await service.set_feedback(
+                ConversationId(WorldId(world_id), conversation_id),
+                MessageId(WorldId(world_id), message_id),
+                body.feedback,
+            )
+        except EntityNotFoundError as error:
+            if str(error) == "selected_player_required":
+                raise HTTPException(409, "selected_player_required") from None
+            raise HTTPException(404, "chat_feedback_message_not_found") from None
+        except ValueError:
+            raise HTTPException(422, "chat_feedback_invalid") from None
+        return _view(message)
 
     @router.get(
         "/{conversation_id}/messages/{message_id}/source", response_model=wire.ChatMessagePage

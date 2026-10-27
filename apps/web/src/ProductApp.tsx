@@ -154,14 +154,29 @@ function WorldWorkspaceContent({ client, initialWorldId, initialTab, onArchive }
 
   const title = tabs.find(item => item.id === tab)?.label ?? "聊天";
   const directoryQuery = conversationSearch.trim().toLocaleLowerCase();
-  const matchingConversations = conversations.filter(item => item.character_name.toLocaleLowerCase().includes(directoryQuery));
-  const matchingGroups = groups.filter(item => item.participants.some(person => person.character_name.toLocaleLowerCase().includes(directoryQuery)));
+  const activityRank = (conversationId: string) => unread.value?.items.find(item => item.conversation_id === conversationId)?.latest_position ?? 0;
+  const sortDirectory = <T extends { conversation_id: string; pinned?: boolean }>(items: T[]) => [...items].sort((left, right) =>
+    Number(Boolean(right.pinned)) - Number(Boolean(left.pinned))
+    || Number(unread.unread(right.conversation_id)) - Number(unread.unread(left.conversation_id))
+    || Number(activityRank(right.conversation_id)) - Number(activityRank(left.conversation_id))
+    || left.conversation_id.localeCompare(right.conversation_id));
+  const matchingConversations = sortDirectory(conversations.filter(item => item.character_name.toLocaleLowerCase().includes(directoryQuery)));
+  const matchingGroups = sortDirectory(groups.filter(item => item.participants.some(person => person.character_name.toLocaleLowerCase().includes(directoryQuery))));
   const chatAvatars = useChatAvatars(client, worldId, [...conversations.map(item => item.root_import_id), ...groups.flatMap(item => item.participants.map(person => person.root_import_id))], tab === "chats");
   const pageHint = { chats: "与角色交流，收集世界的片段", contacts: "角色档案、所属阵营与相识关系", settings: "让这个世界按照你的节奏运行", me: "你在这里的称呼与身份" }[tab];
   const selectedConversation = conversations.find(item => item.conversation_id === selectedConversationId);
   const selectedGroup = groups.find(item => item.conversation_id === selectedGroupId);
   const discussEvent = (conversationId: string, kind: "direct" | "group") => {
     if (events.discuss(conversationId)) directory.select(kind, conversationId);
+  };
+  const togglePinned = async (kind: "direct" | "group", conversationId: string, pinned: boolean) => {
+    if (!selectedPlayer) return;
+    try {
+      await client.setConversationPinned(worldId, conversationId, pinned);
+      directory.setPinned({ worldId, playerId: selectedPlayer }, kind, conversationId, pinned);
+    } catch {
+      setError("会话置顶状态未能保存，请稍后重试。");
+    }
   };
   const openChatModelSettings = () => {
     if (dirty.chat && !window.confirm("当前会话有未发送的草稿，是否离开并打开模型设置？")) return;
@@ -206,8 +221,8 @@ function WorldWorkspaceContent({ client, initialWorldId, initialTab, onArchive }
         {unread.error && <div className="thread-hint" role="status">新消息提示暂未更新。<button type="button" className="text-action" onClick={unread.refresh}>重新读取消息提示</button></div>}
         {conversationsFailed && <div className="thread-hint" role="alert"><p>会话读取未完成，已读取的会话仍保留。</p><button type="button" className="text-action" disabled={conversationsLoading} onClick={() => directory.refresh()}>重新读取会话</button></div>}
         {conversationsLoading && conversations.length === 0 && groups.length === 0 ? <p className="thread-hint">正在读取会话…</p> : conversationsFailed && conversations.length === 0 && groups.length === 0 ? null : conversations.length === 0 && groups.length === 0 ? <div className="empty-state"><h2>还没有会话</h2><p>在通讯录中选择角色，打开与他的会话。</p><button type="button" className="text-action" onClick={() => setTab("contacts")}>前往通讯录</button></div> : <>
-          {matchingGroups.map(item => <button key={item.conversation_id} type="button" className={`conversation-row ${!eventsOpen && selectedGroupId === item.conversation_id ? "selected" : ""}`} aria-pressed={!eventsOpen && selectedGroupId === item.conversation_id} onClick={() => { clearSuggestion(); directory.select("group", item.conversation_id); setEventsOpen(false); }}><span className="avatar group-avatar" aria-hidden="true"><WorkspaceIcon name="people" /></span><span className="row-copy"><strong>{item.participants.map(member => member.character_name).join("、")}{unread.unread(item.conversation_id) && <span className="unread-dot" role="img" aria-label="有未读角色消息" />}</strong><small>群聊 · {item.participants.length} 位角色</small></span></button>)}
-          {matchingConversations.map(item => <button key={item.conversation_id} type="button" className={`conversation-row ${!eventsOpen && selectedConversationId === item.conversation_id ? "selected" : ""}`} aria-pressed={!eventsOpen && selectedConversationId === item.conversation_id} onClick={() => { clearSuggestion(); directory.select("direct", item.conversation_id); setEventsOpen(false); }}><ContactAvatar name={item.character_name} url={chatAvatars[item.root_import_id]} /><span className="row-copy"><strong>{item.character_name}{unread.unread(item.conversation_id) && <span className="unread-dot" role="img" aria-label="有未读角色消息" />}</strong><small>{unread.unread(item.conversation_id) ? "新消息" : "私聊"}</small></span></button>)}
+          {matchingGroups.map(item => <div key={item.conversation_id} className={`conversation-row-wrap ${!eventsOpen && selectedGroupId === item.conversation_id ? "selected" : ""}`}><button type="button" className="conversation-row-main" aria-pressed={!eventsOpen && selectedGroupId === item.conversation_id} onClick={() => { clearSuggestion(); directory.select("group", item.conversation_id); setEventsOpen(false); }}><span className="avatar group-avatar" aria-hidden="true"><WorkspaceIcon name="people" /></span><span className="row-copy"><strong>{item.participants.map(member => member.character_name).join("、")}{unread.unread(item.conversation_id) && <span className="unread-dot" role="img" aria-label="有未读角色消息" />}</strong><small>群聊 · {item.participants.length} 位角色</small></span></button><button type="button" className={`conversation-pin ${item.pinned ? "active" : ""}`} aria-label={item.pinned ? "取消置顶群聊" : "置顶群聊"} aria-pressed={item.pinned} title={item.pinned ? "取消置顶" : "置顶会话"} onClick={() => void togglePinned("group", item.conversation_id, !item.pinned)}><WorkspaceIcon name="star" /></button></div>)}
+          {matchingConversations.map(item => <div key={item.conversation_id} className={`conversation-row-wrap ${!eventsOpen && selectedConversationId === item.conversation_id ? "selected" : ""}`}><button type="button" className="conversation-row-main" aria-pressed={!eventsOpen && selectedConversationId === item.conversation_id} onClick={() => { clearSuggestion(); directory.select("direct", item.conversation_id); setEventsOpen(false); }}><ContactAvatar name={item.character_name} url={chatAvatars[item.root_import_id]} /><span className="row-copy"><strong>{item.character_name}{unread.unread(item.conversation_id) && <span className="unread-dot" role="img" aria-label="有未读角色消息" />}</strong><small>{unread.unread(item.conversation_id) ? "新消息" : "私聊"}</small></span></button><button type="button" className={`conversation-pin ${item.pinned ? "active" : ""}`} aria-label={item.pinned ? `取消置顶${item.character_name}` : `置顶${item.character_name}`} aria-pressed={item.pinned} title={item.pinned ? "取消置顶" : "置顶会话"} onClick={() => void togglePinned("direct", item.conversation_id, !item.pinned)}><WorkspaceIcon name="star" /></button></div>)}
         </>}
 
         {directoryQuery && conversations.length + groups.length > 0 && matchingConversations.length + matchingGroups.length === 0 && <p className="thread-hint" role="status">没有匹配的会话。试试角色的名字。</p>}
@@ -275,6 +290,6 @@ function WorldWorkspaceContent({ client, initialWorldId, initialTab, onArchive }
         {selectedPlayer ? <p className="inline-hint">已绑定：{players.find(item => item.player_id === selectedPlayer)?.name ?? "当前玩家"}</p> : null}
       </section>{world && <ProfileEditor key={world.world_id} client={client} worldId={world.world_id} onDirtyChange={onDirty.worldProfile} />}</div>}
     </main>
-    <nav className="bottom-nav" aria-label="主导航">{tabs.map(item => <button key={item.id} type="button" className={tab === item.id ? "nav-item active" : "nav-item"} aria-current={tab === item.id ? "page" : undefined} onClick={() => { if (tab !== item.id && dirty.chat && !window.confirm("当前会话有未发送的草稿或正在处理的请求，是否离开会话？已发起的生成可能继续。")) return; setTab(item.id); }}><TabIcon name={item.id} /><span>{item.label}{item.id === "chats" && unread.hasUnread && <span className="unread-dot" role="img" aria-label="有未读角色消息" />}</span></button>)}</nav>
+    <nav className="bottom-nav" aria-label="主导航">{tabs.map(item => <button key={item.id} type="button" className={tab === item.id ? "nav-item active" : "nav-item"} aria-label={item.label} title={item.label} aria-current={tab === item.id ? "page" : undefined} onClick={() => { if (tab !== item.id && dirty.chat && !window.confirm("当前会话有未发送的草稿或正在处理的请求，是否离开会话？已发起的生成可能继续。")) return; setTab(item.id); }}><TabIcon name={item.id} /><span>{item.label}{item.id === "chats" && unread.hasUnread && <span className="unread-dot" role="img" aria-label="有未读角色消息" />}</span></button>)}</nav>
   </div>;
 }

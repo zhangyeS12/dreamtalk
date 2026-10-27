@@ -6,7 +6,7 @@ import hashlib
 import json
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Literal, Protocol
 
 if TYPE_CHECKING:
     from livingworld.application.chat_media import ChatMediaService
@@ -36,6 +36,7 @@ class ChatMessage:
     created_at_utc: datetime
     story_sent_at_utc: datetime | None = None
     media: dict | None = field(default=None, repr=False)
+    feedback: Literal["up", "down"] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -96,6 +97,9 @@ class ClaimedGroupTurn:
 
 
 class ChatMessageStore(Protocol):
+    async def set_feedback(
+        self, conversation_id: ConversationId, player_id: PlayerId, message_id: MessageId, feedback
+    ) -> ChatMessage: ...
     async def save_context_report(self, source, speaker, report) -> None: ...
 
     async def context_reports(self, conversation, turn_id, player) -> dict: ...
@@ -300,6 +304,15 @@ class ChatMessageService:
     async def list_messages(self, conversation_id: ConversationId) -> tuple[ChatMessage, ...]:
         return await self._store.list_for_player(
             conversation_id, await self._player(conversation_id)
+        )
+
+    async def set_feedback(
+        self, conversation_id: ConversationId, message_id: MessageId, feedback: str | None
+    ) -> ChatMessage:
+        if message_id.world_id != conversation_id.world_id or feedback not in {None, "up", "down"}:
+            raise ValueError("chat_feedback_invalid")
+        return await self._store.set_feedback(
+            conversation_id, await self._player(conversation_id), message_id, feedback
         )
 
     async def page_messages(

@@ -48,6 +48,7 @@ def _conversation(
         CharacterId(world_id, participant.character_id),
         participant.root_import_id,
         name,
+        pinned=row.pinned,
     )
 
 
@@ -98,6 +99,19 @@ class SqlAlchemyChatConversationStore:
                     dissolved_at=datetime.now(UTC),
                 )
             )
+
+    async def set_pinned(self, conversation_id, player_id, pinned: bool) -> None:
+        if conversation_id.world_id != player_id.world_id or type(pinned) is not bool:
+            raise EntityNotFoundError("chat_world_mismatch")
+        async with self._sessions() as session, session.begin():
+            await session.connection(execution_options={"livingworld_write_intent": True})
+            row = await session.get(
+                ChatConversationRecord,
+                (conversation_id.world_id.value, conversation_id.value),
+            )
+            if row is None or row.player_id != player_id.value:
+                raise EntityNotFoundError("conversation_not_found")
+            row.pinned = pinned
 
     async def bind_contact(self, character_id, root_import_id):
         async with self._sessions() as session, session.begin():
@@ -230,6 +244,7 @@ class SqlAlchemyChatConversationStore:
                 )
                 for participant, name in rows
             ),
+            pinned=row.pinned,
         )
 
     async def find_group(

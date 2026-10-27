@@ -4,6 +4,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException
+from pydantic import BaseModel, ConfigDict
 
 from livingworld.adapters.http import contracts as wire
 from livingworld.adapters.http.contracts import (
@@ -29,6 +30,11 @@ from livingworld.domain.contracts import API_PROTOCOL, RequestId
 from livingworld.domain.identifiers import WorldId
 
 
+class PinRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    pinned: bool
+
+
 def _view(conversation: ChatConversationValue) -> ChatConversation:
     return {
         "conversation_id": str(conversation.conversation_id.value),
@@ -37,6 +43,7 @@ def _view(conversation: ChatConversationValue) -> ChatConversation:
         "root_import_id": str(conversation.root_import_id),
         "character_name": conversation.character_name,
         "kind": "direct",
+        "pinned": conversation.pinned,
         "read_only": conversation.read_only,
     }
 
@@ -46,6 +53,7 @@ def _group_view(group: GroupChatConversationValue) -> GroupChatConversation:
         "conversation_id": str(group.conversation_id.value),
         "player_id": str(group.player_id.value),
         "kind": "group",
+        "pinned": group.pinned,
         "read_only": group.read_only,
         "participants": [
             {
@@ -105,6 +113,16 @@ def chat_conversation_router(service: ChatConversationService, authorize) -> API
             raise HTTPException(404, str(error)) from None
         except ChatTurnUnavailableError as error:
             raise HTTPException(409, str(error)) from None
+
+    @router.patch("/{conversation_id}/pin")
+    async def set_pin(world_id: UUID, conversation_id: UUID, body: PinRequest) -> dict:
+        try:
+            await service.set_pinned(WorldId(world_id), conversation_id, body.pinned)
+        except EntityNotFoundError as error:
+            if str(error) == "selected_player_required":
+                raise HTTPException(409, "selected_player_required") from None
+            raise HTTPException(404, "conversation_not_found") from None
+        return {"pinned": body.pinned}
 
     @router.post("/direct/{import_id}")
     async def open_direct(world_id: UUID, import_id: UUID) -> ChatConversation:

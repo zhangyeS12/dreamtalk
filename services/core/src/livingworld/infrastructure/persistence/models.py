@@ -19,6 +19,7 @@ from sqlalchemy import (
     Table,
     Text,
     UniqueConstraint,
+    false,
     text,
 )
 from sqlalchemy import (
@@ -1137,6 +1138,9 @@ class ChatConversationRecord(Base):
         UUIDStorage(), ForeignKey("world_content_imports.import_id"), nullable=True
     )
     created_at_utc: Mapped[datetime] = mapped_column(UTCTimestampStorage(), nullable=False)
+    pinned: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=false()
+    )
     __table_args__ = (
         ForeignKeyConstraint(["world_id", "player_id"], ["players.world_id", "players.player_id"]),
         CheckConstraint(
@@ -1235,6 +1239,7 @@ class ChatMessageRecord(Base):
     created_at_utc: Mapped[datetime] = mapped_column(UTCTimestampStorage(), nullable=False)
     story_sent_at_utc: Mapped[datetime | None] = mapped_column(UTCTimestampStorage())
     media_json: Mapped[str | None] = mapped_column(Text())
+    feedback: Mapped[str | None] = mapped_column(String(4), nullable=True)
     __table_args__ = (
         ForeignKeyConstraint(
             ["world_id", "conversation_id"],
@@ -1266,6 +1271,9 @@ class ChatMessageRecord(Base):
             "(sender_player_id IS NOT NULL AND sender_character_id IS NULL) OR "
             "(sender_player_id IS NULL AND sender_character_id IS NOT NULL)",
             name="ck_chat_message_sender",
+        ),
+        CheckConstraint(
+            "feedback IS NULL OR feedback IN ('up','down')", name="ck_chat_message_feedback"
         ),
     )
 

@@ -78,6 +78,7 @@ def _message(row: ChatMessageRecord) -> ChatMessage:
         row.created_at_utc,
         row.story_sent_at_utc,
         json.loads(row.media_json) if row.media_json else None,
+        row.feedback,
     )
 
 
@@ -280,6 +281,28 @@ class SqlAlchemyChatMessageStore(ChatContextReportMixin, ChatReplyRecoveryMixin)
                 )
             ).all()
             return tuple(_message(row) for row in rows)
+
+    async def set_feedback(
+        self, conversation_id: ConversationId, player_id: PlayerId, message_id: MessageId, feedback
+    ) -> ChatMessage:
+        if message_id.world_id != conversation_id.world_id or feedback not in {None, "up", "down"}:
+            raise ValueError("chat_feedback_invalid")
+        async with self._sessions() as session, session.begin():
+            await self._conversation(session, conversation_id, player_id)
+            row = await session.scalar(
+                select(ChatMessageRecord).where(
+                    active_message_clause(ChatMessageRecord),
+                    ChatMessageRecord.world_id == conversation_id.world_id.value,
+                    ChatMessageRecord.conversation_id == conversation_id.value,
+                    ChatMessageRecord.message_id == message_id.value,
+                    ChatMessageRecord.sender_character_id.is_not(None),
+                )
+            )
+            if row is None:
+                raise EntityNotFoundError("chat_feedback_message_not_found")
+            row.feedback = feedback
+            await session.flush()
+            return _message(row)
 
     async def seen_group_messages(
         self,

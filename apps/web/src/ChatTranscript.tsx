@@ -11,6 +11,7 @@ import { StreamingReplyBubble } from "./StreamingReplyBubble";
 import { useChatScroll } from "./useChatScroll";
 import { MessageMedia, StickerPicker } from "./ChatMedia";
 import { ChatMessageBody } from "./ChatMessageBody";
+import { MessageFeedback } from "./MessageFeedback";
 import { ChatHistoryPanel } from "./ChatHistoryPanel";
 import { LongChatMemoryPanel } from "./LongChatMemoryPanel";
 import { ConversationMemoryPanel } from "./ConversationMemoryPanel";
@@ -88,7 +89,7 @@ export function ChatTranscript({ client, worldId, playerId, conversation, avatar
               <div className="message-bubble">
                 <span className="message-sender">{own ? "我" : conversation.character_name}</span>
                 <>{!message.media?.only_media && <ChatMessageBody text={message.text} character={!own} />}<MessageMedia client={client} worldId={worldId} media={message.media} /></>
-                <MessageTime message={message} />{!conversation.read_only && <MessagePathActions message={message} disabled={sending || !!pendingSend || paths.busy || !paths.snapshot} onAction={setPathAction} />}{!own ? <><button type="button" className="text-action message-reference" onClick={() => setReferenceTurn(message.turn_id)}>本次参考内容</button>{!message.media?.only_media && <SpeechControls conversation={conversation.conversation_id} message={message.message_id} />}</> : null}
+                <MessageTime message={message} />{!conversation.read_only && <MessagePathActions message={message} disabled={sending || !!pendingSend || paths.busy || !paths.snapshot} onAction={setPathAction} />}{!own ? <><MessageFeedback client={client} worldId={worldId} conversationId={conversation.conversation_id} message={message} disabled={conversation.read_only} /><button type="button" className="text-action message-reference" onClick={() => setReferenceTurn(message.turn_id)}>本次参考内容</button>{!message.media?.only_media && <SpeechControls conversation={conversation.conversation_id} message={message.message_id} />}</> : null}
               </div>
             </li></Fragment>;
           })}{visibleStreamDraft ? <StreamingReplyBubble name={conversation.character_name} avatarUrl={avatarUrl} text={visibleStreamDraft.text} /> : null}</ol></>}

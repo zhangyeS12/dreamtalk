@@ -1,6 +1,6 @@
 import { useId, type ReactNode } from "react";
 
-export type WorkspaceIconName = "search" | "plus" | "orbit" | "arrow" | "book" | "people" | "refresh" | "close";
+export type WorkspaceIconName = "search" | "plus" | "orbit" | "arrow" | "book" | "people" | "refresh" | "close" | "star";
 
 export function WorkspaceIcon({ name }: { name: WorkspaceIconName }) {
   const paths = {
@@ -12,6 +12,7 @@ export function WorkspaceIcon({ name }: { name: WorkspaceIconName }) {
     people: <><circle cx="9" cy="8" r="3" /><path d="M3 20v-2a6 6 0 0 1 12 0v2M17 5a3 3 0 0 1 0 6m1 3a5 5 0 0 1 3 5" /></>,
     refresh: <><path d="M20 5v5h-5M4 19v-5h5M5.2 8a7.5 7.5 0 0 1 12-3L20 8M4 16l2.8 3a7.5 7.5 0 0 0 12-3" /></>,
     close: <path d="m6 6 12 12M6 18 18 6" />,
+    star: <path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-2.9-5.6 2.9 1.1-6.2L3 9.6l6.2-.9Z" />,
   };
   return <svg className="workspace-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
 }

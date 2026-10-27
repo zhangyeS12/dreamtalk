@@ -14,6 +14,7 @@ type Action =
   | { type: "groups-loaded"; scope: Scope; items: GroupChatConversation[] }
   | { type: "direct-opened"; scope: Scope; item: ChatConversation }
   | { type: "group-created"; scope: Scope; item: GroupChatConversation }
+  | { type: "pinned"; scope: Scope; kind: "direct" | "group"; id: string; pinned: boolean }
   | { type: "group-removed"; scope: Scope; id: string }
   | { type: "select"; selection: Selection }
   | { type: "search"; value: string };
@@ -42,6 +43,14 @@ function reduce(state: State, action: Action): State {
       selection: { kind: "direct", id: action.item.conversation_id }, groupSetupOpen: false };
     case "group-created": return { ...state, groups: upsert(state.groups, action.scope, action.item),
       selection: { kind: "group", id: action.item.conversation_id }, groupSetupOpen: false };
+    case "pinned": {
+      if (action.kind === "direct") {
+        if (!sameScope(state.direct, action.scope)) return state;
+        return { ...state, direct: { ...state.direct!, items: state.direct!.items.map(item => item.conversation_id === action.id ? { ...item, pinned: action.pinned } : item) } };
+      }
+      if (!sameScope(state.groups, action.scope)) return state;
+      return { ...state, groups: { ...state.groups!, items: state.groups!.items.map(item => item.conversation_id === action.id ? { ...item, pinned: action.pinned } : item) } };
+    }
     case "group-removed": return { ...state, groups: sameScope(state.groups, action.scope)
       ? { ...state.groups!, items: state.groups!.items.filter(item => item.conversation_id !== action.id) } : state.groups, selection: null };
     case "select": return { ...state, selection: action.selection, groupSetupOpen: false };
@@ -78,11 +87,12 @@ export function useConversationDirectory(client: CoreClient, worldId: string, pl
   const opened = useCallback((scope: Scope, item: ChatConversation) => dispatch({ type: "direct-opened", scope, item }), []);
   const created = useCallback((scope: Scope, item: GroupChatConversation) => dispatch({ type: "group-created", scope, item }), []);
   const removed = useCallback((scope: Scope, id: string) => dispatch({ type: "group-removed", scope, id }), []);
+  const setPinned = useCallback((scope: Scope, kind: "direct" | "group", id: string, pinned: boolean) => dispatch({ type: "pinned", scope, kind, id, pinned }), []);
   const scope = { worldId, playerId: playerId ?? "" };
   return { conversations: sameScope(state.direct, scope) ? state.direct!.items : [],
     groups: sameScope(state.groups, scope) ? state.groups!.items : [],
     selectedConversationId: state.selection?.kind === "direct" ? state.selection.id : null,
     selectedGroupId: state.selection?.kind === "group" ? state.selection.id : null,
     groupSetupOpen: state.groupSetupOpen, conversationsLoading: state.loading, conversationsFailed: state.failed,
-    conversationSearch: state.search, select, clearSelection, beginGroup, closeGroup, refresh, search, opened, created, removed };
+    conversationSearch: state.search, select, clearSelection, beginGroup, closeGroup, refresh, search, opened, created, removed, setPinned };
 }

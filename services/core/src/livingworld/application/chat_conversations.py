@@ -24,6 +24,7 @@ class ChatConversation:
     root_import_id: UUID
     character_name: str
     read_only: bool = False
+    pinned: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,11 +40,15 @@ class GroupChatConversation:
     player_id: PlayerId
     participants: tuple[GroupChatParticipant, ...]
     read_only: bool = False
+    pinned: bool = False
 
 
 class ChatConversationStore(Protocol):
     async def dissolve_group(
         self, conversation_id: ConversationId, player_id: PlayerId
+    ) -> None: ...
+    async def set_pinned(
+        self, conversation_id: ConversationId, player_id: PlayerId, pinned: bool
     ) -> None: ...
     async def bind_contact(self, character_id: CharacterId, root_import_id: UUID) -> None: ...
     async def activity_contacts(self, world_id: WorldId) -> tuple[GroupChatParticipant, ...]: ...
@@ -102,6 +107,12 @@ class ChatConversationService:
         if player is None:
             raise EntityNotFoundError("selected_player_required")
         await self._store.dissolve_group(ConversationId(world_id, conversation_id), player)
+
+    async def set_pinned(self, world_id: WorldId, conversation_id: UUID, pinned: bool) -> None:
+        player = await self._players.selected_player(world_id)
+        if player is None:
+            raise EntityNotFoundError("selected_player_required")
+        await self._store.set_pinned(ConversationId(world_id, conversation_id), player, pinned)
 
     async def _ensure_character(self, world_id: WorldId, root: AcceptedWorldContent) -> CharacterId:
         character_id = CharacterId(world_id, uuid5(root.import_id, "livingworld:chat-character:v1"))

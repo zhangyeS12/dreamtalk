@@ -73,6 +73,7 @@ class ChatMessage(TypedDict):
     created_at_utc: str
     story_sent_at_utc: NotRequired[str | None]
     media: NotRequired[ChatMediaAttachment | None]
+    feedback: NotRequired[Literal["up", "down"] | None]
 
 
 @with_config(ConfigDict(extra="allow"))
