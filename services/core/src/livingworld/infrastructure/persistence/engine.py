@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 
-from sqlalchemy import event
+from sqlalchemy import create_engine, event
 from sqlalchemy.engine import URL, Connection
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async_engine
 
@@ -71,12 +72,49 @@ class Database:
 
         self._sessions = async_sessionmaker(self.engine, expire_on_commit=False)
 
+    def _initialize_sync(self) -> None:
+        """Run the one-time schema gate outside aiosqlite's worker thread.
+
+        Alembic operates on synchronous SQLAlchemy connections. Running the
+        legacy upgrade chain through an async connection can leave an older
+        database waiting behind the driver worker while the desktop startup
+        deadline expires. No application sessions exist until this gate ends.
+        """
+        migration_engine = create_engine(
+            URL.create("sqlite", database=str(self.path)), hide_parameters=True
+        )
+
+        @event.listens_for(migration_engine, "connect")
+        def configure_migration_sqlite(dbapi_connection: object, _record: object) -> None:
+            dbapi_connection.isolation_level = None  # type: ignore[attr-defined]
+            cursor = dbapi_connection.cursor()  # type: ignore[attr-defined]
+            cursor.execute("PRAGMA busy_timeout = 5000")
+            # Alembic's SQLite batch migrations may rebuild tables referenced by
+            # other tables. This short-lived connection is discarded before
+            # normal async connections enable foreign keys.
+            cursor.execute("PRAGMA foreign_keys = OFF")
+            cursor.execute("PRAGMA recursive_triggers = ON")
+            cursor.execute("PRAGMA journal_mode = WAL")
+            mode = cursor.fetchone()[0]
+            cursor.close()
+            if str(mode).lower() != "wal":
+                raise RuntimeError("wal_unavailable")
+
+        @event.listens_for(migration_engine, "begin")
+        def begin_migration_transaction(connection: Connection) -> None:
+            connection.exec_driver_sql("BEGIN")
+
+        try:
+            with migration_engine.begin() as connection:
+                connection.exec_driver_sql(
+                    "CREATE VIRTUAL TABLE IF NOT EXISTS temp.fts5_probe USING fts5(value)"
+                )
+                upgrade(connection)
+        finally:
+            migration_engine.dispose()
+
     async def initialize(self) -> None:
-        async with self.engine.begin() as connection:
-            await connection.exec_driver_sql(
-                "CREATE VIRTUAL TABLE IF NOT EXISTS temp.fts5_probe USING fts5(value)"
-            )
-            await connection.run_sync(upgrade)
+        await asyncio.to_thread(self._initialize_sync)
 
     def store(self) -> PersistenceStore:
         return PersistenceStore(self._sessions)

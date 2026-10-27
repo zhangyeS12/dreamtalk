@@ -13,6 +13,7 @@
 - 隔离 SQLite 从 `0059_character_evolution_provenance` 升级到 `0060_chat_preferences`，严格 schema 校验通过。
 - Python compileall、Ruff、Pyright、前端 lint／TypeScript 和 API 契约生成检查通过。
 - 追加修复世界书架启动门闩：世界列表读取完成后即可进入书架，封面图片作为可选资源后台加载；封面请求卡住或失败不再把整个启动判为失败。前端 lint／TypeScript 和本机 build-only 重新通过。
+- 追加修复旧存档启动迁移：Alembic 使用短生命周期同步 SQLite 连接完成 `0049 → 0060`，迁移连接暂时关闭外键检查以支持 SQLite 表重建，正常异步连接仍保持外键检查；隔离副本升级和完整性检查通过。
 
 ## 验收边界
 
