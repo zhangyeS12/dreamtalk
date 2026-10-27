@@ -12,7 +12,8 @@
 
 - 隔离 SQLite 从 `0059_character_evolution_provenance` 升级到 `0060_chat_preferences`，严格 schema 校验通过。
 - Python compileall、Ruff、Pyright、前端 lint／TypeScript 和 API 契约生成检查通过。
+- 追加修复世界书架启动门闩：世界列表读取完成后即可进入书架，封面图片作为可选资源后台加载；封面请求卡住或失败不再把整个启动判为失败。前端 lint／TypeScript 和本机 build-only 重新通过。
 
 ## 验收边界
 
-本轮只完成源码和隔离检查，未运行真实应用、真实模型或真实存档。旧用户库升级后置顶状态、反馈保留、主动联系排序和窄窗口布局仍待用户验收。
+本轮只完成源码、隔离检查和本机 build-only，未运行真实应用、真实模型或真实存档。旧用户库升级后置顶状态、反馈保留、主动联系排序、窄窗口布局和启动恢复仍待用户验收。

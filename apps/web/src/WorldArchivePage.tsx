@@ -103,11 +103,13 @@ export function WorldArchivePage({ client, initialWorldId, onEnter, displayTime,
     return () => { initialActive = false; initialRequest.abort(); active.current = false; window.clearInterval(timer); };
   }, [refresh]);
   useEffect(() => {
-    if (!onStartupStatus || startupReported.current || loading || !startupFailed && !covers.ready) return;
-    // The real books/covers have committed. Avoid waiting for animation frames:
-    // hidden autostart windows may not receive them at all.
+    if (!onStartupStatus || startupReported.current || loading) return;
+    // Covers are optional presentation data. The archive can open with its
+    // text appearance while artwork continues loading or falls back.
+    // Avoid waiting for animation frames: hidden autostart windows may not
+    // receive them at all.
     startupReported.current = true; onStartupStatus(!startupFailed);
-  }, [onStartupStatus, loading, covers.ready, startupFailed]);
+  }, [onStartupStatus, loading, startupFailed]);
   useEffect(() => {
     if (!isTauri()) return;
     const report = () => void invoke("report_desktop_presence", { worldId: null, visible: false }).catch(() => undefined);
