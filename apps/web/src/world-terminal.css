@@ -308,7 +308,8 @@
 
 @media (min-width: 1600px) {
   .world-workspace .chat-workspace { grid-template-columns: 320px minmax(0, 1fr); }
-  .world-workspace .app-content, .world-workspace .app-header { padding-inline: 40px; }
+  .world-workspace .app-content { padding-left: 92px; padding-right: 40px; }
+  .world-workspace .app-header { padding-inline: 40px; }
 }
 @media (max-width: 1100px) {
   .world-workspace .app-content { padding-inline: 16px; }
@@ -393,7 +394,7 @@
   .world-workspace .journal-refresh { align-items: flex-start; }
 }
 @media (min-width: 701px) {
-  .world-workspace.world-tab-contacts .app-content { padding-inline: 16px; }
+  .world-workspace.world-tab-contacts .app-content { padding-left: 92px; padding-right: 16px; }
   .world-workspace .contacts-workspace { grid-template-columns: 220px minmax(0, 1fr); }
   .world-workspace.world-tab-contacts:not(.contacts-editing) .contacts-workspace { min-height: 0; }
   .world-workspace .contacts-workspace .directory-heading { padding: 12px 8px 14px; }
