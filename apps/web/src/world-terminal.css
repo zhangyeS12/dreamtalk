@@ -130,12 +130,12 @@
 .world-workspace .message-content blockquote { border-left-width: 1px; }
 .world-workspace .message-bubble time { color: var(--muted); font-size: .6875rem; }
 .world-workspace .message-reference { color: var(--muted); font-size: .6875rem; padding: 5px 0 0; font-weight: 400; }
-.world-workspace .message-feedback { display: flex; align-items: center; gap: 3px; padding-top: 7px; }
-.world-workspace .message-feedback button { display: grid; place-items: center; width: 26px; height: 24px; padding: 4px; border: 0; border-radius: 5px; color: var(--muted); background: transparent; }
-.world-workspace .message-feedback button:hover:not(:disabled), .world-workspace .message-feedback button:focus-visible { color: var(--blue); background: var(--raised); }
-.world-workspace .message-feedback button.active { color: var(--gold); background: var(--green-soft); }
-.world-workspace .message-feedback button svg { width: 14px; height: 14px; }
-.world-workspace .message-feedback button:last-of-type svg { transform: rotate(180deg); }
+.world-workspace .message-feedback { display: flex; align-items: center; gap: 5px; padding-top: 8px; }
+.world-workspace .message-feedback button { display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 1px solid transparent; border-radius: 8px; color: var(--muted); background: transparent; }
+.world-workspace .message-feedback button:hover:not(:disabled), .world-workspace .message-feedback button:focus-visible { color: var(--ink); background: var(--raised); border-color: var(--control-line); }
+.world-workspace .message-feedback button.active { color: var(--gold); background: var(--green-soft); border-color: color-mix(in oklch, var(--gold) 45%, transparent); }
+.world-workspace .message-feedback button.down.active { color: var(--danger); border-color: color-mix(in oklch, var(--danger) 45%, transparent); }
+.world-workspace .message-feedback button svg { width: 16px; height: 16px; stroke-width: 1.8; }
 .world-workspace .message-feedback span { color: var(--danger); font-size: .625rem; margin-left: 4px; }
 .world-workspace .message-day { display: flex; align-items: center; justify-content: center; gap: 16px; list-style: none; color: var(--muted); font-size: .6875rem; margin: 4px 0 6px; }
 .world-workspace .message-day::before, .world-workspace .message-day::after { content: ""; height: 1px; width: 32px; background: var(--line); }

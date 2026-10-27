@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { useDesktopUpdateBlock } from "./DesktopUpdates";
 import { CoreClient, CoreRequestError, type ChatMediaAttachment, type ChatMediaSettings, type StickerEntry, type StickerLibrary } from "@dreamtalk/api-client";
+import { Smile } from "lucide-react";
 import "./chat-media.css";
 
 function failureText(error: unknown): string {
@@ -83,7 +84,7 @@ export function StickerPicker({ client, worldId, selected, onSelect, disabled }:
     return () => { active = false; controller.abort(); window.clearTimeout(timer); };
   }, [client, worldId, open, query, page, reload]);
   return <div className="sticker-picker">
-    <div className="profile-actions"><button type="button" className="text-action" aria-expanded={open} disabled={disabled} onClick={() => setOpen(value => !value)}>表情</button>{selected && <><span>已选：{selected.description || "表情"}</span><button type="button" className="text-action" disabled={disabled} onClick={() => onSelect(null)}>取消选择</button></>}</div>
+    <div className="profile-actions"><button type="button" className="text-action sticker-picker-trigger" aria-label="表情" title="打开表情包" aria-expanded={open} disabled={disabled} onClick={() => setOpen(value => !value)}><Smile aria-hidden="true" /><span className="sr-only">表情</span></button>{selected && <><span>已选：{selected.description || "表情"}</span><button type="button" className="text-action" disabled={disabled} onClick={() => onSelect(null)}>取消选择</button></>}</div>
     {open && <div className="sticker-picker-body">
       <label className="field"><span>我的表情</span><input type="search" value={query} onChange={event => { setQuery(event.target.value); setPage(0); }} placeholder="搜索说明…" /></label>
       {error && <><p className="app-alert" role="alert">{error}</p><button type="button" disabled={disabled || loading} onClick={() => setReload(value => value + 1)}>重新读取表情</button></>}

@@ -10,6 +10,9 @@
 .sticker-grid img { max-height: 90px; }
 .media-placeholder { width: 80px; height: 80px; background: var(--recessed); border-radius: 6px; }
 .sticker-picker-body { max-height: 420px; overflow: auto; background: var(--recessed); padding: 1rem; border-radius: 8px; display: grid; gap: .75rem; }
+.sticker-picker-trigger { display: inline-grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 1px solid transparent; border-radius: 8px; }
+.sticker-picker-trigger:hover:not(:disabled), .sticker-picker-trigger:focus-visible { color: var(--ink); background: var(--raised); border-color: var(--control-line); }
+.sticker-picker-trigger svg { width: 18px; height: 18px; stroke-width: 1.8; }
 .sticker-management-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); gap: 1.5rem; }
 .sticker-editor { display: grid; align-content: start; gap: .65rem; padding-block: .75rem; border-bottom: 1px solid var(--line); }
 .sticker-editor .media-image-frame { height: 140px; }
