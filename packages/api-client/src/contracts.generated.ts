@@ -1248,6 +1248,12 @@ export type DissolveGroupResult = {
 export function isDissolveGroupResult(value: unknown): value is DissolveGroupResult {
   return (isObject(value)) && (typeof value.dissolved === "boolean");
 }
+export type PinConversationResult = {
+  pinned: boolean;
+};
+export function isPinConversationResult(value: unknown): value is PinConversationResult {
+  return (isObject(value)) && (typeof value.pinned === "boolean");
+}
 export type CreateWorldResult = {
   world_id: string;
 };

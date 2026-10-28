@@ -54,9 +54,7 @@ def upgrade():
             ["world_id", "digest"],
             ["world_cover_images.world_id", "world_cover_images.digest"],
         ),
-        sa.CheckConstraint(
-            f"expression IN ({EXPRESSIONS})", name="ck_chat_visual_expression"
-        ),
+        sa.CheckConstraint(f"expression IN ({EXPRESSIONS})", name="ck_chat_visual_expression"),
         sa.CheckConstraint("length(digest) = 64", name="ck_chat_visual_expression_digest"),
     )
     op.create_index(

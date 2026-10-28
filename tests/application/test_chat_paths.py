@@ -412,12 +412,9 @@ def test_running_or_unknown_reply_blocks_changes_and_export_switch_is_rejected(t
 
 
 def test_0056_upgrade_preserves_all_original_rows_and_backfills_memory_origin(tmp_path):
+    from legacy_store import rewind_store
     from livingworld.application.long_chat_memory import MemoryAnnotation
-    from livingworld.infrastructure.persistence.migration import (
-        CHARACTER_EVOLUTION_TABLES,
-        CHAT_PATH_TABLES,
-        HEAD_REVISION,
-    )
+    from livingworld.infrastructure.persistence.migration import HEAD_REVISION
     from sqlalchemy import text
 
     async def run():
@@ -439,28 +436,15 @@ def test_0056_upgrade_preserves_all_original_rows_and_backfills_memory_origin(tm
                     ),
                 ),
             )
-            async with db.engine.begin() as connection:
-                # 0057 only adds tables. Removing those tables recreates the
-                # exact previous schema while retaining synthetic legacy content.
-                for name in (
-                    "chat_lore_activations",
-                    "chat_memory_origins",
-                    "chat_path_operations",
-                    "chat_path_turns",
-                    "chat_path_messages",
-                    "chat_path_states",
-                    "chat_paths",
-                ):
-                    assert name in CHAT_PATH_TABLES
-                    await connection.execute(text(f'DROP TABLE "{name}"'))
-                for name in CHARACTER_EVOLUTION_TABLES:
-                    await connection.execute(text(f'DROP TABLE "{name}"'))
-                await connection.execute(
-                    text("UPDATE alembic_version SET version_num='0056_player_cards'")
+            # Rewrite the store exactly as 0.1.x at 0056 saved it, keeping the rows.
+            await db.engine.dispose()
+            rewind_store(tmp_path / "runtime.sqlite3", "0056_player_cards")
+            async with db.engine.connect() as connection:
+                result = await connection.execute(
+                    text("SELECT * FROM chat_messages ORDER BY position")
                 )
-                before = (
-                    await connection.execute(text("SELECT * FROM chat_messages ORDER BY position"))
-                ).all()
+                columns = ", ".join(f'"{name}"' for name in result.keys())
+                before = result.all()
                 old_memories = (
                     await connection.execute(text("SELECT * FROM long_chat_memories"))
                 ).all()
@@ -468,7 +452,9 @@ def test_0056_upgrade_preserves_all_original_rows_and_backfills_memory_origin(tm
             await db.initialize()
             async with db.engine.connect() as connection:
                 assert (
-                    await connection.execute(text("SELECT * FROM chat_messages ORDER BY position"))
+                    await connection.execute(
+                        text(f"SELECT {columns} FROM chat_messages ORDER BY position")
+                    )
                 ).all() == before
                 assert (await connection.execute(text("PRAGMA foreign_key_check"))).all() == []
                 assert (

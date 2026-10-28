@@ -13,10 +13,12 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
+from legacy_store import database_at
 from livingworld.application.content import ContentService
 from livingworld.infrastructure import save_safety as safety
 from livingworld.infrastructure import save_slots as slots
 from livingworld.infrastructure.persistence import Database
+from livingworld.infrastructure.persistence.migration import HEAD_REVISION
 
 
 @contextmanager
@@ -78,19 +80,27 @@ def seed(app, label, draft=None):
         )
         # The extra records are intentionally synthetic; their full rows must round-trip.
         connection.execute(
-            "INSERT INTO chat_conversations VALUES (?,?,?,'group',NULL,?)",
+            "INSERT INTO chat_conversations"
+            " (world_id, conversation_id, player_id, kind, direct_root_import_id, created_at_utc)"
+            " VALUES (?,?,?,'group',NULL,?)",
             (world, conversation, player, stamp),
         )
         connection.execute(
-            "INSERT INTO chat_turns VALUES (?,?,?,?,?,100,'pending',?,'player')",
+            "INSERT INTO chat_turns (world_id, turn_id, conversation_id, request_id, fingerprint,"
+            " token_ceiling, status, created_at_utc, kind)"
+            " VALUES (?,?,?,?,?,100,'pending',?,'player')",
             (world, turn, conversation, uuid4().hex, "a" * 64, stamp),
         )
         connection.execute(
-            "INSERT INTO chat_messages VALUES (?,?,?,?,1,?,NULL,?, ?,NULL,NULL)",
+            "INSERT INTO chat_messages (world_id, message_id, conversation_id, turn_id, position,"
+            " sender_player_id, sender_character_id, text, created_at_utc, story_sent_at_utc,"
+            " media_json) VALUES (?,?,?,?,1,?,NULL,?,?,NULL,NULL)",
             (world, message, conversation, turn, player, f"合成聊天 {label}", stamp),
         )
         connection.execute(
-            "INSERT INTO llm_budgets VALUES (?,1,'hard','USD','10',?,?,NULL,NULL,NULL,0,?,?)",
+            "INSERT INTO llm_budgets (budget_id, enabled, mode, currency, limit_amount, start_utc,"
+            " end_utc, purpose, provider_id, model_id, revision, created_at_utc, updated_at_utc)"
+            " VALUES (?,1,'hard','USD','10',?,?,NULL,NULL,NULL,0,?,?)",
             (uuid4().hex, "2026-10-01", "2026-11-01", stamp, stamp),
         )
     for folder in ("avatars", "world-covers", "chat-media", "speech", "content-assets"):
@@ -334,32 +344,14 @@ def test_corrupt_archive_never_changes_current_data(isolated):
 
 def test_previous_schema_migrates_only_working_copy(isolated):
     app = configured(isolated)
-    with connect(app / "data/runtime.sqlite3") as connection:
-        for table in (
-            "example_world_setups",
-            "world_player_personas",
-            "world_styles",
-            "world_player_cards",
-            "chat_lore_activations",
-            "chat_paths",
-            "chat_path_states",
-            "chat_path_messages",
-            "chat_path_turns",
-            "chat_path_operations",
-            "chat_memory_origins",
-            "character_card_evolution",
-        ):
-            connection.execute(f'DROP TABLE "{table}"')
-        connection.execute(
-            "UPDATE alembic_version SET version_num='0052_sticker_entry_description'"
-        )
+    database_at(app / "data/runtime.sqlite3", "0052_sticker_entry_description")
     write_slot(app, 1)
     sealed = slots._checked_archive(
         isolated / "saves", slots._catalog(isolated / "saves")["slots"][1]
     )
     digest = safety.digest(sealed)
     slots.load(app, "0.1.81", 1, slots.status()["revision"])
-    assert safety.metadata(app / "data")["revisions"] == ["0058_character_evolution"]
+    assert safety.metadata(app / "data")["revisions"] == [HEAD_REVISION]
     assert safety.digest(sealed) == digest
 
 

@@ -10,7 +10,21 @@ from livingworld.infrastructure.persistence.migration import (
     STICKER_DESCRIPTION_REVISION,
     _alembic_config,
 )
-from sqlalchemy import text
+from sqlalchemy import column, table, text
+
+
+def _bound(record, values):
+    """Apply each mapped column's own type conversion (UUIDs, datetimes)."""
+    columns = record.__table__.columns
+    return {
+        name: columns[name].type.bind_processor(_DIALECT)(value)
+        if columns[name].type.bind_processor(_DIALECT)
+        else value
+        for name, value in values.items()
+    }
+
+
+_DIALECT = __import__("sqlalchemy.dialects.sqlite", fromlist=["dialect"]).dialect()
 
 
 async def seed_legacy_content(connection):
@@ -22,7 +36,11 @@ async def seed_legacy_content(connection):
     timestamp = datetime(2026, 10, 1, tzinfo=UTC)
 
     async def add(record, **values):
-        await connection.execute(record.__table__.insert().values(world_id=world, **values))
+        # A bare table with only the given columns: today's ORM defaults would
+        # otherwise insert into columns the old schema does not have yet.
+        values = {"world_id": world, **values}
+        legacy = table(record.__tablename__, *(column(name) for name in values))
+        await connection.execute(legacy.insert().values(**_bound(record, values)))
 
     await add(models.PlayerRecord, player_id=player, name="Synthetic player", revision=1)
     await add(models.CharacterRecord, character_id=character, name="Synthetic friend", revision=1)
@@ -136,11 +154,12 @@ def test_0052_upgrade_only_adds_example_receipts_and_preserves_existing_rows(tmp
                     .scalars()
                     .all()
                 )
-                before = {
-                    name: (await connection.execute(text(f'SELECT * FROM "{name}"'))).all()
-                    for name in tables
-                    if name != "alembic_version"
-                }
+                before = {}
+                for name in tables:
+                    if name == "alembic_version":
+                        continue
+                    result = await connection.execute(text(f'SELECT * FROM "{name}"'))
+                    before[name] = (list(result.keys()), result.all())
             await database.initialize()
             await database.initialize()
             async with database.engine.connect() as connection:
@@ -150,8 +169,11 @@ def test_0052_upgrade_only_adds_example_receipts_and_preserves_existing_rows(tmp
                 assert (
                     await connection.execute(text("SELECT COUNT(*) FROM example_world_setups"))
                 ).scalar_one() == 0
-                for name, rows in before.items():
-                    assert (await connection.execute(text(f'SELECT * FROM "{name}"'))).all() == rows
+                # Later revisions may append columns; every original value must survive.
+                for name, (columns, rows) in before.items():
+                    selected = ", ".join(f'"{column}"' for column in columns)
+                    query = text(f'SELECT {selected} FROM "{name}"')
+                    assert (await connection.execute(query)).all() == rows
         finally:
             await database.close()
 

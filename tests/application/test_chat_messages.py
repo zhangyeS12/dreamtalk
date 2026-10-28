@@ -369,6 +369,7 @@ def test_chat_transcript_http_is_authenticated_and_bound_to_selected_world_playe
                     "media": None,
                     "created_at_utc": sent.message.created_at_utc.isoformat(),
                     "story_sent_at_utc": None,
+                    "feedback": None,
                 }
             ]
             timestamp = datetime.fromisoformat(response.json()[0]["created_at_utc"])

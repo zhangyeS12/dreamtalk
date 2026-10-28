@@ -203,11 +203,7 @@ class SqlAlchemyChatConversationStore:
                 ChatConversationRecord,
                 (conversation_id.world_id.value, conversation_id.value),
             )
-            if (
-                row is None
-                or row.player_id != player_id.value
-                or row.kind != "direct"
-            ):
+            if row is None or row.player_id != player_id.value or row.kind != "direct":
                 return None
             return await self._read(session, conversation_id.world_id, conversation_id.value)
 

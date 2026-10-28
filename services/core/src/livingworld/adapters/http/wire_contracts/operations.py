@@ -114,6 +114,11 @@ class DissolveGroupResult(TypedDict):
 
 
 @with_config(ConfigDict(extra="allow"))
+class PinConversationResult(TypedDict):
+    pinned: bool
+
+
+@with_config(ConfigDict(extra="allow"))
 class CreateWorldResult(TypedDict):
     world_id: str
 

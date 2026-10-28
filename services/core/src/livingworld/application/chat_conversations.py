@@ -275,9 +275,7 @@ class ChatConversationService:
             conversation = await self._store.find_direct(conversation_id, player)
             if conversation is None:
                 return ()
-            current = await self._imports.current_for_root(
-                world_id, conversation.root_import_id
-            )
+            current = await self._imports.current_for_root(world_id, conversation.root_import_id)
             if current is None:
                 return ()
             return (replace(conversation, character_name=_character(current).display_name),)

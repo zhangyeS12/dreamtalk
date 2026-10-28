@@ -361,6 +361,9 @@ from livingworld.adapters.http.wire_contracts.operations import (
     PauseProductWorldResult as PauseProductWorldResult,
 )
 from livingworld.adapters.http.wire_contracts.operations import (
+    PinConversationResult as PinConversationResult,
+)
+from livingworld.adapters.http.wire_contracts.operations import (
     RecordMemoryResult as RecordMemoryResult,
 )
 from livingworld.adapters.http.wire_contracts.operations import (

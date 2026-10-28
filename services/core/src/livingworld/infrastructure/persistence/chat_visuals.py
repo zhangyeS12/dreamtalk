@@ -81,9 +81,7 @@ class SqlAlchemyChatVisualStore:
         async with self._sessions() as session:
             if (
                 await session.scalar(
-                    select(WorldRecord.world_id).where(
-                        WorldRecord.world_id == world.value
-                    )
+                    select(WorldRecord.world_id).where(WorldRecord.world_id == world.value)
                 )
                 is None
             ):

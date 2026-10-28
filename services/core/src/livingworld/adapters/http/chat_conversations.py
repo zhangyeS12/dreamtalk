@@ -114,7 +114,7 @@ def chat_conversation_router(service: ChatConversationService, authorize) -> API
         except ChatTurnUnavailableError as error:
             raise HTTPException(409, str(error)) from None
 
-    @router.patch("/{conversation_id}/pin")
+    @router.patch("/{conversation_id}/pin", response_model=wire.PinConversationResult)
     async def set_pin(world_id: UUID, conversation_id: UUID, body: PinRequest) -> dict:
         try:
             await service.set_pinned(WorldId(world_id), conversation_id, body.pinned)
