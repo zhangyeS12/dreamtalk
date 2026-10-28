@@ -1,4 +1,7 @@
-"""Require clean committed release source; CI verification is explicitly opt-in."""
+"""Require clean committed release source and a successful CI run for that exact commit.
+
+Skipping CI is an explicit, logged override for emergencies only.
+"""
 
 from __future__ import annotations
 
@@ -37,11 +40,13 @@ def validate_runs(payload: dict, commit: str) -> str:
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--require-ci",
+        "--skip-ci",
         action="store_true",
-        help="Verify CI only when the user explicitly requested it",
+        help="Emergency override: build without a green CI run for this commit",
     )
     args = parser.parse_args()
+    if not args.skip_ci and os.environ.get("DREAMTALK_RELEASE_SKIP_CI") == "1":
+        args.skip_ci = True
     commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
     if not re.fullmatch(r"[0-9a-f]{40}", commit):
         raise SystemExit("release_ci_commit_invalid")
@@ -50,8 +55,8 @@ def main():
     )
     if dirty.strip():
         raise SystemExit("release_ci_requires_committed_clean_source")
-    if not args.require_ci:
-        print(f"Release source: CLEAN {commit}; CI NOT RUN (manual opt-in)")
+    if args.skip_ci:
+        print(f"Release source: CLEAN {commit}; WARNING CI SKIPPED BY EXPLICIT OVERRIDE")
         return
     headers = {"Accept": "application/vnd.github+json", "User-Agent": "dreamtalk-release-check"}
     token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")

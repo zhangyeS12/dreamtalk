@@ -34,7 +34,7 @@ Python 类型门禁采用锁定的 Pyright 1.1.414（MIT），复用现有 Node 
 
 ## 编译与验证
 
-验证权限统一遵守 [AGENTS第20节](../AGENTS.md#20-current-verification-responsibility)。用户负责最终验收；没有当前具体授权不添加／运行测试、浏览器／桌面 smoke、模型／凭据探测或真实存档操作。已有测试和 CI 保留；允许静态、格式／lint／类型、链接及必要编译检查。历史单次例外不复用。
+验证权限统一遵守 [AGENTS第20节](../AGENTS.md#20-current-verification-responsibility)。用户负责最终验收；现有离线测试（pytest、vitest、静态检查）可在隔离临时目录直接运行，缺陷修复和新功能应补回归测试。真实模型／凭据探测、真实存档操作及用户机器上已安装应用的运行仍须当前具体授权。
 
 必要本机交付用 `npm run build:desktop:local`，独立 Cargo 目标及版本／摘要回执在 artifacts/local-desktop；共享 target/debug 不作快捷方式目标。先核对当前是否须保留旧版供更新验收，不能覆盖其入口。`build:desktop` 供 CI／原生工程检查；源码 EXE 依赖开发环境，对外完整包须另含 Core 与资源。
 
@@ -55,4 +55,4 @@ python scripts/check-release-privacy.py --package artifacts/portable/本次构�
 
 分别核对文档、本次可提交文件、实际发布提交和实际载荷；路径示例不能直接当作现有产物。已知特征扫描不能替代人工审查，也不会清除旧提交和附件。
 
-既有 foundation.yml 负责 Python 矩阵、前端／浏览器及 Windows 桌面，由 CI Gate 汇总。推送／手动触发遵守当前授权，不用 skip-ci 或弱化断言取得通过结论。发布构建通过 scripts/check-release-ci.py 核对干净工作区、完整 SHA 及该 SHA 最新工作流成功；缺失、取消、运行中或失败均阻止构建，不借用其他提交的结果。这个核对不会自行推送或重跑 CI。
+既有 foundation.yml 负责 Python 矩阵、前端／浏览器及 Windows 桌面，由 CI Gate 汇总。推送 main、`v*` 标签和 PR 时自动运行，也可手动触发；推送本身仍须用户明确提出，不弱化断言取得通过结论。发布构建通过 scripts/check-release-ci.py 核对干净工作区、完整 SHA 及该 SHA 最新工作流成功；缺失、取消、运行中或失败均阻止构建，不借用其他提交的结果；只有用户明确批准时才可用 `--skip-ci`（或 `DREAMTALK_RELEASE_SKIP_CI=1`），输出会标明跳过。这个核对不会自行推送或重跑 CI。

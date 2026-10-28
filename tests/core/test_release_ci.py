@@ -1,4 +1,5 @@
 import importlib.util
+import sys
 from pathlib import Path
 
 import pytest
@@ -57,3 +58,37 @@ def test_only_reviewed_original_example_bytes_can_ship_as_authored_content():
     assert "credential_literal" in privacy.findings(
         privacy.PUBLIC_EXAMPLE_SOURCE, original + canary, source=True
     )
+
+
+def _clean_checkout(monkeypatch, *argv):
+    outputs = {"rev-parse": "a" * 40 + "\n", "status": ""}
+    monkeypatch.setattr(
+        release_ci.subprocess, "check_output", lambda args, **kwargs: outputs[args[1]]
+    )
+    monkeypatch.setattr(sys, "argv", ["check-release-ci.py", *argv])
+    monkeypatch.delenv("DREAMTALK_RELEASE_SKIP_CI", raising=False)
+
+
+def test_release_build_requires_ci_by_default(monkeypatch):
+    _clean_checkout(monkeypatch)
+
+    def offline(*args, **kwargs):
+        raise release_ci.urllib.error.URLError("offline")
+
+    monkeypatch.setattr(release_ci.urllib.request, "urlopen", offline)
+    with pytest.raises(SystemExit, match="release_ci_verification_failed"):
+        release_ci.main()
+
+
+@pytest.mark.parametrize("override", ["flag", "env"])
+def test_skipping_release_ci_is_an_explicit_logged_override(monkeypatch, capsys, override):
+    _clean_checkout(monkeypatch, *(["--skip-ci"] if override == "flag" else []))
+    if override == "env":
+        monkeypatch.setenv("DREAMTALK_RELEASE_SKIP_CI", "1")
+
+    def unexpected(*args, **kwargs):
+        pytest.fail("skipped CI must not query GitHub")
+
+    monkeypatch.setattr(release_ci.urllib.request, "urlopen", unexpected)
+    release_ci.main()
+    assert "CI SKIPPED BY EXPLICIT OVERRIDE" in capsys.readouterr().out

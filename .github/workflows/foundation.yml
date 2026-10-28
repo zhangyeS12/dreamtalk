@@ -1,5 +1,11 @@
-name: dreamtalk manual verification
+name: dreamtalk CI
+# Runs automatically so every release commit has an exact-SHA result;
+# scripts/check-release-ci.py blocks release builds without it.
 on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
   workflow_dispatch:
 permissions:
   contents: read

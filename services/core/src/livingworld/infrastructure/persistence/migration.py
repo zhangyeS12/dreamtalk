@@ -1236,7 +1236,10 @@ def _validate_domain_shape(
                 and column.name == "feedback"
             )
         ]
-        if actual != expected:
+        # SQLite appends ALTER TABLE ADD COLUMN at the end while ORM declaration
+        # order is free-form, so physical column order is not part of the
+        # contract. Names, types and nullability still must match exactly.
+        if sorted(actual) != sorted(expected):
             _fail("alembic_schema_shape_mismatch")
         expected_pk = [column.name for column in table.primary_key.columns]
         if legacy_observations and table.name == "observations":
