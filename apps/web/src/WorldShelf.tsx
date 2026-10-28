@@ -1,24 +1,26 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type WheelEvent as ReactWheelEvent } from "react";
-import type { BookDesign, WorldSettings } from "@dreamtalk/api-client";
-import { BlankFaces, Book3DFaces, type BookArt } from "./world/archive/Book3D";
-import { BLANK_THICKNESS, BOOK_FACE, FACE_LABELS, THICKNESS, designFor } from "./world/archive/bookDesign";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type FocusEvent, type KeyboardEvent, type MouseEvent, type PointerEvent as ReactPointerEvent, type WheelEvent as ReactWheelEvent } from "react";
+import type { WorldSettings } from "@dreamtalk/api-client";
+import { BlankFaces, Book3DFaces, type BookLook, type ShelfAppearance } from "./world/archive/Book3D";
+import { BLANK_THICKNESS, FACE_LABELS, THICKNESS, designFor, type ShelfFace } from "./world/archive/bookDesign";
+import { FACE_YAW, ease, faceFromYaw, lapsFor, poseCss, restPose, ringLayout, ringPosition, yawToward, type Pose, type RingLayout } from "./world/archive/ring";
 import { skyAt, worldClock } from "./world/sky";
 import styles from "./world/archive/Shelf.module.css";
 
 const MIN_BOOKS = 12;
 const GAP = 8;
 export const worldShelfBlankCount = (worldCount: number) => Math.max(1, MIN_BOOKS - worldCount);
-export type ShelfAppearance = { design: BookDesign; art: BookArt; uploads: Record<string, string> };
-export type ShelfFace = "front" | "spine" | "back" | "edge";
 type Book = { key: string; name: string; world?: WorldSettings; blankIndex?: number };
-type Pose = { px: number; py: number; pz: number; yaw: number; pitch: number; tilt: number };
-type Node = { el: HTMLElement; book: Book; lap: number; dx: number; hover: number };
+/** One drawn copy of a book. `css` remembers what was last written so frames only touch changed styles. */
+type Node = { el: HTMLElement; book: Book; lap: number; dx: number; hover: number; css: Map<string, string> };
 
-const FACE_YAW: Record<ShelfFace, number> = { front: -90, spine: 0, back: 90, edge: 180 };
-const ease = (t: number) => 1 - (1 - t) ** 3;
-const restPose = (dx: number): Pose => ({ px: dx, py: 0, pz: -(dx * dx) / 2600 - BOOK_FACE / 2, yaw: Math.max(-38, Math.min(38, -dx * 0.02)), pitch: 0, tilt: 0 });
-const poseCss = (p: Pose) => `translate3d(${p.px.toFixed(1)}px, ${p.py.toFixed(1)}px, ${p.pz.toFixed(1)}px) rotateZ(${p.tilt.toFixed(2)}deg) rotateX(${p.pitch.toFixed(2)}deg) rotateY(${p.yaw.toFixed(2)}deg)`;
 const nightSky = skyAt(0);
+const SETTLE_STALL_MS = 600;
+
+function write(node: Node, property: string, value: string) {
+  if (node.css.get(property) === value) return;
+  node.css.set(property, value);
+  node.el.style.setProperty(property, value);
+}
 
 /**
  * The world archive as an endless ring of books. Books are positioned every
@@ -44,8 +46,28 @@ export function WorldShelf({ worlds, appearances, selectedKey, initialWorldId, d
     }
     return result;
   }, [worlds, vacatedIndex]);
-  const designOf = useCallback((book: Book) => book.world ? appearances[book.world.world_id]?.design ?? designFor(undefined, book.name) : null, [appearances]);
-  const widthOf = useCallback((book: Book) => (book.world ? THICKNESS[designOf(book)!.thickness] : BLANK_THICKNESS) + GAP, [designOf]);
+
+  // One look object per world, reused until that world or its appearance changes,
+  // so a design drag re-renders only the book being designed.
+  const lookCache = useRef(new Map<string, { world: WorldSettings; appearance: ShelfAppearance | undefined; look: BookLook }>());
+  const looks = useMemo(() => {
+    const cache = lookCache.current, next = new Map<string, BookLook>();
+    for (const world of worlds) {
+      const appearance = appearances[world.world_id], cached = cache.get(world.world_id);
+      if (cached && cached.world === world && cached.appearance === appearance) { next.set(world.world_id, cached.look); continue; }
+      const clock = worldClock(world.world_time);
+      const look: BookLook = { name: world.name, design: appearance?.design ?? designFor(undefined, world.name), art: appearance?.art ?? {},
+        uploads: appearance?.uploads ?? {}, sky: clock ? skyAt(clock.minuteOfDay) : nightSky, paused: world.clock_state === "paused" };
+      cache.set(world.world_id, { world, appearance, look }); next.set(world.world_id, look);
+    }
+    for (const id of cache.keys()) if (!next.has(id)) cache.delete(id);
+    return next;
+  }, [worlds, appearances]);
+  const thicknessOf = useCallback((book: Book) => {
+    const look = book.world && looks.get(book.world.world_id);
+    return look ? THICKNESS[look.design.thickness] : BLANK_THICKNESS;
+  }, [looks]);
+  const widthOf = useCallback((book: Book) => thicknessOf(book) + GAP, [thicknessOf]);
 
   const viewport = useRef<HTMLDivElement>(null);
   const nodes = useRef<Node[]>([]);
@@ -53,11 +75,11 @@ export function WorldShelf({ worlds, appearances, selectedKey, initialWorldId, d
   const [reduced, setReduced] = useState(() => window.matchMedia("(prefers-reduced-motion: reduce)").matches);
   const [chosenKey, setChosenKey] = useState<string | null>(null);
   const [face, setFace] = useState<ShelfFace>("front");
-  const laps = Math.max(2, Math.ceil((width + 600) / Math.max(1, books.reduce((sum, book) => sum + widthOf(book), 0))) + 1);
+  const laps = lapsFor(width, books.reduce((sum, book) => sum + widthOf(book), 0));
 
   // Motion state lives in refs; React renders the books, the frame loop moves them.
   const engine = useRef({
-    offset: 0, velocity: 0, dragging: false, awake: false, frame: 0,
+    offset: 0, velocity: 0, dragging: false, awake: false, frame: 0, lastFrame: 0,
     tween: null as null | { from: number; by: number; start: number; ms: number; done?: () => void },
     hovered: null as Node | null, chosen: null as Node | null, pose: null as Pose | null, returning: false,
     spin: { yaw: -68, pitch: 0, vy: 0, vp: 0, dragging: false }, settledKey: null as string | null,
@@ -65,32 +87,23 @@ export function WorldShelf({ worlds, appearances, selectedKey, initialWorldId, d
   });
   const props = useRef({ books, widthOf, selectedKey, designing, reduced, onSettled, onFace, laps });
   props.current = { books, widthOf, selectedKey, designing, reduced, onSettled, onFace, laps };
-  const slotWidth = useCallback((book: Book, now: number) => {
-    const grow = engine.current.grow.get(book.key);
-    const k = grow ? Math.min(1, (now - grow.start) / 700) : 1;
-    return props.current.widthOf(book) * (grow ? grow.from + (1 - grow.from) * ease(k) : 1);
+
+  /** Slot widths for this frame; a newly added blank grows into its slot. */
+  const layoutAt = useCallback((now: number): RingLayout => {
+    const { books: list, widthOf: base } = props.current, byKey = new Map(list.map(book => [book.key, book]));
+    return ringLayout(list, key => {
+      const grow = engine.current.grow.get(key), full = base(byKey.get(key)!);
+      return grow ? full * (grow.from + (1 - grow.from) * ease(Math.min(1, (now - grow.start) / 700))) : full;
+    });
   }, []);
-  const positionOf = useCallback((node: Node, now: number) => {
-    const { books: list, laps: count } = props.current;
-    let cum = 0, total = 0;
-    for (const book of list) { const w = slotWidth(book, now); if (book === node.book) cum = total; total += w; }
-    const length = total * count;
-    const p = node.lap * total + cum + slotWidth(node.book, now) / 2 - engine.current.offset;
-    return ((p % length) + length * 1.5) % length - length / 2;
-  }, [slotWidth]);
 
   const focusTarget = useCallback((): Omit<Pose, "yaw" | "pitch"> => props.current.designing
     ? { px: -(viewport.current?.clientWidth ?? 1200) * 0.29, py: -10, pz: -80, tilt: 0 }
     : { px: 0, py: -12, pz: 120, tilt: -4 }, []);
 
-  const faceFromYaw = (yaw: number): ShelfFace => {
-    const a = ((yaw % 360) + 360) % 360;
-    return ([["spine", 0], ["back", 90], ["edge", 180], ["front", 270], ["spine", 360]] as Array<[ShelfFace, number]>)
-      .reduce((best, item) => Math.abs(a - item[1]) < Math.abs(a - best[1]) ? item : best)[0];
-  };
-
   const step = useCallback(function step(now: number) {
-    const state = engine.current, { reduced: still, selectedKey: wanted } = props.current;
+    const state = engine.current, { reduced: still, selectedKey: wanted, laps: count } = props.current;
+    state.lastFrame = now;
     let moving = false;
     if (state.tween) {
       const t = still ? 1 : Math.min(1, (now - state.tween.start) / state.tween.ms);
@@ -105,9 +118,9 @@ export function WorldShelf({ worlds, appearances, selectedKey, initialWorldId, d
       state.spin.vy *= 0.93; state.spin.vp *= 0.9; moving = true; reportFace();
     }
     for (const [key, start] of state.grow) if (now - start.start < 720) moving = true; else state.grow.delete(key);
-    const half = (viewport.current?.clientWidth ?? 1200) / 2;
+    const layout = layoutAt(now), half = (viewport.current?.clientWidth ?? 1200) / 2;
     for (const node of nodes.current) {
-      node.dx = positionOf(node, now);
+      node.dx = ringPosition(layout, node.book.key, node.lap, count, state.offset);
       if (node === state.chosen) continue;
       const target = node === state.hovered && !state.chosen && !state.dragging ? 1 : 0;
       if (Math.abs(target - node.hover) > 0.01) { node.hover += (target - node.hover) * (still ? 1 : 0.22); moving = true; } else node.hover = target;
@@ -115,11 +128,13 @@ export function WorldShelf({ worlds, appearances, selectedKey, initialWorldId, d
       const far = Math.min(1, Math.abs(node.dx) / half);
       let shade = Math.min(0.85, far ** 1.7 * 0.8) * (1 - 0.6 * node.hover), blur = far > 0.82 ? 3.5 : far > 0.62 ? 1.6 : 0;
       if (state.chosen && !state.returning) { shade = Math.min(0.92, shade + (props.current.designing ? 0.7 : 0.5)); blur = Math.max(blur, 2.5); }
-      node.el.style.transform = poseCss(pose);
-      node.el.style.setProperty("--shade", shade.toFixed(3));
-      node.el.style.filter = blur ? `blur(${blur}px)` : "";
+      write(node, "transform", poseCss(pose));
+      write(node, "--shade", shade.toFixed(3));
+      write(node, "filter", blur ? `blur(${blur}px)` : "");
       node.el.classList.toggle("is-hover", node.hover > 0.5);
-      node.el.style.visibility = Math.abs(node.dx) > half + 260 ? "hidden" : "";
+      // Off-screen copies are culled. The focusable first lap only fades, so Tab can still reach it.
+      const offscreen = Math.abs(node.dx) > half + 260;
+      write(node, node.lap === 0 ? "opacity" : "visibility", offscreen ? node.lap === 0 ? "0" : "hidden" : "");
       const printing = state.printing.get(node.book.key);
       node.el.classList.toggle("is-printing", printing !== undefined && now < printing);
       if (printing !== undefined && now >= printing + 100) state.printing.delete(node.book.key); else if (printing !== undefined) moving = true;
@@ -130,8 +145,8 @@ export function WorldShelf({ worlds, appearances, selectedKey, initialWorldId, d
       const k = still ? 1 : state.returning ? 0.18 : 0.14;
       let error = 0;
       for (const key of ["px", "py", "pz", "yaw", "pitch", "tilt"] as const) { state.pose[key] += (target[key] - state.pose[key]) * k; error += Math.abs(target[key] - state.pose[key]); }
-      chosen.el.style.transform = poseCss(state.pose); chosen.el.style.filter = ""; chosen.el.style.visibility = "";
-      chosen.el.style.setProperty("--shade", "0"); chosen.el.style.setProperty("--yaw", state.pose.yaw.toFixed(1));
+      write(chosen, "transform", poseCss(state.pose)); write(chosen, "filter", ""); write(chosen, chosen.lap === 0 ? "opacity" : "visibility", "");
+      write(chosen, "--shade", "0"); write(chosen, "--yaw", state.pose.yaw.toFixed(1));
       if (error > 0.6) moving = true;
       else if (state.returning) { chosen.el.classList.remove("is-chosen"); state.chosen = null; state.pose = null; state.returning = false; }
       else if (state.settledKey !== wanted && wanted === chosen.book.key) { state.settledKey = wanted; props.current.onSettled(wanted); }
@@ -140,10 +155,10 @@ export function WorldShelf({ worlds, appearances, selectedKey, initialWorldId, d
     cancelAnimationFrame(state.frame);
     state.awake = moving;
     state.frame = moving ? requestAnimationFrame(step) : 0;
-  }, [focusTarget, positionOf]);
+  }, [focusTarget, layoutAt]);
   const wake = useCallback(() => {
     const state = engine.current;
-    if (!state.awake) { state.awake = true; state.frame = requestAnimationFrame(step); }
+    if (!state.awake) { state.awake = true; state.lastFrame = performance.now(); state.frame = requestAnimationFrame(step); }
   }, [step]);
   const travel = useCallback((by: number, ms = 520) => new Promise<void>(done => {
     const state = engine.current; state.velocity = 0;
@@ -165,8 +180,8 @@ export function WorldShelf({ worlds, appearances, selectedKey, initialWorldId, d
   }
   const turnTo = useCallback((target: ShelfFace) => {
     const spin = engine.current.spin;
-    const base = target === "front" && !props.current.designing ? -68 : FACE_YAW[target];
-    spin.yaw = base + 360 * Math.round((spin.yaw - base) / 360); spin.pitch = 0; spin.vy = 0; spin.vp = 0;
+    spin.yaw = yawToward(spin.yaw, target === "front" && !props.current.designing ? -68 : FACE_YAW[target]);
+    spin.pitch = 0; spin.vy = 0; spin.vp = 0;
     reportFace(target); wake();
   }, [wake]);
 
@@ -187,11 +202,10 @@ export function WorldShelf({ worlds, appearances, selectedKey, initialWorldId, d
   useLayoutEffect(() => {
     if (restored.current || loading || !width) return;
     restored.current = true;
-    const start = performance.now();
     const index = Math.max(0, books.findIndex(book => book.world?.world_id === initialWorldId));
-    let cum = 0; for (let i = 0; i < index; i++) cum += widthOf(books[i]);
-    engine.current.offset = cum + widthOf(books[index]) / 2 + (initialWorldId ? 0 : width * 0.18);
-    step(start);
+    const layout = ringLayout(books, key => widthOf(books.find(book => book.key === key)!));
+    engine.current.offset = (layout.centres.get(books[index].key) ?? 0) + (initialWorldId ? 0 : width * 0.18);
+    step(performance.now());
   }, [books, initialWorldId, loading, step, width, widthOf]);
   useEffect(() => { wake(); }, [books, laps, appearances, width, designing, wake]);
   useEffect(() => () => cancelAnimationFrame(engine.current.frame), []);
@@ -230,12 +244,17 @@ export function WorldShelf({ worlds, appearances, selectedKey, initialWorldId, d
       node.el.classList.add("is-chosen"); lastFace.current = "front"; setFace("front"); setChosenKey(selectedKey); wake();
     };
     void begin();
-    // Hidden windows get no animation frames: still report the selection.
-    const fallback = window.setTimeout(() => { if (!cancelled && state.settledKey !== selectedKey && props.current.selectedKey === selectedKey) { state.settledKey = selectedKey; onSettled(selectedKey); } }, 1400);
-    return () => { cancelled = true; window.clearTimeout(fallback); };
+    // A hidden or throttled window gets no animation frames, so the book would never
+    // report that it is out. Settle only when frames have actually stopped arriving.
+    const watch = window.setInterval(() => {
+      if (cancelled || state.settledKey === selectedKey || props.current.selectedKey !== selectedKey) return;
+      if (document.hidden || (state.awake && performance.now() - state.lastFrame > SETTLE_STALL_MS)) { state.settledKey = selectedKey; onSettled(selectedKey); }
+    }, 300);
+    return () => { cancelled = true; window.clearInterval(watch); };
   }, [selectedKey]);
   useEffect(() => { if (faceRequest) turnTo(faceRequest.face); }, [faceRequest, turnTo]);
   useEffect(() => { if (engine.current.chosen) { if (designing) turnTo("front"); wake(); } }, [designing, turnTo, wake]);
+
   // ---------- Pointer: drag the ring, or turn the chosen book ----------
   const down = useRef<null | { x: number; y: number; lx: number; ly: number; moved: boolean; node: Node | null; spin: boolean; id: number }>(null);
   const nodeAt = (target: EventTarget | null) => {
@@ -258,8 +277,9 @@ export function WorldShelf({ worlds, appearances, selectedKey, initialWorldId, d
   const pointerMove = (event: ReactPointerEvent<HTMLElement>) => {
     const state = engine.current, press = down.current;
     if (!press) {
+      // Without a press there is no pointer capture, so the target is the book under the pointer.
       if (event.pointerType !== "mouse" || state.chosen) return;
-      const node = nodeAt(document.elementFromPoint(event.clientX, event.clientY));
+      const node = nodeAt(event.target);
       if (node !== state.hovered) { state.hovered = node; wake(); }
       return;
     }
@@ -283,39 +303,44 @@ export function WorldShelf({ worlds, appearances, selectedKey, initialWorldId, d
     if (press.node.book.key === selectedKey) return;
     choose(press.node);
   };
+  const wheelEnd = useRef<number | undefined>(undefined);
   const wheel = (event: ReactWheelEvent<HTMLElement>) => {
     const state = engine.current;
     if (state.chosen || disabled || loading) return;
     state.tween = null; state.offset += (event.deltaX || event.deltaY) * 0.8; wake();
     window.clearTimeout(wheelEnd.current); wheelEnd.current = window.setTimeout(snap, 140);
   };
-  const wheelEnd = useRef<number | undefined>(undefined);
 
-  // ---------- Keyboard: one focusable button per book (the first lap) ----------
+  // ---------- Keyboard and assistive tech: one button per book (the first lap) ----------
   const navigate = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === "Escape" && selectedKey) { event.preventDefault(); event.stopPropagation(); onClose(); return; }
     const target = event.target as HTMLElement;
     if (engine.current.chosen && !engine.current.returning && (event.key === "ArrowLeft" || event.key === "ArrowRight") && !target.dataset.bookKey) {
       event.preventDefault(); engine.current.spin.yaw += event.key === "ArrowRight" ? 90 : -90; reportFace(); wake(); return;
     }
-    if (!target.dataset.bookKey) return;
-    if ((event.key === "Enter" || event.key === " ") && !event.repeat) {
-      event.preventDefault(); const node = nodes.current.find(item => item.el === target); if (node) choose(node); return;
-    }
-    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key) || disabled || loading) return;
+    if (!target.dataset.bookKey || !["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key) || disabled || loading) return;
     const buttons = [...event.currentTarget.querySelectorAll<HTMLButtonElement>("button[data-book-key]:not(:disabled)")];
     const index = buttons.indexOf(target as HTMLButtonElement); if (index < 0) return;
     event.preventDefault();
     const next = event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1 : (index + (event.key === "ArrowRight" ? 1 : -1) + buttons.length) % buttons.length;
     buttons[next]?.focus({ preventScroll: true });
   };
-  const reveal = (element: HTMLElement) => {
-    const node = nodes.current.find(item => item.el === element);
-    if (!node || engine.current.chosen) return;
-    engine.current.hovered = node;
-    const copy = nearest(item => item.book.key === node.book.key, 0);
-    if (copy && Math.abs(copy.dx) > (viewport.current?.clientWidth ?? 1200) * 0.3) void travel(copy.dx, 380); else wake();
+  // Stable handlers for the memoized books; they read the latest render through a ref.
+  const handlers = useRef<{ focus: (element: HTMLElement) => void; activate: (element: HTMLElement) => void }>({ focus: () => {}, activate: () => {} });
+  handlers.current = {
+    // Keyboard focus brings the focused copy itself to the centre, so the focus ring stays in view.
+    focus: element => {
+      const node = nodes.current.find(item => item.el === element);
+      if (!node || engine.current.chosen) return;
+      engine.current.hovered = node;
+      if (Math.abs(node.dx) > (viewport.current?.clientWidth ?? 1200) * 0.3) void travel(node.dx, 380); else wake();
+    },
+    activate: element => { const node = nodes.current.find(item => item.el === element); if (node) choose(node); },
   };
+  const onBookFocus = useCallback((event: FocusEvent<HTMLButtonElement>) => { if (event.currentTarget.matches(":focus-visible")) handlers.current.focus(event.currentTarget); }, []);
+  // Mouse presses are handled by the pointer handlers; Enter, Space and screen-reader
+  // activation arrive as clicks with no press count.
+  const onBookClick = useCallback((event: MouseEvent<HTMLButtonElement>) => { if (event.detail === 0) handlers.current.activate(event.currentTarget); }, []);
   const stepWorld = (direction: 1 | -1) => {
     if (disabled || loading) return;
     const list = books.filter(book => book.world);
@@ -327,6 +352,7 @@ export function WorldShelf({ worlds, appearances, selectedKey, initialWorldId, d
     }
     void travel(direction * 3 * (BLANK_THICKNESS + GAP), 420);
   };
+
   // ---------- Render: every lap is drawn; only the first lap is focusable ----------
   // Stable ref callbacks keep each copy's node (and the chosen book) across renders.
   const registry = useRef(new Map<string, Node>());
@@ -340,7 +366,8 @@ export function WorldShelf({ worlds, appearances, selectedKey, initialWorldId, d
         const map = registry.current;
         if (!element) { map.delete(key); return; }
         const info = copyInfo.current.get(key)!, existing = map.get(key);
-        if (existing) existing.el = element; else map.set(key, { el: element, book: info.book, lap: info.lap, dx: 0, hover: 0 });
+        if (existing) { existing.el = element; existing.css = new Map(); }
+        else map.set(key, { el: element, book: info.book, lap: info.lap, dx: 0, hover: 0, css: new Map() });
       };
       refCache.current.set(key, callback);
     }
@@ -359,12 +386,6 @@ export function WorldShelf({ worlds, appearances, selectedKey, initialWorldId, d
     if (state.hovered && !nodes.current.includes(state.hovered)) state.hovered = null;
     step(performance.now());
   });
-  const looks = (book: Book) => {
-    if (!book.world) return null;
-    const appearance = appearances[book.world.world_id], clock = worldClock(book.world.world_time);
-    return { name: book.name, design: designOf(book)!, art: appearance?.art ?? {}, uploads: appearance?.uploads ?? {},
-      sky: clock ? skyAt(clock.minuteOfDay) : nightSky, paused: book.world.clock_state === "paused" };
-  };
   const chosenWorld = chosenKey?.startsWith("world:") ?? false;
   const copies: Array<{ book: Book; lap: number; key: string }> = [];
   for (let lap = 0; lap < laps; lap++) for (const book of books) copies.push({ book, lap, key: `${lap}:${book.key}` });
@@ -377,18 +398,10 @@ export function WorldShelf({ worlds, appearances, selectedKey, initialWorldId, d
     onDoubleClick={event => { const node = nodeAt(event.target); if (node && node === engine.current.chosen) turnTo("front"); }}>
     <div className={styles.boardTop} aria-hidden="true" />
     <div ref={viewport} className={styles.ring} onKeyDown={navigate}>
-      {copies.map(({ book, lap, key }) => {
-        const look = looks(book);
-        const thickness = look ? THICKNESS[look.design.thickness] : BLANK_THICKNESS;
-        const style = { "--T": `${thickness}px` } as CSSProperties;
-        const content = look ? <Book3DFaces look={look} /> : <BlankFaces />;
-        return lap === 0
-          ? <button type="button" key={key} ref={register(key, book, lap)} data-copy="" data-book-key={book.key} className={styles.book} style={style}
-            disabled={disabled || loading} aria-pressed={selectedKey === book.key} aria-controls="archive-preview"
-            aria-label={book.world ? `预览世界：${book.name}` : `创建或导入一个新世界，空白书 ${book.blankIndex! + 1}`}
-            onFocus={event => { if (event.currentTarget.matches(":focus-visible")) reveal(event.currentTarget); }}>{content}</button>
-          : <div key={key} ref={register(key, book, lap)} data-copy="" className={styles.book} style={style} aria-hidden="true">{content}</div>;
-      })}
+      {copies.map(({ book, lap, key }) => <ShelfBook key={key} bookRef={register(key, book, lap)} bookKey={book.key} focusable={lap === 0}
+        look={book.world ? looks.get(book.world.world_id) ?? null : null} thickness={thicknessOf(book)}
+        label={book.world ? `预览世界：${book.name}` : `创建或导入一个新世界，空白书 ${book.blankIndex! + 1}`}
+        disabled={disabled || loading} pressed={selectedKey === book.key} onFocus={onBookFocus} onClick={onBookClick} />)}
     </div>
     <div className={styles.boardBottom} aria-hidden="true" />
     <div className={styles.controls}>
@@ -404,3 +417,17 @@ export function WorldShelf({ worlds, appearances, selectedKey, initialWorldId, d
       : loading ? "正在读取世界档案…" : `${worlds.length} 个世界 · ${books.length} 个书位 · 拖动书架，书本首尾相接 · 点击空白书新建世界`}</p>
   </section>;
 }
+
+/** One drawn copy. Memoized: the frame loop moves it through refs, React only re-renders it when its look changes. */
+const ShelfBook = memo(function ShelfBook({ bookRef, bookKey, focusable, look, thickness, label, disabled, pressed, onFocus, onClick }: {
+  bookRef: (element: HTMLElement | null) => void; bookKey: string; focusable: boolean; look: BookLook | null; thickness: number;
+  label: string; disabled: boolean; pressed: boolean;
+  onFocus: (event: FocusEvent<HTMLButtonElement>) => void; onClick: (event: MouseEvent<HTMLButtonElement>) => void;
+}) {
+  const style = { "--T": `${thickness}px` } as CSSProperties;
+  const content = look ? <Book3DFaces look={look} /> : <BlankFaces />;
+  return focusable
+    ? <button type="button" ref={bookRef} data-copy="" data-book-key={bookKey} className={styles.book} style={style}
+      disabled={disabled} aria-pressed={pressed} aria-controls="archive-preview" aria-label={label} onFocus={onFocus} onClick={onClick}>{content}</button>
+    : <div ref={bookRef} data-copy="" className={styles.book} style={style} aria-hidden="true">{content}</div>;
+});

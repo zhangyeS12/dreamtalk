@@ -6,6 +6,8 @@ import styles from "./Book3D.module.css";
 
 export type BookArt = { front?: string; spine?: string; back?: string; jacket?: string; jacketAspect?: number };
 export type BookLook = { name: string; design: BookDesign; art: BookArt; uploads: Record<string, string>; sky: Sky; paused: boolean };
+/** What a world contributes to its book; the shelf adds the name and the world's sky. */
+export type ShelfAppearance = Pick<BookLook, "design" | "art" | "uploads">;
 
 const percent = (value: number) => `${value}%`;
 

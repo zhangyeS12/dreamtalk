@@ -1,4 +1,5 @@
 import type { BookDesign, BookDesignSticker, WorldCover } from "@dreamtalk/api-client";
+import { stableHash } from "../hash";
 
 /** Book proportions follow the saved cover images (196:286 faces, 42:286 spine). */
 export const BOOK_HEIGHT = 540;
@@ -6,6 +7,8 @@ export const BOOK_FACE = 372;
 export const THICKNESS: Record<BookDesign["thickness"], number> = { thin: 54, normal: 74, thick: 96 };
 export const BLANK_THICKNESS = 70;
 export type DesignFace = "front" | "spine" | "back";
+/** Every face a reader can turn toward; the fore-edge has nothing to design. */
+export type ShelfFace = DesignFace | "edge";
 export const FACE_LABELS: Record<DesignFace | "edge", string> = { front: "正面", spine: "书脊", back: "背面", edge: "书口" };
 
 /** System fonts only (no bundled font files). */
@@ -71,9 +74,42 @@ export function stickerSource(item: BookDesignSticker, uploads: Record<string, s
 
 /** A stable spine treatment chosen from the world's name, never random. */
 export function spineStyle(name: string): 0 | 1 | 2 {
-  let hash = 2166136261;
-  for (const char of name) hash = Math.imul(hash ^ char.codePointAt(0)!, 16777619);
-  return ((hash >>> 0) % 3) as 0 | 1 | 2;
+  return (stableHash(name) % 3) as 0 | 1 | 2;
 }
 
 export const cloneDesign = (design: BookDesign): BookDesign => JSON.parse(JSON.stringify(design)) as BookDesign;
+
+/** Per-face sticker limits; the Core rejects more (adapters/http/world_covers.py). */
+export const STICKER_LIMIT: Record<DesignFace, number> = { front: 24, spine: 12, back: 24 };
+const DESIGN_FACES: DesignFace[] = ["front", "spine", "back"];
+const stickerId = (face: DesignFace, item: BookDesignSticker) => [face, item.kind, item.ref, item.x, item.y, item.w, item.r, item.opacity].join("|");
+const TEMPLATE_STICKERS = new Set(Object.values(TEMPLATES).flatMap(template => {
+  const built = template.build("");
+  return DESIGN_FACES.flatMap(face => built.stickers[face].map(item => stickerId(face, item)));
+}));
+
+/**
+ * Restyle a book with a template but keep what the user placed: the title text
+ * and every sticker the template did not put there itself. Template stickers
+ * from an earlier template are swapped out, so switching templates never piles them up.
+ */
+export function withTemplate(current: BookDesign, key: string): BookDesign {
+  const next = TEMPLATES[key].build(current.title.text);
+  for (const face of DESIGN_FACES) {
+    const own = current.stickers[face].filter(item => !TEMPLATE_STICKERS.has(stickerId(face, item)));
+    const room = Math.max(0, STICKER_LIMIT[face] - own.length);
+    next.stickers[face] = [...next.stickers[face].slice(0, room), ...own];
+  }
+  return next;
+}
+
+/** Deep equality that ignores object key order (a saved design may come back reordered). */
+export function sameValue(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) return false;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  if (Array.isArray(a) && Array.isArray(b)) return a.length === b.length && a.every((item, index) => sameValue(item, b[index]));
+  const left = a as Record<string, unknown>, right = b as Record<string, unknown>;
+  const keys = Object.keys(left).filter(key => left[key] !== undefined), other = Object.keys(right).filter(key => right[key] !== undefined);
+  return keys.length === other.length && keys.every(key => sameValue(left[key], right[key]));
+}

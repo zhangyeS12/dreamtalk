@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import type { BookDesign, BookDesignSticker, CoreClient, CoverCrop, CoverFace, WorldCover, WorldCoverWrite, WorldSettings } from "@dreamtalk/api-client";
 import { coverPreview } from "../../coverPreview";
-import type { ShelfAppearance, ShelfFace } from "../../WorldShelf";
 import type { Sky } from "../sky";
-import { FaceArt, type BookLook } from "./Book3D";
-import { BOOK_FACE, BOOK_HEIGHT, BUILTIN_STICKERS, CASE_COLORS, FACE_LABELS, FONTS, INK_COLORS, MATERIALS, TEMPLATES, THICKNESS, cloneDesign, designFor, stickerSource, type DesignFace } from "./bookDesign";
+import { FaceArt, type BookLook, type ShelfAppearance } from "./Book3D";
+import { BOOK_FACE, BOOK_HEIGHT, BUILTIN_STICKERS, CASE_COLORS, FACE_LABELS, FONTS, INK_COLORS, MATERIALS, STICKER_LIMIT, TEMPLATES, THICKNESS, cloneDesign, designFor, sameValue, stickerSource, withTemplate, type DesignFace, type ShelfFace } from "./bookDesign";
 import { FaceCropper, SIZES, failureMessage, type FaceDraft } from "./FaceCropper";
 import styles from "./Designer.module.css";
 
@@ -44,7 +43,16 @@ export function BookDesigner({ client, world, sky, face: shelfFace, onFaceReques
   const stickerInput = useRef<HTMLInputElement>(null);
   const callbacks = useRef({ onDirty, onBusy, onDraft });
   callbacks.current = { onDirty, onBusy, onDraft };
-  const makeUrl = useCallback((blob: Blob) => { const url = URL.createObjectURL(blob); urls.current.add(url); return url; }, []);
+  // Every object URL is owned here. A slot ("preview:front", "image:back", "sticker:<digest>") holds one
+  // URL at a time; the URL it replaces is revoked shortly after, once the shelf shows the new one.
+  const slots = useRef(new Map<string, string>());
+  const slotUrl = useCallback((slot: string, blob: Blob) => {
+    const url = URL.createObjectURL(blob), old = slots.current.get(slot);
+    urls.current.add(url); slots.current.set(slot, url);
+    if (old) releaseUrl(urls.current, old);
+    return url;
+  }, []);
+  const clearSlot = (slot: string) => { const old = slots.current.get(slot); slots.current.delete(slot); if (old) releaseUrl(urls.current, old); };
   const setBusy = (value: boolean) => { setBusyState(value); callbacks.current.onBusy(value); };
   const markDirty = () => { setDirtyState(true); callbacks.current.onDirty(true); setNotice(""); };
 
@@ -67,20 +75,20 @@ export function BookDesigner({ client, world, sky, face: shelfFace, onFaceReques
         const original = await client.coverImage(world.world_id, image.source.digest, abort.signal);
         const display = await client.coverImage(world.world_id, image.display.digest, abort.signal);
         if (abort.signal.aborted) return;
-        sources[which] = { source: image.source, url: makeUrl(original), crop: image.crop };
-        displays[which] = makeUrl(display);
+        sources[which] = { source: image.source, url: slotUrl(`image:${which}`, original), crop: image.crop };
+        displays[which] = slotUrl(`preview:${which}`, display);
       }
       const next = designFor(saved, world.name);
       for (const digest of new Set(FACES.flatMap(which => next.stickers[which]).filter(item => item.kind === "image").map(item => item.ref))) {
         const blob = await client.coverImage(world.world_id, digest, abort.signal);
         if (abort.signal.aborted) return;
-        stickerUrls[digest] = makeUrl(blob);
+        stickerUrls[digest] = slotUrl(`sticker:${digest}`, blob);
       }
       setCover(saved); setDesign(next); setHistory([]); setFuture([]); setImages(sources); setPreviews(displays); setUploads(stickerUrls);
       setDirtyState(false); callbacks.current.onDirty(false); setCropKey(value => value + 1);
     } catch (failure) { if (!abort.signal.aborted) setError(failureMessage(failure)); }
     finally { if (!abort.signal.aborted && mounted.current) setBusy(false); }
-  }, [client, world.world_id, world.name, makeUrl]);
+  }, [client, world.world_id, world.name, slotUrl]);
   useEffect(() => { void load(); }, [load]);
 
   const look: BookLook = useMemo(() => ({ name: world.name, design, uploads, sky, paused: world.clock_state === "paused",
@@ -110,9 +118,9 @@ export function BookDesigner({ client, world, sky, face: shelfFace, onFaceReques
     if (!preview) return;
     const epoch = ++previewEpoch.current[which];
     void coverPreview(source.url, crop, SIZES[which][0], SIZES[which][1]).then(blob => {
-      if (mounted.current && epoch === previewEpoch.current[which]) setPreviews(current => ({ ...current, [which]: makeUrl(blob) }));
+      if (mounted.current && epoch === previewEpoch.current[which]) setPreviews(current => ({ ...current, [which]: slotUrl(`preview:${which}`, blob) }));
     }).catch(() => { if (mounted.current) setError("预览暂时无法生成，请重新选择图片。原图仍保留。"); });
-  }, [images, makeUrl]);
+  }, [images, slotUrl]);
   const validImage = (file: File) => {
     if (!/\.(jpe?g|png|webp)$/i.test(file.name) || file.type && !["image/jpeg", "image/png", "image/webp"].includes(file.type)) { setError("请选择 JPG、PNG 或 WebP 图片。"); return false; }
     if (file.size > 10 * 1024 * 1024) { setError("每张图片不能超过 10 MB。"); return false; }
@@ -125,8 +133,8 @@ export function BookDesigner({ client, world, sky, face: shelfFace, onFaceReques
       const source = await client.uploadCoverImage(world.world_id, file, controller.current.signal);
       if (!mounted.current) return;
       previewEpoch.current[target] += 1;
-      setImages(current => ({ ...current, [target]: { source, url: makeUrl(file) } }));
-      setPreviews(current => { const next = { ...current }; delete next[target]; return next; });
+      setImages(current => ({ ...current, [target]: { source, url: slotUrl(`image:${target}`, file) } }));
+      setPreviews(current => { const next = { ...current }; delete next[target]; return next; }); clearSlot(`preview:${target}`);
       setPending(true); setCropKey(value => value + 1); markDirty();
     } catch (failure) { if (mounted.current) setError(failureMessage(failure)); }
     finally { if (mounted.current) setBusy(false); }
@@ -135,12 +143,13 @@ export function BookDesigner({ client, world, sky, face: shelfFace, onFaceReques
     previewEpoch.current[imageFace] += 1; setPending(false);
     setImages(current => { const next = { ...current }; delete next[imageFace]; return next; });
     setPreviews(current => { const next = { ...current }; delete next[imageFace]; return next; });
+    clearSlot(`image:${imageFace}`); clearSlot(`preview:${imageFace}`);
     if (imageFace === "front" && design.wrap) change(draft => { draft.wrap = false; }); else markDirty();
   };
 
   // ---------- Stickers ----------
   const addSticker = (sticker: BookDesignSticker) => {
-    const index = design.stickers[face].length, limit = face === "spine" ? 12 : 24;
+    const index = design.stickers[face].length, limit = STICKER_LIMIT[face];
     if (index >= limit) { setError(`这一面最多放 ${limit} 张贴纸。`); return; }
     change(draft => { draft.stickers[face].push(sticker); }); setPicked({ kind: "sticker", index });
   };
@@ -151,7 +160,7 @@ export function BookDesigner({ client, world, sky, face: shelfFace, onFaceReques
     try {
       const image = await client.uploadCoverImage(world.world_id, file, controller.current.signal);
       if (!mounted.current) return;
-      setUploads(current => ({ ...current, [image.digest]: makeUrl(file) }));
+      setUploads(current => ({ ...current, [image.digest]: slotUrl(`sticker:${image.digest}`, file) }));
       addSticker({ kind: "image", ref: image.digest, x: 50, y: 50, w: face === "spine" ? 80 : 34, r: 0, opacity: 1 });
     } catch (failure) { if (mounted.current) setError(failureMessage(failure)); }
     finally { if (mounted.current) setBusy(false); }
@@ -168,6 +177,15 @@ export function BookDesigner({ client, world, sky, face: shelfFace, onFaceReques
     const list = design.stickers[face], to = index + by; if (to < 0 || to >= list.length) return;
     change(draft => { const [moved] = draft.stickers[face].splice(index, 1); draft.stickers[face].splice(to, 0, moved); });
     setPicked({ kind: "sticker", index: to });
+  };
+
+  const applyTemplate = (key: string) => {
+    const next = withTemplate(latest.current, key), plain = TEMPLATES[key].build("");
+    const count = (value: BookDesign) => FACES.reduce((sum, which) => sum + value.stickers[which].length, 0);
+    const kept = count(next) - count(plain);
+    change(draft => { Object.assign(draft, next); });
+    setPicked(null);
+    if (kept) setNotice("已换用模板。你放的贴纸都保留着；不满意可以撤销。");
   };
 
   // ---------- Save ----------
@@ -188,7 +206,7 @@ export function BookDesigner({ client, world, sky, face: shelfFace, onFaceReques
       catch (failure) {
         // A lost response is resolved by reading back; never repeat an uncertain write.
         const saved = await client.worldCover(world.world_id, controller.current.signal).catch(() => null);
-        if (!saved || saved.revision !== draft.expected_revision + 1 || JSON.stringify(saved.design) !== JSON.stringify(draft.design)) throw failure;
+        if (!saved || saved.revision !== draft.expected_revision + 1 || !sameValue(saved.design, draft.design)) throw failure;
         result = saved;
       }
       if (!mounted.current) return;
@@ -274,7 +292,7 @@ export function BookDesigner({ client, world, sky, face: shelfFace, onFaceReques
         <h3>从模板开始</h3>
         <div className={styles.templates}>{Object.entries(TEMPLATES).map(([key, template]) => { const preview = template.build("");
           return <button key={key} type="button" aria-pressed={design.template === key} style={{ background: preview.case_color, color: preview.title.color }}
-            onClick={() => change(draft => { const next = template.build(draft.title.text); Object.assign(draft, next, { stickers: next.stickers }); })}>{template.label}</button>; })}</div>
+            onClick={() => applyTemplate(key)}>{template.label}</button>; })}</div>
 
         <h3>书的形体</h3>
         {segment("材质", design.material, MATERIALS, value => change(draft => { draft.material = value; }))}
@@ -332,4 +350,8 @@ export function BookDesigner({ client, world, sky, face: shelfFace, onFaceReques
       <button type="button" className={styles.save} disabled={busy || !cover || !dirty || pending} onClick={() => void save()}>{busy ? "正在处理…" : "保存设计"}</button>
     </div>
   </section>;
+}
+
+function releaseUrl(owned: Set<string>, url: string) {
+  window.setTimeout(() => { if (owned.delete(url)) URL.revokeObjectURL(url); }, 1500);
 }

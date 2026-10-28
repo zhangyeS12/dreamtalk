@@ -4,14 +4,14 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import { CoreClient, CoreRequestError, type WorldSettings, type WorldContentItem } from "@dreamtalk/api-client";
 import { ModelSetup } from "./ModelSetup";
 import { WorldImports } from "./WorldContent";
-import { WorldShelf, worldShelfBlankCount, type ShelfAppearance, type ShelfFace } from "./WorldShelf";
+import { WorldShelf, worldShelfBlankCount } from "./WorldShelf";
 import { useWorldCovers } from "./useWorldCovers";
 import { SaveBackupPanel } from "./SaveBackups";
 import { ExampleWorldPanel } from "./ExampleWorldPanel";
 import { ArchiveRoom, archiveSky } from "./world/archive/ArchiveRoom";
 import { BookDesigner } from "./world/archive/BookDesigner";
-import { FaceArt } from "./world/archive/Book3D";
-import { designFor } from "./world/archive/bookDesign";
+import { FaceArt, type ShelfAppearance } from "./world/archive/Book3D";
+import { designFor, type ShelfFace } from "./world/archive/bookDesign";
 import { formatClock, skyAt, worldClock } from "./world/sky";
 import styles from "./world/archive/Archive.module.css";
 const NIGHT = skyAt(0);
@@ -199,8 +199,8 @@ export function WorldArchivePage({ client, initialWorldId, onEnter, displayTime,
         setWorlds(directory); clearSelection(); setError("这个世界已不存在，请刷新书架。"); return;
       }
       const go = () => onEnter(world.world_id, Boolean(identity.player_id));
-      // The book opens onto that world's sky; skipped when motion is reduced or unsupported.
-      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches || document.hidden || typeof document.body.animate !== "function") { go(); return; }
+      // The book opens onto that world's sky; skipped when motion is reduced or the window is hidden.
+      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches || document.hidden) { go(); return; }
       setTravelling(world);
       window.setTimeout(() => { if (active.current) setSkyWorldId(world.world_id); }, 650);
       await new Promise(resolve => window.setTimeout(resolve, 1700));
@@ -268,14 +268,17 @@ export function WorldArchivePage({ client, initialWorldId, onEnter, displayTime,
   const homeWorld = worlds.find(item => item.world_id === skyWorldId) ?? worlds.find(item => item.world_id === initialWorldId);
   const sky = archiveSky(homeWorld);
   const homeClock = homeWorld ? worldClock(homeWorld.world_time) : null;
-  const appearances = useMemo(() => Object.fromEntries(worlds.map(item => {
+  const savedAppearances = useMemo(() => Object.fromEntries(worlds.map(item => {
     const look = covers.appearances[item.world_id];
-    const value: ShelfAppearance = item.world_id === selectedId && designDraft ? designDraft : {
+    const value: ShelfAppearance = {
       design: designFor(look?.full, item.name), uploads: look?.uploads ?? {},
       art: { front: look?.urls.front, spine: look?.urls.spine, back: look?.urls.back, jacket: look?.jacket, jacketAspect: look?.jacketAspect },
     };
     return [item.world_id, value];
-  })), [worlds, covers.appearances, selectedId, designDraft]);
+  })), [worlds, covers.appearances]);
+  // While designing, only the designed book's entry changes, so the rest of the shelf does not re-render.
+  const appearances = useMemo(() => selectedId && designDraft && savedAppearances[selectedId]
+    ? { ...savedAppearances, [selectedId]: designDraft } : savedAppearances, [savedAppearances, selectedId, designDraft]);
   const selectedTime = world?.world_time;
   const selectedSky = useMemo(() => { if (selectedTime === undefined) return null; const clock = worldClock(selectedTime); return skyAt(clock ? clock.minuteOfDay : 0); }, [selectedTime]);
   const travelLook = travelling ? { name: travelling.name, design: appearances[travelling.world_id]?.design ?? designFor(undefined, travelling.name), art: appearances[travelling.world_id]?.art ?? {},
