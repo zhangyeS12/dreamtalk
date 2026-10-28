@@ -23,7 +23,7 @@
 .brand { display: flex; align-items: center; gap: 12px; margin-right: auto; min-width: 0; text-shadow: 0 2px 12px rgb(0 0 0 / 0.7); }
 .brand img { width: 40px; height: 36px; object-fit: contain; flex: none; }
 .brand h1 { margin: 0; color: var(--dt-moon); font-size: 18px; font-weight: 600; letter-spacing: 0.2em; line-height: 1.3; outline: none; }
-.brand p { margin: 2px 0 0; color: rgb(238 240 248 / 0.72) !important; font-size: 12.5px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.brand p { margin: 2px 0 0; color: rgb(238 240 248 / 0.72); font-size: 12.5px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .pill, .hud :global(.desktop-update-entry) { display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 16px; border-radius: 999px;
   border: 1px solid var(--dt-glass-edge); background: rgb(8 10 24 / 0.55); color: var(--dt-silver); font-size: 13px; cursor: pointer; backdrop-filter: blur(12px); white-space: nowrap; }
 .pill:hover:not(:disabled), .hud :global(.desktop-update-entry:hover) { color: var(--dt-moon); background: rgb(8 10 24 / 0.82); }

@@ -1,3 +1,4 @@
+@layer legacy {
 .speech-settings, .character-voice { display: grid; gap: 1rem; }
 .speech-local-service { border-block: 1px solid var(--border, #343e51); padding-block: .85rem; display: grid; gap: .7rem; }
 .speech-local-service p { margin: 0; overflow-wrap: anywhere; }
@@ -20,3 +21,4 @@
 .speech-preview-decision { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; }
 .speech-preview-decision button { font-size: .9rem; }
 @media (max-width: 720px) { .speech-limits { grid-template-columns: 1fr; } }
+}

@@ -1,3 +1,4 @@
+@layer legacy {
 .contacts-view-switch { display: flex; gap: .55rem; padding: .8rem 1rem; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
 .contacts-view-switch button[aria-pressed="true"] { background: #dfeee3; color: #22573b; border-color: #94bca3; }
 .contact-portrait { display: inline-grid; place-items: center; width: 3rem; height: 3rem; flex: none; border-radius: 50%; overflow: hidden; background: linear-gradient(145deg, #e8f1e8, #b8d4c0); color: #23613e; box-shadow: inset 0 0 0 1px #ffffffb8, 0 .2rem .7rem #173b2430; font-weight: 700; font-size: 1.25rem; }
@@ -87,3 +88,4 @@
 .faction-leave-dialog .secondary-button { color: #ecedf4; background: #252e42; border-color: #68728a; }
 .faction-leave-dialog .destructive-action { color: #ffbbb3; border-color: #a26766; }
 @media (max-width: 640px) { .faction-leave-dialog { padding: 18px; } }
+}

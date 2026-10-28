@@ -1,5 +1,7 @@
 # 循环拖动世界书架：复用决定（2026-10-02）
 
+> 后续变更（0.1.93）：书架改为自绘三维环形书架（`apps/web/src/WorldShelf.tsx`），不再依赖 Embla；`embla-carousel-react` 及其许可文件已移除。以下为当时的决策记录，保留作历史参考，现行实现见 [WORLD_ARCHIVE](../WORLD_ARCHIVE.md)。
+
 用户已确认：书距略增；横排首尾相接、双向循环；总书位为max(12,世界数+1)，始终有空白创建入口；侧面与正面显示同一个世界名；直接按住书本或背景拖动，短按仍选书，拖动不误触。保留现有抽出后展示详情、草稿和真实世界隔离；三图封面最后实施。
 
 ## 成熟实现与实际选择
@@ -9,7 +11,7 @@
 - [8.6.0 DragHandler发布源码](https://github.com/davidjerleke/embla-carousel/blob/v8.6.0/packages/embla-carousel/src/components/DragHandler.ts)：8px拖动阈值只用于点击拦截，捕获阶段阻止拖动后的点击；document mouseup处理移出视口的释放。键盘Enter/Space在应用keydown显式激活，以避免旧鼠标点击抑制影响键盘操作。手指拖动交给Embla，保留纵向页面与缩放。
 - [官方事件](https://www.embla-carousel.com/docs/v8/api/events)、[方法](https://www.embla-carousel.com/docs/v8/api/methods)：scroll/reInit/settle回调与slideNodes、scrollTo/scrollPrev/scrollNext。应用只读公开slide DOM的实际位置，不调用internalEngine，不复制私有算法。
 - [8.6.0 SlideLooper源码](https://github.com/davidjerleke/embla-carousel/blob/v8.6.0/packages/embla-carousel/src/components/SlideLooper.ts)：内容不足以覆盖视口时loop会降级false。12本84px书位在宽屏可能不够，因此按视口增加整圈的纯展示副本，保证内容宽度至少多于视口两个书位；书序持续重复，无新增存档。总书数仍按逻辑书位计。每个逻辑书只有一个按钮/键盘/读屏入口，额外展示书为aria-hidden的非焦点图形，点击复用同一个真实worldId或空白入口。
-- [版本标签MIT许可](https://raw.githubusercontent.com/davidjerleke/embla-carousel/v8.6.0/LICENSE)：三包均声明MIT，完整原始许可保存在[本地许可](../licenses/embla-carousel-8.6.0-LICENSE-MIT.txt)并随便携包分发。项目仍Apache-2.0。
+- [版本标签MIT许可](https://raw.githubusercontent.com/davidjerleke/embla-carousel/v8.6.0/LICENSE)：三包均声明MIT，当时完整原始许可随便携包分发。项目仍Apache-2.0。
 
 ## 与现有三维场景的衔接
 

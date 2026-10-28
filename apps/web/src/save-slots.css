@@ -1,3 +1,4 @@
+@layer legacy {
 .save-slots { padding: 24px; color: var(--ink); }
 .save-slots-heading { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 16px; }
 .save-slots h2 { margin: 0 0 8px; font-size: 1.25rem; text-wrap: balance; }
@@ -27,4 +28,5 @@
   .save-slot-kind { flex-basis: 100%; }
   .save-slot-name { max-width: none; }
   .save-slot-actions { align-items: flex-start; gap: 10px 12px; }
+}
 }

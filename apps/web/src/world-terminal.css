@@ -1,3 +1,4 @@
+@layer legacy {
 /* Observatory: an ink-blue room, silver-blue conversation and warm solar light. */
 .world-workspace {
   --casing: oklch(.17 .025 265); --page: oklch(.205 .025 265); --surface: oklch(.235 .027 265);
@@ -34,7 +35,6 @@
 .world-workspace.world-tab-chats .chat-workspace { flex: 1; height: auto; min-height: 360px; }
 .world-workspace.world-tab-contacts:not(.contacts-editing) .contacts-page { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 .world-workspace.world-tab-contacts:not(.contacts-editing) .contacts-workspace { flex: 1; min-height: 360px; height: auto; }
-.world-workspace .unread-dot { background: oklch(.75 .15 25); box-shadow: 0 0 0 2px var(--recessed); }
 
 /* Directory surfaces are recessed; the conversation receives the space. */
 .world-workspace .chat-workspace { grid-template-columns: 292px minmax(0, 1fr); height: calc(100dvh - 210px); min-height: 440px; background: var(--page); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; box-shadow: none; }
@@ -43,32 +43,22 @@
 .world-workspace .directory-heading > div { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
 .world-workspace .directory-heading strong { font-size: 1.125rem; font-weight: 500; }
 .world-workspace .directory-heading small { color: var(--muted); font-size: .6875rem; }
-.world-workspace .directory-add { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 8px; border: 1px solid var(--control-line); padding: 0; background: transparent; color: var(--gold); }
-.world-workspace .directory-section-label { margin: 24px 12px 10px; color: var(--muted); font-size: .6875rem; }
+
 .world-workspace .conversation-row { position: relative; border: 0; border-radius: 8px; min-height: 78px; margin: 3px 0; padding: 14px 12px; gap: 12px; background: transparent; }
-.world-workspace .conversation-row-wrap { position: relative; display: flex; align-items: stretch; margin: 3px 0; border-radius: 8px; }
-.world-workspace .conversation-row-wrap.selected { background: var(--green-soft); }
-.world-workspace .conversation-row-main { flex: 1; min-width: 0; display: flex; align-items: center; border: 0; border-radius: 8px; padding: 14px 8px 14px 12px; gap: 12px; color: inherit; background: transparent; text-align: left; }
-.world-workspace .conversation-row-wrap.selected .conversation-row-main { color: var(--ink); }
-.world-workspace .conversation-row-main:hover { background: oklch(.27 .028 265); }
-.world-workspace .conversation-pin { flex: 0 0 36px; display: grid; place-items: center; align-self: center; width: 32px; height: 32px; margin-right: 7px; border: 0; border-radius: 7px; color: var(--muted); background: transparent; }
-.world-workspace .conversation-pin:hover, .world-workspace .conversation-pin:focus-visible { color: var(--gold); background: var(--raised); }
-.world-workspace .conversation-pin.active { color: var(--gold); }
-.world-workspace .conversation-pin svg { width: 16px; height: 16px; }
-.world-workspace .conversation-pin.active svg { fill: currentColor; }
+
+
+
 .world-workspace .conversation-row.selected { background: var(--green-soft); color: var(--ink); }
 .world-workspace .conversation-row.selected .row-copy strong { color: var(--green-hover); }
 .world-workspace .row-copy { gap: 5px; }
 .world-workspace .row-copy strong { font-weight: 500; font-size: .875rem; line-height: 1.5; overflow-wrap: anywhere; }
 .world-workspace .row-copy small { font-size: .6875rem; }
-.world-workspace .pin-label { font-size: .625rem; color: var(--muted); }
+
 .world-workspace .avatar { width: 42px; height: 42px; flex-basis: 42px; border-radius: 12px; }
-.world-workspace .event-avatar { color: var(--gold); background: oklch(.28 .025 75); }
-.world-workspace .event-avatar svg { width: 25px; height: 25px; }
-.world-workspace .group-avatar { background: var(--green-soft); color: var(--blue); }
+
 .world-workspace .contact-portrait { width: 44px; height: 44px; border-radius: 50%; background: linear-gradient(145deg, oklch(.40 .04 265), oklch(.28 .025 265)); color: var(--ink); box-shadow: inset 0 0 0 1px oklch(.63 .03 265 / .35); font-weight: 500; font-size: 1.125rem; }
 .world-workspace .conversation-detail { min-width: 0; overflow: hidden; background: var(--page); }
-.world-workspace .chat-thread { min-height: 0; height: 100%; overflow-y: auto; }
+
 .world-workspace .conversation-placeholder { min-height: 320px; padding: 48px 24px; gap: 0; }
 .world-workspace .conversation-placeholder h2 { font-size: 1.375rem; font-weight: 450; letter-spacing: .01em; margin: 0 0 14px; }
 .world-workspace .conversation-placeholder p { color: var(--muted); font-size: .875rem; line-height: 1.9; }
@@ -84,22 +74,14 @@
 
 /* Identity, dialogue and writing have distinct visual weight. */
 .world-workspace .thread-heading { padding: 20px 30px; min-height: 84px; background: var(--page); border-bottom: 1px solid var(--line); z-index: var(--layer-header); gap: 14px; }
-.world-workspace .conversation-heading { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; }
-.world-workspace .thread-back { display: none; }
-.world-workspace .thread-identity { min-width: 0; }
-.world-workspace .thread-identity h2 { font-size: 1.0625rem; font-weight: 500; overflow-wrap: anywhere; }
-.world-workspace .thread-identity > span { font-size: .6875rem; display: block; margin-top: 3px; }
-.world-workspace .thread-heading .transcript-refresh { display: inline-flex; align-items: center; gap: 7px; font-size: .75rem; color: var(--muted); white-space: nowrap; }
-.world-workspace .transcript-refresh svg { width: 16px; height: 16px; flex-basis: 16px; }
-.world-workspace .thread-tools { display: contents; }
-.world-workspace .thread-tools > summary { list-style: none; padding: 8px 10px; border: 1px solid var(--control-line); border-radius: 6px; cursor: pointer; color: var(--muted); white-space: nowrap; font-size: .75rem; }
-.world-workspace .thread-tools > summary::-webkit-details-marker { display: none; }
-.world-workspace .thread-tools > summary:hover { color: var(--ink); background: var(--surface); }
-.world-workspace .thread-tools summary svg { width: 12px; height: 12px; margin-left: 7px; fill: none; stroke: currentColor; stroke-width: 1.5; vertical-align: middle; transition: transform var(--motion); }
-.world-workspace .thread-tools[open] summary svg { transform: rotate(180deg); }
-.world-workspace .thread-tool-actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
-.world-workspace .thread-tools:not([open]) .thread-tool-actions { display: none; }
-.world-workspace .thread-tool-actions .text-action { display: inline-flex; font-size: .75rem; }
+
+
+
+
+
+
+
+
 .world-workspace .message-list { max-width: 1060px; padding: 28px 40px 36px; gap: 24px; }
 .world-workspace .message-row { align-items: flex-start; gap: 12px; }
 .world-workspace .message-portrait { width: 34px; height: 34px; margin-top: 5px; font-size: .875rem; }
@@ -121,22 +103,16 @@
 .world-workspace .message-feedback span { color: var(--danger); font-size: .625rem; margin-left: 4px; }
 .world-workspace .message-day { display: flex; align-items: center; justify-content: center; gap: 16px; list-style: none; color: var(--muted); font-size: .6875rem; margin: 4px 0 6px; }
 .world-workspace .message-day::before, .world-workspace .message-day::after { content: ""; height: 1px; width: 32px; background: var(--line); }
-.world-workspace .chat-composer { margin: 0 22px 20px; padding: 18px 20px 14px; gap: 10px; background: var(--surface); border: 1px solid var(--control-line); border-radius: 12px; z-index: var(--layer-composer); box-shadow: none; bottom: 12px; }
-.world-workspace .chat-composer:focus-within { border-color: var(--blue); }
-.world-workspace .chat-composer textarea { border: 0; outline: none; background: transparent; border-radius: 4px; min-height: 66px; padding: 4px 0; line-height: 1.8; font-size: .9375rem; }
-.world-workspace .chat-composer textarea:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
-.world-workspace .chat-composer-actions { gap: 8px 12px; align-items: center; }
-.world-workspace .chat-composer-actions > small { font-size: .6875rem; line-height: 1.65; max-width: 58ch; margin-right: auto; }
-.world-workspace .chat-composer-actions .text-action { font-size: .75rem; }
-.world-workspace .chat-composer-actions .primary-button { min-width: 88px; }
-.world-workspace .chat-composer-actions { min-height: 38px; }
+
+
+
 .world-workspace .chat-feedback, .world-workspace .reply-recovery { font-size: .8125rem; line-height: 1.7; }
 .world-workspace .reply-recovery .controls { gap: 8px; }
 .world-workspace .reply-recovery [role="alertdialog"] { padding: 16px; margin-top: 12px; background: oklch(.30 .032 80); border-radius: 6px; color: var(--warning); }
 .world-workspace .chat-mention-actions button { border-radius: 5px; padding: 5px 10px; border: 1px solid var(--control-line); background: var(--surface); color: var(--blue); }
 
 /* Shared controls explicitly override inspector styles and old light surfaces. */
-.world-workspace input:not([type="checkbox"]):not([type="radio"]):not(.dt-bare), .world-workspace select, .world-workspace textarea:not(.chat-composer textarea):not(.dt-bare) { width: 100%; max-width: 100%; min-width: 0; color: var(--ink); background: var(--recessed); border: 1px solid var(--control-line); border-radius: 6px; padding: 10px 12px; font-weight: 400; }
+.world-workspace input:not([type="checkbox"]):not([type="radio"]), .world-workspace select, .world-workspace textarea { width: 100%; max-width: 100%; min-width: 0; color: var(--ink); background: var(--recessed); border: 1px solid var(--control-line); border-radius: 6px; padding: 10px 12px; font-weight: 400; }
 .world-workspace input::placeholder, .world-workspace textarea::placeholder { color: var(--muted); opacity: 1; }
 .world-workspace input[type="checkbox"], .world-workspace input[type="radio"] { accent-color: var(--gold); }
 .world-workspace .primary-button, .world-workspace .secondary-button { min-height: 40px; font-size: .8125rem; border-radius: 6px; padding: 9px 16px; display: inline-flex; align-items: center; justify-content: center; gap: 10px; }
@@ -308,9 +284,8 @@
   .world-workspace .world-journal { padding-inline: 24px; }
   .world-workspace .world-journal .news-item { flex-direction: column; }
   .world-workspace .news-marks { flex-direction: row; flex-wrap: wrap; }
-  .world-workspace .conversation-heading { gap: 10px; }
-  .world-workspace .thread-heading .transcript-refresh { grid-column: 3; grid-row: 1; }
-  .world-workspace .transcript-refresh span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+
+
 }
 @media (max-width: 700px) {
   .world-workspace .dreamtalk-brand { font-size: 0; gap: 0; }
@@ -329,16 +304,14 @@
   .world-workspace .thread-open .conversation-detail { display: block; }
   .world-workspace .contacts-workspace .conversation-list { display: block; max-height: 260px; }
   .world-workspace .contacts-workspace .conversation-detail { display: block; }
-  .world-workspace .thread-back { display: inline-flex; grid-column: 1 / -1; justify-self: start; padding: 0; font-size: .75rem; }
-  .world-workspace .thread-heading .transcript-refresh { grid-row: 2; }
+
   .world-workspace .thread-heading h2 { font-size: 1rem; }
-  .world-workspace .thread-heading .text-action:not(.thread-back) { display: inline-flex; }
+  .world-workspace .thread-heading .text-action { display: inline-flex; }
   .world-workspace .message-list { padding: 20px 14px; gap: 20px; }
   .world-workspace .message-bubble { max-width: calc(100% - 42px); padding: 12px 14px; }
   .world-workspace .message-row.own .message-bubble { max-width: 90%; }
   .world-workspace .message-portrait { width: 30px; height: 30px; }
-  .world-workspace .chat-composer { margin: 0 10px 14px; padding: 14px; bottom: 92px; }
-  .world-workspace .chat-composer-actions > small { flex-basis: 100%; }
+
   .world-workspace .contacts-management > summary { padding: 12px; }
   .world-workspace .contacts-view-switch { padding: 10px; gap: 0; position: static; }
   .world-workspace .contacts-view-switch .secondary-button { padding-inline: 9px; font-size: .75rem; }
@@ -377,3 +350,4 @@
 
 .world-workspace .destructive-action { color: var(--danger); }
 .world-workspace .destructive-action:disabled { opacity: .45; }
+}

@@ -1,3 +1,4 @@
+@layer legacy {
 .sticker-libraries, .chat-media-settings, .media-analysis-fields { display: grid; gap: 1rem; min-width: 0; }
 .sticker-import { display: flex; flex-wrap: wrap; gap: 1rem; padding-block: 1rem; border-block: 1px solid var(--line); }
 .sticker-import > label { flex: 1 1 260px; }
@@ -23,3 +24,4 @@
 .media-analysis-fields { margin-top: 1rem; }
 .chat-media-settings .field { max-width: 650px; }
 .sticker-editor .profile-actions { flex-wrap: wrap; }
+}

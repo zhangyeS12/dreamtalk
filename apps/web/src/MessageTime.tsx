@@ -9,3 +9,9 @@ export function MessageTime({ message, compact = false }: { message: ChatMessage
     </details>}
   </>;
 }
+
+/** Day label for a divider between script lines, e.g. 2026年10月28日. */
+export function transcriptDay(raw: string): string {
+  const date = new Date(raw);
+  return Number.isNaN(date.getTime()) ? "时间未记录" : date.toLocaleDateString("zh-CN", { year: "numeric", month: "long", day: "numeric" });
+}

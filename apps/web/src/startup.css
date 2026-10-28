@@ -1,3 +1,4 @@
+@layer legacy {
 /* Preboot and React share the same composition; no white frame at handover. */
 .startup-splash, .startup-preboot {
   --night: oklch(.145 .025 270); --pearl: oklch(.94 .014 265); --gold: oklch(.85 .07 80);
@@ -47,4 +48,5 @@
   .startup-splash.has-failed .startup-signature { transform: translateY(-85px); }
   .startup-splash.has-failed .startup-signature img { width: 90px; }
   .startup-recovery { top: calc(50% + 36px); gap: 8px; }
+}
 }

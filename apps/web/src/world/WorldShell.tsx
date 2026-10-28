@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties, type ReactNode, type Ref } from "react";
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { WorldScene } from "./WorldScene";
 import styles from "./WorldShell.module.css";
 import "./tokens.css";
@@ -8,15 +8,15 @@ import "./theme.css";
  * Everything inside a world floats over that world's sky: the title written
  * on the sky, the four entries on a glass rail, and the active page.
  */
-export function WorldShell({ className, style, sky, rail, immersive, paused, body, children, mainRef }: {
+export function WorldShell({ className, style, sky, rail, immersive, paused, body, children }: {
   className: string; style: CSSProperties; sky: ReactNode; rail: ReactNode; immersive: boolean; paused: boolean;
-  body: "sun" | "moon" | null; children: ReactNode; mainRef?: Ref<HTMLElement>;
+  body: "sun" | "moon" | null; children: ReactNode;
 }) {
   return <div className={`dt-world ${styles.shell} ${className}`} style={style} data-immersive={immersive || undefined} data-paused={paused || undefined}>
     <WorldScene kind={body} />
     {sky}
     {!immersive && <div className={styles.railSlot}>{rail}</div>}
-    <main className={styles.main} id="main-content" ref={mainRef}>{children}</main>
+    <main className={styles.main} id="main-content">{children}</main>
   </div>;
 }
 

@@ -1,3 +1,4 @@
+@layer legacy {
 .settings-handbook { display: grid; grid-template-columns: 244px minmax(0, 1fr); max-width: 1380px; margin: 0 auto; min-height: 620px; background: var(--surface); border: 1px solid var(--line); border-radius: 4px; }
 .settings-handbook[hidden], .handbook-panel[hidden], .contacts-page[hidden] { display: none; }
 .handbook-index { min-width: 0; padding: 24px 0 18px; background: oklch(.946 .003 160); border-right: 1px solid var(--line); display: flex; flex-direction: column; }
@@ -44,9 +45,8 @@
 .handbook-diagnostics dl > div { display: grid; grid-template-columns: 124px minmax(0, 1fr); gap: 16px; padding: 16px 0; border-top: 1px solid var(--line); font-size: .9rem; }
 .handbook-diagnostics dt { color: var(--muted); }
 .handbook-diagnostics dd { margin: 0; overflow-wrap: anywhere; }
-.contacts-toolbar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 20px; }
-.contacts-toolbar h2 { margin: 0 0 6px; font-size: 1.08rem; font-weight: 650; }
-.contacts-toolbar p { margin: 0; color: var(--muted); font-size: .85rem; }
+
+
 .contacts-management { background: var(--surface); margin-bottom: 20px; border: 1px solid var(--line); border-radius: 4px; }
 .contacts-management > summary { display: flex; flex-wrap: wrap; gap: 10px 20px; align-items: center; padding: 18px 24px; cursor: pointer; }
 .contacts-management > summary::before { content: "＋"; color: var(--green-hover); }
@@ -107,3 +107,4 @@
 .background-readiness summary { cursor: pointer; padding-block: 12px; }
 .background-readiness li { margin-block: 12px; }
 .background-readiness li p { margin: 4px 0 0; color: var(--muted); }
+}

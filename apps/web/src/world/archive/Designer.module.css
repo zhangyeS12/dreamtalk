@@ -1,6 +1,6 @@
 .designer { position: absolute; inset: 0; z-index: 12; pointer-events: none; user-select: none; }
 .designer > * { pointer-events: auto; }
-.dim { position: absolute; inset: 0; pointer-events: none !important; background: linear-gradient(90deg, transparent 0 32%, rgb(4 5 12 / 0.8) 50%); animation: fade 0.35s ease both; }
+.dim { position: absolute; inset: 0; pointer-events: none; background: linear-gradient(90deg, transparent 0 32%, rgb(4 5 12 / 0.8) 50%); animation: fade 0.35s ease both; }
 .canvasWrap { position: absolute; left: 38%; top: 84px; width: 24%; display: grid; justify-items: center; gap: 10px; }
 .canvasLabel { color: var(--dt-silver); font-size: 12.5px; letter-spacing: 0.06em; text-align: center; }
 .canvas { position: relative; border-radius: 8px; overflow: visible; box-shadow: 0 0 0 1px rgb(255 255 255 / 0.12), 0 30px 60px -20px rgb(0 0 0 / 0.9); }
@@ -17,7 +17,7 @@
 
 .panel { position: absolute; right: 24px; top: 70px; bottom: 96px; width: min(440px, 34%); overflow: auto; padding: 6px 20px 20px; border-radius: 22px;
   border: 1px solid var(--dt-glass-edge); background: rgb(12 15 36 / 0.88); backdrop-filter: blur(24px); animation: slide 0.4s var(--dt-ease) both; user-select: text; }
-.panel h3 { margin: 18px 0 10px !important; color: var(--dt-silver); font-size: 12.5px; font-weight: 600; letter-spacing: 0.14em; }
+.panel h3 { margin: 18px 0 10px; color: var(--dt-silver); font-size: 12.5px; font-weight: 600; letter-spacing: 0.14em; }
 .panel > * + .segment, .panel > .swatches, .panel > .toggle { margin-top: 10px; }
 .row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 10px; }
 .segment { display: inline-flex; flex-wrap: wrap; padding: 3px; gap: 2px; border-radius: 999px; background: rgb(0 0 0 / 0.3); }
@@ -60,7 +60,7 @@
 .layers li[data-picked] { background: rgb(240 203 133 / 0.14); }
 .layers button { min-width: 26px; height: 26px; padding: 0 6px; border: 0; border-radius: 8px; background: none; color: var(--dt-faint); cursor: pointer; }
 .layers button:hover { color: var(--dt-moon); background: rgb(255 255 255 / 0.06); }
-.layerName { flex: 1; display: flex !important; align-items: center; gap: 8px; text-align: left; color: var(--dt-silver) !important; font-size: 12.5px; }
+.layerName { flex: 1; display: flex; align-items: center; gap: 8px; text-align: left; color: var(--dt-silver); font-size: 12.5px; }
 .layerName img { width: 22px; height: 22px; object-fit: contain; }
 .error, .notice { margin: 14px 0 0; padding: 10px 12px; border-radius: 12px; font-size: 12.5px; line-height: 1.6; }
 .error { background: rgb(242 144 126 / 0.14); color: var(--dt-danger-ink); }

@@ -4,66 +4,29 @@ import argparse
 import json
 import os
 import re
-import shutil
-import subprocess
-import tempfile
-import time
-import urllib.request
 from pathlib import Path
 
+from browser_runtime import owned_dev_web
 from playwright.sync_api import expect, sync_playwright
-from runtime_support import terminate_owned_tree
 from startup_browser_checks import check_startup_recovery
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--channel", default="msedge" if os.name == "nt" else None)
 args = parser.parse_args()
 root = Path(__file__).resolve().parents[1]
-node = shutil.which("node")
-if node is None:
-    raise SystemExit("Node is required")
-isolated_data = tempfile.TemporaryDirectory(prefix="livingworld-browser-smoke-")
-environment = os.environ.copy()
-environment["LOCALAPPDATA"] = isolated_data.name
-environment["APPDATA"] = isolated_data.name
-environment["HF_HUB_OFFLINE"] = "1"
-environment["TRANSFORMERS_OFFLINE"] = "1"
-process = subprocess.Popen(
-    [node, "scripts/dev-web.mjs", "--smoke"],
-    cwd=root,
-    env=environment,
-    stdin=subprocess.PIPE,
-    stdout=subprocess.PIPE,
-    stderr=subprocess.STDOUT,
-    text=True,
-    encoding="utf-8",
-    errors="replace",
-)
-try:
-    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-    deadline = time.monotonic() + 20
-    while True:
-        if process.poll() is not None or time.monotonic() > deadline:
-            raise RuntimeError("browser_runtime_start_failed")
-        try:
-            with opener.open("http://127.0.0.1:5173/", timeout=1):
-                break
-        except OSError:
-            time.sleep(0.1)
+with owned_dev_web("livingworld-browser-smoke-") as url:
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(channel=args.channel, headless=True)
         page = browser.new_page(viewport={"width": 1440, "height": 900})
         errors = []
         page.on("pageerror", lambda _error: errors.append(True))
-        page.goto("http://127.0.0.1:5173/", wait_until="networkidle")
-        page.get_by_role("heading", name="世界书架", exact=True).wait_for(timeout=30_000)
+        page.goto(url, wait_until="networkidle")
+        page.get_by_role("region", name="世界书架", exact=True).wait_for(timeout=30_000)
 
         def archive():
             page.get_by_role("button", name="世界书架", exact=True).click()
-            page.get_by_role("heading", name="世界书架", exact=True).wait_for()
-            expect(
-                page.locator(".archive-intro").get_by_role("button", name="刷新书架", exact=True)
-            ).to_be_enabled()
+            page.get_by_role("region", name="世界书架", exact=True).wait_for()
+            expect(page.get_by_role("button", name="刷新书架", exact=True)).to_be_enabled()
 
         def enter_world(name):
             book = page.get_by_role("button", name=f"预览世界：{name}", exact=True)
@@ -82,6 +45,10 @@ try:
             page.get_by_role("button", name="创建世界", exact=True).click()
             page.get_by_role("textbox", name="世界名称", exact=True).fill(name)
             page.get_by_role("button", name="创建档案并添加世界书", exact=True).click()
+            # The new archive opens its world-book sheet; adding books can wait.
+            sheet = page.get_by_role("dialog", name=f"「{name}」的世界书", exact=True)
+            sheet.get_by_role("button", name="收起", exact=True).click()
+            expect(sheet).to_have_count(0)
             page.get_by_role("button", name="进入世界 →", exact=True).click()
             page.get_by_role("navigation", name="主导航").wait_for()
 
@@ -123,12 +90,16 @@ try:
         page.get_by_role("button", name="进入世界", exact=True).click()
         page.get_by_text("已绑定：我", exact=True).wait_for()
         page.get_by_role("button", name="聊天", exact=True).click()
+        directory = page.get_by_role("complementary", name="会话列表")
+        events_row = directory.get_by_role("button", name=re.compile("^世界事件"))
         for width in (1024, 1440, 1920):
             page.set_viewport_size({"width": width, "height": 900})
-            workspace = page.locator(".chat-workspace:visible")
-            assert workspace.bounding_box()["width"] > width * 0.9
-            assert workspace.locator(".conversation-list").is_visible()
-            assert workspace.locator(".conversation-detail").is_visible()
+            # Directory and thread sit side by side and fill the area beside the nav rail.
+            workspace = page.locator(".dt-chat-workspace")
+            main = page.locator("#main-content").bounding_box()
+            assert workspace.bounding_box()["width"] > main["width"] * 0.9
+            expect(directory).to_be_visible()
+            expect(workspace.locator(".dt-thread-host")).to_be_visible()
             assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
         page.set_viewport_size({"width": 1440, "height": 900})
         if screenshot_path := os.environ.get("LW_BROWSER_SCREENSHOT"):
@@ -137,7 +108,7 @@ try:
             page.set_viewport_size({"width": 390, "height": 844})
             page.screenshot(path=mobile_screenshot_path, full_page=True)
         page.set_viewport_size({"width": 1440, "height": 900})
-        page.locator(".conversation-row.pinned").click()
+        events_row.click()
         page.get_by_role("region", name="世界事件时间线").wait_for()
         settings("世界时间")
         clock_section = page.locator("section.settings-section").filter(
@@ -190,7 +161,10 @@ try:
         page.get_by_text("当前聊天模型尚不可用，请在设置中核对模型与路由。", exact=True).wait_for()
         expect(page.get_by_role("textbox", name="发送给Fixture Alice的消息")).to_be_disabled()
         expect(page.get_by_role("button", name="发送", exact=True)).to_be_disabled()
-        expect(page.locator(".conversation-list .conversation-row.pinned")).to_have_count(1)
+        # Opening a chat never pins it; world events stay the only pinned row.
+        expect(
+            directory.get_by_role("button", name="置顶Fixture Alice", exact=True)
+        ).to_have_attribute("aria-pressed", "false")
         if chat_screenshot := os.environ.get("LW_CHAT_SCREENSHOT"):
             page.screenshot(path=chat_screenshot, full_page=True)
         settings("主动联系")
@@ -202,7 +176,7 @@ try:
         availability_section.get_by_role("button", name="设为可用").click()
         expect(availability_section.locator("strong")).to_have_text("可用")
         page.reload(wait_until="networkidle")
-        page.get_by_role("heading", name="世界书架", exact=True).wait_for()
+        page.get_by_role("region", name="世界书架", exact=True).wait_for()
         enter_world("world_profile_smoke")
         settings("模型与聊天")
         page.get_by_text("聊天额度", exact=True).filter(visible=True).click()
@@ -237,11 +211,11 @@ try:
         page.get_by_role("region", name="群聊").wait_for()
         expect(page.get_by_role("button", name="发送", exact=True)).to_be_disabled()
         page.reload(wait_until="networkidle")
-        page.get_by_role("heading", name="世界书架", exact=True).wait_for()
+        page.get_by_role("region", name="世界书架", exact=True).wait_for()
         enter_world("world_profile_smoke")
         page.get_by_role("button", name="聊天", exact=True).click()
         group_row = (
-            page.locator(".conversation-list .conversation-row")
+            directory.get_by_role("button")
             .filter(has_text="Fixture Billy")
             .filter(has_text="Fixture Charlie")
         )
@@ -262,6 +236,9 @@ try:
         page.get_by_role("heading", name="导入预览", exact=True).wait_for()
         page.get_by_role("button", name="确认加入当前世界", exact=True).click()
         page.get_by_text("世界书已加入当前世界。", exact=True).wait_for()
+        sheet = page.get_by_role("dialog", name="「world_profile_smoke」的世界书", exact=True)
+        sheet.get_by_role("button", name="收起", exact=True).click()
+        expect(sheet).to_have_count(0)
         page.get_by_role("button", name="进入世界 →", exact=True).click()
         page.get_by_role("button", name="我", exact=True).click()
         page.get_by_label("我的称呼", exact=True).fill("player_a")
@@ -270,7 +247,7 @@ try:
         page.get_by_label("我在这个世界的身份", exact=True).fill("旅人")
         page.get_by_role("button", name="保存世界身份", exact=True).click()
         page.reload(wait_until="networkidle")
-        page.get_by_role("heading", name="世界书架", exact=True).wait_for()
+        page.get_by_role("region", name="世界书架", exact=True).wait_for()
         enter_world("world_profile_smoke")
         page.get_by_role("button", name="我", exact=True).click()
         expect(page.get_by_label("我的称呼", exact=True)).to_have_value("player_a")
@@ -286,34 +263,23 @@ try:
         page.get_by_role("button", name="聊天", exact=True).click()
         expect(group_row).to_have_count(0)
         # Inspector polls every 500 ms, so network-idle is not a readiness condition.
-        page.goto("http://127.0.0.1:5173/?developer=1", wait_until="domcontentloaded")
+        page.goto(url + "?developer=1", wait_until="domcontentloaded")
         page.get_by_role("heading", name="开发者运行时检查器").wait_for(timeout=20_000)
         page.get_by_role("heading", name="计划触发器", exact=True).wait_for(timeout=20_000)
         if errors:
             raise RuntimeError("browser_page_error")
-        check_startup_recovery(browser, "http://127.0.0.1:5173/")
+        check_startup_recovery(browser, url)
         browser.close()
-    output, _ = process.communicate("stop\n", timeout=12)
-    events = [json.loads(line)["event"] for line in output.splitlines() if line.startswith("{")]
-    if process.returncode != 0 or "runtime_stopped" not in events:
-        raise RuntimeError("browser_graceful_shutdown_failed")
-    print(
-        json.dumps(
-            {
-                "event": "browser_smoke_passed",
-                "state": "核心已就绪",
-                "product": "visible",
-                "inspector": "visible",
-                "profile_persistence_and_world_isolation": "passed",
-                "startup_failure_update_hit_testing_and_network_recovery": "passed",
-                "page_errors": 0,
-            }
-        )
+print(
+    json.dumps(
+        {
+            "event": "browser_smoke_passed",
+            "state": "核心已就绪",
+            "product": "visible",
+            "inspector": "visible",
+            "profile_persistence_and_world_isolation": "passed",
+            "startup_failure_update_hit_testing_and_network_recovery": "passed",
+            "page_errors": 0,
+        }
     )
-finally:
-    if process.poll() is None:
-        try:
-            process.communicate("stop\n", timeout=12)
-        except (OSError, subprocess.TimeoutExpired, ValueError):
-            terminate_owned_tree(process)
-    isolated_data.cleanup()
+)

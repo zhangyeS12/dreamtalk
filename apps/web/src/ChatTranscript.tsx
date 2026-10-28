@@ -1,7 +1,7 @@
 import { ChatPathTools, MessagePathActions, type PathAction } from "./ChatPathTools";
 import { useConversationRead } from "./useChatUnread";
 import { ContextReferencePanel } from "./ContextReferencePanel";
-import { MessageTime } from "./MessageTime";
+import { MessageTime, transcriptDay } from "./MessageTime";
 import { SpeechControls, SpeechFeedback, useSpeechPreviews } from "./SpeechPlayback";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { CoreClient, type ChatConversation, type ChatMessage } from "@dreamtalk/api-client";
@@ -18,7 +18,6 @@ import { ConversationMemoryPanel } from "./ConversationMemoryPanel";
 import { submitChatOnEnter } from "./chatComposerKeys";
 import { chatPhaseFeedback } from "./chatFeedback";
 
-import { transcriptDay } from "./ConversationHeading";
 import { characterTint } from "./world/tint";
 import { ComposerShell, DayDivider, ScriptMessage, SendButton, ThreadEmpty, ThreadFrame, ThreadHeader, ThreadNote, ThreadStage, TranscriptButton, WorldAvatar } from "./world/chat/ThreadParts";
 import { FileExportDialog } from "./FileExportDialog";
@@ -109,7 +108,7 @@ export function ChatTranscript({ client, worldId, playerId, conversation, avatar
         </>}
         sticker={<StickerPicker client={client} worldId={worldId} selected={sticker} onSelect={setSticker} disabled={composerLocked} />}
         input={<><label htmlFor="direct-chat-draft" className="sr-only">发送给{conversation.character_name}的消息</label>
-          <textarea ref={draftInput} id="direct-chat-draft" className="dt-bare" value={draft} onChange={event => setDraft(event.target.value)} onKeyDown={submitChatOnEnter} disabled={composerLocked} maxLength={65536} placeholder={`对${conversation.character_name}说点什么……`} rows={1} /></>}
+          <textarea ref={draftInput} id="direct-chat-draft" value={draft} onChange={event => setDraft(event.target.value)} onKeyDown={submitChatOnEnter} disabled={composerLocked} maxLength={65536} placeholder={`对${conversation.character_name}说点什么……`} rows={1} /></>}
         send={<SendButton label={sendLabel} disabled={!available || sending || (!!budgetFeedback && !pendingSend) || (!draft.trim() && !sticker && !pendingSend)} />}
         meta={<><small>回车发送 · Shift+回车换行 · 本轮输入与输出共用 {tokenCeiling.toLocaleString("zh-CN")} Token 上限</small>
           {latestPlayerMessage ? <button type="button" className="text-action" disabled={sending || !!pendingSend} onClick={() => void checkReply()}>检查回复状态</button> : null}

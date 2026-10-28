@@ -29,7 +29,7 @@ export function ChatDirectory({
     <div className={styles.search}>
       <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 4.5 4.5" /></svg>
       <label className="sr-only" htmlFor={searchId}>搜索角色或群聊成员</label>
-      <input id={searchId} className="dt-bare" type="search" value={query} onChange={event => onQuery(event.target.value)} placeholder="搜索角色或群聊成员" autoComplete="off" maxLength={120} />
+      <input id={searchId} type="search" value={query} onChange={event => onQuery(event.target.value)} placeholder="搜索角色或群聊成员" autoComplete="off" maxLength={120} />
       {query && <button type="button" aria-label="清除搜索" onClick={() => { onQuery(""); document.getElementById(searchId)?.focus(); }}>
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 7 10 10M7 17 17 7" /></svg>
       </button>}

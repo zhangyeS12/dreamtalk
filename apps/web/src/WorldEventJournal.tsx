@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { CoreClient, CoreRequestError, type ChatStoryEntry, type KnownWorldEvent, type NewsMark, type PublicNewsEntry, type WorldStoryEntries } from "@dreamtalk/api-client";
 
-import { transcriptDay } from "./ConversationHeading";
+import { transcriptDay } from "./MessageTime";
 import { SourceMessageDialog } from "./SourceMessageDialog";
 
 const kinds = { activity: "活动", plan: "计划", rumor: "传闻", invitation: "邀请", change: "变更" };

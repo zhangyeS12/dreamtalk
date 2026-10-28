@@ -2,7 +2,7 @@ import { ChatPathTools, MessagePathActions, type PathAction } from "./ChatPathTo
 import { useConversationRead } from "./useChatUnread";
 import { useDesktopUpdateBlock } from "./DesktopUpdates";
 import { ContextReferencePanel } from "./ContextReferencePanel";
-import { MessageTime } from "./MessageTime";
+import { MessageTime, transcriptDay } from "./MessageTime";
 import { SpeechControls, SpeechFeedback, useSpeechPreviews } from "./SpeechPlayback";
 import { Fragment, useEffect, useRef, useState, type FormEvent } from "react";
 import { CoreClient, CoreRequestError, type ChatMessage, type GroupChatConversation, type WorldContentItem } from "@dreamtalk/api-client";
@@ -19,7 +19,6 @@ import { ConversationMemoryPanel } from "./ConversationMemoryPanel";
 import { submitChatOnEnter } from "./chatComposerKeys";
 import { chatPhaseFeedback } from "./chatFeedback";
 
-import { transcriptDay } from "./ConversationHeading";
 import { companyTints } from "./world/tint";
 import { ComposerShell, DayDivider, ScriptMessage, SendButton, ThreadEmpty, ThreadFrame, ThreadHeader, ThreadNote, ThreadStage, TranscriptButton, WorldAvatar, threadStyles } from "./world/chat/ThreadParts";
 import { FileExportDialog } from "./FileExportDialog";
@@ -196,7 +195,7 @@ export function GroupChatDetails({ client, worldId, playerId, group, avatarUrls 
         mentions={mentionable.length > 0 ? <div className="chat-mention-actions"><span>指定下一位</span>{mentionable.map(item => <button key={item.character_id} type="button" disabled={composerLocked || dissolving} onClick={() => insertMention(item.character_name)}>@{item.character_name}</button>)}</div> : null}
         sticker={<StickerPicker client={client} worldId={worldId} selected={sticker} onSelect={setSticker} disabled={composerLocked} />}
         input={<><label htmlFor="group-chat-draft" className="sr-only">发送群聊消息</label>
-          <textarea ref={draftInput} id="group-chat-draft" className="dt-bare" value={draft} onChange={event => setDraft(event.target.value)} onKeyDown={submitChatOnEnter} disabled={composerLocked || dissolving} maxLength={65536} placeholder="说点什么，或用 @角色名 指定下一位发言者……" rows={1} /></>}
+          <textarea ref={draftInput} id="group-chat-draft" value={draft} onChange={event => setDraft(event.target.value)} onKeyDown={submitChatOnEnter} disabled={composerLocked || dissolving} maxLength={65536} placeholder="说点什么，或用 @角色名 指定下一位发言者……" rows={1} /></>}
         send={<SendButton label={sendLabel} disabled={dissolving || !available || sending || (!!budgetFeedback && !pending) || (!draft.trim() && !sticker && !pending)} />}
         meta={<><small>回车发送 · Shift+回车换行 · 本轮所有发言共用 {tokenCeiling.toLocaleString("zh-CN")} Token 上限</small>
           {latestPlayerMessage ? <button type="button" className="text-action" disabled={sending || !!pending} onClick={() => void checkReply()}>检查回复状态</button> : null}

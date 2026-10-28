@@ -82,7 +82,8 @@
 .frame .tools :global(.chat-path-current .text-action) { padding: 3px 10px; border-radius: 999px; }
 .frame .tools :global(.chat-path-current .text-action:hover) { background: rgb(255 255 255 / 0.08); color: var(--dt-moon); }
 .frame .tools :global(.chat-path-current .text-action) { color: var(--dt-silver); font-size: 12px; }
-.frame .tools > :global(*:not(.chat-path-tools)),
+/* Inline panels only: modal <dialog>s keep their own centred top-layer box. */
+.frame .tools > :global(*:not(.chat-path-tools, dialog)),
 .frame .tools :global(.chat-path-panel) {
   margin: 8px 18px; max-height: min(56vh, 520px); overflow: auto;
   padding: 16px 18px; border-radius: 18px; border: 1px solid var(--dt-glass-edge);
@@ -224,7 +225,7 @@
 }
 .frame .capsule:focus-within { border-color: rgb(240 203 133 / 0.45); box-shadow: 0 24px 50px -20px rgb(0 0 0 / 0.8), 0 0 0 4px rgb(240 203 133 / 0.08); }
 .frame .capsule :global(textarea) {
-  flex: 1; min-width: 0; min-height: 46px; max-height: 200px; field-sizing: content; resize: none;
+  flex: 1; width: auto; max-width: none; min-width: 0; min-height: 46px; max-height: 200px; field-sizing: content; resize: none;
   padding: 12px 4px; border: 0; outline: 0; background: none; color: var(--dt-moon);
   font: 15.5px/1.55 var(--dt-font);
 }

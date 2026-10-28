@@ -3,7 +3,7 @@ import { ChatMessageBody } from "./ChatMessageBody";
 import { threadStyles as styles } from "./world/chat/ThreadParts";
 
 /** The reply as it arrives, laid out like a finished script line. */
-export function StreamingReplyBubble({ name, text, tint }: { name: string; text: string; avatarUrl?: string; tint?: string }) {
+export function StreamingReplyBubble({ name, text, tint }: { name: string; text: string; tint?: string }) {
   return <li className={`${styles.line} ${styles.streaming}`} style={tint ? { "--tint": tint } as CSSProperties : undefined} aria-label={`${name}正在回复`}>
     <div className={styles.name}><span>{name}</span></div>
     <div className={styles.text}>

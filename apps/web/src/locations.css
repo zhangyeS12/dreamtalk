@@ -1,3 +1,4 @@
+@layer legacy {
 .location-manager { padding: 1.2rem 1.4rem; border-top: 1px solid var(--line); }
 .location-manager-heading { display: flex; justify-content: space-between; align-items: start; gap: 1rem; margin-bottom: 1.2rem; }
 .location-manager-heading h2, .location-editor h3, .character-location-editor h3 { margin: 0 0 .4rem; font-size: 1.05rem; }
@@ -43,3 +44,4 @@
 .location-map-empty { position: absolute; top: 45%; left: 0; right: 0; text-align: center; }
 @media (max-width: 800px) { .location-editor-grid { grid-template-columns: 1fr; }.location-catalog { max-height: 12rem; border-right: 0; border-bottom: 1px solid var(--line); }.location-focus-panel { width: min(16rem, 55%); }.location-unplaced { max-width: 55%; top: 5.5rem; }.location-map-stage { min-height: 34rem; } }
 @media (prefers-reduced-motion: reduce) { .location-focus-panel { animation: none; } }
+}

@@ -1,3 +1,4 @@
+@layer legacy {
 .file-export-dialog { width: min(640px, calc(100vw - 32px)); max-height: calc(100dvh - 48px); overflow-y: auto; padding: 28px; border: 1px solid #525b72; border-radius: 14px; background: #161c2b; color: #ecedf4; box-shadow: 0 24px 80px #05091370; }
 .file-export-dialog::backdrop { background: #050913b3; }
 .file-export-dialog .export-heading { display: flex; align-items: start; justify-content: space-between; gap: 20px; margin-bottom: 24px; }
@@ -19,3 +20,4 @@
 .export-check input { margin-top: 5px; }
 .export-notice { overflow-wrap: anywhere; }
 @media (max-width: 640px) { .file-export-dialog { padding: 18px; } }
+}
