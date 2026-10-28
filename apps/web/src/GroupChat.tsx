@@ -121,7 +121,8 @@ export function GroupChatDetails({ client, worldId, playerId, group, avatarUrls 
   const expression = inferExpression(latestCharacter?.text ?? "");
   const expressionDigest = (spritePerson && visualState?.visuals?.expressions.find(item => item.root_import_id === spritePerson.root_import_id && item.expression === expression)?.digest)
     ?? (spritePerson && visualState?.visuals?.expressions.find(item => item.root_import_id === spritePerson.root_import_id && item.expression === "neutral")?.digest);
-  const spriteUrl = (expressionDigest ? visualState?.urls[expressionDigest] : undefined) ?? (spritePerson ? avatarUrls[spritePerson.root_import_id] : undefined);
+  // Only a sprite the user uploaded may stand on the stage; never substitute the avatar.
+  const spriteUrl = expressionDigest ? visualState?.urls[expressionDigest] : undefined;
 
   const dissolve = async () => {
     if (dissolveLock.current || sending || pending) return;
@@ -157,7 +158,7 @@ export function GroupChatDetails({ client, worldId, playerId, group, avatarUrls 
   const senderName = (message: ChatMessage) => message.sender_kind === "player" && message.sender_id === playerId ? "我" : names.get(message.sender_id) ?? "角色";
   const title = group.participants.map(item => item.character_name).join("、");
 
-  return <ThreadFrame label="群聊" tint={spritePerson ? tintOf(spritePerson.character_id) : undefined} staged={immersive && !!spriteUrl} scrollRef={thread}
+  return <ThreadFrame label="群聊" tint={spritePerson ? tintOf(spritePerson.character_id) : undefined} staged={immersive} portrait={immersive && !!spriteUrl} scrollRef={thread}
     stage={immersive ? <ThreadStage url={spriteUrl} label={`${spritePerson?.character_name ?? "角色"}，${expressionLabel(expression)}表情`} /> : null}
     header={<ThreadHeader title={title} kind={`群聊 · ${group.participants.length} 位角色`}
       portrait={<span className={threadStyles.groupPortrait} aria-hidden="true">{group.participants.slice(0, 3).map(person => <WorldAvatar key={person.character_id} name={person.character_name} url={avatarUrls[person.root_import_id]} tint={tintOf(person.character_id)} size="s" />)}</span>}

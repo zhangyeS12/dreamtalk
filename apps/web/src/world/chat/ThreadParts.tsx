@@ -16,11 +16,11 @@ export function WorldAvatar({ name, url, tint, size = "m", className = "" }: { n
  * and the composer. `scrollRef` must sit on the direct child of the scroller
  * (useChatScroll reads its parent element).
  */
-export function ThreadFrame({ label, header, tools, stage, scrollRef, children, composer, tint, staged }: {
+export function ThreadFrame({ label, header, tools, stage, scrollRef, children, composer, tint, staged, portrait = false }: {
   label: string; header: ReactNode; tools?: ReactNode; stage?: ReactNode; scrollRef: Ref<HTMLElement>;
-  children: ReactNode; composer: ReactNode; tint?: string; staged: boolean;
+  children: ReactNode; composer: ReactNode; tint?: string; staged: boolean; portrait?: boolean;
 }) {
-  return <section className={styles.frame} aria-label={label} style={tintStyle(tint)} data-staged={staged || undefined}>
+  return <section className={styles.frame} aria-label={label} style={tintStyle(tint)} data-staged={staged || undefined} data-portrait={portrait || undefined}>
     {stage}
     {header}
     {tools ? <div className={styles.tools}>{tools}</div> : null}

@@ -285,8 +285,11 @@
   mask-image: linear-gradient(to bottom, transparent 0, black 120px);
 }
 .frame[data-staged] .header { position: relative; z-index: 2; border-color: transparent; }
-.frame[data-staged] .column { width: min(640px, 52%); margin: 0 0 0 4%; }
-.frame[data-staged] .composer { width: min(700px, 56%); margin-left: 4%; }
+/* No uploaded sprite: the background alone, with the script centred over a light veil. */
+.frame[data-staged]:not([data-portrait])::before { background: rgb(6 8 22 / 0.42); }
+/* With a sprite: script moves left, the character stands on the right. */
+.frame[data-portrait] .column { width: min(640px, 52%); margin: 0 0 0 4%; }
+.frame[data-portrait] .composer { width: min(700px, 56%); margin-left: 4%; }
 .frame[data-staged] .line:last-of-type .text :global(.message-content) { font-size: 18px; }
 
 /* ---------- Narrow windows ---------- */
@@ -305,7 +308,7 @@
   .frame .mine { max-width: 88%; }
   .frame .composer { width: calc(100% - 20px); margin-bottom: 10px; }
   .stage { width: 70%; opacity: 0.55; }
-  .frame[data-staged] .column, .frame[data-staged] .composer { width: calc(100% - 28px); margin-left: 14px; }
+  .frame[data-portrait] .column, .frame[data-portrait] .composer { width: calc(100% - 28px); margin-left: 14px; }
 }
 
 @media (max-width: 520px) {

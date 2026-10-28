@@ -66,14 +66,15 @@ export function ChatTranscript({ client, worldId, playerId, conversation, avatar
   const expression = inferExpression(latestCharacter?.text ?? "");
   const expressionDigest = visualState?.visuals?.expressions.find(item => item.root_import_id === conversation.root_import_id && item.expression === expression)?.digest
     ?? visualState?.visuals?.expressions.find(item => item.root_import_id === conversation.root_import_id && item.expression === "neutral")?.digest;
-  const spriteUrl = (expressionDigest ? visualState?.urls[expressionDigest] : undefined) ?? avatarUrl;
+  // Only a sprite the user uploaded may stand on the stage; never substitute the avatar.
+  const spriteUrl = expressionDigest ? visualState?.urls[expressionDigest] : undefined;
 
   const tint = characterTint(conversation.character_id);
   const composerLocked = !available || sending || !!pendingSend;
   const sendLabel = phase === "saving" ? "正在保存…" : phase === "replying" ? "等待回复…" : phase === "checking" ? "检查中…" : pendingSend ? "重试保存" : "发送";
   const senderName = (message: ChatMessage) => message.sender_kind === "player" && message.sender_id === playerId ? "我" : conversation.character_name;
 
-  return <ThreadFrame label={`${conversation.character_name}的会话`} tint={tint} staged={immersive && !!spriteUrl} scrollRef={thread}
+  return <ThreadFrame label={`${conversation.character_name}的会话`} tint={tint} staged={immersive} portrait={immersive && !!spriteUrl} scrollRef={thread}
     stage={immersive ? <ThreadStage url={spriteUrl} label={`${conversation.character_name}，${expressionLabel(expression)}表情`} /> : null}
     header={<ThreadHeader title={conversation.character_name} kind="私聊" portrait={<WorldAvatar name={conversation.character_name} url={avatarUrl} tint={tint} size="l" />}
       onBack={onBack} onRefresh={() => { setRefresh(value => value + 1); paths.refresh(); }} onPaths={() => paths.setOpen(true)} onLongMemory={() => setLongMemoryOpen(true)}
