@@ -1,0 +1,45 @@
+.rail {
+  grid-area: rail;
+  display: flex; flex-direction: column; align-items: stretch; gap: 4px;
+  padding: 14px 8px;
+  background: var(--dt-night);
+  border-right: 1px solid var(--dt-line);
+}
+
+.rail .item {
+  position: relative;
+  display: grid; justify-items: center; gap: 4px;
+  min-height: 58px; padding: 9px 4px 7px;
+  border: 0; border-radius: var(--dt-radius-m);
+  background: transparent; color: var(--dt-faint);
+  cursor: pointer;
+  transition: color var(--dt-quick) var(--dt-ease), background-color var(--dt-quick) var(--dt-ease);
+}
+.rail .item:hover { color: var(--dt-moon); background: var(--dt-raised); }
+.rail .item[aria-current="page"] { color: var(--dt-moon); background: var(--dt-raised); }
+/* The active entry carries the logo's four-point star. */
+.rail .item[aria-current="page"]::before {
+  content: ""; position: absolute; left: -2px; top: 50%; width: 9px; height: 9px; translate: 0 -50%;
+  background: var(--dt-sun);
+  clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%);
+}
+.rail .item:focus-visible { outline: 2px solid var(--dt-sun); outline-offset: 1px; }
+
+.rail .icon { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.rail .item[aria-current="page"] .icon { stroke: var(--dt-sun); }
+.rail .label { font-size: var(--dt-text-xs); line-height: 1.2; letter-spacing: 0.02em; }
+
+.rail .unread {
+  position: absolute; top: 8px; right: 14px; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--dt-coral); box-shadow: 0 0 0 2px var(--dt-night);
+}
+
+@media (max-width: 720px) {
+  .rail {
+    flex-direction: row; justify-content: space-around; gap: 0;
+    padding: 4px 6px max(4px, env(safe-area-inset-bottom));
+    border-right: 0; border-top: 1px solid var(--dt-line);
+  }
+  .rail .item { flex: 1 1 0; max-width: 120px; min-height: 52px; }
+  .rail .item[aria-current="page"]::before { left: 50%; top: -1px; translate: -50% 0; }
+}

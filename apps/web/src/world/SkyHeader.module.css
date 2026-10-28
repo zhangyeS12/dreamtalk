@@ -1,0 +1,102 @@
+/* The sky over the world. Selectors carry two classes so the legacy
+   `.world-workspace button` rules cannot repaint them during migration. */
+.sky {
+  grid-area: sky;
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  min-width: 0;
+  padding: 0 20px 0 18px;
+  color: var(--dt-moon);
+  background: linear-gradient(to bottom,
+    var(--dt-sky-zenith) 0%,
+    color-mix(in oklab, var(--dt-sky-zenith) 70%, var(--dt-sky-horizon)) 50%,
+    var(--dt-sky-horizon) 100%);
+  box-shadow: inset 0 -1px 0 color-mix(in oklab, var(--dt-sky-horizon) 70%, white 10%);
+}
+.sky[data-paused] { filter: saturate(0.45); }
+
+.sky .stars { position: absolute; inset: 0; z-index: -1; opacity: var(--dt-stars); pointer-events: none; }
+.sky .stars i {
+  position: absolute; width: 2px; height: 2px; border-radius: 50%;
+  background: #f4f2ff; box-shadow: 0 0 4px rgb(244 242 255 / 0.7);
+}
+
+/* Sun or moon on its arc. x runs across the whole sky; altitude lifts it. */
+.sky .body {
+  --size: 18px;
+  position: absolute; z-index: -1; width: var(--size); height: var(--size); border-radius: 50%;
+  /* The arc runs through the open sky between the world name and the controls. */
+  --track-start: 320px; --track-end: 330px;
+  left: calc(var(--track-start) + var(--dt-sky-x) * (100% - var(--track-start) - var(--track-end) - var(--size)));
+  top: calc((1 - var(--dt-sky-altitude)) * 52px + 2px);
+  pointer-events: none;
+}
+.sky .body[data-kind="sun"] {
+  background: radial-gradient(circle at 40% 38%, #fff4d6, var(--dt-sun) 55%, #d9a556);
+  box-shadow: 0 0 18px 6px rgb(243 205 130 / 0.45), 0 0 60px 18px rgb(243 205 130 / 0.18);
+}
+.sky .body[data-kind="moon"] {
+  background: transparent;
+  box-shadow: inset -5px 3px 0 0 #dfe5f7, 0 0 16px 2px rgb(200 212 245 / 0.18);
+  transform: rotate(-18deg);
+}
+
+.sky .world { display: flex; align-items: center; gap: 12px; min-width: 0; margin-right: auto; }
+.sky .mark { width: 34px; height: 30px; object-fit: contain; flex: none; filter: drop-shadow(0 1px 4px rgb(6 8 24 / 0.5)); }
+.sky .names { display: grid; gap: 2px; min-width: 0; text-shadow: 0 1px 3px rgb(6 8 24 / 0.45); }
+.sky .names strong {
+  overflow: hidden; white-space: nowrap; text-overflow: ellipsis; max-width: 40ch;
+  font-size: var(--dt-text-l); font-weight: 600; letter-spacing: 0.01em; line-height: 1.3;
+}
+.sky .clock {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  font-size: var(--dt-text-xs); color: color-mix(in oklab, var(--dt-moon) 82%, transparent);
+  font-variant-numeric: tabular-nums; line-height: 1.4;
+}
+.sky .phase { color: var(--dt-moon); }
+.sky .state {
+  padding: 0 7px; border-radius: 999px; line-height: 18px;
+  background: rgb(10 12 32 / 0.45); color: var(--dt-sun-bright);
+}
+.sky .state[data-tone="danger"] { color: var(--dt-danger-ink); }
+
+.sky .actions { display: flex; align-items: center; gap: 10px; flex: none; }
+.sky .archive {
+  display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 14px;
+  border: 1px solid rgb(236 238 247 / 0.28); border-radius: 999px;
+  background: rgb(10 12 32 / 0.32); color: var(--dt-moon);
+  font-size: var(--dt-text-s); cursor: pointer;
+  backdrop-filter: blur(6px);
+  transition: background-color var(--dt-quick) var(--dt-ease), border-color var(--dt-quick) var(--dt-ease);
+}
+.sky .archive:hover { background: rgb(10 12 32 / 0.55); border-color: rgb(236 238 247 / 0.5); }
+.sky .archive svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linejoin: round; }
+
+.segmented {
+  display: inline-flex; padding: 3px; gap: 2px;
+  border-radius: 999px; background: rgb(10 12 32 / 0.38); border: 1px solid rgb(236 238 247 / 0.2);
+  backdrop-filter: blur(6px);
+}
+.segmented button {
+  min-width: 52px; min-height: 30px; padding: 0 12px; border: 0; border-radius: 999px;
+  background: transparent; color: color-mix(in oklab, var(--dt-moon) 78%, transparent);
+  font-size: var(--dt-text-s); cursor: pointer;
+  transition: background-color var(--dt-quick) var(--dt-ease), color var(--dt-quick) var(--dt-ease);
+}
+.segmented button:hover { color: var(--dt-moon); background: rgb(236 238 247 / 0.08); }
+.segmented button[aria-pressed="true"] { background: var(--dt-moon); color: var(--dt-night); font-weight: 600; }
+
+.sky :is(button):focus-visible, .segmented button:focus-visible { outline: 2px solid var(--dt-sun); outline-offset: 2px; }
+
+@media (max-width: 720px) {
+  .sky { gap: 10px; padding: 0 12px; }
+  .sky .names strong { max-width: 18ch; font-size: var(--dt-text-m); }
+  .sky .phase { display: none; }
+  .sky .body { display: none; }
+  .sky .archive span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .sky .archive { padding: 0 10px; }
+}

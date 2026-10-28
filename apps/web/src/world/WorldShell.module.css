@@ -1,0 +1,74 @@
+.shell {
+  display: grid;
+  grid-template-areas: "sky sky" "rail main";
+  grid-template-columns: 76px minmax(0, 1fr);
+  grid-template-rows: 64px minmax(0, 1fr);
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+  color: var(--dt-moon);
+  background-color: var(--dt-night);
+}
+.shell[data-immersive] { grid-template-areas: "sky" "main"; grid-template-columns: minmax(0, 1fr); }
+
+/* The room takes its light from the sky: a soft wash under wherever the sun or moon stands. */
+.shell .main {
+  grid-area: main;
+  position: relative;
+  display: flex; flex-direction: column;
+  min-width: 0; min-height: 0;
+  max-width: none; margin: 0; /* the base stylesheet centres every <main> */
+  overflow: auto;
+  padding: 16px 20px 20px;
+  background:
+    radial-gradient(70% 60% at calc(250px + var(--dt-sky-x) * (100% - 580px)) 0%,
+      color-mix(in oklab, var(--dt-sky-horizon) 16%, transparent), transparent 72%),
+    var(--dt-night);
+}
+.shell .main > * { flex-shrink: 0; }
+.shell[data-immersive] .main { padding: 0; }
+
+.notices {
+  position: absolute; z-index: 20; top: 12px; right: 20px;
+  display: grid; gap: 8px; width: min(420px, calc(100% - 40px));
+  pointer-events: none;
+}
+.notices .notice {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 11px 12px 11px 16px;
+  border-radius: var(--dt-radius-m);
+  border: 1px solid var(--dt-line-strong);
+  background: color-mix(in oklab, var(--dt-raised) 92%, transparent);
+  box-shadow: 0 12px 32px -12px rgb(4 6 20 / 0.7);
+  backdrop-filter: blur(10px);
+  font-size: var(--dt-text-s); line-height: 1.6;
+  pointer-events: auto;
+  animation: notice-in 220ms var(--dt-ease);
+}
+.notices .notice p { flex: 1; margin: 0; }
+.notices .notice[data-tone="error"] { background: color-mix(in oklab, var(--dt-danger-surface) 94%, transparent); color: var(--dt-danger-ink); border-color: rgb(242 144 126 / 0.4); }
+.notices .notice[data-tone="notice"] { color: var(--dt-moon); }
+.notices .notice[data-tone="notice"]::before {
+  content: ""; flex: none; width: 8px; height: 8px; margin-top: 7px;
+  background: var(--dt-sun);
+  clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%);
+}
+.notices .notice button {
+  flex: none; display: grid; place-items: center; width: 26px; height: 26px; margin: -2px -2px 0 0;
+  padding: 0; border: 0; border-radius: 50%; background: transparent; color: inherit; cursor: pointer;
+}
+.notices .notice button:hover { background: rgb(255 255 255 / 0.08); }
+.notices .notice button svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+
+@keyframes notice-in { from { opacity: 0; translate: 0 -6px; } }
+
+@media (max-width: 720px) {
+  .shell { grid-template-areas: "sky" "main" "rail"; grid-template-columns: minmax(0, 1fr); grid-template-rows: 56px minmax(0, 1fr) auto; }
+  .shell[data-immersive] { grid-template-areas: "sky" "main"; grid-template-rows: 56px minmax(0, 1fr); }
+  .shell .main { padding: 10px 10px 12px; }
+  .notices { left: 10px; right: 10px; width: auto; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .notices .notice { animation: none; }
+}

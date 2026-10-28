@@ -22,9 +22,7 @@
 .product-shell input:focus-visible,
 .product-shell select:focus-visible,
 .product-shell textarea:focus-visible { outline: 3px solid var(--green); outline-offset: 2px; }
-.app-header { height: 64px; padding: 0 32px; display: flex; align-items: center; justify-content: space-between; gap: 18px; background: var(--surface); border-bottom: 1px solid var(--line); }
 .app-brand { font-size: 1.02rem; font-weight: 720; letter-spacing: -0.02em; }
-.app-content { max-width: none; width: 100%; min-height: calc(100dvh - 64px); margin: 0; padding: 24px 32px 96px; }
 .page-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 22px; }
 .page-heading h1 { margin: 0; font-size: 1.65rem; font-weight: 720; letter-spacing: -0.025em; text-wrap: balance; }
 .page-world { color: var(--muted); font-size: .84rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -99,11 +97,6 @@
 .app-alert, .app-notice { padding: 12px 16px; border-radius: 8px; font-size: .88rem; }
 .app-alert { background: oklch(0.96 0.03 25); color: oklch(0.35 0.1 25); }
 .app-notice { background: var(--green-soft); color: var(--green-hover); }
-.bottom-nav { position: fixed; bottom: 0; left: 0; right: 0; margin: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 180px)); justify-content: center; padding: 7px 10px max(7px, env(safe-area-inset-bottom)); border-top: 1px solid var(--line); background: var(--surface); z-index: 10; }
-.nav-item { min-height: 44px; display: flex; flex-direction: row; align-items: center; justify-content: center; gap: 10px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); cursor: pointer; font-size: .78rem; }
-.nav-item:hover { background: var(--page); }
-.nav-item.active { color: var(--green-hover); font-weight: 650; }
-.nav-item svg { width: 22px; height: 22px; }
 .chat-workspace { display: grid; grid-template-columns: 300px minmax(0, 1fr); height: calc(100dvh - 218px); min-height: 360px; border: 1px solid var(--line); background: var(--surface); }
 .conversation-list { min-width: 0; overflow-y: auto; border-right: 1px solid var(--line); background: var(--surface); }
 .conversation-list .empty-state { padding: 40px 20px; }
@@ -163,8 +156,6 @@
   .thread-heading .text-action { display: inline-flex; }
 }
 @media (max-width: 600px) {
-  .app-header { height: 55px; padding: 0 16px; }
-  .app-content { min-height: calc(100dvh - 55px); padding: 25px 0 110px; }
   .page-heading { padding: 0 18px; margin-bottom: 18px; }
   .page-heading h1 { font-size: 1.42rem; }
   .page-section, .settings-page { border-radius: 0; }
@@ -213,12 +204,8 @@
 .chat-composer-actions { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; }
 .chat-composer-actions small { flex: 1 1 220px; }
 .chat-composer-actions small, .chat-feedback { color: var(--muted); font-size: .8rem; }
-.chat-mode-switch { display: inline-flex; margin-left: 14px; padding: 3px; border: 1px solid color-mix(in srgb, var(--line) 85%, transparent); border-radius: 999px; background: color-mix(in srgb, var(--surface) 72%, transparent); }
-.chat-mode-switch button { min-width: 48px; padding: 5px 10px; border: 0; border-radius: 999px; background: transparent; color: var(--muted); cursor: pointer; font-size: .78rem; }
-.chat-mode-switch button.active { background: var(--green-soft); color: var(--green-hover); font-weight: 700; }
 .immersive-sprite-stage { position: absolute; inset: 70px 0 120px; display: flex; align-items: flex-end; justify-content: center; pointer-events: none; z-index: 0; }
 .immersive-sprite-stage img { max-width: min(62vw, 720px); max-height: min(76vh, 780px); width: auto; height: 100%; object-fit: contain; object-position: center bottom; filter: drop-shadow(0 14px 24px color-mix(in srgb, #000 32%, transparent)); }
-.immersive-mode .app-content { padding: 0 0 0; min-height: calc(100dvh - 64px); }
 .immersive-mode .page-heading { display: none; }
 .immersive-mode .app-alert, .immersive-mode .app-notice { margin: 12px 24px; }
 .immersive-mode .chat-workspace { height: calc(100dvh - 64px); min-height: 0; border: 0; display: block; background: var(--page); }
@@ -230,7 +217,6 @@
 .immersive-mode .chat-composer { position: sticky; z-index: 2; }
 .immersive-mode .message-list { max-width: 1080px; }
 .immersive-mode .chat-composer { margin-top: auto; }
-.immersive-mode .bottom-nav { display: none; }
 .chat-visual-preview { min-height: 148px; display: grid; place-items: center; padding: 20px; border: 1px solid var(--line); border-radius: 10px; background-color: var(--page); background-size: cover; background-position: center; color: var(--muted); text-align: center; }
 .chat-visual-actions, .expression-editor { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-top: 14px; }
 .chat-visual-upload { position: relative; overflow: hidden; display: inline-flex; align-items: center; justify-content: center; }

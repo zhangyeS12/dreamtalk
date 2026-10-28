@@ -23,35 +23,17 @@
 .workspace-icon { width: 20px; height: 20px; flex: 0 0 20px; vertical-align: middle; }
 
 /* The world stays in the header. The four familiar destinations sit at the rim. */
-.world-workspace .app-header { height: 76px; padding: 0 30px; gap: 24px; background: var(--casing); border: 0; }
 .world-workspace .dreamtalk-brand { gap: 12px; font-size: 1.1875rem; font-weight: 500; letter-spacing: .01em; }
 .world-workspace .dreamtalk-brand img { width: 46px; height: 42px; object-fit: contain; }
-.world-workspace .workspace-world { min-width: 0; display: flex; align-items: center; gap: 14px; margin-right: auto; padding-left: 26px; border-left: 1px solid var(--line); }
-.world-workspace .workspace-world > svg { color: var(--gold); width: 28px; height: 28px; flex-basis: 28px; }
-.world-workspace .workspace-world > div { min-width: 0; display: grid; gap: 1px; }
-.world-workspace .workspace-world strong { font-weight: 500; font-size: .875rem; max-width: 44ch; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.world-workspace .workspace-world span { color: var(--muted); font-size: .6875rem; font-variant-numeric: tabular-nums; }
-.world-workspace .workspace-world .world-clock-state { color: var(--gold); }
-.world-workspace .archive-return { display: inline-flex; align-items: center; gap: 9px; white-space: nowrap; color: var(--muted); font-size: .8125rem; }
-.world-workspace .app-content { padding: 12px 24px 24px 92px; min-height: calc(100dvh - 76px); }
 .world-workspace .page-heading { margin: 6px 8px 26px; align-items: center; }
 .world-workspace .page-heading h1 { font-size: 1.625rem; font-weight: 500; letter-spacing: -.02em; }
 .world-workspace .page-heading p { color: var(--muted); font-size: .8125rem; margin: 5px 0 0; }
 .world-workspace .page-world { display: inline-flex; align-items: center; gap: 10px; color: var(--muted); font-size: .75rem; }
 .world-workspace .page-world svg { color: var(--gold); }
 .world-workspace .chat-page-heading { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); margin: 0; padding: 0; }
-.world-workspace.world-tab-chats .app-content { display: flex; flex-direction: column; height: calc(100dvh - 76px); min-height: 0; }
-.world-workspace.world-tab-chats .app-content > :not(.chat-workspace) { flex-shrink: 0; }
 .world-workspace.world-tab-chats .chat-workspace { flex: 1; height: auto; min-height: 360px; }
-.world-workspace.world-tab-contacts:not(.contacts-editing) .app-content { display: flex; flex-direction: column; height: calc(100dvh - 76px); min-height: 0; }
-.world-workspace.world-tab-contacts:not(.contacts-editing) .app-content > :not(.contacts-page) { flex-shrink: 0; }
 .world-workspace.world-tab-contacts:not(.contacts-editing) .contacts-page { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 .world-workspace.world-tab-contacts:not(.contacts-editing) .contacts-workspace { flex: 1; min-height: 360px; height: auto; }
-.world-workspace .bottom-nav { left: 0; top: 76px; right: auto; bottom: 0; transform: none; width: 68px; padding: 18px 10px; gap: 10px; display: flex; flex-direction: column; border: 0; border-right: 1px solid var(--line); border-radius: 0; background: var(--recessed); z-index: var(--layer-navigation); }
-.world-workspace .nav-item { position: relative; min-height: 44px; padding: 10px; border: 0; border-radius: 9px; font-size: 0; gap: 0; color: var(--muted); background: transparent; }
-.world-workspace .nav-item svg { width: 21px; height: 21px; stroke-width: 1.5; }
-.world-workspace .nav-item.active { background: var(--green-soft); color: var(--green-hover); font-weight: 500; }
-.world-workspace .nav-item.active svg { color: var(--gold); }
 .world-workspace .unread-dot { background: oklch(.75 .15 25); box-shadow: 0 0 0 2px var(--recessed); }
 
 /* Directory surfaces are recessed; the conversation receives the space. */
@@ -308,11 +290,8 @@
 
 @media (min-width: 1600px) {
   .world-workspace .chat-workspace { grid-template-columns: 320px minmax(0, 1fr); }
-  .world-workspace .app-content { padding-left: 92px; padding-right: 40px; }
-  .world-workspace .app-header { padding-inline: 40px; }
 }
 @media (max-width: 1100px) {
-  .world-workspace .app-content { padding-inline: 16px; }
   .world-workspace .chat-workspace { grid-template-columns: 248px minmax(0, 1fr); }
   .world-workspace .settings-handbook { grid-template-columns: 216px minmax(0, 1fr); }
   .world-workspace .handbook-sheet { padding: 28px; }
@@ -334,16 +313,8 @@
   .world-workspace .transcript-refresh span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 }
 @media (max-width: 700px) {
-  .world-workspace .app-header { height: 70px; padding-inline: 16px; gap: 12px; }
   .world-workspace .dreamtalk-brand { font-size: 0; gap: 0; }
   .world-workspace .dreamtalk-brand img { width: 36px; height: 34px; }
-  .world-workspace .workspace-world { padding-left: 12px; gap: 8px; }
-  .world-workspace .workspace-world > svg { display: none; }
-  .world-workspace .workspace-world strong { max-width: 20ch; font-size: .8125rem; }
-  .world-workspace .archive-return { font-size: .75rem; padding: 8px 0; }
-  .world-workspace .archive-return svg { display: none; }
-  .world-workspace .app-content { padding: 10px 10px 104px; min-height: calc(100dvh - 70px); }
-  .world-workspace.world-tab-chats .app-content, .world-workspace.world-tab-contacts:not(.contacts-editing) .app-content { display: block; height: auto; min-height: calc(100dvh - 70px); padding-bottom: 104px; }
   .world-workspace.world-tab-contacts:not(.contacts-editing) .contacts-page { display: block; }
   .world-workspace .page-heading { margin: 10px 8px 22px; }
   .world-workspace .page-heading h1 { font-size: 1.375rem; }
@@ -388,13 +359,10 @@
   .world-workspace .handbook-panel .setting-row .field { width: min(240px, 100%); }
   .world-workspace .profile-page > .settings-section { padding: 28px 24px; }
   .world-workspace .faction-manager { padding: 20px; }
-  .world-workspace .bottom-nav { left: 10px; top: auto; right: 10px; bottom: max(10px, env(safe-area-inset-bottom)); width: auto; height: 58px; padding: 5px; flex-direction: row; gap: 4px; border: 1px solid var(--line); border-radius: 12px; }
-  .world-workspace .nav-item { flex: 1; gap: 0; padding: 8px; font-size: 0; }
   .world-workspace .world-journal { padding: 4px 20px 28px; }
   .world-workspace .journal-refresh { align-items: flex-start; }
 }
 @media (min-width: 701px) {
-  .world-workspace.world-tab-contacts .app-content { padding-left: 92px; padding-right: 16px; }
   .world-workspace .contacts-workspace { grid-template-columns: 220px minmax(0, 1fr); }
   .world-workspace.world-tab-contacts:not(.contacts-editing) .contacts-workspace { min-height: 0; }
   .world-workspace .contacts-workspace .directory-heading { padding: 12px 8px 14px; }

@@ -1,0 +1,49 @@
+/*
+ * dreamtalk in-world tokens. Moon-white text, silver-blue secondary, sun-gold
+ * actions, all taken from the logo. The sky colours are written by SkyHeader
+ * from the real world clock and transition smoothly between polls.
+ */
+@property --dt-sky-zenith { syntax: "<color>"; inherits: true; initial-value: #0c102e; }
+@property --dt-sky-horizon { syntax: "<color>"; inherits: true; initial-value: #1f2652; }
+@property --dt-sky-x { syntax: "<number>"; inherits: true; initial-value: 0.5; }
+@property --dt-sky-altitude { syntax: "<number>"; inherits: true; initial-value: 0.5; }
+@property --dt-stars { syntax: "<number>"; inherits: true; initial-value: 1; }
+
+.dt-world {
+  --dt-night: #0e1330;
+  --dt-surface: #161c3c;
+  --dt-raised: #1f2649;
+  --dt-hover: #262e57;
+  --dt-line: rgb(159 176 218 / 0.16);
+  --dt-line-strong: rgb(159 176 218 / 0.32);
+  --dt-moon: #eceef7;
+  --dt-silver: #a9b4d8;
+  --dt-faint: #7d88b0;
+  --dt-sun: #e8c47e;
+  --dt-sun-bright: #f3d79c;
+  --dt-sun-ink: #2b2008;
+  --dt-coral: #f2907e;
+  --dt-danger-surface: #3a1f2c;
+  --dt-danger-ink: #ffc9bd;
+
+  --dt-font: "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", "Noto Sans SC", system-ui, sans-serif;
+  --dt-text-xs: 0.75rem;   /* 12 */
+  --dt-text-s: 0.8125rem;  /* 13 */
+  --dt-text-m: 0.9375rem;  /* 15 */
+  --dt-text-l: 1.0625rem;  /* 17 */
+  --dt-text-xl: 1.25rem;   /* 20 */
+
+  --dt-radius-s: 6px;
+  --dt-radius-m: 10px;
+  --dt-radius-l: 16px;
+  --dt-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --dt-quick: 160ms;
+
+  font-family: var(--dt-font);
+  transition: --dt-sky-zenith 2.4s linear, --dt-sky-horizon 2.4s linear, --dt-sky-x 2.4s linear,
+    --dt-sky-altitude 2.4s linear, --dt-stars 2.4s linear;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dt-world { transition: none; }
+}

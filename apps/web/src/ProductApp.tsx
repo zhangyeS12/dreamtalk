@@ -11,7 +11,7 @@ import { SaveBackupPanel } from "./SaveBackups";
 import { BackgroundSettings, type DesktopStatus } from "./BackgroundSettings";
 import { OfflineContactSettings } from "./OfflineContactSettings";
 import { useOfflineContact } from "./useOfflineContact";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { CoreClient, type PlayerAvailability, } from "@dreamtalk/api-client";
 import { useChatUnread } from "./useChatUnread";
 import { ProactiveContactSettings } from "./ProactiveContactSettings";
@@ -29,7 +29,6 @@ import { WorldActivities } from "./WorldActivities";
 import type { BackgroundDestination } from "./BackgroundTaskFeedback";
 import { ProfileEditor } from "./ProfileEditor";
 import { WorldArchivePage } from "./WorldArchivePage";
-import { Brand } from "./Brand";
 import { SettingsHandbook, SettingsFold } from "./SettingsHandbook";
 import { SettingsDiagnostics } from "./SettingsDiagnostics";
 import { ContactAvatar } from "./ContactSocial";
@@ -38,25 +37,9 @@ import { useChatVisuals } from "./useChatVisuals";
 import { CelestialEmpty, DirectorySearch, WorkspaceIcon } from "./WorkspacePrimitives";
 import "./product.css";
 import "./world-terminal.css";
-
-type IconName = "chats" | "contacts" | "settings" | "me";
-
-function TabIcon({ name }: { name: IconName }) {
-  const paths = {
-    chats: <><path d="M20 11.5a7.5 7.5 0 0 1-7.5 7.5 9 9 0 0 1-3.6-.7L4 20l1.5-4.2a7.5 7.5 0 1 1 14.5-4.3Z" /><path d="M8 11.5h8" /></>,
-    contacts: <><circle cx="9" cy="8" r="3" /><path d="M3.5 19a5.5 5.5 0 0 1 11 0" /><path d="M17 5.5a3 3 0 0 1 0 5.5M17 14a5 5 0 0 1 3.5 5" /></>,
-    settings: <><circle cx="12" cy="12" r="3" /><path d="m10 2-.5 2.2-2 .8-2-1.1-2.6 2.6 1.1 2-.8 2L1 11v2l2.2.5.8 2-1.1 2 2.6 2.6 2-1.1 2 .8L10 22h4l.5-2.2 2-.8 2 1.1 2.6-2.6-1.1-2 .8-2L23 13v-2l-2.2-.5-.8-2 1.1-2-2.6-2.6-2 1.1-2-.8L14 2Z" /></>,
-    me: <><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></>,
-  } satisfies Record<IconName, ReactNode>;
-  return <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
-}
-
-const tabs: Array<{ id: Tab; label: string }> = [
-  { id: "chats", label: "聊天" },
-  { id: "contacts", label: "通讯录" },
-  { id: "settings", label: "设置" },
-  { id: "me", label: "我" },
-];
+import { NavRail, WORLD_TABS } from "./world/NavRail";
+import { SegmentedSwitch, SkyHeader, skyStyle } from "./world/SkyHeader";
+import { WorldNotices, WorldShell } from "./world/WorldShell";
 
 function displayTime(raw: string): string {
   const micros = BigInt(raw);
@@ -155,7 +138,8 @@ function WorldWorkspaceContent({ client, initialWorldId, initialTab, onArchive }
     }, "", "会话未能打开，请稍后重试。");
   };
 
-  const title = tabs.find(item => item.id === tab)?.label ?? "聊天";
+  const title = WORLD_TABS.find(item => item.id === tab)?.label ?? "聊天";
+  const clearNotice = useCallback(() => setNotice(""), [setNotice]);
   const directoryQuery = conversationSearch.trim().toLocaleLowerCase();
   const activityRank = (conversationId: string) => unread.value?.items.find(item => item.conversation_id === conversationId)?.latest_position ?? 0;
   const sortDirectory = <T extends { conversation_id: string; pinned?: boolean }>(items: T[]) => [...items].sort((left, right) =>
@@ -216,12 +200,16 @@ function WorldWorkspaceContent({ client, initialWorldId, initialTab, onArchive }
       section?.scrollIntoView({ block: "start" }); section?.focus({ preventScroll: true });
     });
   };
-  return <div className={`product-shell world-workspace world-tab-${tab}${contactsManagementOpen ? " contacts-editing" : ""}${immersive && tab === "chats" ? " immersive-mode" : ""}`}>
-    <header className="app-header"><Brand /><span role="status" className="sr-only">核心已就绪</span><div className="workspace-world"><WorkspaceIcon name="orbit" /><div><strong>{world?.name ?? "正在读取世界…"}</strong>{world && <span>{displayTime(world.world_time)}<span className="world-clock-state">{world.clock_state === "paused" ? " · 已暂停" : ""}{world.runtime_state === "degraded" ? " · 运行异常" : ""}</span></span>}</div><div className="chat-mode-switch" role="group" aria-label="聊天显示模式"><button type="button" className={!immersive ? "active" : ""} aria-pressed={!immersive} onClick={() => setImmersiveMode(false)}>普通</button><button type="button" className={immersive ? "active" : ""} aria-pressed={immersive} onClick={() => setImmersiveMode(true)}>沉浸</button></div></div><button type="button" className="text-action archive-return" onClick={returnArchive}><WorkspaceIcon name="book" /><span>世界书架</span></button></header>
-    <main className="app-content" id="main-content">
+  const leaveChatGuard = () => !dirty.chat || window.confirm("当前会话有未发送的草稿或正在处理的请求，是否离开会话？已发起的生成可能继续。");
+  const immersiveChat = immersive && tab === "chats";
+  return <WorldShell className={`product-shell world-workspace world-tab-${tab}${contactsManagementOpen ? " contacts-editing" : ""}${immersiveChat ? " immersive-mode" : ""}`}
+    style={skyStyle(world)} immersive={immersiveChat}
+    sky={<SkyHeader world={world} onArchive={returnArchive} status={<span role="status" className="sr-only">核心已就绪</span>}
+      modeSwitch={tab === "chats" ? <SegmentedSwitch label="聊天显示模式" value={immersive ? "immersive" : "normal"}
+        options={[{ value: "normal", label: "普通" }, { value: "immersive", label: "沉浸" }]} onChange={value => setImmersiveMode(value === "immersive")} /> : undefined} />}
+    rail={<NavRail tab={tab} unread={unread.hasUnread} onSelect={next => { if (leaveChatGuard()) setTab(next); }} />}>
       <div className={`page-heading${tab === "chats" || tab === "contacts" ? " chat-page-heading" : ""}`}><div><h1 ref={entryHeading} tabIndex={-1}>{title}</h1><p>{pageHint}</p></div>{world ? <span className="page-world"><WorkspaceIcon name="orbit" />{world.name}</span> : null}</div>
-      {error ? <p className="app-alert" role="alert">{error}</p> : null}
-      {notice ? <p className="app-notice" role="status">{notice}</p> : null}
+      <WorldNotices error={error} notice={notice} onDismissError={() => setError("")} onDismissNotice={clearNotice} />
 
       {tab === "chats" && <div className={`chat-workspace ${eventsOpen || selectedConversation || selectedGroup || groupSetupOpen ? "thread-open" : ""}`}>
         <aside className="conversation-list" aria-label="会话列表">
@@ -305,7 +293,5 @@ function WorldWorkspaceContent({ client, initialWorldId, initialTab, onArchive }
         </>}
         {selectedPlayer ? <p className="inline-hint">已绑定：{players.find(item => item.player_id === selectedPlayer)?.name ?? "当前玩家"}</p> : null}
       </section>{world && <ProfileEditor key={world.world_id} client={client} worldId={world.world_id} onDirtyChange={onDirty.worldProfile} />}</div>}
-    </main>
-    <nav className="bottom-nav" aria-label="主导航">{tabs.map(item => <button key={item.id} type="button" className={tab === item.id ? "nav-item active" : "nav-item"} aria-label={item.label} title={item.label} aria-current={tab === item.id ? "page" : undefined} onClick={() => { if (tab !== item.id && dirty.chat && !window.confirm("当前会话有未发送的草稿或正在处理的请求，是否离开会话？已发起的生成可能继续。")) return; setTab(item.id); }}><TabIcon name={item.id} /><span>{item.label}{item.id === "chats" && unread.hasUnread && <span className="unread-dot" role="img" aria-label="有未读角色消息" />}</span></button>)}</nav>
-  </div>;
+  </WorldShell>;
 }
