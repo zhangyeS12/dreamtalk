@@ -20,6 +20,11 @@ from livingworld.infrastructure.persistence import (  # noqa: F401
     player_persona_models,
     speech_models,
 )
+from livingworld.infrastructure.persistence.chat_visual_models import (  # noqa: F401
+    ChatCharacterBackgroundRecord,
+    ChatCharacterExpressionRecord,
+    ChatVisualBackgroundRecord,
+)
 from livingworld.infrastructure.persistence.content_builder import (
     ContentBuilderJobRecord,  # noqa: F401
 )
@@ -125,7 +130,8 @@ CHAT_PATH_REVISION = "0057_chat_paths"
 CHARACTER_EVOLUTION_REVISION = "0058_character_evolution"
 CHARACTER_EVOLUTION_PROVENANCE_REVISION = "0059_character_evolution_provenance"
 CHAT_PREFERENCES_REVISION = "0060_chat_preferences"
-HEAD_REVISION = CHAT_PREFERENCES_REVISION
+CHAT_VISUALS_REVISION = "0061_chat_visuals"
+HEAD_REVISION = CHAT_VISUALS_REVISION
 
 # One reviewed linear chain replaces repeated hand-maintained suffix sets.
 _SUPPORTED_REVISIONS = (
@@ -189,7 +195,13 @@ _SUPPORTED_REVISIONS = (
     CHARACTER_EVOLUTION_REVISION,
     CHARACTER_EVOLUTION_PROVENANCE_REVISION,
     CHAT_PREFERENCES_REVISION,
+    CHAT_VISUALS_REVISION,
 )
+CHAT_VISUAL_TABLES = {
+    "chat_visual_backgrounds",
+    "chat_character_backgrounds",
+    "chat_character_expressions",
+}
 _REVISION_RANGES = {
     revision: frozenset(_SUPPORTED_REVISIONS[index:])
     for index, revision in enumerate(_SUPPORTED_REVISIONS)
@@ -428,6 +440,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         revision not in _REVISION_RANGES[CHARACTER_EVOLUTION_PROVENANCE_REVISION]
     )
     pre_chat_preferences_revision = revision not in _REVISION_RANGES[CHAT_PREFERENCES_REVISION]
+    pre_chat_visuals_revision = revision not in _REVISION_RANGES[CHAT_VISUALS_REVISION]
     pre_example_revision = revision not in _REVISION_RANGES[EXAMPLE_WORLD_REVISION]
     pre_recall_revision = revision not in _REVISION_RANGES[RECALL_REVISION]
     pre_location_policy_revision = revision not in _REVISION_RANGES[LOCATION_REVISION]
@@ -499,6 +512,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         CHARACTER_EVOLUTION_REVISION,
         CHARACTER_EVOLUTION_PROVENANCE_REVISION,
         CHAT_PREFERENCES_REVISION,
+        CHAT_VISUALS_REVISION,
     }:
         _fail("alembic_revision_unsupported")
     # Through 0020, chat revisions only add tables. Validate each historical
@@ -683,6 +697,8 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         expected -= CHAT_PATH_TABLES
     if pre_character_evolution_revision:
         expected -= CHARACTER_EVOLUTION_TABLES
+    if pre_chat_visuals_revision:
+        expected -= CHAT_VISUAL_TABLES
     if tables != expected:
         _fail("alembic_schema_state_mismatch")
     _validate_auxiliary_objects(
@@ -703,6 +719,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
             pre_character_evolution_revision=pre_character_evolution_revision,
             pre_character_evolution_provenance_revision=pre_character_evolution_provenance_revision,
             pre_chat_preferences_revision=pre_chat_preferences_revision,
+            pre_chat_visuals_revision=pre_chat_visuals_revision,
             pre_example_revision=pre_example_revision,
             pre_chat_revision=pre_chat_revision,
             pre_message_revision=pre_message_revision,
@@ -817,6 +834,7 @@ def _validate_domain_shape(
     pre_character_evolution_revision: bool = True,
     pre_character_evolution_provenance_revision: bool = True,
     pre_chat_preferences_revision: bool = True,
+    pre_chat_visuals_revision: bool = True,
     pre_chat_revision: bool | None = None,
     pre_message_revision: bool | None = None,
     pre_dispatch_revision: bool | None = None,
@@ -881,6 +899,8 @@ def _validate_domain_shape(
         if pre_chat_path_revision and table.name in CHAT_PATH_TABLES:
             continue
         if pre_character_evolution_revision and table.name in CHARACTER_EVOLUTION_TABLES:
+            continue
+        if pre_chat_visuals_revision and table.name in CHAT_VISUAL_TABLES:
             continue
         if pre_player_card_revision and table.name == "world_player_cards":
             continue
@@ -1335,8 +1355,7 @@ def _validate_domain_shape(
                 and constraint.name == "ck_world_event_ledger_position"
             )
             and not (
-                pre_chat_preferences_revision
-                and constraint.name == "ck_chat_message_feedback"
+                pre_chat_preferences_revision and constraint.name == "ck_chat_message_feedback"
             )
         }
         if (

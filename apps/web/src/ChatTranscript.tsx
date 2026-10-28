@@ -21,6 +21,8 @@ import { chatPhaseFeedback } from "./chatFeedback";
 import { ConversationHeading, transcriptDay } from "./ConversationHeading";
 import { ContactAvatar } from "./ContactSocial";
 import { FileExportDialog } from "./FileExportDialog";
+import { expressionLabel, inferExpression, type ChatVisualState } from "./useChatVisuals";
+import { ChatBackgroundControl } from "./ChatBackgroundControl";
 
 interface Props {
   client: CoreClient;
@@ -34,9 +36,11 @@ interface Props {
   onBack: () => void;
   onDirtyChange?: (dirty: boolean) => void;
   onModelSettings?: () => void;
+  visualState?: ChatVisualState;
+  immersive?: boolean;
 }
 
-export function ChatTranscript({ client, worldId, playerId, conversation, avatarUrl, tokenCeiling, suggestedDraft, onSuggestionUsed, onBack, onDirtyChange, onModelSettings }: Props) {
+export function ChatTranscript({ client, worldId, playerId, conversation, avatarUrl, tokenCeiling, suggestedDraft, onSuggestionUsed, onBack, onDirtyChange, onModelSettings, visualState, immersive = false }: Props) {
   const draftInput = useRef<HTMLTextAreaElement>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
@@ -57,11 +61,17 @@ export function ChatTranscript({ client, worldId, playerId, conversation, avatar
   const readReceipt = useConversationRead(client, worldId, conversation.conversation_id, messages);
   useSpeechPreviews(conversation.conversation_id, messages);
   const { thread, beforePrepend, followBottom } = useChatScroll(messages, visibleStreamDraft?.text);
+  const latestCharacter = [...(messages ?? [])].reverse().find(message => message.sender_kind === "character");
+  const expression = inferExpression(latestCharacter?.text ?? "");
+  const expressionDigest = visualState?.visuals?.expressions.find(item => item.root_import_id === conversation.root_import_id && item.expression === expression)?.digest
+    ?? visualState?.visuals?.expressions.find(item => item.root_import_id === conversation.root_import_id && item.expression === "neutral")?.digest;
+  const spriteUrl = (expressionDigest ? visualState?.urls[expressionDigest] : undefined) ?? avatarUrl;
 
   return <section ref={thread} className="chat-thread" aria-label={`${conversation.character_name}的会话`}>
+    {immersive && spriteUrl ? <div className="immersive-sprite-stage" aria-label={`${conversation.character_name}，${expressionLabel(expression)}表情`}><img src={spriteUrl} alt="" /></div> : null}
     <ConversationHeading title={conversation.character_name} kind="私聊" portrait={<ContactAvatar name={conversation.character_name} url={avatarUrl} />}
       onBack={onBack} onRefresh={() => { setRefresh(value => value + 1); paths.refresh(); }} onPaths={() => paths.setOpen(true)} onLongMemory={() => setLongMemoryOpen(true)}
-      onMemory={() => setMemoryOpen(true)} onHistory={() => setHistoryOpen(true)} onExport={() => setExportOpen(true)} />
+      onMemory={() => setMemoryOpen(true)} onHistory={() => setHistoryOpen(true)} onExport={() => setExportOpen(true)} visualControl={visualState ? <ChatBackgroundControl client={client} worldId={worldId} rootImportId={conversation.root_import_id} state={visualState} /> : undefined} />
     <ChatPathTools key={`${pathAction?.action ?? ""}:${pathAction?.message?.message_id ?? pathAction?.path?.path_id ?? ""}`} client={client} worldId={worldId} conversationId={conversation.conversation_id} paths={paths} blocked={sending || !!pendingSend || !!conversation.read_only} tokenCeiling={tokenCeiling} action={pathAction} onAction={setPathAction} onGenerate={turn => generateSavedReply(turn, true)} />
     {exportOpen && <FileExportDialog client={client} worldId={worldId} conversationId={conversation.conversation_id} onClose={() => setExportOpen(false)} />}
     {referenceTurn ? <ContextReferencePanel key={`${worldId}:${conversation.conversation_id}:${referenceTurn}`} client={client} worldId={worldId} conversationId={conversation.conversation_id} turnId={referenceTurn} names={new Map([[conversation.character_id, conversation.character_name]])} onClose={() => setReferenceTurn(null)} /> : null}

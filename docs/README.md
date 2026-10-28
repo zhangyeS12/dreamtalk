@@ -18,6 +18,7 @@
 | --- | --- |
 | 书架、封面、示例 | [书架](WORLD_ARCHIVE.md)、[三面封面](WORLD_COVERS.md)、[校园示例](EXAMPLE_WORLD.md) |
 | 聊天、记忆与来源 | [聊天](CHAT_FUNCTIONAL_EXPERIENCE.md)、[长期记忆](LONG_TERM_MEMORY.md)、[上下文与召回](CONTEXT_AND_RECALL.md)、[亲历召回](EXPERIENCE_RECALL.md) |
+| 聊天背景、角色立绘与沉浸模式 | [聊天模型与显示契约](architecture/CHAT_MODEL.md#聊天视觉与沉浸模式)、设置页与通讯录角色档案 |
 | 玩家设定身份 | [人物绑定、预览确认与逐角色初始认识](PLAYER_PERSONA.md) |
 | 地点、日常与相遇 | [地点](ACTIVITY_LOCATIONS.md)、[日常](DIRECTOR_ACTIVITIES.md)、[相遇](CHARACTER_ENCOUNTERS.md)、[共同休闲](SHARED_LEISURE.md) |
 | 事件与主动联系 | [世界事件](WORLD_EVENT_JOURNAL.md)、[在线联系](PROACTIVE_CONTACT.md)、[离线联系](OFFLINE_MESSAGES.md)、[背景授权](BACKGROUND_TASK_FEEDBACK.md) |

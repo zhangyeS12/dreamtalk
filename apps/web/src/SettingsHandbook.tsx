@@ -6,6 +6,7 @@ import "./settings-handbook.css";
 
 export const settingsPages = [
   { id: "model", label: "模型与聊天", scope: "当前世界", hint: "当前世界模型与本机共用聊天额度" },
+  { id: "visuals", label: "聊天视觉", scope: "当前世界", hint: "通用背景、透明质感与聊天立绘" },
   { id: "media", label: "表情与图片", scope: "当前世界", hint: "使用频率、联网配图与图片分析" },
   { id: "speech", label: "角色配音", scope: "当前世界", hint: "自动说话、音色与配音服务" },
   { id: "background", label: "后台运行", scope: "应用设置", hint: "登录启动与系统托盘" },

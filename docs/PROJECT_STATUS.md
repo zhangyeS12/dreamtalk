@@ -7,7 +7,7 @@
 | 项目 | 当前事实 |
 | --- | --- |
 | 公开发行基线 | GitHub 预发布 **v0.1.92** 已公开，Release ID `424368026`，固定提交`6897e6b`；六项附件与 `update-preview/windows.json` 已上传，频道清单版本为 `0.1.92`。 |
-| 接口与数据结构 | API 1；Core/Web 0.1.0；当前源码 Alembic head 为 `0060_chat_preferences`，公开 0.1.92 包 head 为 `0059_character_evolution_provenance`；配音revision 8。保留`livingworld`协议、数据位置及`app.livingworld.desktop`。 |
+| 接口与数据结构 | API 1；Core/Web 0.1.0；当前源码 Alembic head 为 `0061_chat_visuals`，公开 0.1.92 包 head 为 `0059_character_evolution_provenance`；配音revision 8。保留`livingworld`协议、数据位置及`app.livingworld.desktop`。 |
 | 本次工作基点 | 0.1.92修复提交 `6897e6b` 已同步到 `main` 与 `codex/world-archive`；Release 与固定更新频道已公开。源码隐私、build-only、签名和归档载荷核对通过；本轮没有对应提交的 GitHub Actions 成功运行。 |
 | 当前发行优化 | 0.1.91的私聊上下文精确读取、后台结构化诊断和角色卡建议来源追踪继续保留；0.1.92修复了0059迁移后严格schema校验因字段声明顺序造成的启动失败。真实后台运行和旧存档升级仍待验收。 |
 | 本机交付入口 | 规范本机入口为本轮独立构建的 0.1.92 版本 `artifacts/local-desktop/dreamtalk-desktop.exe`；未运行真实应用、用户库或模型。 |
@@ -44,6 +44,7 @@
 | 群聊内部发言者标签（0.1.91已发布） | 当前角色历史仅正文，其他角色按姓名／成员编号区分；旧前缀只整理模型输入副本，新回复前缀按本次角色姓名及UUID精确处理，流式暂存潜在标签。既有合成回归、界面回归、Pyright、Ruff／格式覆盖；见[契约](architecture/CHAT_MODEL.md#群聊内部标签与正文)。 | 真实模型仍待验收；旧聊天原文保持，不批量去除旧标识。 |
 | 0.1.92 启动迁移热修复 | 隔离 SQLite 从 0058 升级到 0059 后，严格 schema 校验通过；Python 编译、Ruff、Pyright、前端 lint／TypeScript、源码／载荷隐私、便携 build-only、签名安装器静态解包和六项远端资产摘要均通过。证据见[发行记录](maintenance/2026-10-26-release-0192.md)。 | 用户机器上的 0.1.90 → 0.1.92 应用内升级、真实存档保留、失败回退和重新启动仍待验收；本轮未运行 CI、真实应用、安装器或模型。 |
 | 会话工作区与回复反馈（当前工作树，未发行） | 左侧图标导航、直接／群聊置顶、未读主动联系排序、消息赞踩及有界风格偏好已接入；新增 `0060_chat_preferences`，置顶和反馈按现有世界／玩家／会话权限保存，反馈不会写入角色卡、记忆或世界事实；同时修复封面加载不应阻塞世界书架启动。隔离迁移、Core 类型、Ruff、前端 lint／TypeScript、契约生成和本机 build-only 通过。 | 尚未发行，未运行真实应用、真实模型或真实存档；用户体验、旧库升级后的置顶／反馈保留和启动恢复仍待验收。 |
+| 聊天视觉与沉浸模式（当前工作树，未发行） | 新增 `0061_chat_visuals`：当前世界通用背景、角色专属背景和角色表情立绘绑定；设置页、通讯录角色档案及聊天标题旁的背景入口已接线。普通模式只在聊天区应用背景并对消息／输入使用有限玻璃质感；沉浸模式隐藏目录并显示按最新角色回复本地推断的表情立绘，回退中性立绘和角色头像。Ruff、Python 编译、API DTO 一致性、前端 lint／TypeScript、Vite build 和 `git diff --check` 通过。 | 尚未发行，未运行真实应用、真实模型或真实存档；真实背景上传、旧库启动迁移、沉浸布局、表情素材切换和窄窗口体验待用户验收。 |
 | 0.1.91源码、Release 与 build-only | 本轮版本同步、前端 lint／TypeScript、Pyright、生成契约、文档链接、源码／提交隐私检查、便携 build-only、签名安装器静态解包和六项公开资产摘要均通过；GitHub Release ID `424286400` 与固定频道清单均与本地摘要一致，证据见[发行记录](maintenance/2026-10-26-release-0191.md)。本轮没有对应提交的 GitHub Actions 成功运行。 | 应用内更新、真实应用、模型或真实存档均未验证。 |
 | 本轮聊天路线与高级世界书 | 合成数据库／模拟服务／内存界面回归及静态检查通过，本机入口编译与摘要核对完成，详见[交付记录](maintenance/2026-10-20-chat-paths-and-lore.md)；本次 CI 再次覆盖相关前后端路径。 | 真实模型效果、旧用户库、实际界面长期使用与发行更新；未运行真实应用。 |
 | 发行提交 CI | `06c2ad6`的[完整CI](https://github.com/zhangyeS12/dreamtalk/actions/runs/39232983675)四组Python、前端、Windows桌面和CI Gate通过；Windows各1816项，Linux各1815项及1项平台跳过，前端104项。包含远端隔离浏览器、原生启动／退出及便携生命周期检查。 | 用户机器上的安装、真实数据升级和实际模型兼容。 |

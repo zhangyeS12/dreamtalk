@@ -26,3 +26,7 @@ dreamtalk 已有 Apache-2.0 的 Python Core、React/Tauri 客户端、Character 
 ## 后续评估
 
 每次复用记录具体能力、项目版本、许可证、维护成本、数据流与退出方案。只有收益高于适配和长期维护成本时才引入依赖；不为“看起来现成”而增加框架。涉及世界书条件激活时，先区分创作素材、角色可见权限与运行世界事实，不照搬会泄漏暗线或绕过 Kernel 的功能。
+
+### 2026-10-27：聊天背景、沉浸模式与表情切换
+
+本轮参考 SillyTavern 官方的[Visual Novel 模式说明](https://github.com/SillyTavern/SillyTavern-Docs/blob/main/Usage/User_Settings/Visual-Novel.md)、[界面自定义说明](https://github.com/SillyTavern/SillyTavern-Docs/blob/main/Usage/User_Settings/uicustomization.md)和[表情图片说明](https://github.com/SillyTavern/SillyTavern-Docs/blob/main/extensions/Expression-Images.md)。复用的是公开交互行为：聊天背景与透明度属于聊天显示、视觉小说模式隐藏目录并显示立绘、表情素材按角色维护并可按情绪切换。DreamTalk 使用自己的世界范围数据表、既有图片上传接口和本地关键词推断，不复制 SillyTavern 代码、不引入其 AGPL-3.0 运行依赖；该取舍保留 Apache-2.0 分发边界，也避免为一次前端显示选择增加外部服务和模型费用。

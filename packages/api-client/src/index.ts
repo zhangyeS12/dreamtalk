@@ -2,6 +2,9 @@ import { isChatPathSnapshot, isChatPathPreview, isChatPathResult, isCharacterEvo
 import type { ChatPathSnapshot, ChatPathPreview, ChatPathResult, PathDraft, PathConfirm } from "./contracts.generated";
 export type { ChatPath, ChatPathSnapshot, ChatPathPreview, ChatPathResult, PathDraft, PathConfirm, LoreControls, CharacterEvolutionEntry } from "./contracts.generated";
 import type { CharacterEvolutionEntry } from "./contracts.generated";
+import { isChatVisuals } from "./contracts.generated";
+import type { ChatVisuals, HttpChatVisualsBackgroundWrite, HttpChatVisualsCharacterBackgroundWrite, HttpChatVisualsExpressionWrite } from "./contracts.generated";
+export type { ChatVisuals } from "./contracts.generated";
 import { isWorldStyleSnapshot, isWorldStylePreview } from "./contracts.generated";
 import type { WorldStyleSnapshot, WorldStylePreview, HttpWorldStyleStyleDraft, HttpWorldStyleStyleConfirm } from "./contracts.generated";
 export type { WorldStyleSnapshot, WorldStylePreview } from "./contracts.generated";
@@ -685,6 +688,24 @@ export class CoreClient {
   }
   setCharacterAvatar(worldId: string, rootId: string, digest: string | null): Promise<EditStickerResult> {
     return this.contractRequest(`/worlds/${encodeURIComponent(worldId)}/social/avatars/${encodeURIComponent(rootId)}`, isEditStickerResult, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ digest } satisfies Requests.HttpFactionsAvatarWrite) });
+  }
+  chatVisuals(worldId: string, signal?: AbortSignal): Promise<ChatVisuals> {
+    return this.contractRequest(`/worlds/${encodeURIComponent(worldId)}/chat-visuals`, isChatVisuals, { signal });
+  }
+  setChatBackground(worldId: string, digest: string | null): Promise<ChatVisuals> {
+    return this.contractRequest(`/worlds/${encodeURIComponent(worldId)}/chat-visuals/background`, isChatVisuals, {
+      method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ digest } satisfies HttpChatVisualsBackgroundWrite),
+    });
+  }
+  setCharacterChatBackground(worldId: string, rootImportId: string, digest: string | null): Promise<ChatVisuals> {
+    return this.contractRequest(`/worlds/${encodeURIComponent(worldId)}/chat-visuals/character-background`, isChatVisuals, {
+      method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ root_import_id: rootImportId, digest } satisfies HttpChatVisualsCharacterBackgroundWrite),
+    });
+  }
+  setCharacterExpression(worldId: string, rootImportId: string, expression: HttpChatVisualsExpressionWrite["expression"], digest: string | null): Promise<ChatVisuals> {
+    return this.contractRequest(`/worlds/${encodeURIComponent(worldId)}/chat-visuals/expression`, isChatVisuals, {
+      method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ root_import_id: rootImportId, expression, digest } satisfies HttpChatVisualsExpressionWrite),
+    });
   }
   listProductWorlds(signal?: AbortSignal): Promise<WorldSettings[]> { return this.contractRequest("/worlds", (value): value is WorldSettings[] => Array.isArray(value) && value.every(isWorldSettings), { signal }); }
   deleteWorld(worldId: string, expectedName: string): Promise<DeleteWorldResult> {

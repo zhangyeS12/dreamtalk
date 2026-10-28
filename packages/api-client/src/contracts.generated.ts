@@ -444,6 +444,43 @@ export type ChatPathResult = {
 export function isChatPathResult(value: unknown): value is ChatPathResult {
   return (isObject(value)) && (typeof value.path_id === "string") && (typeof value.revision === "number") && ((typeof value.turn_id === "string" || value.turn_id === null));
 }
+export type ChatVisualExpression = {
+  root_import_id: string;
+  expression: ("neutral" | "joy" | "content" | "sad" | "angry" | "surprised" | "scared" | "disgusted" | "confused" | "love" | "embarrassed" | "thinking");
+  digest: string;
+};
+export function isChatVisualExpression(value: unknown): value is ChatVisualExpression {
+  return (isObject(value)) && (typeof value.root_import_id === "string") && ((value.expression === "neutral" || value.expression === "joy" || value.expression === "content" || value.expression === "sad" || value.expression === "angry" || value.expression === "surprised" || value.expression === "scared" || value.expression === "disgusted" || value.expression === "confused" || value.expression === "love" || value.expression === "embarrassed" || value.expression === "thinking")) && (typeof value.digest === "string");
+}
+export type ChatVisuals = {
+  common_background_digest: (string | null);
+  character_backgrounds: Record<string, string>;
+  expressions: Array<ChatVisualExpression>;
+};
+export function isChatVisuals(value: unknown): value is ChatVisuals {
+  return (isObject(value)) && ((typeof value.common_background_digest === "string" || value.common_background_digest === null)) && ((isObject(value.character_backgrounds) && Object.values(value.character_backgrounds).every(item => typeof item === "string"))) && ((Array.isArray(value.expressions) && value.expressions.every(item => isChatVisualExpression(item))));
+}
+export type ChatVisualBackgroundWrite = {
+  digest: (string | null);
+};
+export function isChatVisualBackgroundWrite(value: unknown): value is ChatVisualBackgroundWrite {
+  return (isObject(value)) && ((typeof value.digest === "string" || value.digest === null));
+}
+export type ChatVisualCharacterBackgroundWrite = {
+  root_import_id: string;
+  digest: (string | null);
+};
+export function isChatVisualCharacterBackgroundWrite(value: unknown): value is ChatVisualCharacterBackgroundWrite {
+  return (isObject(value)) && (typeof value.root_import_id === "string") && ((typeof value.digest === "string" || value.digest === null));
+}
+export type ChatVisualExpressionWrite = {
+  root_import_id: string;
+  expression: ("neutral" | "joy" | "content" | "sad" | "angry" | "surprised" | "scared" | "disgusted" | "confused" | "love" | "embarrassed" | "thinking");
+  digest: (string | null);
+};
+export function isChatVisualExpressionWrite(value: unknown): value is ChatVisualExpressionWrite {
+  return (isObject(value)) && (typeof value.root_import_id === "string") && ((value.expression === "neutral" || value.expression === "joy" || value.expression === "content" || value.expression === "sad" || value.expression === "angry" || value.expression === "surprised" || value.expression === "scared" || value.expression === "disgusted" || value.expression === "confused" || value.expression === "love" || value.expression === "embarrassed" || value.expression === "thinking")) && ((typeof value.digest === "string" || value.digest === null));
+}
 export type WorldContentItemCharactersItem = {
   id: string;
   name: string;
@@ -1691,6 +1728,25 @@ export type HttpChatMessagesFeedbackRequest = {
 };
 export function isHttpChatMessagesFeedbackRequest(value: unknown): value is HttpChatMessagesFeedbackRequest {
   return (isObject(value)) && (((value.feedback === "up" || value.feedback === "down") || value.feedback === null));
+}
+export type HttpChatVisualsBackgroundWrite = {
+  digest?: (string | null);
+};
+export function isHttpChatVisualsBackgroundWrite(value: unknown): value is HttpChatVisualsBackgroundWrite {
+  return (isObject(value)) && ((!("digest" in value) || ((typeof value.digest === "string" || value.digest === null))));
+}
+export type HttpChatVisualsCharacterBackgroundWrite = HttpChatVisualsBackgroundWrite & {
+  root_import_id: string;
+};
+export function isHttpChatVisualsCharacterBackgroundWrite(value: unknown): value is HttpChatVisualsCharacterBackgroundWrite {
+  return (isObject(value)) && (typeof value.root_import_id === "string") && (isHttpChatVisualsBackgroundWrite(value));
+}
+export type HttpChatVisualsExpressionWrite = HttpChatVisualsBackgroundWrite & {
+  root_import_id: string;
+  expression: ("neutral" | "joy" | "content" | "sad" | "angry" | "surprised" | "scared" | "disgusted" | "confused" | "love" | "embarrassed" | "thinking");
+};
+export function isHttpChatVisualsExpressionWrite(value: unknown): value is HttpChatVisualsExpressionWrite {
+  return (isObject(value)) && (typeof value.root_import_id === "string") && ((value.expression === "neutral" || value.expression === "joy" || value.expression === "content" || value.expression === "sad" || value.expression === "angry" || value.expression === "surprised" || value.expression === "scared" || value.expression === "disgusted" || value.expression === "confused" || value.expression === "love" || value.expression === "embarrassed" || value.expression === "thinking")) && (isHttpChatVisualsBackgroundWrite(value));
 }
 export type HttpContentAuthoringDraftReview = {
   draft: ContentEditorDraft;

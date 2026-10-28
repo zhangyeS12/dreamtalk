@@ -18,6 +18,7 @@ from livingworld.application.chat_conversations import ChatConversationService
 from livingworld.application.chat_messages import ChatMessageService
 from livingworld.application.chat_paths import ChatPathService
 from livingworld.application.chat_recall import EarlierChatRecall
+from livingworld.application.chat_visuals import ChatVisualService
 from livingworld.application.command_handler import CommandHandler
 from livingworld.application.developer_inspector import (
     INSPECTOR_TRIGGER_KIND,
@@ -283,6 +284,7 @@ async def run(
         from livingworld.application.action_resolution import ActionResolutionService
         from livingworld.application.conversation_memory import ConversationMemoryService
         from livingworld.application.director import DirectorService
+
         background_diagnostics = StructuredBackgroundDiagnosticSink(logger)
 
         director = DirectorService(
@@ -567,6 +569,7 @@ async def run(
                 ),
                 speech=speech,
                 chat_media=chat_media,
+                chat_visuals=ChatVisualService(database.chat_visual_store()),
                 storage_metadata=(lambda: metadata(config.data_dir)) if desktop else None,
                 storage_observer=(lambda: observe_world_change(config.data_dir.parent))
                 if desktop

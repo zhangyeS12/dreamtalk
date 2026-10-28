@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from livingworld.application.chat_paths import ChatPathService
     from livingworld.application.chat_recall import EarlierChatRecall
     from livingworld.application.chat_reply import DirectChatReplyService
+    from livingworld.application.chat_visuals import ChatVisualService
     from livingworld.application.content import ContentRepository
     from livingworld.application.content_builder import ContentBuilder
     from livingworld.application.conversation_memory import ConversationMemoryService
@@ -85,6 +86,7 @@ class HttpServices:
     chat_exports: ChatExportService | None = None
     speech: SpeechService | None = None
     chat_media: ChatMediaService | None = None
+    chat_visuals: ChatVisualService | None = None
     storage_metadata: Callable[[], dict[str, object]] | None = None
     storage_observer: Callable[[], None] | None = None
     example_worlds: ExampleWorldService | None = None

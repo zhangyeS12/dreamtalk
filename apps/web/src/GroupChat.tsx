@@ -22,6 +22,8 @@ import { chatPhaseFeedback } from "./chatFeedback";
 import { ConversationHeading, transcriptDay } from "./ConversationHeading";
 import { FileExportDialog } from "./FileExportDialog";
 import { ContactAvatar } from "./ContactSocial";
+import { expressionLabel, inferExpression, type ChatVisualState } from "./useChatVisuals";
+import { ChatBackgroundControl } from "./ChatBackgroundControl";
 
 export function GroupChatSetup({ client, worldId, onCreated, onBack, onDirtyChange }: {
   client: CoreClient;
@@ -81,11 +83,13 @@ export function GroupChatSetup({ client, worldId, onCreated, onBack, onDirtyChan
   </section>;
 }
 
-export function GroupChatDetails({ client, worldId, playerId, group, avatarUrls = {}, tokenCeiling, suggestedDraft, onSuggestionUsed, onBack, onDissolved = onBack, onDirtyChange, onModelSettings }: {
+export function GroupChatDetails({ client, worldId, playerId, group, avatarUrls = {}, tokenCeiling, suggestedDraft, onSuggestionUsed, onBack, onDissolved = onBack, onDirtyChange, onModelSettings, visualState, immersive = false }: {
   client: CoreClient; worldId: string; playerId: string; group: GroupChatConversation; tokenCeiling: number; avatarUrls?: Record<string, string>;
   suggestedDraft?: string | null; onSuggestionUsed?: () => void; onBack: () => void; onDirtyChange?: (dirty: boolean) => void;
   onDissolved?: () => void;
   onModelSettings?: () => void;
+  visualState?: ChatVisualState;
+  immersive?: boolean;
 }) {
   const draftInput = useRef<HTMLTextAreaElement>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -111,6 +115,12 @@ export function GroupChatDetails({ client, worldId, playerId, group, avatarUrls 
   const readReceipt = useConversationRead(client, worldId, group.conversation_id, messages);
   useSpeechPreviews(group.conversation_id, messages);
   const { thread, beforePrepend, followBottom } = useChatScroll(messages, visibleStreamDraft?.text);
+  const latestCharacter = [...(messages ?? [])].reverse().find(message => message.sender_kind === "character");
+  const spritePerson = group.participants.find(person => person.character_id === latestCharacter?.sender_id) ?? group.participants[0];
+  const expression = inferExpression(latestCharacter?.text ?? "");
+  const expressionDigest = (spritePerson && visualState?.visuals?.expressions.find(item => item.root_import_id === spritePerson.root_import_id && item.expression === expression)?.digest)
+    ?? (spritePerson && visualState?.visuals?.expressions.find(item => item.root_import_id === spritePerson.root_import_id && item.expression === "neutral")?.digest);
+  const spriteUrl = (expressionDigest ? visualState?.urls[expressionDigest] : undefined) ?? (spritePerson ? avatarUrls[spritePerson.root_import_id] : undefined);
 
   const dissolve = async () => {
     if (dissolveLock.current || sending || pending) return;
@@ -140,9 +150,10 @@ export function GroupChatDetails({ client, worldId, playerId, group, avatarUrls 
   for (const item of group.participants) nameCounts.set(item.character_name, (nameCounts.get(item.character_name) ?? 0) + 1);
   const mentionable = group.participants.filter(item => nameCounts.get(item.character_name) === 1);
   return <section ref={thread} className="chat-thread" aria-label="群聊">
+    {immersive && spriteUrl ? <div className="immersive-sprite-stage" aria-label={`${spritePerson?.character_name ?? "角色"}，${expressionLabel(expression)}表情`}><img src={spriteUrl} alt="" /></div> : null}
     <ConversationHeading title={group.participants.map(item => item.character_name).join("、")} kind={`群聊 · ${group.participants.length} 位角色`}
       portrait={<span className="avatar event-avatar" aria-hidden="true">群</span>} onBack={() => { if (!dissolving) onBack(); }} onRefresh={() => { setRefresh(value => value + 1); paths.refresh(); }} onPaths={() => paths.setOpen(true)}
-      onLongMemory={() => setLongMemoryOpen(true)} onMemory={() => setMemoryOpen(true)} onHistory={() => setHistoryOpen(true)} onExport={() => setExportOpen(true)} onDissolve={() => void dissolve()} dissolveDisabled={dissolving || sending || !!pending} />
+      onLongMemory={() => setLongMemoryOpen(true)} onMemory={() => setMemoryOpen(true)} onHistory={() => setHistoryOpen(true)} onExport={() => setExportOpen(true)} visualControl={visualState && spritePerson ? <ChatBackgroundControl client={client} worldId={worldId} rootImportId={spritePerson.root_import_id} state={visualState} /> : undefined} onDissolve={() => void dissolve()} dissolveDisabled={dissolving || sending || !!pending} />
     <ChatPathTools key={`${pathAction?.action ?? ""}:${pathAction?.message?.message_id ?? pathAction?.path?.path_id ?? ""}`} client={client} worldId={worldId} conversationId={group.conversation_id} paths={paths} blocked={sending || !!pending || !!group.read_only} tokenCeiling={tokenCeiling} group action={pathAction} onAction={setPathAction} onGenerate={turn => generateSavedReply(turn, true)} />
     {exportOpen && <FileExportDialog client={client} worldId={worldId} conversationId={group.conversation_id} onClose={() => setExportOpen(false)} />}
     {dissolveError ? <p className="thread-hint" role="alert">{dissolveError}</p> : null}

@@ -16,6 +16,7 @@ import { CoreClient, type PlayerAvailability, } from "@dreamtalk/api-client";
 import { useChatUnread } from "./useChatUnread";
 import { ProactiveContactSettings } from "./ProactiveContactSettings";
 import { ChatMediaSettingsPanel } from "./ChatMedia";
+import { ChatVisualSettings } from "./ChatVisualSettings";
 import { ChatTranscript } from "./ChatTranscript";
 import { SpeechProvider } from "./SpeechPlayback";
 import { SpeechSettings } from "./SpeechSettings";
@@ -33,6 +34,7 @@ import { SettingsHandbook, SettingsFold } from "./SettingsHandbook";
 import { SettingsDiagnostics } from "./SettingsDiagnostics";
 import { ContactAvatar } from "./ContactSocial";
 import { useChatAvatars } from "./useChatAvatars";
+import { useChatVisuals } from "./useChatVisuals";
 import { CelestialEmpty, DirectorySearch, WorkspaceIcon } from "./WorkspacePrimitives";
 import "./product.css";
 import "./world-terminal.css";
@@ -125,6 +127,7 @@ function WorldWorkspaceContent({ client, initialWorldId, initialTab, onArchive }
   const contactsManager = useRef<HTMLElement>(null);
   const [desktopStatus, setDesktopStatus] = useState<DesktopStatus | null>(null);
   const [modelSummary, setModelSummary] = useState<ModelSetupSummary | null>(null);
+  const [immersive, setImmersive] = useState(false);
   const [tokenCeiling, setTokenCeiling] = useState(savedTokenCeiling);
   const [tokenCeilingInput, setTokenCeilingInput] = useState(() => String(savedTokenCeiling()));
   const offlineContact = useOfflineContact(client, worldId, selectedPlayer);
@@ -166,6 +169,18 @@ function WorldWorkspaceContent({ client, initialWorldId, initialTab, onArchive }
   const pageHint = { chats: "与角色交流，收集世界的片段", contacts: "角色档案、所属阵营与相识关系", settings: "让这个世界按照你的节奏运行", me: "你在这里的称呼与身份" }[tab];
   const selectedConversation = conversations.find(item => item.conversation_id === selectedConversationId);
   const selectedGroup = groups.find(item => item.conversation_id === selectedGroupId);
+  const chatVisuals = useChatVisuals(client, worldId, tab === "chats" || tab === "contacts" || tab === "settings");
+  const activeVisualRoot = selectedConversation?.root_import_id ?? selectedGroup?.participants[0]?.root_import_id ?? null;
+  const activeBackgroundDigest = activeVisualRoot ? chatVisuals.visuals?.character_backgrounds[activeVisualRoot] ?? chatVisuals.visuals?.common_background_digest : chatVisuals.visuals?.common_background_digest;
+  const activeBackgroundUrl = activeBackgroundDigest ? chatVisuals.urls[activeBackgroundDigest] : undefined;
+  useEffect(() => {
+    try { setImmersive(window.localStorage.getItem(`livingworld.chat.immersive.${worldId}`) === "true"); }
+    catch { setImmersive(false); }
+  }, [worldId]);
+  const setImmersiveMode = (next: boolean) => {
+    setImmersive(next);
+    try { window.localStorage.setItem(`livingworld.chat.immersive.${worldId}`, String(next)); } catch { /* Keep the current session mode. */ }
+  };
   const discussEvent = (conversationId: string, kind: "direct" | "group") => {
     if (events.discuss(conversationId)) directory.select(kind, conversationId);
   };
@@ -201,8 +216,8 @@ function WorldWorkspaceContent({ client, initialWorldId, initialTab, onArchive }
       section?.scrollIntoView({ block: "start" }); section?.focus({ preventScroll: true });
     });
   };
-  return <div className={`product-shell world-workspace world-tab-${tab}${contactsManagementOpen ? " contacts-editing" : ""}`}>
-    <header className="app-header"><Brand /><span role="status" className="sr-only">核心已就绪</span><div className="workspace-world"><WorkspaceIcon name="orbit" /><div><strong>{world?.name ?? "正在读取世界…"}</strong>{world && <span>{displayTime(world.world_time)}<span className="world-clock-state">{world.clock_state === "paused" ? " · 已暂停" : ""}{world.runtime_state === "degraded" ? " · 运行异常" : ""}</span></span>}</div></div><button type="button" className="text-action archive-return" onClick={returnArchive}><WorkspaceIcon name="book" /><span>世界书架</span></button></header>
+  return <div className={`product-shell world-workspace world-tab-${tab}${contactsManagementOpen ? " contacts-editing" : ""}${immersive && tab === "chats" ? " immersive-mode" : ""}`}>
+    <header className="app-header"><Brand /><span role="status" className="sr-only">核心已就绪</span><div className="workspace-world"><WorkspaceIcon name="orbit" /><div><strong>{world?.name ?? "正在读取世界…"}</strong>{world && <span>{displayTime(world.world_time)}<span className="world-clock-state">{world.clock_state === "paused" ? " · 已暂停" : ""}{world.runtime_state === "degraded" ? " · 运行异常" : ""}</span></span>}</div><div className="chat-mode-switch" role="group" aria-label="聊天显示模式"><button type="button" className={!immersive ? "active" : ""} aria-pressed={!immersive} onClick={() => setImmersiveMode(false)}>普通</button><button type="button" className={immersive ? "active" : ""} aria-pressed={immersive} onClick={() => setImmersiveMode(true)}>沉浸</button></div></div><button type="button" className="text-action archive-return" onClick={returnArchive}><WorkspaceIcon name="book" /><span>世界书架</span></button></header>
     <main className="app-content" id="main-content">
       <div className={`page-heading${tab === "chats" || tab === "contacts" ? " chat-page-heading" : ""}`}><div><h1 ref={entryHeading} tabIndex={-1}>{title}</h1><p>{pageHint}</p></div>{world ? <span className="page-world"><WorkspaceIcon name="orbit" />{world.name}</span> : null}</div>
       {error ? <p className="app-alert" role="alert">{error}</p> : null}
@@ -227,12 +242,12 @@ function WorldWorkspaceContent({ client, initialWorldId, initialTab, onArchive }
 
         {directoryQuery && conversations.length + groups.length > 0 && matchingConversations.length + matchingGroups.length === 0 && <p className="thread-hint" role="status">没有匹配的会话。试试角色的名字。</p>}
         </aside>
-        <div className="conversation-detail">
+        <div className="conversation-detail chat-visual-surface" style={activeBackgroundUrl ? { backgroundImage: `linear-gradient(180deg, color-mix(in srgb, var(--page) 76%, transparent), color-mix(in srgb, var(--page) 88%, transparent)), url(${activeBackgroundUrl})` } : undefined}>
           {eventsOpen ? <section className="event-thread" aria-label="世界事件时间线">
         <div className="thread-heading"><button type="button" className="text-action" onClick={() => setEventsOpen(false)}>返回聊天</button><h2>世界事件</h2><span>聊天获知与世界动态</span></div>
         {topicEvent ? <div className="event-topic-picker"><strong>聊聊「{topicEvent.title}」</strong><p>选择已有会话，系统只填写一条可编辑的消息，不会自动发送。</p>{conversations.length === 0 && groups.length === 0 ? <p>先从通讯录打开一位角色的会话。</p> : <div className="event-topic-choices">{conversations.map(item => <button type="button" key={item.conversation_id} onClick={() => discussEvent(item.conversation_id, "direct")}>{item.character_name}</button>)}{groups.map(item => <button type="button" key={item.conversation_id} onClick={() => discussEvent(item.conversation_id, "group")}>群聊：{item.participants.map(member => member.character_name).join("、")}</button>)}</div>}</div> : null}
         {!world ? <p className="thread-hint">先创建世界，才能查看事件。</p> : !selectedPlayer ? <div className="thread-empty"><p>先进入当前世界，才能查看你获知的事件。</p><button type="button" className="text-action" onClick={() => { setEventsOpen(false); setTab("me"); }}>前往我的身份</button></div> : <WorldEventJournal key={`journal:${worldId}:${selectedPlayer}`} client={client} worldId={worldId} witnessed={visibleEvents} onTopic={setTopicEvent} displayTime={displayTime} />}
-          </section> : groupSetupOpen ? <GroupChatSetup key={`${worldId}:${selectedPlayer}`} client={client} worldId={worldId} onBack={directory.closeGroup} onDirtyChange={onDirty.chat} onCreated={group => { directory.created({ worldId, playerId: selectedPlayer! }, group); }} /> : selectedGroup && selectedPlayer ? <GroupChatDetails key={`${worldId}:${selectedPlayer}:${selectedGroup.conversation_id}`} client={client} worldId={worldId} playerId={selectedPlayer} group={selectedGroup} onModelSettings={openChatModelSettings} avatarUrls={chatAvatars} onDirtyChange={onDirty.chat} tokenCeiling={tokenCeiling} suggestedDraft={suggestedFor(selectedGroup.conversation_id)} onSuggestionUsed={() => clearSuggestion()} onBack={directory.clearSelection} onDissolved={() => { directory.removed({ worldId, playerId: selectedPlayer }, selectedGroup.conversation_id); clearSuggestion(); onDirty.chat(false); }} /> : selectedConversation && selectedPlayer ? <ChatTranscript key={`${worldId}:${selectedPlayer}:${selectedConversation.conversation_id}`} client={client} worldId={worldId} playerId={selectedPlayer} conversation={selectedConversation} onModelSettings={openChatModelSettings} avatarUrl={chatAvatars[selectedConversation.root_import_id]} onDirtyChange={onDirty.chat} tokenCeiling={tokenCeiling} suggestedDraft={suggestedFor(selectedConversation.conversation_id)} onSuggestionUsed={() => clearSuggestion()} onBack={directory.clearSelection} /> : <CelestialEmpty title="每次相逢，都从一句话开始" action={<button type="button" className="secondary-button" onClick={() => setTab("contacts")}>寻找一位角色<WorkspaceIcon name="arrow" /></button>}>选择左侧的会话，继续你们的故事。<br />也可以打开世界事件，看看已经获知的片段。</CelestialEmpty>}
+          </section> : groupSetupOpen ? <GroupChatSetup key={`${worldId}:${selectedPlayer}`} client={client} worldId={worldId} onBack={directory.closeGroup} onDirtyChange={onDirty.chat} onCreated={group => { directory.created({ worldId, playerId: selectedPlayer! }, group); }} /> : selectedGroup && selectedPlayer ? <GroupChatDetails key={`${worldId}:${selectedPlayer}:${selectedGroup.conversation_id}`} client={client} worldId={worldId} playerId={selectedPlayer} group={selectedGroup} onModelSettings={openChatModelSettings} avatarUrls={chatAvatars} visualState={chatVisuals} immersive={immersive} onDirtyChange={onDirty.chat} tokenCeiling={tokenCeiling} suggestedDraft={suggestedFor(selectedGroup.conversation_id)} onSuggestionUsed={() => clearSuggestion()} onBack={directory.clearSelection} onDissolved={() => { directory.removed({ worldId, playerId: selectedPlayer }, selectedGroup.conversation_id); clearSuggestion(); onDirty.chat(false); }} /> : selectedConversation && selectedPlayer ? <ChatTranscript key={`${worldId}:${selectedPlayer}:${selectedConversation.conversation_id}`} client={client} worldId={worldId} playerId={selectedPlayer} conversation={selectedConversation} onModelSettings={openChatModelSettings} avatarUrl={chatAvatars[selectedConversation.root_import_id]} visualState={chatVisuals} immersive={immersive} onDirtyChange={onDirty.chat} tokenCeiling={tokenCeiling} suggestedDraft={suggestedFor(selectedConversation.conversation_id)} onSuggestionUsed={() => clearSuggestion()} onBack={directory.clearSelection} /> : <CelestialEmpty title="每次相逢，都从一句话开始" action={<button type="button" className="secondary-button" onClick={() => setTab("contacts")}>寻找一位角色<WorkspaceIcon name="arrow" /></button>}>选择左侧的会话，继续你们的故事。<br />也可以打开世界事件，看看已经获知的片段。</CelestialEmpty>}
         </div>
       </div>}
 
@@ -242,14 +257,15 @@ function WorldWorkspaceContent({ client, initialWorldId, initialTab, onArchive }
             <summary ref={contactsManager}><strong>添加／编辑角色卡</strong>{dirty.worldContent && <span>有未保存的编辑 · 草稿保留中</span>}</summary>
             <WorldImports key={`content:${world.world_id}`} client={client} worldId={world.world_id} onlyKind="character" refreshKey={contactsRefresh} onDirtyChange={onDirty.worldContent} onSaved={() => setContactsRefresh(value => value + 1)} />
           </details>
-          <WorldContacts key={world.world_id} client={client} worldId={world.world_id} refreshKey={contactsRefresh} visible={tab === "contacts"} onSettings={openContactsManager} onIdentity={() => setTab("me")} onOpenChat={openChat} canOpenChat={!!selectedPlayer} openingChat={busy} identityKey={selectedPlayer} onLocationDirty={onDirty.worldLocations} onCharacterLocationDirty={onDirty.characterActivity} onRemoved={() => setContactsRefresh(value => value + 1)} removalDisabled={dirty.worldContent} />
+          <WorldContacts key={world.world_id} client={client} worldId={world.world_id} refreshKey={contactsRefresh} visible={tab === "contacts"} visualState={chatVisuals} onSettings={openContactsManager} onIdentity={() => setTab("me")} onOpenChat={openChat} canOpenChat={!!selectedPlayer} openingChat={busy} identityKey={selectedPlayer} onLocationDirty={onDirty.worldLocations} onCharacterLocationDirty={onDirty.characterActivity} onRemoved={() => setContactsRefresh(value => value + 1)} removalDisabled={dirty.worldContent} />
         </> : <div className="page-section"><div className="empty-state"><h2>先创建一个世界</h2><p>在世界档案库创建世界，然后新建或导入角色卡。</p><button className="text-action" onClick={returnArchive}>前往世界档案库</button></div></div>}
       </div>}
 
       <SettingsHandbook client={client} world={world} visible={tab === "settings"} page={settingsPage} onPage={setSettingsPage} onArchive={returnArchive}
-        dirtyPages={{ model: dirty.model || Number(tokenCeilingInput) !== tokenCeiling, speech: dirty.speech, media: dirty.media, background: dirty.background, activities: false }}
+        dirtyPages={{ model: dirty.model || Number(tokenCeilingInput) !== tokenCeiling, visuals: false, speech: dirty.speech, media: dirty.media, background: dirty.background, activities: false }}
         panels={{
           backups: <SaveBackupPanel />,
+          visuals: <ChatVisualSettings key={`visuals:${worldId}`} client={client} worldId={worldId} state={chatVisuals} />,
           media: <ChatMediaSettingsPanel key={`media:${worldId}`} client={client} worldId={worldId} onDirtyChange={onDirty.media} />,
           speech: <SpeechSettings client={client} worldId={worldId} onDirtyChange={onDirty.speech} />,
           model: <>

@@ -168,6 +168,11 @@ class Database:
 
         return SqlAlchemyWorldCoverRepository(self._sessions)
 
+    def chat_visual_store(self):
+        from livingworld.infrastructure.persistence.chat_visuals import SqlAlchemyChatVisualStore
+
+        return SqlAlchemyChatVisualStore(self._sessions)
+
     def chat_media_store(self):
         from livingworld.infrastructure.persistence.chat_media import SqlAlchemyChatMediaStore
 

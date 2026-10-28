@@ -16,6 +16,7 @@ from livingworld.adapters.http.chat_conversations import chat_conversation_route
 from livingworld.adapters.http.chat_media import chat_media_router, media_error_handler
 from livingworld.adapters.http.chat_messages import chat_message_router
 from livingworld.adapters.http.chat_paths import chat_path_router
+from livingworld.adapters.http.chat_visuals import create_chat_visual_router
 from livingworld.adapters.http.content_authoring import content_authoring_router
 from livingworld.adapters.http.contracts import CoreHealth as HealthResponse
 from livingworld.adapters.http.conversation_memory import conversation_memory_router
@@ -250,6 +251,8 @@ def create_app(
 
     if services.world_covers is not None:
         app.include_router(create_world_cover_router(services.world_covers, authorize))
+    if services.chat_visuals is not None:
+        app.include_router(create_chat_visual_router(services.chat_visuals, authorize))
     if services.factions is not None:
         app.include_router(faction_router(services.factions, authorize))
     chat_media = services.chat_media
