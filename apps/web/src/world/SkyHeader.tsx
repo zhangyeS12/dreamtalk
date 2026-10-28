@@ -17,13 +17,12 @@ export function skyStyle(world: WorldSettings | undefined): CSSProperties {
   } as CSSProperties;
 }
 
-// Fixed star field (percent coordinates); brightness follows the sky only.
-const STARS: ReadonlyArray<readonly [number, number, number]> = [
-  [3, 22, 1], [7, 64, .6], [11, 38, .8], [16, 14, .5], [19, 72, .7], [24, 30, 1], [28, 58, .5], [33, 18, .7],
-  [37, 80, .6], [41, 42, .9], [46, 12, .6], [50, 66, .5], [54, 28, .8], [58, 52, .6], [62, 16, 1], [66, 74, .5],
-  [70, 36, .7], [74, 60, .6], [78, 20, .9], [82, 46, .5], [86, 70, .8], [90, 26, .6], [94, 54, .9], [97, 14, .5],
-];
+export function skyBody(world: WorldSettings | undefined): "sun" | "moon" | null {
+  const clock = world ? worldClock(world.world_time) : null;
+  return clock ? skyAt(clock.minuteOfDay).body.kind : null;
+}
 
+/** The world's name written into its own sky, with the real clock beneath it. */
 export function SkyHeader({ world, modeSwitch, onArchive, status }: {
   world: WorldSettings | undefined;
   modeSwitch?: ReactNode;
@@ -34,21 +33,15 @@ export function SkyHeader({ world, modeSwitch, onArchive, status }: {
   const sky = clock ? skyAt(clock.minuteOfDay) : null;
   const paused = world?.clock_state === "paused";
   const degraded = world?.runtime_state === "degraded";
-  return <header className={styles.sky} data-paused={paused || undefined}>
-    <div className={styles.stars} aria-hidden="true">
-      {STARS.map(([x, y, size]) => <i key={`${x}:${y}`} style={{ left: `${x}%`, top: `${y}%`, transform: `scale(${size})` }} />)}
-    </div>
-    {sky && <div className={styles.body} data-kind={sky.body.kind} aria-hidden="true" />}
-    <div className={styles.world}>
-      <img className={styles.mark} src="/brand/dreamtalk-logo.png" alt="dreamtalk" width="34" height="30" />
-      <div className={styles.names}>
-        <strong>{world?.name ?? "正在读取世界…"}</strong>
-        {world && <span className={styles.clock}>
-          {clock ? <>{formatClock(clock)}<span className={styles.phase}>{sky?.phase}</span></> : `逻辑时间 ${world.world_time} 微秒`}
-          {paused && <span className={styles.state}>已暂停</span>}
-          {degraded && <span className={styles.state} data-tone="danger">运行异常</span>}
-        </span>}
-      </div>
+  return <header className={styles.top}>
+    <img className={styles.mark} src="/brand/dreamtalk-logo.png" alt="dreamtalk" width="52" height="46" />
+    <div className={styles.title}>
+      <strong className={styles.name}>{world?.name ?? "正在读取世界…"}</strong>
+      {world && <p className={styles.clock}>
+        {clock ? <><span>{formatClock(clock)}</span><span className={styles.phase}>{sky?.phase}</span></> : <span>逻辑时间 {world.world_time} 微秒</span>}
+        {paused && <span className={styles.state}>已暂停</span>}
+        {degraded && <span className={styles.state} data-tone="danger">运行异常</span>}
+      </p>}
     </div>
     {status}
     <div className={styles.actions}>

@@ -1,0 +1,58 @@
+.scene { position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; background: #070918; }
+.sky {
+  position: absolute; inset: 0;
+  background: linear-gradient(to bottom,
+    var(--dt-sky-zenith) 0%,
+    color-mix(in oklab, var(--dt-sky-zenith) 55%, var(--dt-sky-horizon)) 52%,
+    var(--dt-sky-horizon) 78%,
+    color-mix(in oklab, var(--dt-sky-horizon) 70%, white 6%) 100%);
+}
+.stars { position: absolute; inset: 0; opacity: var(--dt-stars); }
+.stars i {
+  position: absolute; width: 2px; height: 2px; border-radius: 50%;
+  background: #fff; box-shadow: 0 0 6px #fff;
+  animation: twinkle 5s ease-in-out infinite;
+}
+@keyframes twinkle { 50% { opacity: 0.35; } }
+
+.body {
+  position: absolute; width: 120px; height: 120px; margin: -60px 0 0 -60px; border-radius: 50%;
+  left: calc(12% + var(--dt-sky-x) * 76%);
+  top: calc(74% - var(--dt-sky-altitude) * 58%);
+}
+.body[data-kind="sun"] {
+  background: radial-gradient(circle at 42% 40%, #fffaf0 0 18%, #ffe3a6 30%, rgb(244 196 120 / 0.55) 46%, rgb(244 180 110 / 0) 70%);
+}
+.body[data-kind="sun"]::after {
+  content: ""; position: absolute; inset: -160px; border-radius: 50%;
+  background: radial-gradient(circle, rgb(255 214 150 / 0.28), transparent 60%);
+}
+.body[data-kind="moon"] {
+  width: 70px; height: 70px; margin: -35px 0 0 -35px;
+  box-shadow: inset -16px 8px 0 0 #e9edfb; rotate: -20deg;
+}
+.body[data-kind="moon"]::after {
+  content: ""; position: absolute; inset: -90px; border-radius: 50%;
+  background: radial-gradient(circle, rgb(190 205 255 / 0.16), transparent 60%);
+}
+
+.cloud {
+  position: absolute; height: 46px; border-radius: 999px; filter: blur(18px); opacity: 0.45;
+  background: color-mix(in oklab, var(--dt-sky-horizon) 60%, white 25%);
+  animation: drift linear infinite;
+}
+@keyframes drift { from { translate: -30vw 0; } to { translate: 130vw 0; } }
+
+.land { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; height: 44%; }
+.far { fill: color-mix(in oklab, var(--dt-sky-horizon) 52%, #0a0d26); }
+.mid { fill: color-mix(in oklab, var(--dt-sky-horizon) 26%, #080b20); }
+.near { fill: color-mix(in oklab, var(--dt-sky-horizon) 10%, #06081a); }
+.mist { position: absolute; left: 0; right: 0; bottom: 0; height: 30%; background: linear-gradient(to top, rgb(6 8 22 / 0.92), rgb(6 8 22 / 0)); }
+
+/* Paused worlds hold still and lose a little colour. */
+:global([data-paused]) .scene { filter: saturate(0.45); }
+:global([data-paused]) .stars i, :global([data-paused]) .cloud { animation-play-state: paused; }
+
+@media (prefers-reduced-motion: reduce) {
+  .stars i, .cloud { animation: none; }
+}

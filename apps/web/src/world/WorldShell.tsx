@@ -1,19 +1,21 @@
 import { useEffect, useState, type CSSProperties, type ReactNode, type Ref } from "react";
+import { WorldScene } from "./WorldScene";
 import styles from "./WorldShell.module.css";
 import "./tokens.css";
+import "./theme.css";
 
 /**
- * Layout frame for everything inside a world: sky across the top, the four
- * entries on the rail, and the active page. The room is lit from where the
- * sun or moon currently stands.
+ * Everything inside a world floats over that world's sky: the title written
+ * on the sky, the four entries on a glass rail, and the active page.
  */
-export function WorldShell({ className, style, sky, rail, immersive, children, mainRef }: {
-  className: string; style: CSSProperties; sky: ReactNode; rail: ReactNode; immersive: boolean;
-  children: ReactNode; mainRef?: Ref<HTMLElement>;
+export function WorldShell({ className, style, sky, rail, immersive, paused, body, children, mainRef }: {
+  className: string; style: CSSProperties; sky: ReactNode; rail: ReactNode; immersive: boolean; paused: boolean;
+  body: "sun" | "moon" | null; children: ReactNode; mainRef?: Ref<HTMLElement>;
 }) {
-  return <div className={`dt-world ${styles.shell} ${className}`} style={style} data-immersive={immersive || undefined}>
+  return <div className={`dt-world ${styles.shell} ${className}`} style={style} data-immersive={immersive || undefined} data-paused={paused || undefined}>
+    <WorldScene kind={body} />
     {sky}
-    {!immersive && rail}
+    {!immersive && <div className={styles.railSlot}>{rail}</div>}
     <main className={styles.main} id="main-content" ref={mainRef}>{children}</main>
   </div>;
 }

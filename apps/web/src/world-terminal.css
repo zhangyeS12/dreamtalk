@@ -136,7 +136,7 @@
 .world-workspace .chat-mention-actions button { border-radius: 5px; padding: 5px 10px; border: 1px solid var(--control-line); background: var(--surface); color: var(--blue); }
 
 /* Shared controls explicitly override inspector styles and old light surfaces. */
-.world-workspace input:not([type="checkbox"]):not([type="radio"]), .world-workspace select, .world-workspace textarea:not(.chat-composer textarea) { width: 100%; max-width: 100%; min-width: 0; color: var(--ink); background: var(--recessed); border: 1px solid var(--control-line); border-radius: 6px; padding: 10px 12px; font-weight: 400; }
+.world-workspace input:not([type="checkbox"]):not([type="radio"]):not(.dt-bare), .world-workspace select, .world-workspace textarea:not(.chat-composer textarea):not(.dt-bare) { width: 100%; max-width: 100%; min-width: 0; color: var(--ink); background: var(--recessed); border: 1px solid var(--control-line); border-radius: 6px; padding: 10px 12px; font-weight: 400; }
 .world-workspace input::placeholder, .world-workspace textarea::placeholder { color: var(--muted); opacity: 1; }
 .world-workspace input[type="checkbox"], .world-workspace input[type="radio"] { accent-color: var(--gold); }
 .world-workspace .primary-button, .world-workspace .secondary-button { min-height: 40px; font-size: .8125rem; border-radius: 6px; padding: 9px 16px; display: inline-flex; align-items: center; justify-content: center; gap: 10px; }

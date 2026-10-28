@@ -1,0 +1,86 @@
+.directory {
+  display: flex; flex-direction: column; min-height: 0; min-width: 0;
+  padding: 18px 12px 12px;
+  border-radius: var(--dt-radius-xl); border: 1px solid var(--dt-glass-edge);
+  background: var(--dt-glass); backdrop-filter: blur(22px) saturate(1.25);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08), 0 30px 60px -30px rgb(0 0 0 / 0.6);
+}
+.directory .head { display: flex; align-items: center; justify-content: space-between; padding: 0 8px 14px 10px; }
+.directory .head > div { display: flex; align-items: baseline; gap: 10px; }
+.directory .head strong { font-size: 18px; font-weight: 600; letter-spacing: 0.08em; }
+.directory .head small { color: var(--dt-faint); font-size: 12px; }
+.directory .round {
+  display: grid; place-items: center; width: 36px; height: 36px; padding: 0;
+  border-radius: 50%; border: 1px solid var(--dt-glass-edge); background: rgb(255 255 255 / 0.05); color: var(--dt-moon); cursor: pointer;
+}
+.directory .round:hover { background: rgb(255 255 255 / 0.12); }
+.directory svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+
+.directory .search {
+  display: flex; align-items: center; gap: 10px; margin: 0 4px 12px; padding: 0 6px 0 14px; height: 40px;
+  border-radius: 999px; background: rgb(0 0 0 / 0.22); color: var(--dt-faint);
+  transition: box-shadow var(--dt-quick) var(--dt-ease);
+}
+.directory .search:focus-within { box-shadow: 0 0 0 1px rgb(240 203 133 / 0.4); }
+.directory .search svg { width: 16px; height: 16px; flex: none; }
+.directory .search input { flex: 1; min-width: 0; border: 0; outline: 0; background: none; color: var(--dt-moon); font: 13.5px var(--dt-font); }
+.directory .search input::placeholder { color: var(--dt-faint); }
+.directory .search input::-webkit-search-cancel-button { display: none; }
+.directory .search button { display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 50%; background: none; color: var(--dt-faint); cursor: pointer; }
+
+.directory .list { flex: 1; min-height: 0; overflow-y: auto; margin: 0 -4px; padding: 0 4px; }
+.directory .section { padding: 16px 12px 6px; color: var(--dt-faint); font-size: 12px; letter-spacing: 0.12em; }
+
+.directory .wrap { position: relative; display: flex; align-items: center; border-radius: 16px; }
+.directory .wrap[data-selected] {
+  background: linear-gradient(90deg, rgb(240 203 133 / 0.16), rgb(255 255 255 / 0.04));
+  box-shadow: inset 0 0 0 1px rgb(240 203 133 / 0.22);
+}
+.directory .row {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; width: 100%;
+  padding: 10px; border: 0; border-radius: 16px; background: none; color: var(--dt-moon); text-align: left; cursor: pointer;
+  transition: background-color var(--dt-quick) var(--dt-ease);
+}
+.directory .row:hover { background: rgb(255 255 255 / 0.05); }
+.directory .row[aria-pressed="true"]:not(.wrap .row) {
+  background: linear-gradient(90deg, rgb(240 203 133 / 0.16), rgb(255 255 255 / 0.04));
+  box-shadow: inset 0 0 0 1px rgb(240 203 133 / 0.22);
+}
+.directory .wrap .row:hover { background: rgb(255 255 255 / 0.04); }
+.directory .event {
+  flex: none; display: grid; place-items: center; width: 46px; height: 46px; border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, #fff2cf, var(--dt-sun) 60%, #b98a3c); color: #3a2a08; font-size: 18px;
+  box-shadow: 0 0 0 2px rgb(255 255 255 / 0.12), 0 8px 22px -8px rgb(240 203 133 / 0.8);
+}
+.directory .stack { position: relative; flex: none; width: 46px; height: 46px; }
+.directory .stack > * { position: absolute; width: 30px; height: 30px; font-size: 13px; box-shadow: 0 0 0 2px rgb(14 18 44 / 0.95); }
+.directory .stack > :nth-child(1) { left: 0; top: 0; }
+.directory .stack > :nth-child(2) { right: 0; bottom: 0; }
+.directory .stack > :nth-child(n + 3) { display: none; }
+.directory .copy { flex: 1; min-width: 0; display: grid; gap: 3px; }
+.directory .copy strong { display: flex; align-items: center; gap: 8px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 15px; font-weight: 600; }
+.directory .copy small { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--dt-silver); font-size: 12.5px; }
+.directory .dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--dt-coral); box-shadow: 0 0 10px rgb(242 144 126 / 0.7); }
+.directory .pinned { color: var(--dt-sun); opacity: 0.8; }
+.directory .pinned svg { width: 14px; height: 14px; fill: currentColor; stroke: none; }
+.directory .pin {
+  flex: none; display: grid; place-items: center; width: 32px; height: 32px; margin-right: 6px; padding: 0;
+  border: 0; border-radius: 50%; background: none; color: var(--dt-faint); cursor: pointer; opacity: 0;
+  transition: opacity var(--dt-quick) var(--dt-ease), color var(--dt-quick) var(--dt-ease);
+}
+.directory .wrap:is(:hover, :focus-within) .pin, .directory .pin[data-active] { opacity: 1; }
+.directory .pin:hover { color: var(--dt-moon); background: rgb(255 255 255 / 0.07); }
+.directory .pin[data-active] { color: var(--dt-sun); }
+.directory .pin[data-active] svg { fill: currentColor; }
+.directory .pin svg { width: 15px; height: 15px; }
+@media (hover: none) { .directory .pin { opacity: 1; } }
+
+.directory .hint { margin: 8px; padding: 10px 12px; border-radius: 12px; background: rgb(255 255 255 / 0.05); color: var(--dt-silver); font-size: 12.5px; line-height: 1.6; }
+.directory .hint p { margin: 0 0 6px; }
+.directory .hint button, .directory .empty button {
+  margin-left: 6px; padding: 0; border: 0; background: none; color: var(--dt-sun); font-size: 12.5px; cursor: pointer;
+}
+.directory .empty { display: grid; justify-items: center; gap: 8px; padding: 40px 16px; text-align: center; }
+.directory .empty h2 { margin: 0; font-size: 16px; font-weight: 600; letter-spacing: 0.08em; }
+.directory .empty p { margin: 0; color: var(--dt-silver); font-size: 13px; line-height: 1.7; }
+.directory :is(button, input):focus-visible { outline: 2px solid var(--dt-sun); outline-offset: 2px; }

@@ -11,7 +11,7 @@ import { SaveBackupPanel } from "./SaveBackups";
 import { BackgroundSettings, type DesktopStatus } from "./BackgroundSettings";
 import { OfflineContactSettings } from "./OfflineContactSettings";
 import { useOfflineContact } from "./useOfflineContact";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { CoreClient, type PlayerAvailability, } from "@dreamtalk/api-client";
 import { useChatUnread } from "./useChatUnread";
 import { ProactiveContactSettings } from "./ProactiveContactSettings";
@@ -31,15 +31,15 @@ import { ProfileEditor } from "./ProfileEditor";
 import { WorldArchivePage } from "./WorldArchivePage";
 import { SettingsHandbook, SettingsFold } from "./SettingsHandbook";
 import { SettingsDiagnostics } from "./SettingsDiagnostics";
-import { ContactAvatar } from "./ContactSocial";
 import { useChatAvatars } from "./useChatAvatars";
 import { useChatVisuals } from "./useChatVisuals";
-import { CelestialEmpty, DirectorySearch, WorkspaceIcon } from "./WorkspacePrimitives";
+import { CelestialEmpty, WorkspaceIcon } from "./WorkspacePrimitives";
 import "./product.css";
 import "./world-terminal.css";
 import { NavRail, WORLD_TABS } from "./world/NavRail";
-import { SegmentedSwitch, SkyHeader, skyStyle } from "./world/SkyHeader";
+import { SegmentedSwitch, SkyHeader, skyBody, skyStyle } from "./world/SkyHeader";
 import { WorldNotices, WorldShell } from "./world/WorldShell";
+import { ChatDirectory } from "./world/chat/ChatDirectory";
 
 function displayTime(raw: string): string {
   const micros = BigInt(raw);
@@ -203,7 +203,7 @@ function WorldWorkspaceContent({ client, initialWorldId, initialTab, onArchive }
   const leaveChatGuard = () => !dirty.chat || window.confirm("当前会话有未发送的草稿或正在处理的请求，是否离开会话？已发起的生成可能继续。");
   const immersiveChat = immersive && tab === "chats";
   return <WorldShell className={`product-shell world-workspace world-tab-${tab}${contactsManagementOpen ? " contacts-editing" : ""}${immersiveChat ? " immersive-mode" : ""}`}
-    style={skyStyle(world)} immersive={immersiveChat}
+    style={skyStyle(world)} immersive={immersiveChat} paused={world?.clock_state === "paused"} body={skyBody(world)}
     sky={<SkyHeader world={world} onArchive={returnArchive} status={<span role="status" className="sr-only">核心已就绪</span>}
       modeSwitch={tab === "chats" ? <SegmentedSwitch label="聊天显示模式" value={immersive ? "immersive" : "normal"}
         options={[{ value: "normal", label: "普通" }, { value: "immersive", label: "沉浸" }]} onChange={value => setImmersiveMode(value === "immersive")} /> : undefined} />}
@@ -211,31 +211,21 @@ function WorldWorkspaceContent({ client, initialWorldId, initialTab, onArchive }
       <div className={`page-heading${tab === "chats" || tab === "contacts" ? " chat-page-heading" : ""}`}><div><h1 ref={entryHeading} tabIndex={-1}>{title}</h1><p>{pageHint}</p></div>{world ? <span className="page-world"><WorkspaceIcon name="orbit" />{world.name}</span> : null}</div>
       <WorldNotices error={error} notice={notice} onDismissError={() => setError("")} onDismissNotice={clearNotice} />
 
-      {tab === "chats" && <div className={`chat-workspace ${eventsOpen || selectedConversation || selectedGroup || groupSetupOpen ? "thread-open" : ""}`}>
-        <aside className="conversation-list" aria-label="会话列表">
-        <div className="directory-heading"><div><strong>聊天</strong><small>{conversationsLoading ? "读取中" : conversationsFailed ? "读取未完成" : `${conversations.length + groups.length} 个会话`}</small></div>{selectedPlayer && <button type="button" className="directory-add" aria-label="新建群聊" title="新建群聊" onClick={() => { directory.beginGroup(); setEventsOpen(false); }}><WorkspaceIcon name="plus" /></button>}</div>
-        <DirectorySearch label="搜索角色或群聊成员" value={conversationSearch} onChange={directory.search} />
-        <button className={`conversation-row pinned ${eventsOpen ? "selected" : ""}`} aria-pressed={eventsOpen} type="button" onClick={() => { setTopicEvent(null); setEventsOpen(true); }}>
-          <span className="avatar event-avatar" aria-hidden="true"><WorkspaceIcon name="orbit" /></span>
-          <span className="row-copy"><strong>世界事件</strong><small>你已获知的事件</small></span>
-          <span className="pin-label">置顶</span>
-        </button>
-        <div className="directory-section-label">会话列表</div>
-        {unread.error && <div className="thread-hint" role="status">新消息提示暂未更新。<button type="button" className="text-action" onClick={unread.refresh}>重新读取消息提示</button></div>}
-        {conversationsFailed && <div className="thread-hint" role="alert"><p>会话读取未完成，已读取的会话仍保留。</p><button type="button" className="text-action" disabled={conversationsLoading} onClick={() => directory.refresh()}>重新读取会话</button></div>}
-        {conversationsLoading && conversations.length === 0 && groups.length === 0 ? <p className="thread-hint">正在读取会话…</p> : conversationsFailed && conversations.length === 0 && groups.length === 0 ? null : conversations.length === 0 && groups.length === 0 ? <div className="empty-state"><h2>还没有会话</h2><p>在通讯录中选择角色，打开与他的会话。</p><button type="button" className="text-action" onClick={() => setTab("contacts")}>前往通讯录</button></div> : <>
-          {matchingGroups.map(item => <div key={item.conversation_id} className={`conversation-row-wrap ${!eventsOpen && selectedGroupId === item.conversation_id ? "selected" : ""}`}><button type="button" className="conversation-row-main" aria-pressed={!eventsOpen && selectedGroupId === item.conversation_id} onClick={() => { clearSuggestion(); directory.select("group", item.conversation_id); setEventsOpen(false); }}><span className="avatar group-avatar" aria-hidden="true"><WorkspaceIcon name="people" /></span><span className="row-copy"><strong>{item.participants.map(member => member.character_name).join("、")}{unread.unread(item.conversation_id) && <span className="unread-dot" role="img" aria-label="有未读角色消息" />}</strong><small>群聊 · {item.participants.length} 位角色</small></span></button><button type="button" className={`conversation-pin ${item.pinned ? "active" : ""}`} aria-label={item.pinned ? "取消置顶群聊" : "置顶群聊"} aria-pressed={item.pinned} title={item.pinned ? "取消置顶" : "置顶会话"} onClick={() => void togglePinned("group", item.conversation_id, !item.pinned)}><WorkspaceIcon name="star" /></button></div>)}
-          {matchingConversations.map(item => <div key={item.conversation_id} className={`conversation-row-wrap ${!eventsOpen && selectedConversationId === item.conversation_id ? "selected" : ""}`}><button type="button" className="conversation-row-main" aria-pressed={!eventsOpen && selectedConversationId === item.conversation_id} onClick={() => { clearSuggestion(); directory.select("direct", item.conversation_id); setEventsOpen(false); }}><ContactAvatar name={item.character_name} url={chatAvatars[item.root_import_id]} /><span className="row-copy"><strong>{item.character_name}{unread.unread(item.conversation_id) && <span className="unread-dot" role="img" aria-label="有未读角色消息" />}</strong><small>{unread.unread(item.conversation_id) ? "新消息" : "私聊"}</small></span></button><button type="button" className={`conversation-pin ${item.pinned ? "active" : ""}`} aria-label={item.pinned ? `取消置顶${item.character_name}` : `置顶${item.character_name}`} aria-pressed={item.pinned} title={item.pinned ? "取消置顶" : "置顶会话"} onClick={() => void togglePinned("direct", item.conversation_id, !item.pinned)}><WorkspaceIcon name="star" /></button></div>)}
-        </>}
-
-        {directoryQuery && conversations.length + groups.length > 0 && matchingConversations.length + matchingGroups.length === 0 && <p className="thread-hint" role="status">没有匹配的会话。试试角色的名字。</p>}
-        </aside>
-        <div className="conversation-detail chat-visual-surface" style={activeBackgroundUrl ? { backgroundImage: `linear-gradient(180deg, color-mix(in srgb, var(--page) 76%, transparent), color-mix(in srgb, var(--page) 88%, transparent)), url(${activeBackgroundUrl})` } : undefined}>
-          {eventsOpen ? <section className="event-thread" aria-label="世界事件时间线">
+      {tab === "chats" && <div className={`dt-chat-workspace${eventsOpen || selectedConversation || selectedGroup || groupSetupOpen ? " thread-open" : ""}`}>
+        <ChatDirectory conversations={matchingConversations} groups={matchingGroups} total={conversations.length + groups.length}
+          loading={conversationsLoading} failed={conversationsFailed} query={conversationSearch} onQuery={directory.search}
+          unread={unread.unread} unreadError={!!unread.error} onUnreadRetry={unread.refresh} avatars={chatAvatars}
+          eventsOpen={eventsOpen} selectedConversationId={selectedConversationId} selectedGroupId={selectedGroupId} canCreateGroup={!!selectedPlayer}
+          onEvents={() => { setTopicEvent(null); setEventsOpen(true); }}
+          onSelect={(kind, id) => { clearSuggestion(); directory.select(kind, id); setEventsOpen(false); }}
+          onPin={(kind, id, pinned) => void togglePinned(kind, id, pinned)}
+          onNewGroup={() => { directory.beginGroup(); setEventsOpen(false); }} onContacts={() => setTab("contacts")} onRetry={() => directory.refresh()} />
+        <div className="dt-thread-host" style={activeBackgroundUrl ? { "--dt-chat-backdrop": `url(${activeBackgroundUrl})` } as CSSProperties : undefined} data-backdrop={activeBackgroundUrl ? "" : undefined}>
+          {eventsOpen ? <section className="event-thread dt-panel" aria-label="世界事件时间线">
         <div className="thread-heading"><button type="button" className="text-action" onClick={() => setEventsOpen(false)}>返回聊天</button><h2>世界事件</h2><span>聊天获知与世界动态</span></div>
         {topicEvent ? <div className="event-topic-picker"><strong>聊聊「{topicEvent.title}」</strong><p>选择已有会话，系统只填写一条可编辑的消息，不会自动发送。</p>{conversations.length === 0 && groups.length === 0 ? <p>先从通讯录打开一位角色的会话。</p> : <div className="event-topic-choices">{conversations.map(item => <button type="button" key={item.conversation_id} onClick={() => discussEvent(item.conversation_id, "direct")}>{item.character_name}</button>)}{groups.map(item => <button type="button" key={item.conversation_id} onClick={() => discussEvent(item.conversation_id, "group")}>群聊：{item.participants.map(member => member.character_name).join("、")}</button>)}</div>}</div> : null}
         {!world ? <p className="thread-hint">先创建世界，才能查看事件。</p> : !selectedPlayer ? <div className="thread-empty"><p>先进入当前世界，才能查看你获知的事件。</p><button type="button" className="text-action" onClick={() => { setEventsOpen(false); setTab("me"); }}>前往我的身份</button></div> : <WorldEventJournal key={`journal:${worldId}:${selectedPlayer}`} client={client} worldId={worldId} witnessed={visibleEvents} onTopic={setTopicEvent} displayTime={displayTime} />}
-          </section> : groupSetupOpen ? <GroupChatSetup key={`${worldId}:${selectedPlayer}`} client={client} worldId={worldId} onBack={directory.closeGroup} onDirtyChange={onDirty.chat} onCreated={group => { directory.created({ worldId, playerId: selectedPlayer! }, group); }} /> : selectedGroup && selectedPlayer ? <GroupChatDetails key={`${worldId}:${selectedPlayer}:${selectedGroup.conversation_id}`} client={client} worldId={worldId} playerId={selectedPlayer} group={selectedGroup} onModelSettings={openChatModelSettings} avatarUrls={chatAvatars} visualState={chatVisuals} immersive={immersive} onDirtyChange={onDirty.chat} tokenCeiling={tokenCeiling} suggestedDraft={suggestedFor(selectedGroup.conversation_id)} onSuggestionUsed={() => clearSuggestion()} onBack={directory.clearSelection} onDissolved={() => { directory.removed({ worldId, playerId: selectedPlayer }, selectedGroup.conversation_id); clearSuggestion(); onDirty.chat(false); }} /> : selectedConversation && selectedPlayer ? <ChatTranscript key={`${worldId}:${selectedPlayer}:${selectedConversation.conversation_id}`} client={client} worldId={worldId} playerId={selectedPlayer} conversation={selectedConversation} onModelSettings={openChatModelSettings} avatarUrl={chatAvatars[selectedConversation.root_import_id]} visualState={chatVisuals} immersive={immersive} onDirtyChange={onDirty.chat} tokenCeiling={tokenCeiling} suggestedDraft={suggestedFor(selectedConversation.conversation_id)} onSuggestionUsed={() => clearSuggestion()} onBack={directory.clearSelection} /> : <CelestialEmpty title="每次相逢，都从一句话开始" action={<button type="button" className="secondary-button" onClick={() => setTab("contacts")}>寻找一位角色<WorkspaceIcon name="arrow" /></button>}>选择左侧的会话，继续你们的故事。<br />也可以打开世界事件，看看已经获知的片段。</CelestialEmpty>}
+          </section> : groupSetupOpen ? <div className="dt-panel"><GroupChatSetup key={`${worldId}:${selectedPlayer}`} client={client} worldId={worldId} onBack={directory.closeGroup} onDirtyChange={onDirty.chat} onCreated={group => { directory.created({ worldId, playerId: selectedPlayer! }, group); }} /></div> : selectedGroup && selectedPlayer ? <GroupChatDetails key={`${worldId}:${selectedPlayer}:${selectedGroup.conversation_id}`} client={client} worldId={worldId} playerId={selectedPlayer} group={selectedGroup} onModelSettings={openChatModelSettings} avatarUrls={chatAvatars} visualState={chatVisuals} immersive={immersive} onDirtyChange={onDirty.chat} tokenCeiling={tokenCeiling} suggestedDraft={suggestedFor(selectedGroup.conversation_id)} onSuggestionUsed={() => clearSuggestion()} onBack={directory.clearSelection} onDissolved={() => { directory.removed({ worldId, playerId: selectedPlayer }, selectedGroup.conversation_id); clearSuggestion(); onDirty.chat(false); }} /> : selectedConversation && selectedPlayer ? <ChatTranscript key={`${worldId}:${selectedPlayer}:${selectedConversation.conversation_id}`} client={client} worldId={worldId} playerId={selectedPlayer} conversation={selectedConversation} onModelSettings={openChatModelSettings} avatarUrl={chatAvatars[selectedConversation.root_import_id]} visualState={chatVisuals} immersive={immersive} onDirtyChange={onDirty.chat} tokenCeiling={tokenCeiling} suggestedDraft={suggestedFor(selectedConversation.conversation_id)} onSuggestionUsed={() => clearSuggestion()} onBack={directory.clearSelection} /> : <CelestialEmpty title="每次相逢，都从一句话开始" action={<button type="button" className="secondary-button" onClick={() => setTab("contacts")}>寻找一位角色<WorkspaceIcon name="arrow" /></button>}>选择左侧的会话，继续你们的故事。<br />也可以打开世界事件，看看已经获知的片段。</CelestialEmpty>}
         </div>
       </div>}
 

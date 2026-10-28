@@ -1,13 +1,14 @@
-import { ContactAvatar } from "./ContactSocial";
+import type { CSSProperties } from "react";
 import { ChatMessageBody } from "./ChatMessageBody";
+import { threadStyles as styles } from "./world/chat/ThreadParts";
 
-export function StreamingReplyBubble({ name, text, avatarUrl }: { name: string; text: string; avatarUrl?: string }) {
-  return <li className="message-row" aria-label={`${name}正在回复`}>
-    <ContactAvatar name={name} url={avatarUrl} className="message-portrait" />
-    <div className="message-bubble streaming-bubble">
-      <span className="message-sender">{name}</span>
-      {text ? <ChatMessageBody text={text} character /> : <p className="streaming-text">正在准备回复…</p>}
-      <small className="streaming-label">正在生成 · 完成后保存</small>
+/** The reply as it arrives, laid out like a finished script line. */
+export function StreamingReplyBubble({ name, text, tint }: { name: string; text: string; avatarUrl?: string; tint?: string }) {
+  return <li className={`${styles.line} ${styles.streaming}`} style={tint ? { "--tint": tint } as CSSProperties : undefined} aria-label={`${name}正在回复`}>
+    <div className={styles.name}><span>{name}</span></div>
+    <div className={styles.text}>
+      {text ? <ChatMessageBody text={text} character /> : <p className={styles.streamingLabel}>正在准备回复…</p>}
+      <small className={styles.streamingLabel}><i /><i /><i />正在生成 · 完成后保存</small>
     </div>
   </li>;
 }

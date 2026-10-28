@@ -1,0 +1,101 @@
+/*
+ * In-world theme. Chat is rebuilt with CSS Modules; this file lays out the
+ * chat workspace and re-skins pages that still use shared legacy classes so
+ * everything reads as glass floating over the same sky.
+ */
+
+/* Legacy palette, remapped onto glass. */
+.dt-world.world-workspace {
+  --casing: transparent;
+  --page: rgb(14 18 44 / 0.5);
+  --surface: rgb(255 255 255 / 0.05);
+  --raised: rgb(255 255 255 / 0.1);
+  --recessed: rgb(0 0 0 / 0.22);
+  --ink: var(--dt-moon);
+  --muted: var(--dt-silver);
+  --line: rgb(255 255 255 / 0.1);
+  --control-line: rgb(255 255 255 / 0.22);
+  --gold: var(--dt-sun);
+  --green: var(--dt-sun);
+  --green-hover: var(--dt-sun-bright);
+  --green-soft: rgb(240 203 133 / 0.14);
+  --blue: #c8d6ff;
+  background: #070918;
+  font-family: var(--dt-font);
+}
+
+/* ---------- Chat workspace ---------- */
+.dt-world .dt-chat-workspace {
+  flex: 1 1 auto; min-height: 0;
+  display: grid; grid-template-columns: 320px minmax(0, 1fr); gap: 18px;
+}
+.dt-world[data-immersive] .dt-chat-workspace { grid-template-columns: minmax(0, 1fr); }
+.dt-world[data-immersive] .dt-chat-workspace > aside { display: none; }
+.dt-world .dt-thread-host { position: relative; min-width: 0; min-height: 0; border-radius: var(--dt-radius-xl); }
+.dt-world .dt-thread-host[data-backdrop] {
+  background: var(--dt-chat-backdrop) center / cover no-repeat;
+  box-shadow: 0 30px 60px -30px rgb(0 0 0 / 0.6);
+}
+.dt-world[data-immersive] .dt-thread-host[data-backdrop] { border-radius: var(--dt-radius-xl); }
+
+.dt-world .dt-panel {
+  height: 100%; overflow: auto;
+  border-radius: var(--dt-radius-xl); border: 1px solid var(--dt-glass-edge);
+  background: var(--dt-glass); backdrop-filter: blur(22px) saturate(1.25);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08), 0 30px 60px -30px rgb(0 0 0 / 0.6);
+}
+.dt-world .dt-panel > .thread-heading {
+  position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 14px;
+  min-height: 0; padding: 18px 24px; border-bottom: 1px solid rgb(255 255 255 / 0.07);
+  background: color-mix(in oklab, var(--dt-glass-strong) 70%, transparent); backdrop-filter: blur(18px);
+}
+.dt-world .dt-panel > .thread-heading h2 { flex: 0 1 auto; margin: 0; font-size: 19px; font-weight: 600; letter-spacing: 0.1em; }
+.dt-world .dt-panel > .thread-heading span { color: var(--dt-silver); font-size: 12.5px; }
+.dt-world .dt-panel > .thread-heading .text-action { display: none; }
+.dt-world .event-thread > :not(.thread-heading) { margin-inline: 24px; }
+
+/* The empty thread: the logo hanging in the open sky. */
+.dt-world .dt-thread-host > .conversation-placeholder {
+  height: 100%; border-radius: var(--dt-radius-xl); border: 1px solid rgb(255 255 255 / 0.08);
+  background: rgb(14 18 44 / 0.28); backdrop-filter: blur(6px);
+}
+.dt-world .conversation-placeholder h2 { font-size: 22px; font-weight: 600; letter-spacing: 0.14em; text-shadow: 0 2px 16px rgb(0 0 0 / 0.5); }
+.dt-world .conversation-placeholder p { color: var(--dt-silver); line-height: 1.9; }
+.dt-world .empty-emblem img { filter: drop-shadow(0 0 30px rgb(240 203 133 / 0.35)); }
+
+/* ---------- Shared controls ---------- */
+.dt-world .primary-button {
+  border: 0; border-radius: 999px; padding: 10px 22px;
+  background: radial-gradient(circle at 35% 30%, #fff1cc, var(--dt-sun) 60%, #c79546); color: #2a1f06; font-weight: 600;
+  box-shadow: 0 0 20px -4px rgb(240 203 133 / 0.55);
+}
+.dt-world .primary-button:hover:not(:disabled) { filter: brightness(1.06); }
+.dt-world .secondary-button {
+  border-radius: 999px; padding: 9px 18px; border: 1px solid var(--dt-glass-edge);
+  background: rgb(255 255 255 / 0.06); color: var(--dt-moon);
+}
+.dt-world .secondary-button:hover:not(:disabled) { background: rgb(255 255 255 / 0.12); }
+.dt-world .text-action { color: var(--dt-sun); }
+.dt-world :is(.app-alert) { border-radius: 12px; }
+
+/* ---------- Contacts, settings and me: glass sheets ---------- */
+.dt-world.world-workspace :is(.contacts-workspace, .settings-handbook, .profile-page, .contacts-management) {
+  border-radius: var(--dt-radius-xl); border: 1px solid var(--dt-glass-edge);
+  background: var(--dt-glass); backdrop-filter: blur(22px) saturate(1.25);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08), 0 30px 60px -30px rgb(0 0 0 / 0.6);
+}
+.dt-world .handbook-index, .dt-world .profile-page > .settings-section:first-child { background: rgb(0 0 0 / 0.16); }
+.dt-world .handbook-index nav button[aria-current="page"] {
+  background: linear-gradient(90deg, rgb(240 203 133 / 0.16), rgb(255 255 255 / 0.04));
+  box-shadow: inset 0 0 0 1px rgb(240 203 133 / 0.22);
+}
+.dt-world .page-heading { margin: 0 4px 18px; text-shadow: 0 2px 16px rgb(0 0 0 / 0.45); }
+.dt-world .page-heading h1 { font-size: 24px; font-weight: 600; letter-spacing: 0.12em; }
+.dt-world .page-world { display: none; }
+
+@media (max-width: 860px) {
+  .dt-world .dt-chat-workspace { grid-template-columns: minmax(0, 1fr); }
+  .dt-world .dt-chat-workspace > .dt-thread-host { display: none; }
+  .dt-world .dt-chat-workspace.thread-open > aside { display: none; }
+  .dt-world .dt-chat-workspace.thread-open > .dt-thread-host { display: block; }
+}

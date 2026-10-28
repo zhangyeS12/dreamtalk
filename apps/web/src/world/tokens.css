@@ -17,9 +17,9 @@
   --dt-line: rgb(159 176 218 / 0.16);
   --dt-line-strong: rgb(159 176 218 / 0.32);
   --dt-moon: #eceef7;
-  --dt-silver: #a9b4d8;
-  --dt-faint: #7d88b0;
-  --dt-sun: #e8c47e;
+  --dt-silver: #b3bddf;
+  --dt-faint: #8590b8;
+  --dt-sun: #f0cb85;
   --dt-sun-bright: #f3d79c;
   --dt-sun-ink: #2b2008;
   --dt-coral: #f2907e;
@@ -36,6 +36,15 @@
   --dt-radius-s: 6px;
   --dt-radius-m: 10px;
   --dt-radius-l: 16px;
+  --dt-radius-xl: 22px;
+
+  /* Frosted glass floating over the sky */
+  --dt-glass: rgb(14 18 44 / 0.52);
+  --dt-glass-strong: rgb(12 15 38 / 0.78);
+  --dt-glass-edge: rgb(255 255 255 / 0.14);
+  /* Script: narration is quieter than spoken lines */
+  --dt-script: #c6cdea;
+  --dt-dialogue: #fff8e8;
   --dt-ease: cubic-bezier(0.22, 1, 0.36, 1);
   --dt-quick: 160ms;
 
