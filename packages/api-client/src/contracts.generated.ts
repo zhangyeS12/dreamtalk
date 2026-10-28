@@ -1450,6 +1450,70 @@ export type WorldCoverFaces = {
 export function isWorldCoverFaces(value: unknown): value is WorldCoverFaces {
   return (isObject(value)) && ((!("front" in value) || (isWorldCoverFacesFront(value.front)))) && ((!("spine" in value) || (isWorldCoverFacesSpine(value.spine)))) && ((!("back" in value) || (isWorldCoverFacesBack(value.back))));
 }
+export type BookMaterial = ("paper" | "cloth" | "leather" | "gloss" | "holo");
+export function isBookMaterial(value: unknown): value is BookMaterial { return (value === "paper" || value === "cloth" || value === "leather" || value === "gloss" || value === "holo"); }
+export type BookThickness = ("thin" | "normal" | "thick");
+export function isBookThickness(value: unknown): value is BookThickness { return (value === "thin" || value === "normal" || value === "thick"); }
+export type BookFont = ("yahei" | "hei" | "song" | "kai" | "fangsong");
+export function isBookFont(value: unknown): value is BookFont { return (value === "yahei" || value === "hei" || value === "song" || value === "kai" || value === "fangsong"); }
+export type BookDesignTitle = {
+  text: string;
+  font: BookFont;
+  color: string;
+  size: WireNumber;
+  vertical: boolean;
+  x: WireNumber;
+  y: WireNumber;
+};
+export function isBookDesignTitle(value: unknown): value is BookDesignTitle {
+  return (isObject(value)) && (typeof value.text === "string") && (isBookFont(value.font)) && (typeof value.color === "string") && (isWireNumber(value.size)) && (typeof value.vertical === "boolean") && (isWireNumber(value.x)) && (isWireNumber(value.y));
+}
+export type BookDesignSkyWindow = {
+  on: boolean;
+  x: WireNumber;
+  y: WireNumber;
+  w: WireNumber;
+  h: WireNumber;
+};
+export function isBookDesignSkyWindow(value: unknown): value is BookDesignSkyWindow {
+  return (isObject(value)) && (typeof value.on === "boolean") && (isWireNumber(value.x)) && (isWireNumber(value.y)) && (isWireNumber(value.w)) && (isWireNumber(value.h));
+}
+export type BookDesignSticker = {
+  kind: ("builtin" | "image");
+  ref: string;
+  x: WireNumber;
+  y: WireNumber;
+  w: WireNumber;
+  r: WireNumber;
+  opacity: WireNumber;
+};
+export function isBookDesignSticker(value: unknown): value is BookDesignSticker {
+  return (isObject(value)) && ((value.kind === "builtin" || value.kind === "image")) && (typeof value.ref === "string") && (isWireNumber(value.x)) && (isWireNumber(value.y)) && (isWireNumber(value.w)) && (isWireNumber(value.r)) && (isWireNumber(value.opacity));
+}
+export type BookDesignStickers = {
+  front: Array<BookDesignSticker>;
+  spine: Array<BookDesignSticker>;
+  back: Array<BookDesignSticker>;
+};
+export function isBookDesignStickers(value: unknown): value is BookDesignStickers {
+  return (isObject(value)) && ((Array.isArray(value.front) && value.front.every(item => isBookDesignSticker(item)))) && ((Array.isArray(value.spine) && value.spine.every(item => isBookDesignSticker(item)))) && ((Array.isArray(value.back) && value.back.every(item => isBookDesignSticker(item))));
+}
+export type BookDesign = {
+  version: (1);
+  template: string;
+  material: BookMaterial;
+  case_color: string;
+  edge: ("paper" | "gilt");
+  thickness: BookThickness;
+  wrap: boolean;
+  brand: boolean;
+  title: BookDesignTitle;
+  sky_window: BookDesignSkyWindow;
+  stickers: BookDesignStickers;
+};
+export function isBookDesign(value: unknown): value is BookDesign {
+  return (isObject(value)) && ((value.version === 1)) && (typeof value.template === "string") && (isBookMaterial(value.material)) && (typeof value.case_color === "string") && ((value.edge === "paper" || value.edge === "gilt")) && (isBookThickness(value.thickness)) && (typeof value.wrap === "boolean") && (typeof value.brand === "boolean") && (isBookDesignTitle(value.title)) && (isBookDesignSkyWindow(value.sky_window)) && (isBookDesignStickers(value.stickers));
+}
 export type WorldCover = {
   world_id: string;
   mode: ("text" | "image");
@@ -1457,9 +1521,10 @@ export type WorldCover = {
   show_title: boolean;
   faces: WorldCoverFaces;
   revision: WireNumber;
+  design?: BookDesign;
 };
 export function isWorldCover(value: unknown): value is WorldCover {
-  return (isObject(value)) && (typeof value.world_id === "string") && ((value.mode === "text" || value.mode === "image")) && (typeof value.title === "string") && (typeof value.show_title === "boolean") && (isWorldCoverFaces(value.faces)) && (isWireNumber(value.revision));
+  return (isObject(value)) && (typeof value.world_id === "string") && ((value.mode === "text" || value.mode === "image")) && (typeof value.title === "string") && (typeof value.show_title === "boolean") && (isWorldCoverFaces(value.faces)) && (isWireNumber(value.revision)) && ((!("design" in value) || (isBookDesign(value.design))));
 }
 export type WorldCoverWriteFacesFront = {
   source_digest: string;
@@ -1496,9 +1561,10 @@ export type WorldCoverWrite = {
   show_title: boolean;
   faces: WorldCoverWriteFaces;
   expected_revision: WireNumber;
+  design?: BookDesign;
 };
 export function isWorldCoverWrite(value: unknown): value is WorldCoverWrite {
-  return (isObject(value)) && ((value.mode === "text" || value.mode === "image")) && (typeof value.title === "string") && (typeof value.show_title === "boolean") && (isWorldCoverWriteFaces(value.faces)) && (isWireNumber(value.expected_revision));
+  return (isObject(value)) && ((value.mode === "text" || value.mode === "image")) && (typeof value.title === "string") && (typeof value.show_title === "boolean") && (isWorldCoverWriteFaces(value.faces)) && (isWireNumber(value.expected_revision)) && ((!("design" in value) || (isBookDesign(value.design))));
 }
 export type Residency = ("normal" | "strong" | "very_strong");
 export function isResidency(value: unknown): value is Residency { return (value === "normal" || value === "strong" || value === "very_strong"); }
@@ -2037,15 +2103,76 @@ export type HttpWorldCoversFaceWrite = {
 export function isHttpWorldCoversFaceWrite(value: unknown): value is HttpWorldCoversFaceWrite {
   return (isObject(value)) && (typeof value.source_digest === "string") && (isHttpWorldCoversCropWrite(value.crop));
 }
+export type HttpWorldCovers_Strict = object;
+export function isHttpWorldCovers_Strict(value: unknown): value is HttpWorldCovers_Strict { return isObject(value); }
+export type HttpWorldCoversDesignTitleWrite = HttpWorldCovers_Strict & {
+  text: string;
+  font: ("yahei" | "hei" | "song" | "kai" | "fangsong");
+  color: string;
+  size: number;
+  vertical: boolean;
+  x: number;
+  y: number;
+};
+export function isHttpWorldCoversDesignTitleWrite(value: unknown): value is HttpWorldCoversDesignTitleWrite {
+  return (isObject(value)) && (typeof value.text === "string") && ((value.font === "yahei" || value.font === "hei" || value.font === "song" || value.font === "kai" || value.font === "fangsong")) && (typeof value.color === "string") && (typeof value.size === "number") && (typeof value.vertical === "boolean") && (typeof value.x === "number") && (typeof value.y === "number") && (isHttpWorldCovers_Strict(value));
+}
+export type HttpWorldCoversDesignSkyWindowWrite = HttpWorldCovers_Strict & {
+  on: boolean;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+};
+export function isHttpWorldCoversDesignSkyWindowWrite(value: unknown): value is HttpWorldCoversDesignSkyWindowWrite {
+  return (isObject(value)) && (typeof value.on === "boolean") && (typeof value.x === "number") && (typeof value.y === "number") && (typeof value.w === "number") && (typeof value.h === "number") && (isHttpWorldCovers_Strict(value));
+}
+export type HttpWorldCoversDesignStickerWrite = HttpWorldCovers_Strict & {
+  kind: ("builtin" | "image");
+  ref: string;
+  x: number;
+  y: number;
+  w: number;
+  r: number;
+  opacity: number;
+};
+export function isHttpWorldCoversDesignStickerWrite(value: unknown): value is HttpWorldCoversDesignStickerWrite {
+  return (isObject(value)) && ((value.kind === "builtin" || value.kind === "image")) && (typeof value.ref === "string") && (typeof value.x === "number") && (typeof value.y === "number") && (typeof value.w === "number") && (typeof value.r === "number") && (typeof value.opacity === "number") && (isHttpWorldCovers_Strict(value));
+}
+export type HttpWorldCoversDesignStickersWrite = HttpWorldCovers_Strict & {
+  front: Array<HttpWorldCoversDesignStickerWrite>;
+  spine: Array<HttpWorldCoversDesignStickerWrite>;
+  back: Array<HttpWorldCoversDesignStickerWrite>;
+};
+export function isHttpWorldCoversDesignStickersWrite(value: unknown): value is HttpWorldCoversDesignStickersWrite {
+  return (isObject(value)) && ((Array.isArray(value.front) && value.front.every(item => isHttpWorldCoversDesignStickerWrite(item)))) && ((Array.isArray(value.spine) && value.spine.every(item => isHttpWorldCoversDesignStickerWrite(item)))) && ((Array.isArray(value.back) && value.back.every(item => isHttpWorldCoversDesignStickerWrite(item)))) && (isHttpWorldCovers_Strict(value));
+}
+export type HttpWorldCoversBookDesignWrite = HttpWorldCovers_Strict & {
+  version: (1);
+  template: string;
+  material: ("paper" | "cloth" | "leather" | "gloss" | "holo");
+  case_color: string;
+  edge: ("paper" | "gilt");
+  thickness: ("thin" | "normal" | "thick");
+  wrap: boolean;
+  brand: boolean;
+  title: HttpWorldCoversDesignTitleWrite;
+  sky_window: HttpWorldCoversDesignSkyWindowWrite;
+  stickers: HttpWorldCoversDesignStickersWrite;
+};
+export function isHttpWorldCoversBookDesignWrite(value: unknown): value is HttpWorldCoversBookDesignWrite {
+  return (isObject(value)) && ((value.version === 1)) && (typeof value.template === "string") && ((value.material === "paper" || value.material === "cloth" || value.material === "leather" || value.material === "gloss" || value.material === "holo")) && (typeof value.case_color === "string") && ((value.edge === "paper" || value.edge === "gilt")) && ((value.thickness === "thin" || value.thickness === "normal" || value.thickness === "thick")) && (typeof value.wrap === "boolean") && (typeof value.brand === "boolean") && (isHttpWorldCoversDesignTitleWrite(value.title)) && (isHttpWorldCoversDesignSkyWindowWrite(value.sky_window)) && (isHttpWorldCoversDesignStickersWrite(value.stickers)) && (isHttpWorldCovers_Strict(value));
+}
 export type HttpWorldCoversCoverWrite = {
   mode: ("text" | "image");
   title: string;
   show_title: boolean;
   faces: Partial<Record<("front" | "spine" | "back"), HttpWorldCoversFaceWrite>>;
   expected_revision: number;
+  design?: (HttpWorldCoversBookDesignWrite | null);
 };
 export function isHttpWorldCoversCoverWrite(value: unknown): value is HttpWorldCoversCoverWrite {
-  return (isObject(value)) && ((value.mode === "text" || value.mode === "image")) && (typeof value.title === "string") && (typeof value.show_title === "boolean") && ((isObject(value.faces) && Object.entries(value.faces).every(([key, item]) => ((key === "front" || key === "spine" || key === "back")) && (isHttpWorldCoversFaceWrite(item))))) && (typeof value.expected_revision === "number");
+  return (isObject(value)) && ((value.mode === "text" || value.mode === "image")) && (typeof value.title === "string") && (typeof value.show_title === "boolean") && ((isObject(value.faces) && Object.entries(value.faces).every(([key, item]) => ((key === "front" || key === "spine" || key === "back")) && (isHttpWorldCoversFaceWrite(item))))) && (typeof value.expected_revision === "number") && ((!("design" in value) || ((isHttpWorldCoversBookDesignWrite(value.design) || value.design === null))));
 }
 export type HttpWorldLocationsCreateLocationRequest = {
   name: string;

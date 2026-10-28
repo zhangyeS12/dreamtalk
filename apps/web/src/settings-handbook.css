@@ -5,8 +5,6 @@
 .handbook-world > div:last-child { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
 .handbook-world strong { font-size: 1rem; overflow-wrap: anywhere; }
 .handbook-world span, .handbook-world small { font-size: .78rem; color: var(--muted); }
-.handbook-mini-book { --book-width: 196px; --book-height: 286px; --book-depth: 42px; --archive-muted: var(--muted); position: relative; width: 60px; height: 84px; flex: 0 0 60px; perspective: 600px; }
-.handbook-mini-book .book-volume { left: 8px; top: 6px; transform-origin: top left; transform: scale(.25) rotateY(24deg) rotateX(4deg); }
 .handbook-index nav { display: flex; flex-direction: column; gap: 6px; padding: 18px 0 18px 16px; }
 .handbook-index nav button { display: flex; flex-direction: column; gap: 5px; text-align: left; min-height: 64px; padding: 12px 20px 12px 16px; margin-right: 12px; border: 1px solid transparent; border-radius: 3px; color: var(--ink); background: transparent; font-size: .9rem; font-weight: 550; transition: transform 180ms ease-out, background 180ms ease-out; }
 .handbook-index nav button > span { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
@@ -70,8 +68,6 @@
   .settings-handbook { grid-template-columns: minmax(0, 1fr); }
   .handbook-index { padding: 16px 0 0; border-right: 0; border-bottom: 1px solid var(--line); }
   .handbook-world { border-bottom: 0; padding-bottom: 8px; }
-  .handbook-mini-book { width: 40px; height: 58px; flex-basis: 40px; }
-  .handbook-mini-book .book-volume { transform: scale(.17) rotateY(24deg) rotateX(4deg); }
   .handbook-index nav { flex-direction: row; overflow-x: auto; padding: 12px; gap: 8px; }
   .handbook-index nav button { min-width: 108px; margin: 0; min-height: 60px; padding: 10px 12px; }
   .handbook-index nav button[aria-current="page"] { transform: none; }

@@ -4,7 +4,7 @@ from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from livingworld.adapters.http import contracts as wire
 from livingworld.application.errors import EntityNotFoundError
@@ -29,6 +29,75 @@ class FaceWrite(BaseModel):
     crop: CropWrite
 
 
+HEX_COLOR = r"^#[0-9a-fA-F]{6}$"
+DIGEST = r"^[0-9a-f]{64}$"
+BUILTIN_STICKERS = ("star", "moon", "sun", "seal", "ribbon", "film", "sakura", "tape", "heart")
+
+
+class _Strict(BaseModel):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+
+
+class DesignTitleWrite(_Strict):
+    text: str = Field(max_length=60)
+    font: Literal["yahei", "hei", "song", "kai", "fangsong"]
+    color: str = Field(pattern=HEX_COLOR)
+    size: float = Field(ge=12, le=96)
+    vertical: bool = Field(strict=True)
+    x: float = Field(ge=0, le=100)
+    y: float = Field(ge=0, le=100)
+
+
+class DesignSkyWindowWrite(_Strict):
+    on: bool = Field(strict=True)
+    x: float = Field(ge=0, le=100)
+    y: float = Field(ge=0, le=100)
+    w: float = Field(ge=4, le=100)
+    h: float = Field(ge=4, le=100)
+
+
+class DesignStickerWrite(_Strict):
+    kind: Literal["builtin", "image"]
+    ref: str = Field(max_length=64)
+    x: float = Field(ge=-20, le=120)
+    y: float = Field(ge=-20, le=120)
+    w: float = Field(ge=2, le=160)
+    r: float = Field(ge=-720, le=720)
+    opacity: float = Field(ge=0.1, le=1)
+
+    @model_validator(mode="after")
+    def _reference(self):
+        import re
+
+        if self.kind == "builtin" and self.ref not in BUILTIN_STICKERS:
+            raise ValueError("cover_sticker_unknown")
+        if self.kind == "image" and not re.fullmatch(DIGEST, self.ref):
+            raise ValueError("cover_sticker_invalid")
+        return self
+
+
+class DesignStickersWrite(_Strict):
+    front: list[DesignStickerWrite] = Field(max_length=24)
+    spine: list[DesignStickerWrite] = Field(max_length=12)
+    back: list[DesignStickerWrite] = Field(max_length=24)
+
+
+class BookDesignWrite(_Strict):
+    """A bounded, local-only book appearance. It never reaches models or world truth."""
+
+    version: Literal[1]
+    template: str = Field(max_length=24)
+    material: Literal["paper", "cloth", "leather", "gloss", "holo"]
+    case_color: str = Field(pattern=HEX_COLOR)
+    edge: Literal["paper", "gilt"]
+    thickness: Literal["thin", "normal", "thick"]
+    wrap: bool = Field(strict=True)
+    brand: bool = Field(strict=True)
+    title: DesignTitleWrite
+    sky_window: DesignSkyWindowWrite
+    stickers: DesignStickersWrite
+
+
 class CoverWrite(BaseModel):
     model_config = ConfigDict(extra="forbid")
     mode: Literal["text", "image"]
@@ -36,6 +105,7 @@ class CoverWrite(BaseModel):
     show_title: bool = Field(strict=True)
     faces: dict[Literal["front", "spine", "back"], FaceWrite] = Field(max_length=3)
     expected_revision: int = Field(ge=0, strict=True)
+    design: BookDesignWrite | None = None
 
 
 def create_world_cover_router(service, authorize):
@@ -61,7 +131,8 @@ def create_world_cover_router(service, authorize):
 
     @router.put("/worlds/{world_id}/cover", response_model=wire.WorldCover)
     async def save(world_id: UUID, body: CoverWrite):
-        if body.mode == "text" and not body.title.strip():
+        # A designed book may carry its title as a layer, or deliberately none.
+        if body.design is None and body.mode == "text" and not body.title.strip():
             raise HTTPException(422, detail="cover_title_required")
         faces = {
             name: (face.source_digest, CoverCrop(**face.crop.model_dump()))
@@ -75,6 +146,7 @@ def create_world_cover_router(service, authorize):
                 body.show_title,
                 faces,
                 body.expected_revision,
+                body.design.model_dump() if body.design else None,
             )
         )
 

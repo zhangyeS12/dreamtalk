@@ -1,6 +1,6 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { CoreClient, type WorldSettings } from "@dreamtalk/api-client";
-import { BookFaces } from "./BookFaces";
+import { BookThumb } from "./world/archive/BookThumb";
 import { useWorldCovers } from "./useWorldCovers";
 import "./settings-handbook.css";
 
@@ -34,7 +34,7 @@ export function SettingsHandbook({ client, world, visible, page, onPage, dirtyPa
   return <div className="settings-handbook" hidden={!visible}>
     <aside className="handbook-index">
       <div className="handbook-world">
-        <div className="handbook-mini-book" aria-hidden="true"><span className="book-volume"><BookFaces name={world?.name ?? "世界档案"} appearance={world ? covers.appearances[world.world_id] : undefined} /></span></div>
+        <BookThumb world={world} appearance={world ? covers.appearances[world.world_id] : undefined} width={56} />
         <div><span>当前世界</span><strong>{world?.name ?? "正在读取…"}</strong><small>世界管理手册</small></div>
       </div>
       <nav aria-label="设置分类">{settingsPages.map(item => <button key={item.id} type="button" aria-current={page === item.id ? "page" : undefined} aria-controls={`settings-${item.id}`} onClick={() => onPage(item.id)}>

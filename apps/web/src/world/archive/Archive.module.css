@@ -1,0 +1,119 @@
+/* ---------- The archive room ---------- */
+.root { position: fixed; inset: 0; overflow: hidden; isolation: isolate; color: var(--dt-moon); background: #05060f; user-select: none;
+  transition: --dt-sky-zenith 1.4s linear, --dt-sky-horizon 1.4s linear, --dt-sky-x 1.4s linear, --dt-sky-altitude 1.4s linear, --dt-stars 1.4s linear; }
+.room { position: absolute; inset: 0; z-index: 0; background: radial-gradient(120% 80% at 50% 40%, #0b0d1d, #04050c 70%); pointer-events: none; }
+.window { position: absolute; left: 3%; right: 3%; top: 7%; bottom: 13%; overflow: hidden; border-radius: 6px;
+  box-shadow: 0 0 0 10px #090a14, 0 0 0 11px rgb(255 255 255 / 0.04), 0 0 120px 10px color-mix(in oklab, var(--dt-sky-horizon) 35%, transparent); }
+.window::after { content: ""; position: absolute; inset: 0; background: linear-gradient(115deg, rgb(255 255 255 / 0.05), transparent 30%), radial-gradient(90% 90% at 50% 50%, transparent 55%, rgb(3 4 10 / 0.75)); }
+.sky { position: absolute; inset: 0; background: linear-gradient(to bottom, var(--dt-sky-zenith), color-mix(in oklab, var(--dt-sky-zenith) 50%, var(--dt-sky-horizon)) 60%, var(--dt-sky-horizon)); }
+.stars { position: absolute; inset: 0 0 30% 0; opacity: var(--dt-stars); }
+.stars i { position: absolute; width: 2px; height: 2px; border-radius: 50%; background: #fff; box-shadow: 0 0 6px #fff; animation: twinkle 5s ease-in-out infinite; }
+@keyframes twinkle { 50% { opacity: 0.3; } }
+.body { position: absolute; border-radius: 50%; left: calc(10% + var(--dt-sky-x) * 80%); top: calc(80% - var(--dt-sky-altitude) * 62%); }
+.body[data-kind="moon"] { width: 70px; height: 70px; margin: -35px; box-shadow: inset -16px 8px 0 0 #e9edfb; rotate: -20deg; }
+.body[data-kind="moon"]::after { content: ""; position: absolute; inset: -110px; border-radius: 50%; background: radial-gradient(circle, rgb(190 205 255 / 0.2), transparent 60%); }
+.body[data-kind="sun"] { width: 140px; height: 140px; margin: -70px; background: radial-gradient(circle at 42% 40%, #fffaf0 0 18%, #ffe3a6 30%, rgb(244 196 120 / 0.55) 46%, transparent 70%); }
+.window svg { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; height: 38%; }
+.far { fill: color-mix(in oklab, var(--dt-sky-horizon) 48%, #0a0d26); }
+.near { fill: color-mix(in oklab, var(--dt-sky-horizon) 16%, #06081a); }
+.floor { position: absolute; left: 0; right: 0; bottom: 0; height: 24%; background: linear-gradient(#07080f, #030409); }
+
+/* ---------- HUD at the edges, like the reference ---------- */
+.hud { position: absolute; z-index: 10; left: 0; right: 0; top: 0; display: flex; align-items: center; gap: 10px; padding: 18px 26px; }
+.brand { display: flex; align-items: center; gap: 12px; margin-right: auto; min-width: 0; text-shadow: 0 2px 12px rgb(0 0 0 / 0.7); }
+.brand img { width: 40px; height: 36px; object-fit: contain; flex: none; }
+.brand h1 { margin: 0; color: var(--dt-moon); font-size: 18px; font-weight: 600; letter-spacing: 0.2em; line-height: 1.3; outline: none; }
+.brand p { margin: 2px 0 0; color: rgb(238 240 248 / 0.72) !important; font-size: 12.5px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.pill, .hud :global(.desktop-update-entry) { display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 16px; border-radius: 999px;
+  border: 1px solid var(--dt-glass-edge); background: rgb(8 10 24 / 0.55); color: var(--dt-silver); font-size: 13px; cursor: pointer; backdrop-filter: blur(12px); white-space: nowrap; }
+.pill:hover:not(:disabled), .hud :global(.desktop-update-entry:hover) { color: var(--dt-moon); background: rgb(8 10 24 / 0.82); }
+.pill:disabled { opacity: 0.5; cursor: default; }
+.pill[aria-expanded="true"] { color: #10142f; background: var(--dt-moon); }
+.pill svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.hud :focus-visible { outline: 2px solid var(--dt-sun); outline-offset: 2px; }
+.brand h1:focus, .brand h1:focus-visible { outline: none; }
+.stage { position: absolute; inset: 0; z-index: 1; }
+.hud :global(.desktop-update-entry svg) { width: 16px; height: 16px; }
+.hud :global(.desktop-update-entry.has-update) { color: #2a1f06; border-color: transparent; background: radial-gradient(circle at 35% 30%, #fff1cc, var(--dt-sun) 58%, #c79546); }
+
+/* ---------- The pulled-out world: a tag top-right, actions along the bottom ---------- */
+.tag { position: absolute; z-index: 10; right: 26px; top: 70px; width: min(340px, calc(100% - 52px)); padding: 14px 16px 14px 14px; border-radius: 16px;
+  border: 1px solid var(--dt-glass-edge); background: var(--dt-glass-strong); backdrop-filter: blur(16px); animation: rise 0.4s var(--dt-ease) both;
+  display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; align-items: start; }
+.tag .chip { grid-row: span 3; width: 12px; height: 42px; margin-top: 3px; border-radius: 999px; background: linear-gradient(var(--bz), var(--bh)); box-shadow: 0 0 12px -2px var(--bh); }
+.tag h2 { margin: 0; color: var(--dt-moon); font-size: 18px; font-weight: 600; letter-spacing: 0.12em; overflow-wrap: anywhere; }
+.tag .clock { color: var(--dt-silver); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.tag .paused { margin-left: 8px; padding: 0 7px; border-radius: 999px; background: rgb(0 0 0 / 0.4); color: var(--dt-sun); font-size: 11px; }
+.tag .books { margin: 4px 0 0; color: var(--dt-silver); font-size: 12.5px; line-height: 1.6; }
+.tag .books button { padding: 0; border: 0; background: none; color: var(--dt-sun); cursor: pointer; font-size: 12.5px; }
+.actions { position: absolute; z-index: 10; left: 50%; bottom: 28px; translate: -50% 0; display: flex; align-items: center; gap: 6px; padding: 6px; border-radius: 999px;
+  border: 1px solid var(--dt-glass-edge); background: var(--dt-glass-strong); backdrop-filter: blur(18px); animation: rise 0.4s var(--dt-ease) both; }
+.actions button { height: 40px; padding: 0 16px; border: 0; border-radius: 999px; background: none; color: var(--dt-silver); font-size: 13.5px; cursor: pointer; white-space: nowrap; }
+.actions button:hover:not(:disabled) { color: var(--dt-moon); background: rgb(255 255 255 / 0.07); }
+.actions button:disabled { opacity: 0.45; cursor: default; }
+.actions .enter, .gold { padding: 0 24px; color: #2a1f06; font-weight: 700; letter-spacing: 0.08em; background: radial-gradient(circle at 35% 30%, #fff1cc, var(--dt-sun) 58%, #c79546); box-shadow: 0 0 22px -4px rgb(240 203 133 / 0.6); }
+.actions .enter:hover:not(:disabled) { color: #2a1f06; background: radial-gradient(circle at 35% 30%, #fff1cc, var(--dt-sun) 58%, #c79546); filter: brightness(1.06); }
+.actions .delete { color: var(--dt-danger-ink); opacity: 0.75; font-size: 12.5px; }
+.actions .sep { width: 1px; height: 20px; background: rgb(255 255 255 / 0.12); }
+.actions :focus-visible, .tag :focus-visible { outline: 2px solid var(--dt-sun); outline-offset: 2px; }
+@keyframes rise { from { opacity: 0; translate: 0 10px; } }
+.actions { animation-name: rise-center; }
+@keyframes rise-center { from { opacity: 0; translate: -50% 10px; } to { translate: -50% 0; } }
+
+/* ---------- A blank book asks for a name ---------- */
+.blank { position: absolute; z-index: 10; right: 7%; top: 50%; translate: 0 -50%; width: min(400px, calc(100% - 40px)); padding: 24px 24px 20px; border-radius: 22px;
+  border: 1px solid var(--dt-glass-edge); background: var(--dt-glass-strong); backdrop-filter: blur(22px); box-shadow: 0 30px 60px -20px rgb(0 0 0 / 0.8); animation: rise 0.4s var(--dt-ease) both; }
+.blank h2 { margin: 0 0 8px; color: var(--dt-moon); font-size: 22px; font-weight: 600; letter-spacing: 0.12em; }
+.blank p { margin: 0 0 16px; color: var(--dt-silver); font-size: 13px; line-height: 1.7; }
+.blank .row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 4px; }
+.blank form { display: grid; gap: 14px; }
+.blank label { display: grid; gap: 6px; color: var(--dt-silver); font-size: 12.5px; }
+.blank input { height: 42px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--dt-glass-edge); background: rgb(0 0 0 / 0.3); color: var(--dt-moon); font: 15px var(--dt-font); outline: none; user-select: text; }
+.blank input:focus { border-color: rgb(240 203 133 / 0.5); }
+.blank .ghost { height: 40px; padding: 0 18px; border-radius: 999px; border: 1px solid var(--dt-glass-edge); background: rgb(255 255 255 / 0.05); color: var(--dt-moon); cursor: pointer; font-size: 13.5px; }
+.blank .gold { height: 42px; border: 0; border-radius: 999px; cursor: pointer; font-size: 14px; }
+.blank .gold:disabled, .blank .ghost:disabled { opacity: 0.5; cursor: default; }
+.blank .link { justify-self: start; padding: 0; border: 0; background: none; color: var(--dt-sun); font-size: 12.5px; cursor: pointer; }
+.blank small { display: block; margin-top: 14px; color: var(--dt-faint); font-size: 12px; }
+.blank .close, .sheet .close { position: absolute; top: 14px; right: 14px; width: 32px; height: 32px; border: 0; border-radius: 50%; background: rgb(255 255 255 / 0.06); color: var(--dt-silver); cursor: pointer; font-size: 16px; }
+.blank :focus-visible, .sheet :focus-visible { outline: 2px solid var(--dt-sun); outline-offset: 2px; }
+/* ---------- Sheets: settings-style content over the dimmed shelf ---------- */
+.scrim { position: absolute; inset: 0; z-index: 20; background: rgb(3 4 10 / 0.6); backdrop-filter: blur(3px); animation: fade 0.25s ease both; }
+.sheet { position: absolute; z-index: 21; left: 50%; top: 50%; translate: -50% -50%; width: min(1040px, calc(100% - 48px)); max-height: calc(100% - 120px); display: flex; flex-direction: column;
+  border-radius: 22px; border: 1px solid var(--dt-glass-edge); background: rgb(12 15 36 / 0.92); backdrop-filter: blur(24px); box-shadow: 0 40px 80px -20px rgb(0 0 0 / 0.9); animation: pop 0.3s var(--dt-ease) both; user-select: text; }
+.sheet > header { position: relative; flex: none; padding: 20px 64px 14px 26px; border-bottom: 1px solid rgb(255 255 255 / 0.07); }
+.sheet > header h2 { margin: 0; color: var(--dt-moon); font-size: 19px; font-weight: 600; letter-spacing: 0.1em; outline: none; }
+.sheet > header p { margin: 4px 0 0; color: var(--dt-silver); font-size: 12.5px; }
+.sheet .sheetBody { flex: 1; min-height: 0; overflow: auto; padding: 8px 26px 26px; background: transparent; }
+@keyframes fade { from { opacity: 0; } }
+@keyframes pop { from { opacity: 0; scale: 0.97; } }
+
+/* ---------- Entering: the cover opens onto that world's sky ---------- */
+.portal { position: absolute; inset: 0; z-index: 30; display: grid; place-items: center; pointer-events: none; perspective: 1400px; }
+.portal .case { position: relative; width: 372px; height: 540px; transform-style: preserve-3d; animation: fly 1.8s var(--dt-ease) forwards; }
+.portal .inside { position: absolute; inset: 0; border-radius: 4px 8px 8px 4px; background: linear-gradient(to bottom, var(--wz), var(--wh)); box-shadow: inset 0 0 50px rgb(0 0 0 / 0.3); }
+.portal .lid { position: absolute; inset: 0; overflow: hidden; border-radius: 4px 8px 8px 4px; transform-origin: left center; backface-visibility: hidden; animation: lid 1.8s var(--dt-ease) forwards; }
+@keyframes lid { 0%, 12% { transform: rotateY(0); } 45%, 100% { transform: rotateY(-165deg); } }
+@keyframes fly { 0% { opacity: 1; transform: scale(0.95); } 45% { opacity: 1; transform: scale(1.05); } 100% { opacity: 0; transform: scale(6.5); } }
+.root[data-entering] .stage, .root[data-entering] .hud, .root[data-entering] .tag, .root[data-entering] .actions { transition: opacity 0.5s; opacity: 0; pointer-events: none; }
+.veil { position: absolute; inset: 0; z-index: 29; opacity: 0; pointer-events: none; animation: veil 1.8s ease forwards;
+  background: linear-gradient(to bottom, var(--dt-sky-zenith), color-mix(in oklab, var(--dt-sky-zenith) 55%, var(--dt-sky-horizon)) 55%, var(--dt-sky-horizon)); }
+@keyframes veil { 0%, 55% { opacity: 0; } 100% { opacity: 1; } }
+
+.notices { position: absolute; z-index: 40; top: 70px; left: 26px; display: grid; gap: 8px; width: min(420px, calc(100% - 40px)); }
+.notices p { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 0; padding: 11px 16px; border-radius: 14px; border: 1px solid var(--dt-glass-edge);
+  background: var(--dt-glass-strong); backdrop-filter: blur(20px); font-size: 13px; line-height: 1.6; color: var(--dt-moon); }
+.notices p[role="alert"] { background: rgb(58 24 40 / 0.92); color: var(--dt-danger-ink); border-color: rgb(242 144 126 / 0.4); }
+.notices button { padding: 0; border: 0; background: none; color: var(--dt-sun); font-size: 12.5px; cursor: pointer; }
+
+@media (prefers-reduced-motion: reduce) {
+  .stars i { animation: none; }
+  .tag, .actions, .blank, .sheet, .scrim { animation: none; }
+  .portal .case, .portal .lid, .veil { animation-duration: 0.01s; }
+}
+@media (max-width: 860px) {
+  .hud { flex-wrap: wrap; padding: 12px 14px; }
+  .brand p { display: none; }
+  .actions { flex-wrap: wrap; justify-content: center; width: calc(100% - 24px); border-radius: 22px; }
+  .tag { top: 112px; }
+}

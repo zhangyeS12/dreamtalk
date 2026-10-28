@@ -415,6 +415,30 @@ from livingworld.adapters.http.wire_contracts.worlds import (
     ActivityLocation as ActivityLocation,
 )
 from livingworld.adapters.http.wire_contracts.worlds import (
+    BookDesign as BookDesign,
+)
+from livingworld.adapters.http.wire_contracts.worlds import (
+    BookDesignSkyWindow as BookDesignSkyWindow,
+)
+from livingworld.adapters.http.wire_contracts.worlds import (
+    BookDesignSticker as BookDesignSticker,
+)
+from livingworld.adapters.http.wire_contracts.worlds import (
+    BookDesignStickers as BookDesignStickers,
+)
+from livingworld.adapters.http.wire_contracts.worlds import (
+    BookDesignTitle as BookDesignTitle,
+)
+from livingworld.adapters.http.wire_contracts.worlds import (
+    BookFont as BookFont,
+)
+from livingworld.adapters.http.wire_contracts.worlds import (
+    BookMaterial as BookMaterial,
+)
+from livingworld.adapters.http.wire_contracts.worlds import (
+    BookThickness as BookThickness,
+)
+from livingworld.adapters.http.wire_contracts.worlds import (
     CoverCrop as CoverCrop,
 )
 from livingworld.adapters.http.wire_contracts.worlds import (

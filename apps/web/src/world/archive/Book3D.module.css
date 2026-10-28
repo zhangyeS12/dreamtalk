@@ -1,0 +1,74 @@
+/* A book is a box: spine faces the room, the front cover turns toward the reader.
+   The containing element sets --T (thickness); --C and --H are the face size. */
+.face { position: absolute; top: 0; height: var(--H, 540px); overflow: hidden; backface-visibility: hidden; }
+.spine { left: 0; width: var(--T); transform: translateZ(calc(var(--C, 372px) / 2)); border-radius: 3px; }
+.edge { left: 0; width: var(--T); transform: rotateY(180deg) translateZ(calc(var(--C, 372px) / 2)); }
+.front, .back { left: calc((var(--T) - var(--C, 372px)) / 2); width: var(--C, 372px); }
+.front { transform: rotateY(90deg) translateZ(calc(var(--T) / 2)); border-radius: 0 5px 5px 0; }
+.back { transform: rotateY(-90deg) translateZ(calc(var(--T) / 2)); border-radius: 5px 0 0 5px; }
+.top, .bottom { left: 0; width: var(--T); top: calc((var(--H, 540px) - var(--C, 372px)) / 2); height: var(--C, 372px); }
+.top { transform: rotateX(90deg) translateZ(calc(var(--H, 540px) / 2)); }
+.bottom { transform: rotateX(-90deg) translateZ(calc(var(--H, 540px) / 2)); }
+
+.pages { position: absolute; inset: 0; background: repeating-linear-gradient(90deg, #ece6d6 0 1px, #d9d1be 1px 2px); }
+.top .pages, .bottom .pages { background: repeating-linear-gradient(0deg, #ece6d6 0 1px, #d9d1be 1px 2px); box-shadow: inset 0 0 0 3px var(--case, #222); }
+[data-gilt] .pages { background: linear-gradient(90deg, #8a6420, #f6d98a 40%, #b78a35 70%, #f3d27d); }
+.light, .shade { position: absolute; inset: 0; pointer-events: none; }
+.shade { z-index: 9; background: rgb(3 4 10); opacity: var(--shade, 0); }
+.spine .light { background: linear-gradient(90deg, rgb(0 0 0 / 0.4), transparent 26%, transparent 70%, rgb(0 0 0 / 0.5));
+  box-shadow: inset 1.5px 0 0 color-mix(in oklab, var(--rim, #6d7fc4) 70%, transparent), inset -1.5px 0 0 color-mix(in oklab, var(--rim, #6d7fc4) 55%, transparent); }
+.front .light { background: linear-gradient(90deg, rgb(0 0 0 / 0.25), transparent 8%), linear-gradient(115deg, transparent 40%, rgb(255 255 255 / 0.06) 50%, transparent 60%); }
+.back .light { background: linear-gradient(270deg, rgb(0 0 0 / 0.25), transparent 8%), rgb(0 0 0 / 0.12); }
+.edge .light { background: linear-gradient(90deg, rgb(0 0 0 / 0.35), transparent 20%, transparent 80%, rgb(0 0 0 / 0.35)); }
+:global(.is-hover) .spine .light { box-shadow: inset 2px 0 0 var(--rim, #8fa0e0), inset -2px 0 0 color-mix(in oklab, var(--rim, #8fa0e0) 80%, transparent); }
+
+/* ---------- Face art ---------- */
+.art { position: absolute; inset: 0; overflow: hidden; container-type: size; }
+.base { position: absolute; inset: 0; background-repeat: no-repeat; }
+.material { position: absolute; inset: 0; pointer-events: none; }
+.material[data-material="paper"] { background: linear-gradient(rgb(255 255 255 / 0.03), rgb(0 0 0 / 0.08)); }
+.material[data-material="cloth"] { background: repeating-linear-gradient(45deg, rgb(255 255 255 / 0.05) 0 1px, transparent 1px 3px), repeating-linear-gradient(-45deg, rgb(0 0 0 / 0.1) 0 1px, transparent 1px 3px); }
+.material[data-material="leather"] { background: radial-gradient(circle at 30% 20%, rgb(255 255 255 / 0.1), transparent 45%), repeating-radial-gradient(circle at 40% 60%, rgb(0 0 0 / 0.08) 0 1px, transparent 1px 4px); }
+.material[data-material="gloss"] { background: linear-gradient(calc(100deg + var(--yaw, 0) * 1.6deg), transparent 30%, rgb(255 255 255 / 0.26) 46%, transparent 60%); }
+.material[data-material="holo"] { mix-blend-mode: color-dodge; opacity: 0.45; background: conic-gradient(from calc(var(--yaw, 0) * 3deg) at 50% 50%, #ff6ad5, #c774e8, #ad8cff, #8795e8, #94d0ff, #8af7c8, #ffe58a, #ff6ad5); }
+
+.title { position: absolute; display: flex; align-items: center; justify-content: center; max-width: 86%; transform: translate(-50%, -50%);
+  text-align: center; line-height: 1.15; letter-spacing: 0.1em; white-space: pre-wrap; overflow-wrap: anywhere; text-shadow: 0 3px 14px rgb(0 0 0 / 0.45); }
+.title[data-vertical] { writing-mode: vertical-rl; max-width: none; max-height: 86%; }
+.brand { position: absolute; left: 7%; top: 4.5%; font-size: 11px; letter-spacing: 0.3em; opacity: 0.75; }
+.backMark { position: absolute; right: 7%; bottom: 5%; font-size: 11px; letter-spacing: 0.2em; opacity: 0.6; }
+.skyWindow { position: absolute; overflow: hidden; transform: translate(-50%, -50%); border-radius: 12px; background: linear-gradient(var(--wz), var(--wh));
+  box-shadow: inset 0 0 0 3px rgb(255 255 255 / 0.55), 0 8px 20px rgb(0 0 0 / 0.35); }
+.skyWindow i { position: absolute; width: 18%; aspect-ratio: 1; border-radius: 50%; left: calc(10% + var(--wx) * 70%); top: calc(70% - var(--wa) * 50%); }
+.skyWindow i[data-kind="sun"] { background: radial-gradient(circle, #fff6dc, #ffd98f 55%, transparent 72%); }
+.skyWindow i[data-kind="moon"] { box-shadow: inset -6px 3px 0 0 #eef1fb; }
+.sticker { position: absolute; height: auto; pointer-events: none; filter: drop-shadow(0 3px 6px rgb(0 0 0 / 0.35)); }
+
+.band { position: absolute; left: 0; right: 0; top: 0; height: 16px; background: linear-gradient(90deg, var(--bz), var(--bh)); }
+.band[data-style="1"] { top: 54px; }
+.band[data-style="2"] { top: auto; bottom: 96px; }
+.band[data-paused] { filter: grayscale(1) brightness(0.8); }
+.band i { position: absolute; top: 4px; left: calc(var(--bx) * 64% + 14%); width: 8px; height: 8px; border-radius: 50%; }
+.band i[data-kind="sun"] { background: #fff1c8; box-shadow: 0 0 6px 2px rgb(255 220 150 / 0.8); }
+.band i[data-kind="moon"] { box-shadow: inset -3px 1px 0 0 #e9edfb; }
+.spineTitle { position: absolute; left: 0; right: 0; display: flex; justify-content: center; writing-mode: vertical-rl; white-space: nowrap; overflow: hidden; max-height: 68%;
+  text-shadow: 0 1px 6px rgb(0 0 0 / 0.5); top: 34px; font-size: 26px; font-weight: 800; letter-spacing: 0.14em; }
+.spineTitle[data-style="1"] { top: 92px; font-size: 24px; font-weight: 600; letter-spacing: 0.3em; }
+.spineTitle[data-style="2"] { top: 0; height: 70%; align-items: center; font-size: 30px; font-weight: 900; letter-spacing: 0.02em; }
+.spineMark { position: absolute; left: 0; right: 0; bottom: 16px; display: flex; justify-content: center; writing-mode: vertical-rl; font-size: 10px; letter-spacing: 0.24em; opacity: 0.6; }
+
+/* ---------- Blank cases ---------- */
+.blank.spine { background: linear-gradient(90deg, #191c2a, #222638 50%, #191c2a); }
+.blank.front, .blank.back { background: #1b1e2c; }
+.emboss { position: absolute; left: 0; right: 0; top: 46%; display: flex; justify-content: center; writing-mode: vertical-rl; font-size: 11px; letter-spacing: 0.32em;
+  color: transparent; text-shadow: 0 1px 0 rgb(255 255 255 / 0.08), 0 -1px 0 rgb(0 0 0 / 0.6); }
+.plus { position: absolute; left: 0; right: 0; top: 30px; text-align: center; font-size: 22px; color: var(--dt-sun, #f0cb85); opacity: 0; transition: opacity 0.25s; }
+:global(.is-hover) .plus, :global(.is-chosen) .plus { opacity: 0.9; }
+:global(.is-hover) .blank.spine { background: linear-gradient(90deg, #1d2132, #2a2f45 50%, #1d2132); }
+.blankPrompt { position: absolute; left: 0; right: 0; top: 46%; text-align: center; color: rgb(255 255 255 / 0.3); font-size: 22px; letter-spacing: 0.3em; }
+
+/* A world being written into a blank: its art spreads from the spine's centre line. */
+:global(.is-printing) .art { animation: ink 1.3s cubic-bezier(0.22, 1, 0.36, 1) both; }
+:global(.is-printing) .spine { background: linear-gradient(90deg, #191c2a, #222638 50%, #191c2a); }
+@keyframes ink { from { clip-path: inset(50% 0 50% 0); } to { clip-path: inset(0); } }
+@media (prefers-reduced-motion: reduce) { :global(.is-printing) .art { animation: none; } }

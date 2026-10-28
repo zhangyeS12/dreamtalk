@@ -108,3 +108,8 @@
   .dt-world .dt-chat-workspace.thread-open > aside { display: none; }
   .dt-world .dt-chat-workspace.thread-open > .dt-thread-host { display: block; }
 }
+
+/* Legacy panels shown inside archive sheets keep their content, not their own heading. */
+.dt-sheet-body { background: transparent !important; color: var(--dt-moon); }
+.dt-sheet-body > .archive-editor > .archive-editor-heading { display: none; }
+.dt-sheet-body .archive-editor { padding: 0; border: 0; background: none; }

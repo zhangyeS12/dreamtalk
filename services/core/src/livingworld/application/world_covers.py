@@ -11,6 +11,7 @@ from livingworld.application.content_packages import (
     ContentAssetStore,
     PackagedBlob,
 )
+from livingworld.application.errors import EntityNotFoundError
 from livingworld.domain.content.identifiers import ContentAssetId
 from livingworld.domain.errors import ConcurrencyConflictError
 from livingworld.domain.identifiers import WorldId
@@ -93,10 +94,22 @@ class WorldCoverService:
         image = await self._repository.image(world, digest)
         return await self._assets.read(self._binding(world, digest, image["size"])), image
 
-    async def save(self, world, mode, title, show_title, faces, revision):
+    async def save(self, world, mode, title, show_title, faces, revision, design=None):
         await self._repository.world_name(world)
-        if mode == "text" and not title.strip():
+        if design is None and mode == "text" and not title.strip():
             raise CoverError("cover_title_required")
+        if design is not None:
+            # Sticker images must be this world's own uploaded, validated images.
+            for digest in {
+                sticker["ref"]
+                for stickers in design["stickers"].values()
+                for sticker in stickers
+                if sticker["kind"] == "image"
+            }:
+                try:
+                    await self._repository.image(world, digest)
+                except EntityNotFoundError:
+                    raise CoverError("cover_sticker_image_missing") from None
         if mode == "image" and "front" not in faces:
             raise CoverError("cover_front_required")
         previous = await self.load(world)
@@ -125,13 +138,12 @@ class WorldCoverService:
                     },
                 )
                 result[face] = {"source": source, "display": display, "crop": asdict(crop)}
-        return await self._repository.save(
-            world,
-            {
-                "mode": mode,
-                "title": title.strip(),
-                "show_title": show_title,
-                "faces": result,
-            },
-            revision,
-        )
+        value = {
+            "mode": mode,
+            "title": title.strip(),
+            "show_title": show_title,
+            "faces": result,
+        }
+        if design is not None:
+            value["design"] = design
+        return await self._repository.save(world, value, revision)

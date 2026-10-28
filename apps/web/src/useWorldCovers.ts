@@ -1,10 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CoreClient, type WorldCover } from "@dreamtalk/api-client";
-import type { BookAppearance } from "./BookFaces";
+type CoverFace = "front" | "spine" | "back";
+export type BookAppearance = { cover: Pick<WorldCover, "mode" | "title" | "show_title">; urls: Partial<Record<CoverFace, string>> };
+
+/** Everything a designed book needs: saved cover, face images, wrap image and sticker images. */
+export type CoverAppearance = BookAppearance & { full: WorldCover; jacket?: string; jacketAspect?: number; uploads: Record<string, string> };
 
 export function useWorldCovers(client: CoreClient, worldId?: string, enabled = true) {
   const [covers, setCovers] = useState<WorldCover[]>([]);
-  const [appearances, setAppearances] = useState<Record<string, BookAppearance>>({});
+  const [appearances, setAppearances] = useState<Record<string, CoverAppearance>>({});
   const [metadataReady, setMetadataReady] = useState(false);
   const [error, setError] = useState("");
   const live = useRef(true);
@@ -38,10 +42,25 @@ export function useWorldCovers(client: CoreClient, worldId?: string, enabled = t
     // finish every book's text appearance; explicit refresh can retry the images.
     const timer = window.setTimeout(() => controller.abort(), 5000);
     const load = async () => {
-      const result: Record<string, BookAppearance> = {};
+      const result: Record<string, CoverAppearance> = {};
+      const fetchUrl = async (cover: WorldCover, digest: string) => {
+        const key = `${cover.world_id}:${digest}`;
+        let url = cache.current.get(key);
+        if (!url && !controller.signal.aborted) {
+          try {
+            const blob = await client.coverImage(cover.world_id, digest, controller.signal);
+            if (!active()) return undefined;
+            url = URL.createObjectURL(blob); cache.current.set(key, url);
+          } catch {
+            if (active()) setError("部分封面图片无法读取，已保留文字外观。刷新书架可重试。");
+          }
+        }
+        return url;
+      };
       for (const cover of covers) {
         if (worldId && cover.world_id !== worldId) continue;
-        const urls: BookAppearance["urls"] = {};
+        const urls: BookAppearance["urls"] = {}, uploads: Record<string, string> = {};
+        let jacket: string | undefined, jacketAspect: number | undefined;
         if (cover.mode === "image") for (const face of ["front", "spine", "back"] as const) {
           const display = cover.faces[face]?.display;
           if (!display) continue;
@@ -59,7 +78,18 @@ export function useWorldCovers(client: CoreClient, worldId?: string, enabled = t
           }
           if (url) urls[face] = url;
         }
-        result[cover.world_id] = { cover, urls };
+        const front = cover.faces.front;
+        if (cover.mode === "image" && cover.design?.wrap && front) {
+          jacket = await fetchUrl(cover, front.source.digest);
+          if (!active()) return;
+          jacketAspect = Number(front.source.width) / Number(front.source.height);
+        }
+        for (const digest of new Set(Object.values(cover.design?.stickers ?? {}).flat().filter(item => item.kind === "image").map(item => item.ref))) {
+          const url = await fetchUrl(cover, digest);
+          if (!active()) return;
+          if (url) uploads[digest] = url;
+        }
+        result[cover.world_id] = { cover, urls, full: cover, jacket, jacketAspect, uploads };
       }
       clearTimeout(timer);
       if (active()) setAppearances(result);
@@ -73,7 +103,10 @@ export function useWorldCovers(client: CoreClient, worldId?: string, enabled = t
     const displayed = new Set(Object.values(appearances).flatMap(appearance => Object.values(appearance.urls)));
     const needed = new Set<string>();
     if (enabled) for (const cover of covers) {
-      if (cover.mode !== "image" || worldId && cover.world_id !== worldId) continue;
+      if (worldId && cover.world_id !== worldId) continue;
+      for (const item of Object.values(cover.design?.stickers ?? {}).flat()) if (item.kind === "image") needed.add(`${cover.world_id}:${item.ref}`);
+      if (cover.mode !== "image") continue;
+      if (cover.design?.wrap && cover.faces.front) needed.add(`${cover.world_id}:${cover.faces.front.source.digest}`);
       for (const face of ["front", "spine", "back"] as const) {
         const display = cover.faces[face]?.display;
         if (display) needed.add(`${cover.world_id}:${display.digest}`);

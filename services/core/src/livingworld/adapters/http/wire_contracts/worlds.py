@@ -95,6 +95,64 @@ class WorldCoverFaces(TypedDict):
     back: NotRequired[WorldCoverFacesBack]
 
 
+type BookMaterial = Literal["paper", "cloth", "leather", "gloss", "holo"]
+type BookThickness = Literal["thin", "normal", "thick"]
+type BookFont = Literal["yahei", "hei", "song", "kai", "fangsong"]
+
+
+@with_config(ConfigDict(extra="allow"))
+class BookDesignTitle(TypedDict):
+    text: str
+    font: BookFont
+    color: str
+    size: WireNumber
+    vertical: bool
+    x: WireNumber
+    y: WireNumber
+
+
+@with_config(ConfigDict(extra="allow"))
+class BookDesignSkyWindow(TypedDict):
+    on: bool
+    x: WireNumber
+    y: WireNumber
+    w: WireNumber
+    h: WireNumber
+
+
+@with_config(ConfigDict(extra="allow"))
+class BookDesignSticker(TypedDict):
+    kind: Literal["builtin", "image"]
+    ref: str
+    x: WireNumber
+    y: WireNumber
+    w: WireNumber
+    r: WireNumber
+    opacity: WireNumber
+
+
+@with_config(ConfigDict(extra="allow"))
+class BookDesignStickers(TypedDict):
+    front: list[BookDesignSticker]
+    spine: list[BookDesignSticker]
+    back: list[BookDesignSticker]
+
+
+@with_config(ConfigDict(extra="allow"))
+class BookDesign(TypedDict):
+    version: Literal[1]
+    template: str
+    material: BookMaterial
+    case_color: str
+    edge: Literal["paper", "gilt"]
+    thickness: BookThickness
+    wrap: bool
+    brand: bool
+    title: BookDesignTitle
+    sky_window: BookDesignSkyWindow
+    stickers: BookDesignStickers
+
+
 @with_config(ConfigDict(extra="allow"))
 class WorldCover(TypedDict):
     world_id: str
@@ -103,6 +161,7 @@ class WorldCover(TypedDict):
     show_title: bool
     faces: WorldCoverFaces
     revision: WireNumber
+    design: NotRequired[BookDesign]
 
 
 @with_config(ConfigDict(extra="allow"))
@@ -137,6 +196,7 @@ class WorldCoverWrite(TypedDict):
     show_title: bool
     faces: WorldCoverWriteFaces
     expected_revision: WireNumber
+    design: NotRequired[BookDesign]
 
 
 type Residency = Literal["normal", "strong", "very_strong"]
