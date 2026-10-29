@@ -202,6 +202,8 @@
 .frame .composerStatus { display: grid; gap: 6px; }
 .frame .composerStatus:empty { display: none; }
 .frame .composerStatus :global(.chat-feedback) { margin: 0; padding: 0 22px; color: var(--dt-silver); font-size: 12.5px; text-shadow: 0 1px 8px rgb(0 0 0 / 0.6); }
+/* The empty live region stays in the accessibility tree but takes no room. */
+.frame .composerStatus :global(.chat-feedback:empty) { position: absolute; padding: 0; }
 .frame .composerStatus :global(.chat-feedback[role="alert"]) { color: var(--dt-danger-ink); }
 .frame .composerStatus :global(.text-action) { justify-self: start; margin-left: 18px; padding: 4px 10px; border: 0; border-radius: 999px; background: rgb(255 255 255 / 0.06); color: var(--dt-sun); font-size: 12.5px; cursor: pointer; }
 .frame .composerStatus :global(.reply-recovery) { padding: 0 16px; font-size: 12.5px; color: var(--dt-silver); }
