@@ -1,16 +1,18 @@
 import { useEffect, useRef, useState } from "react";
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import type { VortexController } from "./celestialVortex";
+import type { StartupScene } from "./startupScene";
 import "./startup.css";
 
 const MIN_VISIBLE_MS = 1500;
+// Keep in step with ENTER_MS in startupScene.ts and the `startup-enter` animations in startup.css.
+const ENTER_MS = 1100;
 
 export function StartupSplash({ ready, failed, failureCode = "", onRetry, onComplete }: {
   ready: boolean; failed: boolean; failureCode?: string; onRetry: () => void; onComplete: () => void;
 }) {
   const surface = useRef<HTMLDivElement>(null);
-  const vortex = useRef<VortexController | null>(null);
+  const vortex = useRef<StartupScene | null>(null);
   const [visible, setVisible] = useState<boolean | null>(() => isTauri() ? null : !document.hidden);
   const visibilityNow = useRef(visible);
   const stopped = useRef(failed);
@@ -47,12 +49,12 @@ export function StartupSplash({ ready, failed, failureCode = "", onRetry, onComp
       if (reduced || abandoned || document.hidden || visibilityNow.current !== true || started || leaving.current || stopped.current) return;
       started = true;
       deadline = window.setTimeout(() => { if (!didPaint) showFallback(); }, 3000);
-      void import("./celestialVortex").then(({ createCelestialVortex }) => {
+      void import("./startupScene").then(({ createStartupScene }) => {
         if (!active || abandoned) return;
         if (!surface.current || document.hidden || visibilityNow.current !== true || leaving.current || stopped.current) {
           started = false; window.clearTimeout(deadline); return;
         }
-        const scene = createCelestialVortex(surface.current, () => {
+        const scene = createStartupScene(surface.current, () => {
           if (!active || abandoned) return;
           didPaint = true; window.clearTimeout(deadline); setPainted(true);
         });
@@ -108,14 +110,14 @@ export function StartupSplash({ ready, failed, failureCode = "", onRetry, onComp
   useEffect(() => {
     if (!ready || failed || visible === null || (visible && !held)) return;
     if (visible) vortex.current?.enter();
-    const timer = window.setTimeout(onComplete, visible ? reduced ? 160 : 900 : 0);
+    const timer = window.setTimeout(onComplete, visible ? reduced ? 160 : ENTER_MS : 0);
     return () => window.clearTimeout(timer);
   }, [ready, failed, visible, held, reduced, onComplete]);
   return <section className={`startup-splash${entering ? " is-entering" : ""}${failed ? " has-failed" : ""}${reduced ? " is-reduced" : ""}`} aria-label="dreamtalk 启动" aria-busy={!failed}>
     <div ref={surface} className={`startup-universe${painted ? " is-painted" : ""}`} aria-hidden="true" />
     <div className="startup-vignette" aria-hidden="true" />
-    <div className="startup-signature"><img src="/brand/dreamtalk-logo.png" alt="dreamtalk" width="230" height="198" draggable="false" /><span aria-hidden="true">dreamtalk</span><p>在万千星轨中，与你相遇。</p></div>
-    <div className="startup-horizon" aria-hidden="true"><span />每一个世界，都有回响<span /></div>
+    <div className="startup-signature"><img src="/brand/dreamtalk-logo.png" alt="dreamtalk" width="230" height="198" draggable="false" /><span aria-hidden="true">dreamtalk</span></div>
+    <p className="startup-caption" aria-hidden="true">每一本书里，都有一片天空。</p>
     <p className="sr-only" role="status" aria-live="polite">{failed ? "启动暂时没有完成。" : ready ? "世界书架已准备好。" : "正在打开世界书架。"}</p>
     {failed && <div className="startup-recovery" role="alert"><p>{failureCode === "core_storage_version_unsupported" ? "当前版本无法读取这份存档" : "暂时无法打开世界书架"}</p><span>{failureCode === "core_storage_version_unsupported"
       ? "请点击右下角检查更新。存档会保留，无需恢复旧备份。"
