@@ -24,7 +24,7 @@ export function ThreadFrame({ label, header, tools, stage, scrollRef, children, 
     {stage}
     {header}
     {tools ? <div className={styles.tools}>{tools}</div> : null}
-    <div className={styles.scroller}>
+    <div className={styles.scroller} data-chat-scroll>
       <div ref={scrollRef as Ref<HTMLDivElement>} className={styles.column}>{children}</div>
     </div>
     {composer}

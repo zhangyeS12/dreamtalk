@@ -61,7 +61,7 @@ export function useWorldCovers(client: CoreClient, worldId?: string, enabled = t
         if (worldId && cover.world_id !== worldId) continue;
         const urls: BookAppearance["urls"] = {}, uploads: Record<string, string> = {};
         let jacket: string | undefined, jacketAspect: number | undefined;
-        if (cover.mode === "image") for (const face of ["front", "spine", "back"] as const) {
+        if (cover.mode === "image" || cover.design) for (const face of ["front", "spine", "back"] as const) {
           const display = cover.faces[face]?.display;
           if (!display) continue;
           const key = `${cover.world_id}:${display.digest}`;
@@ -105,7 +105,7 @@ export function useWorldCovers(client: CoreClient, worldId?: string, enabled = t
     if (enabled) for (const cover of covers) {
       if (worldId && cover.world_id !== worldId) continue;
       for (const item of Object.values(cover.design?.stickers ?? {}).flat()) if (item.kind === "image") needed.add(`${cover.world_id}:${item.ref}`);
-      if (cover.mode !== "image") continue;
+      if (cover.mode !== "image" && !cover.design) continue;
       if (cover.design?.wrap && cover.faces.front) needed.add(`${cover.world_id}:${cover.faces.front.source.digest}`);
       for (const face of ["front", "spine", "back"] as const) {
         const display = cover.faces[face]?.display;

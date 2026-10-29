@@ -1,6 +1,6 @@
 # Structured Generation & Local Schema Validation — C-005C1
 
-状态：已实现opt-in非流式结构化生成，历史测试使用人工fixtures／httpx.MockTransport。0.1.42已接入桌面显式原生能力配置及wire副本适配，本轮不运行测试或真实模型；历史“无production wiring”的阶段结论不代表当前设置入口。见[适配记录](../maintenance/2026-10-08-provider-compatibility.md)。
+状态：已实现opt-in非流式结构化生成，历史测试使用人工fixtures／httpx.MockTransport。桌面已接入显式原生能力配置及wire副本适配，生产应用通过统一路由使用；普通聊天的可选注释不要求开启原生Schema。历史离线检查不代表真实型号／代理已验收，当前结果见[状态清单](../PROJECT_STATUS.md)。见[适配记录](../maintenance/2026-10-08-provider-compatibility.md)。
 
 ```text
 valid provider text != valid JSON != schema-valid value

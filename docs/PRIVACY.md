@@ -4,7 +4,7 @@
 
 ## 本机保存
 
-dreamtalk 在本机保存世界、角色资料、身份、聊天、记忆、素材、音色与应用设置。完整备份及用户主动导出的文件可以包含这些私人内容；用户选择文件位置和是否交给他人。模型权重和环境与应用存档分开。
+dreamtalk 在本机保存世界、角色资料、身份、聊天、记忆、素材、音色与应用设置。完整备份及用户主动导出的文件可以包含这些私人内容；用户选择文件位置和是否交给他人。用户另行部署的配音／视觉模型权重和环境与应用存档分开。固定本地BGE检索模型作为产品资源随Core分发；聊天全文／向量派生索引和缓存仍在本机，运行时不向外部embedding服务发送历史。
 
 API 密钥由桌面宿主通过本机安全凭据存储管理；配置可以保存不透明的密钥引用。完整存档备份不包含 Windows 安全凭据中的密钥正文。
 
@@ -18,9 +18,9 @@ dreamtalk 不提供开发者共享模型账号，不自动把聊天或存档上�
 
 ## 删除和备份
 
-用户可以使用应用已交付的删除或导出入口管理内容。存档保护入口已纳入当前版本；旧安装包不一定具备新备份、恢复或清空入口。真实恢复、跨版升级和故障场景仍待用户验收。
+用户可以使用应用已交付的删除或导出入口管理内容。存档保护入口已纳入当前版本；旧安装包不一定具备当前备份与恢复能力；普通界面已移除清空原始数据入口，保留单项管理和世界删除。真实恢复、跨版升级和故障场景仍待用户验收。
 
-应用内明确清空的设计保留不含聊天正文的调用、费用、预算保护回执，避免用清空剧情重置已知用量。独立备份、用户另存的导出文件和远程服务已经接收的数据，具有各自的删除范围。
+世界删除与存档恢复保留不含聊天正文的调用、费用和预算保护回执，避免通过切换剧情数据重置已知用量；卡片／资料删除可保留不可变来源与相关历史，范围见对应删除提示。独立备份、用户另存的导出文件和远程服务已经接收的数据，具有各自的删除范围。
 
 ## 第三方服务
 
@@ -34,4 +34,4 @@ dreamtalk 不提供开发者共享模型账号，不自动把聊天或存档上�
 
 dreamtalk stores worlds, conversations, memory, media, and configuration locally. Users choose their model services. Authorized chat, creation, speech, image, and enabled background tasks can transmit their relevant inputs to those services. Search, media downloads, model setup, and update checks contact the corresponding services; updates use GitHub. Provider policies apply to those connections.
 
-The project does not automatically upload conversations, saves, or diagnostic logs to its maintainers. API secrets are managed through local OS credential storage and are excluded from save exports. Backups and exports can contain private content. Minimal non-content cost and admission receipts are retained by the explicit erasure design. Third-party copies and separately exported files have separate deletion scopes.
+The project does not automatically upload conversations, saves, or diagnostic logs to its maintainers. API secrets are managed through local OS credential storage and are excluded from save exports. Backups and exports can contain private content. World deletion and save restoration retain minimal non-content cost and admission receipts. Authored-content removal may retain immutable source records and conversation history; the ordinary UI has no raw-data reset action. Third-party copies and separately exported files have separate deletion scopes.

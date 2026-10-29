@@ -1,6 +1,6 @@
-# 上下文、记忆与长历史（桌面0.1.39）
+# 上下文、记忆与长历史
 
-更新日期：2026-10-07。本页说明当前源码；历史0.1.18～0.1.28的实现和检查不扩大为本版验收。详细改动见[长历史维护记录](maintenance/2026-10-07-long-history-recall.md)。
+本页说明当前源码的检索与容量契约。版本、迁移head、工程检查和用户验收统一见[状态清单](PROJECT_STATUS.md)；演进证据见[长历史维护记录](maintenance/2026-10-07-long-history-recall.md)，旧检查不扩大为当前验收。
 
 ## 如何使用
 
@@ -12,7 +12,7 @@
 
 ## 持久全文索引与历史向量
 
-Alembic源码head为0037_persistent_chat_recall，增加派生的recall_documents与FTS5表、同步触发器，不改写聊天、记忆状态或世界事件。新版首次启动沿既有迁移流程建空索引，不在启动时扫描/编码全部存档。本轮没有执行用户存档迁移。
+全文／向量派生表来源于`0037_persistent_chat_recall`，包括recall_documents、FTS5及同步触发器；该编号不是当前head。后续迁移沿唯一Alembic链追加，入口为`infrastructure/persistence/migration.py`。索引不改写聊天、记忆状态或世界事件；首次创建空索引，不在启动时扫描／编码全部存档。
 
 正常聊天或明确搜索时，先按世界、玩家、角色、会话参与和记忆状态核验来源，再逐页补齐索引。每通道一页最多64条，优先较早尚无全文索引的记录；候选正文仍有数量/字节限制。jieba分词全文持久保存在FTS5；冷索引尚未覆盖的记录保留有界关键词候选回退，避免新索引建立前丢失原有关键词访问能力。已索引正文不再参与这条冷扫描。
 
@@ -28,17 +28,17 @@ Alembic源码head为0037_persistent_chat_recall，增加派生的recall_document
 
 语义不可用时使用关键词，并在“本次参考内容”说明。持久派生写入失败不使合法回复失败，覆盖仍按部分召回处理；若主索引写入成功，DiskCache失败不再被误报为仅内存语义。
 
-## 本轮待用户验收
+## 需按场景验收
 
 - 使用早期旧事的关键词和同义表达，检查出处是否相关；首次冷索引不能承诺立即命中所有旧事。
 - 更正或停用后，新回复不再参考被替代条目；跨世界/角色不能出现别人的私聊。
 - 反复上翻长聊天、切回最新页和发送新消息，检查阅读位置、草稿、未读与流式回复。
 - 退出重开后检查已索引来源仍可召回；请反馈参考面板的检索方式和表现，无需提供密钥或私聊全文。
 
-本轮只做源码、lint/type、格式、文档链接及build-only编译/打包；未运行应用、数据库迁移、自动测试或模型推理。
+实现入口为`infrastructure/semantic_chat_retrieval.py`、`infrastructure/persistence/recall_index.py`和`long_chat_memory.py`，均相对`services/core/src/livingworld`。实际检查结果只登记在状态清单及对应维护记录。
 
 ## 仍保持的边界
 
-近期完整上下文仍有界；本人近期活动最多6条/6KiB，获准亲历仍只在近128条中取近期8项与最多4项相关经历，最终12条/8KiB。本轮没有扩大Observation/EpisodicMemory权限或自动反思。当前真实活动、同次获准终态仍优先于旧开始，不补造成果。详见[经历召回](EXPERIENCE_RECALL.md)、[终态说明](EXPERIENCE_STATE_RECALL.md)。
+近期完整上下文仍有界；本人近期活动最多6条/6KiB，获准亲历仍只在近128条中取近期8项与最多4项相关经历，最终12条/8KiB。混合聊天检索不扩大Observation/EpisodicMemory权限，也不实现自动反思。当前真实活动、同次获准终态仍优先于旧开始，不补造成果。详见[经历召回](EXPERIENCE_RECALL.md)、[终态说明](EXPERIENCE_STATE_RECALL.md)。
 
 Windows原生库仍在控制管道和后台线程前准备，模型本身按需加载；相关历史问题见[Core卡顿修复](CORE_NATIVE_STARTUP.md)。聊天/读取失败的恢复边界见[生成与读取修复](GENERATION_READ_RECOVERY.md)。

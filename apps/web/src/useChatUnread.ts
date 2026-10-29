@@ -58,7 +58,7 @@ export function useConversationRead(client: CoreClient, worldId: string, convers
       let position = 0;
       for (const message of loadedMessages.current ?? []) {
         const element = document.querySelector<HTMLElement>(`[data-message-id="${message.message_id}"]`);
-        const scroller = element?.closest<HTMLElement>(".conversation-detail");
+        const scroller = element?.closest<HTMLElement>("[data-chat-scroll]");
         if (!element || !scroller) continue;
         const r = element.getBoundingClientRect(), viewport = scroller.getBoundingClientRect();
         if (r.height > 0 && r.bottom > Math.max(0, viewport.top) && r.top < Math.min(window.innerHeight, viewport.bottom)) position = Math.max(position, message.position);

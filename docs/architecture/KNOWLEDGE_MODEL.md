@@ -70,7 +70,7 @@ FormCharacterBelief 是可信内部 application command，复用 KnowledgeAssert
 
 AcquireKnowledge 不变：既有源 → 显式渠道 Observation → 接收方派生 assertion，复制 source proposition。false belief 因而可被转述，但不会变成 Truth。Stage 2 的矛盾验收使用 AssertWorldTruth `door=locked` 与 FormCharacterBelief `Alice: door=unlocked`，重建前后各 reader 返回自身 scope/owner 的命题，不覆盖或自动调和。历史 stale Truth 不是这一路径的替代。
 
-仅明确 canonical 主观入口；自动 inference、误导检测、belief revision/reconciliation、Observation→Belief 推断和后续产品呈现均未实现。测试和完整验收见 [STAGE_2_ACCEPTANCE.md](https://github.com/zhangyeS12/dreamtalk/blob/485b512a5dac8da7077326d1cd3daea5eb3304c8/docs/architecture/STAGE_2_ACCEPTANCE.md)。
+canonical主观入口已明确；自动inference、误导检测、belief revision／reconciliation及Observation→Belief推断仍未实现。现有亲历事件展示和聊天输入已有独立实现，不能据此写成整个项目没有知识／事件呈现。测试和完整验收见 [STAGE_2_ACCEPTANCE.md](https://github.com/zhangyeS12/dreamtalk/blob/485b512a5dac8da7077326d1cd3daea5eb3304c8/docs/architecture/STAGE_2_ACCEPTANCE.md)。
 
 1. 世界真实事实、Character Knowledge 和 Player Knowledge 分离（FR-04）。
 2. 后台发生但玩家不知道的事件不能直接展示给玩家（FR-05）。

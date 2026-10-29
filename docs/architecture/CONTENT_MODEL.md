@@ -65,7 +65,7 @@ canonical 反序列化仅解释 dreamtalk 格式，不解析外部 Character Car
 
 ContentDraft 是包含 roots、assets、raw_imports 的封闭引用图。校验同类型重复 ID、缺失 LoreEntry/asset/raw 引用、来源 hash/metadata 不一致等局部可判定结构；不会打开资源路径、检查图片 bytes 或执行 metadata。需要引用已存依赖时，可信应用先加载并明确加入 Draft，不悄悄补全。
 
-内容保存使用独立 [ContentRepository](../../services/core/src/livingworld/application/content.py)，没有 runtime UoW、event appender 或知识写入端口。SQLite 的四个 typed root 表分别保存 ID、title、content_version、ContentRevision、semantic_hash 及 canonical JSON；资产引用与原始导入各有独立表。新 LoreEntry 的 collection_id FK 必须在应用/存储写入边界非空，并与集合成员精确一致。nullable 仅保留 legacy；不自动 re-home、不生成合成集合。详见 [PERSISTENCE_MODEL.md](PERSISTENCE_MODEL.md)。当前无删除 API，归属变更不在本任务内开放。
+内容保存使用独立 [ContentRepository](../../services/core/src/livingworld/application/content.py)，没有 runtime UoW、event appender 或知识写入端口。SQLite 的四个 typed root 表分别保存 ID、title、content_version、ContentRevision、semantic_hash 及 canonical JSON；资产引用与原始导入各有独立表。新 LoreEntry 的 collection_id FK 必须在应用/存储写入边界非空，并与集合成员精确一致。nullable 仅保留 legacy；不自动 re-home、不生成合成集合。详见 [PERSISTENCE_MODEL.md](PERSISTENCE_MODEL.md)。产品层已有卡／书停用及明确条目删除入口；此内容图端口不做运行历史的物理清除，也不支持隐式重定条目归属。
 
 所有导入文本、creator notes、authored_instructions、rules 及扩展都是不可信创作数据。字段名 system_prompt / instruction 不授予 application/system 权限。当前角色卡的已确认人格字段和逐条明确开放的公共背景可进入角色聊天上下文，但来源兼容元数据仍不执行，不能授予任何角色或玩家运行时知识权限。公共背景选择属于本地世界配置，不修改 canonical authored content/hash；未开放的暗线默认排除，替换导入后须重新确认。Provenance 不存 API key/secret；原始文件只作为内部保留证据，不写日志或自动展示给玩家。参见 [CHAT_MODEL.md](CHAT_MODEL.md)。
 

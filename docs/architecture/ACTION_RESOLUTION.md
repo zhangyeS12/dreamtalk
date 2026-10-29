@@ -78,4 +78,4 @@ Action occurrence time 由共享 monotonic `WorldTimeSource` 读取，不直接�
 
 固定 activity enum：rest/work/leisure；payload 只含目标地点、预期 CharacterState revision、activity 和稳定 candidate UUID。Kernel writer lock 内校验当前世界绑定身份的费用授权、ready plan/generation、due/end/window 和未执行候选，拒绝不合法 principal/source/scene。角色移动时离开旧 Scene；同一事务提交 CharacterState CAS、CharacterRoutineStarted v1、真实发生时 actor＋origin/destination 在场观众的 Observation、候选 active 和既有 Action receipt。稳定 request/event UUID 支持恢复；授权关闭或暂停不会绕过验证。暂停期间请求 defer，不形成永久拒绝回执。
 
-开始事件不是任务完成；planned_until 是操作性占用截止，不作为已发生的完成事实展示。Replay 新增严格版本 handler 来重建角色位置/revision；Observation 继续由既有重建范围保存。本轮没有新增 canonical 活动完成、关系、Knowledge 或 Memory 事实。
+开始事件不是任务完成；planned_until 是操作性占用截止，不作为已发生的完成事实展示。Replay 新增严格版本 handler 来重建角色位置/revision；Observation 继续由既有重建范围保存。当前日常已有真实结束／中断事件，见[日常手册](../DIRECTOR_ACTIVITIES.md)；它们只认证占用结束，不认证任务成果、关系或知识变化。

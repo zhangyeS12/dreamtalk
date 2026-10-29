@@ -5,13 +5,16 @@ import { WorldAvatar } from "./ThreadParts";
 import styles from "./ChatDirectory.module.css";
 
 type Kind = "direct" | "group";
+export type ChatDirectoryEntry =
+  | { kind: "direct"; conversation: ChatConversation }
+  | { kind: "group"; conversation: GroupChatConversation };
 
 /** The conversation directory: world events first, then real conversations only. */
 export function ChatDirectory({
-  conversations, groups, total, loading, failed, query, onQuery, unread, unreadError, onUnreadRetry, avatars,
+  items, total, loading, failed, query, onQuery, unread, unreadError, onUnreadRetry, avatars,
   eventsOpen, selectedConversationId, selectedGroupId, canCreateGroup, onEvents, onSelect, onPin, onNewGroup, onContacts, onRetry,
 }: {
-  conversations: ChatConversation[]; groups: GroupChatConversation[]; total: number; loading: boolean; failed: boolean;
+  items: ChatDirectoryEntry[]; total: number; loading: boolean; failed: boolean;
   query: string; onQuery: (value: string) => void; unread: (conversationId: string) => boolean; unreadError: boolean; onUnreadRetry: () => void;
   avatars: Record<string, string>; eventsOpen: boolean; selectedConversationId: string | null; selectedGroupId: string | null;
   canCreateGroup: boolean; onEvents: () => void; onSelect: (kind: Kind, id: string) => void; onPin: (kind: Kind, id: string, pinned: boolean) => void;
@@ -47,19 +50,21 @@ export function ChatDirectory({
         : failed && total === 0 ? null
         : total === 0 ? <div className={styles.empty}><h2>还没有会话</h2><p>在通讯录中选择角色，打开与他的会话。</p><button type="button" onClick={onContacts}>前往通讯录</button></div>
         : <>
-          {groups.map(item => {
-            const selected = !eventsOpen && selectedGroupId === item.conversation_id;
-            const fresh = unread(item.conversation_id);
-            const tints = companyTints(item.participants.map(person => person.character_id));
-            return <div key={item.conversation_id} className={styles.wrap} data-selected={selected || undefined}>
-              <button type="button" className={styles.row} aria-pressed={selected} onClick={() => onSelect("group", item.conversation_id)}>
-                <span className={styles.stack} aria-hidden="true">{item.participants.slice(0, 2).map(person => <WorldAvatar key={person.character_id} name={person.character_name} url={avatars[person.root_import_id]} tint={tints.get(person.character_id)} size="s" />)}</span>
-                <span className={styles.copy}><strong>{item.participants.map(member => member.character_name).join("、")}{fresh && <span className={styles.dot} role="img" aria-label="有未读角色消息" />}</strong><small>群聊 · {item.participants.length} 位角色</small></span>
-              </button>
-              <PinButton pinned={!!item.pinned} label={item.pinned ? "取消置顶群聊" : "置顶群聊"} onClick={() => onPin("group", item.conversation_id, !item.pinned)} />
-            </div>;
-          })}
-          {conversations.map(item => {
+          {items.map(entry => {
+            if (entry.kind === "group") {
+              const item = entry.conversation;
+              const selected = !eventsOpen && selectedGroupId === item.conversation_id;
+              const fresh = unread(item.conversation_id);
+              const tints = companyTints(item.participants.map(person => person.character_id));
+              return <div key={item.conversation_id} className={styles.wrap} data-selected={selected || undefined}>
+                <button type="button" className={styles.row} aria-pressed={selected} onClick={() => onSelect("group", item.conversation_id)}>
+                  <span className={styles.stack} aria-hidden="true">{item.participants.slice(0, 2).map(person => <WorldAvatar key={person.character_id} name={person.character_name} url={avatars[person.root_import_id]} tint={tints.get(person.character_id)} size="s" />)}</span>
+                  <span className={styles.copy}><strong>{item.participants.map(member => member.character_name).join("、")}{fresh && <span className={styles.dot} role="img" aria-label="有未读角色消息" />}</strong><small>群聊 · {item.participants.length} 位角色</small></span>
+                </button>
+                <PinButton pinned={!!item.pinned} label={item.pinned ? "取消置顶群聊" : "置顶群聊"} onClick={() => onPin("group", item.conversation_id, !item.pinned)} />
+              </div>;
+            }
+            const item = entry.conversation;
             const selected = !eventsOpen && selectedConversationId === item.conversation_id;
             const fresh = unread(item.conversation_id);
             return <div key={item.conversation_id} className={styles.wrap} data-selected={selected || undefined}>
@@ -71,7 +76,7 @@ export function ChatDirectory({
             </div>;
           })}
         </>}
-      {filtering && total > 0 && conversations.length + groups.length === 0 && <p className={styles.hint} role="status">没有匹配的会话。试试角色的名字。</p>}
+      {filtering && total > 0 && items.length === 0 && <p className={styles.hint} role="status">没有匹配的会话。试试角色的名字。</p>}
     </div>
   </aside>;
 }

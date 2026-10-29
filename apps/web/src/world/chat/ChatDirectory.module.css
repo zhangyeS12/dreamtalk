@@ -28,7 +28,7 @@
 .directory .search input::-webkit-search-cancel-button { display: none; }
 .directory .search button { display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 50%; background: none; color: var(--dt-faint); cursor: pointer; }
 
-.directory .list { flex: 1; min-height: 0; overflow-y: auto; margin: 0 -4px; padding: 0 4px; }
+.directory .list { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; margin: 0 -4px; padding: 0 4px; }
 .directory .section { padding: 16px 12px 6px; color: var(--dt-faint); font-size: 12px; letter-spacing: 0.12em; }
 
 .directory .wrap { position: relative; display: flex; align-items: center; border-radius: 16px; }

@@ -41,7 +41,7 @@ import { SkyHeader } from "./world/SkyHeader";
 import { SegmentedSwitch } from "./world/SegmentedSwitch";
 import { skyOf, skyVars } from "./world/sky";
 import { WorldNotices, WorldShell } from "./world/WorldShell";
-import { ChatDirectory } from "./world/chat/ChatDirectory";
+import { ChatDirectory, type ChatDirectoryEntry } from "./world/chat/ChatDirectory";
 
 function displayTime(raw: string): string {
   const micros = BigInt(raw);
@@ -144,13 +144,15 @@ function WorldWorkspaceContent({ client, initialWorldId, initialTab, onArchive }
   const clearNotice = useCallback(() => setNotice(""), [setNotice]);
   const directoryQuery = conversationSearch.trim().toLocaleLowerCase();
   const activityRank = (conversationId: string) => unread.value?.items.find(item => item.conversation_id === conversationId)?.latest_position ?? 0;
-  const sortDirectory = <T extends { conversation_id: string; pinned?: boolean }>(items: T[]) => [...items].sort((left, right) =>
+  const matchingEntries: ChatDirectoryEntry[] = [
+    ...conversations.filter(item => item.character_name.toLocaleLowerCase().includes(directoryQuery)).map(conversation => ({ kind: "direct" as const, conversation })),
+    ...groups.filter(item => item.participants.some(person => person.character_name.toLocaleLowerCase().includes(directoryQuery))).map(conversation => ({ kind: "group" as const, conversation })),
+  ];
+  matchingEntries.sort(({ conversation: left }, { conversation: right }) =>
     Number(Boolean(right.pinned)) - Number(Boolean(left.pinned))
     || Number(unread.unread(right.conversation_id)) - Number(unread.unread(left.conversation_id))
     || Number(activityRank(right.conversation_id)) - Number(activityRank(left.conversation_id))
     || left.conversation_id.localeCompare(right.conversation_id));
-  const matchingConversations = sortDirectory(conversations.filter(item => item.character_name.toLocaleLowerCase().includes(directoryQuery)));
-  const matchingGroups = sortDirectory(groups.filter(item => item.participants.some(person => person.character_name.toLocaleLowerCase().includes(directoryQuery))));
   const chatAvatars = useChatAvatars(client, worldId, [...conversations.map(item => item.root_import_id), ...groups.flatMap(item => item.participants.map(person => person.root_import_id))], tab === "chats");
   const pageHint = { chats: "与角色交流，收集世界的片段", contacts: "角色档案、所属阵营与相识关系", settings: "让这个世界按照你的节奏运行", me: "你在这里的称呼与身份" }[tab];
   const selectedConversation = conversations.find(item => item.conversation_id === selectedConversationId);
@@ -215,7 +217,7 @@ function WorldWorkspaceContent({ client, initialWorldId, initialTab, onArchive }
       <WorldNotices error={error} notice={notice} onDismissError={() => setError("")} onDismissNotice={clearNotice} />
 
       {tab === "chats" && <div className={`dt-chat-workspace${eventsOpen || selectedConversation || selectedGroup || groupSetupOpen ? " thread-open" : ""}`}>
-        <ChatDirectory conversations={matchingConversations} groups={matchingGroups} total={conversations.length + groups.length}
+        <ChatDirectory items={matchingEntries} total={conversations.length + groups.length}
           loading={conversationsLoading} failed={conversationsFailed} query={conversationSearch} onQuery={directory.search}
           unread={unread.unread} unreadError={!!unread.error} onUnreadRetry={unread.refresh} avatars={chatAvatars}
           eventsOpen={eventsOpen} selectedConversationId={selectedConversationId} selectedGroupId={selectedGroupId} canCreateGroup={!!selectedPlayer}

@@ -16,7 +16,7 @@
 
 [基础设施实现](../../services/core/src/livingworld/infrastructure/persistence/knowledge_readers.py) 在 SELECT 的 WHERE 中强制条件；get 再增加 assertion_id，不绕过绑定条件。跨世界 typed ID 在发查询前拒绝；相同 UUID 的不同世界仍隔离。已有 owner 索引复用，无新搜索索引。
 
-[Database](../../services/core/src/livingworld/infrastructure/persistence/engine.py) 的 factory 属于可信 composition：未来根据已验证身份绑定 reader 后，只把对应端口交给上下文消费者。当前不实现登录、传输鉴权或 Python 插件沙箱；端口隔离不宣称恶意任意 Python 代码不可访问进程内 Database。内部 exact-source mutation repository 与 read-only snapshot inspection 属权威基础设施能力，不分发给 principal。没有 list_all_knowledge 或全局读取后 Python 过滤路径。
+[Database](../../services/core/src/livingworld/infrastructure/persistence/engine.py) 的 factory 属于可信 composition：未来根据已验证身份绑定 reader 后，只把对应端口交给上下文消费者。该reader端口不实现登录、传输鉴权或Python插件沙箱；当前桌面HTTP／WebSocket已有独立会话认证，见[运行基础](RUNTIME_FOUNDATION.md)；端口隔离不宣称恶意任意 Python 代码不可访问进程内 Database。内部 exact-source mutation repository 与 read-only snapshot inspection 属权威基础设施能力，不分发给 principal。没有 list_all_knowledge 或全局读取后 Python 过滤路径。
 
 未来 Director/world 层仅因拥有 TruthReader 不会获得私有信念；未来 Agent 只用绑定角色已授权结果。扩展授权要求独立未来决策，本任务不实现。
 

@@ -89,7 +89,7 @@ rotation 先写 native store，再替换 Core session value；已 dispatch reque
 
 ## 7. 首次聊天模型设置
 
-桌面书架默认模型与“设置 → 模型与聊天”的当前世界模型支持首次配置和受管理配置更新。可选择收录型号自动填写地址及容量，或填写准确API型号／地址／密钥；未收录服务需可信容量，不能按品牌猜测。容量与超时在高级设置，输入不合格时保存定位到对应字段。浏览器开发入口不保存密钥，配置本身不调用模型。异常状态提供显式 `repair_chat_model`：维护屏障内保存原配置字节、保留旧密钥，只替换所选作用域并重新启动核对，失败沿原回滚路径处理。其他可读取世界独立配置保留；资料、聊天及存档结构不改。见[本轮实施](../maintenance/2026-10-15-new-user-fixes.md)。
+桌面书架默认模型与“设置 → 模型与聊天”的当前世界模型支持首次配置和受管理配置更新。可选择收录型号自动填写地址及容量，或填写准确API型号／地址／密钥；未收录服务需可信容量，不能按品牌猜测。容量与超时在高级设置，输入不合格时保存定位到对应字段。浏览器开发入口不保存密钥，配置本身不调用模型。异常状态提供显式 `repair_chat_model`：维护屏障内保存原配置字节、保留旧密钥，只替换所选作用域并重新启动核对，失败沿原回滚路径处理。其他可读取世界独立配置保留；资料、聊天及存档结构不改。见[实现记录](../maintenance/2026-10-15-new-user-fixes.md)。
 
 Rust 将 key 写入 native credential store，将不含key的配置原子写入app-data `config/llm.json`（默认v1或默认／世界v2容器），随后重启 Core 并以 authenticated health 确认 `ready`。如果重启或加载失败，恢复原配置并重启原 Core；恢复失败则报告固定错误码。页面成功后重新连接 Core。用户填写的 usage limits 是显式配置，不是应用推测的 provider 事实；选择与核实相应模型的可信上界仍是配置者责任。该流程未配置价格，因此需要可信价格的 HARD 金额预算仍会拒绝无可验证定价的调用。
 
@@ -101,9 +101,9 @@ Rust 将 key 写入 native credential store，将不含key的配置原子写入a
 
 ## 9. 范围与迁移
 
-自定义多模型路由的可视化编辑、online discovery/pricing、tool/vision/audio 不在此入口范围内。LLM operational configuration/credentials 不进入 canonical world/content state。C-005E5 本身未新增表；其 Alembic head 为 `0010_llm_budget_guard`。
+自定义多模型路由的可视化编辑、online discovery/pricing、tool/vision/audio 不在此入口范围内。LLM operational configuration/credentials 不进入 canonical world/content state。生产LLM接线本身不另建表，复用0009／0010账本与预算；当前完整Alembic链见[状态清单](../PROJECT_STATUS.md)，不把模块初始revision当作head。
 
 
 ## 0.1.43世界范围接线
 
-`load_world_configurations`加载默认与独立世界，`ProductionLLMSession`持有各运行时及共享的会话凭据提供者，`world_model_config.py`按请求／任务世界解析。凭据同步取所有配置引用并集，健康状态按范围计算；只清理不被任何范围使用的旧引用。私聊／群聊、摘要／资料生成与后台均接线；health可选world_id，协议仍1。保存依旧重启共享Core，可能中断在途调用，不自动重放。无新增DB迁移、生成调用或秘密外发。实现／检查／待验收见[本轮记录](../maintenance/2026-10-08-world-model-config.md)。
+`load_world_configurations`加载默认与独立世界，`ProductionLLMSession`持有各运行时及共享的会话凭据提供者，`world_model_config.py`按请求／任务世界解析。凭据同步取所有配置引用并集，健康状态按范围计算；只清理不被任何范围使用的旧引用。私聊／群聊、摘要／资料生成与后台均接线；health可选world_id，协议仍1。保存依旧重启共享Core，可能中断在途调用，不自动重放。无新增DB迁移、生成调用或秘密外发。实现／检查／待验收见[实现记录](../maintenance/2026-10-08-world-model-config.md)。

@@ -1,6 +1,6 @@
 # Real Text Streaming — C-005C2
 
-状态：现有 Chat Completions adapter 已实现 opt-in 非结构化文本 SSE streaming。验证使用受控离线 fixtures 与 httpx.MockTransport，不使用真实 key，不调用真实生成 API；未配置 production default。复用 HTTPX，没有新依赖或 migration。
+本页维护SSE framing、终态、取消及物理attempt边界。兼容Chat Completions、Anthropic Messages、Gemini Interactions和OpenAI Responses均已接入统一生产路由；是否流式由具体模型显式能力及用户配置决定，不按提供商品牌猜测。下文受控fixtures描述协议测试范围，不代表真实服务已验收；结果见[状态清单](../PROJECT_STATUS.md)和[生产组装](LLM_PRODUCTION_COMPOSITION.md)。
 
 ```text
 LLMResponse = complete non-streaming generation result

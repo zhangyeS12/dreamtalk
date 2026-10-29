@@ -81,6 +81,40 @@ it("renders four bottom tabs and keeps the known-event entry pinned", async () =
   expect(await screen.findByText("当前世界还没有角色")).toBeTruthy();
 });
 
+it("orders direct and group chats together by pin, unread state and latest activity", async () => {
+  const direct = [
+    { ...chatA, conversation_id: "pin-direct", character_name: "置顶私聊", pinned: true },
+    { ...chatA, conversation_id: "unread-direct", character_name: "未读私聊" },
+    { ...chatA, conversation_id: "read-direct", character_name: "已读私聊" },
+  ];
+  const group = (id: string, name: string, pinned = false): GroupChatConversation => ({
+    ...groupA, conversation_id: id, pinned,
+    participants: groupA.participants.map(person => ({ ...person, character_name: name })),
+  });
+  const groups = [group("pin-group", "置顶群聊", true), group("unread-group", "未读群聊"), group("read-group", "已读群聊")];
+  const client = {
+    worldContent: vi.fn().mockResolvedValue([]), listProductWorlds: vi.fn().mockResolvedValue([worldA]),
+    listPlayers: vi.fn().mockResolvedValue([{ player_id: "player-a", name: "我" }]), selectedPlayer: vi.fn().mockResolvedValue({ player_id: "player-a" }),
+    conversations: vi.fn().mockResolvedValue(direct), groupConversations: vi.fn().mockResolvedValue(groups),
+    setConversationPinned: vi.fn().mockResolvedValue({}),
+    chatUnread: vi.fn().mockResolvedValue({ player_id: "player-a", items: [
+      { conversation_id: "pin-direct", unread: 0, latest_position: 10 },
+      { conversation_id: "pin-group", unread: 0, latest_position: 5 },
+      { conversation_id: "unread-group", unread: 1, latest_position: 30 },
+      { conversation_id: "unread-direct", unread: 1, latest_position: 20 },
+      { conversation_id: "read-group", unread: 0, latest_position: 50 },
+      { conversation_id: "read-direct", unread: 0, latest_position: 40 },
+    ] }),
+  } as unknown as CoreClient;
+  await renderProduct(client);
+  const directory = await screen.findByRole("complementary", { name: "会话列表" });
+  const names = () => [...directory.querySelectorAll("button strong")].map(item => item.textContent);
+  await waitFor(() => expect(names()).toEqual(["世界事件", "置顶私聊", "置顶群聊、置顶群聊", "未读群聊、未读群聊", "未读私聊", "已读群聊、已读群聊", "已读私聊"]));
+  fireEvent.click(screen.getByRole("button", { name: "取消置顶置顶私聊" }));
+  await waitFor(() => expect(names()[1]).toBe("置顶群聊、置顶群聊"));
+  expect(client.setConversationPinned).toHaveBeenCalledWith("world-a", "pin-direct", false);
+});
+
 it("creates and switches worlds using the product client", async () => {
   const listProductWorlds = vi.fn().mockResolvedValueOnce([worldA]).mockResolvedValue([worldA, worldB]);
   const createWorld = vi.fn().mockResolvedValue({ world_id: "world-b" });

@@ -19,6 +19,9 @@
   animation: dt-arrive 0.7s var(--dt-ease) both;
 }
 .shell .main > * { flex-shrink: 0; }
+/* The conversation panes own their scroll; long transcripts must not grow <main>. */
+.shell .main > :global(.dt-chat-workspace) { flex: 1 1 0%; }
+.shell:global(.world-tab-chats) .main { overflow: hidden; }
 .shell[data-immersive] .main { padding: 0 18px 18px; }
 @keyframes dt-arrive { from { opacity: 0; translate: 0 14px; } }
 

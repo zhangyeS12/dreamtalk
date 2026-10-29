@@ -37,7 +37,7 @@ Draft 是封闭引用图：多个 typed root、LoreEntry、asset metadata 与 ra
 
 Preview 包含不可变 Draft 与 preview_hash。该 SHA-256 覆盖 canonical roots、资产元数据、raw provenance/hash 和 unknown_extensions；成员排列作为行政顺序排序，root 内作者数组保持原顺序。原 bytes 已由 envelope hash 验证，不作为 base64 放进 preview JSON。
 
-Commit 必须传入与 Preview/Draft 一致的 reviewed_hash，以及准确覆盖 root IDs 的 expected ContentRevision（创建为 None）。此 seam 保证所提交内容等于预览内容；它不是身份认证、数字签名或“已有人点击确认”的证明。未来非技术 UI 与可信应用调用负责展示及用户确认，当前没有 UI。
+Commit 必须传入与 Preview/Draft 一致的 reviewed_hash，以及准确覆盖 root IDs 的 expected ContentRevision（创建为 None）。此 seam 保证所提交内容等于预览内容；它不是身份认证、数字签名或“已有人点击确认”的证明。当前文件导入和手动编辑 UI 已展示预览并显式确认，可信应用调用继续负责确认边界；端口本身不证明用户曾点击确认。
 
 ## 3. 持久化和冲突
 

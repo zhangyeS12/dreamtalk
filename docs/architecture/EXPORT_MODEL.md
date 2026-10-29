@@ -14,7 +14,7 @@ LoreEntry != WorldTruth
 
 Draft 可以是未提交快照，也可以由调用方通过现有 ContentRepository.load/load_asset/load_raw_import 读取并显式组装。exporter 没有 repository、数据库、文件系统、Kernel、知识 reader、网络或 shell 能力，不会隐式加载依赖。
 
-ExportResult 包含 target_format、serialized_bytes、application/json、建议 .json、不可变 typed warnings 和 semantic_hash。哈希是生成对象经确定性 UTF-8 JSON 编码后的 SHA-256；不包含调用时钟、随机 ID 或文件名，也不等于输入内容 hash / raw hash。调用方决定后续保存位置，本任务没有 save UI 或 filesystem writer。
+ExportResult 包含 target_format、serialized_bytes、application/json、建议 .json、不可变 typed warnings 和 semantic_hash。哈希是生成对象经确定性 UTF-8 JSON 编码后的 SHA-256；不包含调用时钟、随机 ID 或文件名，也不等于输入内容 hash / raw hash。纯 JSON exporter 只返回 bytes；当前产品导出 UI、HTTP 文件响应和桌面另存为由调用层负责，见[产品入口](PRODUCT_SURFACE.md)。
 
 每次输出先通过对应格式的结构校验，再通过有限 UTF-8 JSON 校验。复用 C-004B/C1 的纯结构 validators，不重解析原卡片/PNG，不复制 SillyTavern 实现。错误只有稳定 code/path，不包含作者文本、secret 或 original bytes。
 
@@ -75,7 +75,7 @@ JSON object keys 排序、紧凑编码，作者数组保持顺序，无 NaN/Infi
 
 [Export tests](../../tests/application/test_content_export.py) 验证 V2/V3/ST semantic round-trip、embedded book、known edit/delete 优先、same-format unknown 保留、跨格式损失、三项已接受规则、selection、UID、重启，以及有真实非空 Truth/Belief/PlayerKnowledge 的完整 SQLite 表与 ledger/receipt 快照不变。[Architecture tests](../../tests/core/test_architecture.py) 限制出口 capability；network/shell/file/regex instrumentation 验证导出文本惰性。
 
-没有新增 dependency、migration、表或 runtime event。没有 GUI smoke、PNG/APNG writer、CHARX、asset materialization/download、native archive/.lworld、backup/restore、lore activation、prompt assembly、LLM、Memory、Director、Agent 或 final UI。C-004D2 的独立原生 authored-content export 已实现，见 [NATIVE_CONTENT_PACKAGE.md](NATIVE_CONTENT_PACKAGE.md)；本 JSON adapter 的无 filesystem/runtime capability 边界保持不变。
+本 JSON adapter 不实现 PNG/APNG／CHARX writer、资产下载、运行世界包、备份恢复、提示组装或模型调用，也不拥有文件系统／runtime写权限。当前产品已有资料和聊天导出界面及独立完整存档，不能从此adapter的范围推断项目没有这些功能。C-004D2 的独立原生 authored-content export 已实现，见 [NATIVE_CONTENT_PACKAGE.md](NATIVE_CONTENT_PACKAGE.md)；本 JSON adapter 的无 filesystem/runtime capability 边界保持不变。
 
 公开规范核对日期：2026-09-17：[V2](https://github.com/malfoyslastname/character-card-spec-v2/blob/main/spec_v2.md)、[V3](https://github.com/kwaroran/character-card-spec-v3/blob/main/SPEC_V3.md)、[ST World Info](https://docs.sillytavern.app/usage/core-concepts/worldinfo/)、[ST public field/enum declarations](https://github.com/SillyTavern/SillyTavern/blob/release/public/scripts/world-info.js)。V3 secondary_keys 的 interface/prose 冲突按用户确认采用 array。
 

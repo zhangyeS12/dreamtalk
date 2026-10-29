@@ -1,6 +1,6 @@
 # LLM Attempt Orchestration, Retry, Backoff & Routing — C-005D1 through C-005E2
 
-状态：provider-neutral sequential retry wrapper 与其上层 deterministic routing 已实现，离线测试使用虚拟时钟、可控 sleeper/jitter、fake gateways 和 MockTransport。没有真实付费 API 验证、production default wiring 或 semantic repair。C-005D2A 增加 accounting，C-005D2B 增加 [预算准入](LLM_BUDGET_GUARD.md)，C-005E1 增加 [显式 fallback](LLM_ROUTING.md)，C-005E2 增加原生 Anthropic 529 与跨协议证明；下文 1–8 节主要保留 D1 单候选 retry policy 语境。
+状态：provider-neutral sequential retry wrapper 与其上层 deterministic routing 已实现，离线测试使用虚拟时钟、可控 sleeper/jitter、fake gateways 和 MockTransport。当前生产组装已注入统一retry／routing、账本及预算，见[生产入口](LLM_PRODUCTION_COMPOSITION.md)；不实现semantic repair。离线测试与真实提供方验收分别查[状态清单](../PROJECT_STATUS.md)。C-005D2A 增加 accounting，C-005D2B 增加 [预算准入](LLM_BUDGET_GUARD.md)，C-005E1 增加 [显式 fallback](LLM_ROUTING.md)，C-005E2 增加原生 Anthropic 529 与跨协议证明；下文 1–8 节主要保留 D1 单候选 retry policy 语境。
 
 ```text
 logical invocation != physical attempt
@@ -52,7 +52,7 @@ LLMFailure 新增 typed DispatchState、optional http_status 和 optional retry_
 | Successful response、refusal/filter | 立即返回成功，不再尝试 |
 | Started stream 的任何失败 | 不重试 |
 
-四类 transient 候选有独立显式 enable flags。Eligibility 不等于立即发送，仍须通过次数/时间/Retry-After bounds。没有允许 ambiguous replay 的开关或 semantic repair；C-005E1 的上层 fallback 只复用安全分类。默认 429 分类沿用已有 HTTP status normalization；未实现 provider-specific quota/billing code taxonomy，当前没有 production wiring。
+四类 transient 候选有独立显式 enable flags。Eligibility 不等于立即发送，仍须通过次数/时间/Retry-After bounds。没有允许 ambiguous replay 的开关或 semantic repair；C-005E1 的上层 fallback 只复用安全分类。默认 429 分类沿用已有 HTTP status normalization；未实现完整provider-specific quota／billing code taxonomy；生产接线已复用本统一策略，不据通用HTTP状态推断具体账单原因。
 
 ## 5. Backoff、Retry-After 与预算
 
@@ -82,7 +82,7 @@ attempt 2: STARTED → TEXT_DELTA / USAGE_UPDATE → COMPLETED or FAILED
 
 Pre-start 可重试失败不向 application 暴露 Failed/Started。所有候选耗尽只交付一个最终 Failed。成功的后续尝试只暴露一次 Started；**Started 一旦暴露，即使尚无正文也永久禁止重放**。Post-start timeout/disconnect/EOF/malformed chunk→一次 Failed，无 Completed。没有 prefix matching、resumption、合并多次尝试正文或全文 buffer。
 
-TextDelta 仍是 streaming content source of truth；LLMStreamCompletion 仍仅为 terminal metadata。UsageUpdate 和 terminal usage 是当前物理流的 factual snapshots，不能相加或跨 attempts 累积；缺失 None，不虚构 zero。不会丢弃 completed-attempt accounting facts 后重试，因为已完成 summary 本身不可重试。C-005D2 将定义 durable per-attempt accounting；本任务没有自造 cumulative usage。
+TextDelta 仍是 streaming content source of truth；LLMStreamCompletion 仍仅为 terminal metadata。UsageUpdate 和 terminal usage 是当前物理流的 factual snapshots，不能相加或跨 attempts 累积；缺失 None，不虚构 zero。不会丢弃 completed-attempt accounting facts 后重试，因为已完成 summary 本身不可重试。durable per-attempt accounting已由[账本](LLM_ACCOUNTING.md)实现，聚合沿各物理attempt的事实，不在stream事件里自造累计usage。
 
 ## 7. Cancellation、资源和安全诊断
 

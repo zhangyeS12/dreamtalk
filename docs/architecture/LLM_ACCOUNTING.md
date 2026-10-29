@@ -1,6 +1,6 @@
 # LLM Accounting — C-005D2A through C-005E2
 
-状态：已实现离线验证的物理 attempt 账本、effective-dated pricing、费用估算、invocation 汇总，以及跨 routed candidates 的共同 lifecycle。C-005E2 增加 Anthropic cache-read/cache-write TTL/reasoning facts，但仍使用同一账本。没有 production catalog、真实付费 API 验证、在线价格抓取或 UI；实现复用现有 SQLAlchemy/Alembic/SQLite，无新增依赖。
+状态：已实现离线验证的物理 attempt 账本、effective-dated pricing、费用估算、invocation 汇总，以及跨 routed candidates 的共同 lifecycle。C-005E2 增加 Anthropic cache-read/cache-write TTL/reasoning facts，但仍使用同一账本。当前生产组装已从严格配置注入catalog、ledger及Budget Guard，四类adapter共用同一物理attempt管线。没有在线价格抓取或提供方发票对账；具体模型／云端效果的验收见[状态清单](../PROJECT_STATUS.md)。
 
 ## 1. 永久边界
 
@@ -118,7 +118,7 @@ C-005D2B 已实现可信 usage/cost bounds、persistent reservations 与 opt-in 
 
 Budgeted execution 使用 SqlAlchemyBudgetGuard.admit，ALL matching HARD reservations + START 同一 BEGIN IMMEDIATE transaction；不能叠加另一个独立 accounting sink。Final accounting + settlement 同事务；失败 rollback，START 保持 INCOMPLETE、hold 保持，原 response/failure/completion/cancellation 不改写、不 replay/retry。Known final accounting + stale held state 为 integrity degraded，future HARD fail closed；正常可信 unknown hold 是 bounded exposure，不能解释为 zero。详见 [LLM_BUDGET_GUARD.md](LLM_BUDGET_GUARD.md)。
 
-Budget matching/window queries **只用 requested ModelRef**。LedgerQuery 的 requested OR reported 筛选保留为 analytics，不能复用为准入 SQL。Reported model 可安全映射 actual pricing，但不重新归属预算；alias HARD 需要 exhaustive trusted pricing envelope。当前 head 为 [0010_llm_budget_guard](../../services/core/src/livingworld/infrastructure/persistence/migrations/versions/0010_llm_budget_guard.py)；0009/旧 accounting rows 与 audit 原样保留，operational budgets 不进入 WorldEvent/content/knowledge/package。
+Budget matching/window queries **只用 requested ModelRef**。LedgerQuery 的 requested OR reported 筛选保留为 analytics，不能复用为准入 SQL。Reported model 可安全映射 actual pricing，但不重新归属预算；alias HARD 需要 exhaustive trusted pricing envelope。预算表创建于 [0010_llm_budget_guard](../../services/core/src/livingworld/infrastructure/persistence/migrations/versions/0010_llm_budget_guard.py)；0009/旧 accounting rows 与 audit 原样保留，operational budgets 不进入 WorldEvent/content/knowledge/package。
 ## C-005E1：跨候选的一个 logical lifecycle
 
 Route context 延迟 logical terminal，直到整个 route 成功或最终失败；candidate failure 不会提前关闭 ledger。Retry 与 fallback 共用 InvocationId 和 invocation-global ordinal，所以 A1/A2→B3 继续满足 (invocation_id, attempt_ordinal) uniqueness。每个 START 的 requested ModelRef 是实际 dispatched candidate，预算归属不会被 reported model 重定义。
@@ -129,13 +129,13 @@ Disabled/capability-ineligible/missing-policy/budget-denied candidates 不形成
 
 Anthropic raw input、cache creation 与 cache read 规范化为 common total input，同时分别保存 uncached、cached 和 cache-write partitions。5-minute/1-hour cache creation 是 optional 子分区；`thinking_tokens` 是 output 子集。TTL detail 缺失或与 aggregate 矛盾时不猜：aggregate 可继续保存，TTL-specific pricing 返回 PRICING_CONTEXT_INCOMPLETE。UsageUpdate 与 terminal snapshot 仍不可相加。
 
-这些字段进入既有 `LLMUsage` 和 `AttemptFacts` typed JSON。`llm_attempts` schema 无新列；旧 JSON 不含字段时 dataclass defaults 为 None，不解释为 zero，因此 Alembic head 仍是 0010。原生 adapter 的 physical attempt 继续由通用 budget reservation、START、FINALIZE 和 settlement 管线管理，见 [Anthropic adapter](ANTHROPIC_MESSAGES_ADAPTER.md)。
+这些字段进入既有 `LLMUsage` 和 `AttemptFacts` typed JSON。`llm_attempts` schema 无新列；旧 JSON 不含字段时 dataclass defaults 为 None，不解释为 zero，因此该adapter扩展不另建迁移；当前head见状态清单。原生 adapter 的 physical attempt 继续由通用 budget reservation、START、FINALIZE 和 settlement 管线管理，见 [Anthropic adapter](ANTHROPIC_MESSAGES_ADAPTER.md)。
 
 ## C-005E3：Gemini reasoning/output accounting
 
 Gemini `total_input_tokens`、`cached_input_tokens`、`total_output_tokens`、`total_thought_tokens` 和 `total_tokens` 映射到既有 `LLMUsage`。`ReasoningTokenRelation.ADDITIVE_TO_OUTPUT` 明确 generated output 为 visible output + thought tokens；它与 OpenAI-compatible/Anthropic 的 included 语义不同，不能使用相同的减法假设。`UsageUpdate` 与 terminal usage 仍是 snapshots，不相加。
 
-Pricing 增加 `GENERATED_OUTPUT` meter：included 取 output，additive 取 output + reasoning，UNKNOWN/missing 则 `PRICING_CONTEXT_INCOMPLETE`。Provider continuation artifact 不写入 attempt/accounting typed JSON；closed codec 仍拒绝 request/response/artifact。新增 relation 依靠 typed-JSON default 兼容旧 rows，没有 Alembic migration，head 仍为 0010。
+Pricing 增加 `GENERATED_OUTPUT` meter：included 取 output，additive 取 output + reasoning，UNKNOWN/missing 则 `PRICING_CONTEXT_INCOMPLETE`。Provider continuation artifact 不写入 attempt/accounting typed JSON；closed codec 仍拒绝 request/response/artifact。新增 relation 依靠 typed-JSON default 兼容旧 rows，该字段扩展没有独立Alembic迁移，沿用已有表。
 
 ## C-005E4：OpenAI Responses usage facts
 
@@ -152,4 +152,4 @@ Reasoning text、summary、encrypted content、prompt、raw SSE、Response body 
 
 ## C-005E5：production composition
 
-生产 routed gateway 总是注入同一 SQLite `AccountingRepository`/`SqlAlchemyBudgetGuard` 组合；没有 provider-specific accounting shortcut。Provider config、SecretRef availability 和 credential control messages 不形成 attempt。只有获得 fresh admission 并 durable START 的实际物理调用才进入 ledger。配置、API key、prompt、response、reasoning 和 continuation artifact 仍不持久化。C-005E5 无 migration，head 保持 `0010_llm_budget_guard`。见 [生产组装](LLM_PRODUCTION_COMPOSITION.md)。
+生产 routed gateway 总是注入同一 SQLite `AccountingRepository`/`SqlAlchemyBudgetGuard` 组合；没有 provider-specific accounting shortcut。Provider config、SecretRef availability 和 credential control messages 不形成 attempt。只有获得 fresh admission 并 durable START 的实际物理调用才进入 ledger。配置、API key、prompt、response、reasoning 和 continuation artifact 仍不持久化。生产接线不另建表；账本／预算表的创建来源是0009／0010，当前完整迁移链另见状态清单。见 [生产组装](LLM_PRODUCTION_COMPOSITION.md)。

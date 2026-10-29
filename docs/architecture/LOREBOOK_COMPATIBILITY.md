@@ -1,6 +1,6 @@
 # Lorebook Import & Canonical Normalization — C-004C1
 
-状态：独立离线 import/normalizer、LoreCollection 内容根、typed reference、Preview warning、原子内容提交及 0007 迁移已实现。C-004D1 增加独立 ST World Info / V2/V3 CharacterBook JSON export。没有复制 SillyTavern 实现，也没有运行时激活、scanner、prompt insertion 或 UI。
+状态：独立离线 import/normalizer、LoreCollection 内容根、typed reference、Preview warning、原子内容提交及 0007 迁移已实现。C-004D1 增加独立 ST World Info / V2/V3 CharacterBook JSON export。没有复制 SillyTavern 实现。此 parser／normalizer 不执行运行时激活或提示插入；当前产品已接入导入UI、公共授权及高级激活，见[聊天路线与世界书](../CHAT_PATHS_AND_LORE.md)。
 
 **LoreCollection != WorldContent != Runtime World != WorldTruth。LoreEntry 是作者内容，不自动成为 CharacterBelief / PlayerKnowledge / Memory，也不自动变成角色已知事实。**
 
@@ -26,7 +26,7 @@ LoreCollection 使用独立不可变 LoreCollectionId、ContentRevision、name�
 
 CharacterDefinition.lore_collection_ids 是最小 typed content reference。它允许沿用既有非拥有引用语义：多个定义可明确引用同一集合，不获得删除权限或知识权限。Standalone collection 初始没有角色绑定。原来的 lore_entry_ids 保留兼容，既有 CharacterDefinition / WorldContent 共享旧条目的引用不改写。
 
-当前无删除 API，无 destructive cascade；条目归属不支持本任务内重新指定，集合编辑不能隐式丢弃已持久化成员。编辑沿用 ContentRevision CAS 和完整闭合 Draft；所有依赖必须显式加入。
+内容图本身不做 destructive cascade 或隐式重定归属。当前原生编辑支持经确认的条目删除，产品卡片／世界书管理也有删除入口；保留旧快照／来源与运行历史，不等同于物理删除 canonical 图。编辑沿用 ContentRevision CAS 和完整闭合 Draft；所有依赖必须显式加入。
 
 ## 3. ST native entry 映射
 

@@ -42,11 +42,11 @@
 
 暂停、忙碌、尚未达到间隔、没有当前有效活动、共同活动尚未真实开始或有未回复联系，都可能使本次机会跳过。程序完全退出或电脑关机后不会执行模型任务；世界时间恢复也不补造共同活动。
 
-可以查看页面的已保存状态、等待回复或任务停止提示。共同联系的实际送达由用户等待并验收，本轮工程端不读取真实存档、不触发联系、不运行应用或模型。
+可以查看页面的已保存状态、等待回复或任务停止提示。共同联系的实际送达继续按用户决定等待验收；没有新的具体授权不触发联系或真实环境诊断。
 
 ## 实现与边界
 
-首版仅支持同事由双人共同休闲，不是任意多人 Episode。详见[实施契约](proposals/2026-10-04-proactive-contact.md)、[离线消息](OFFLINE_MESSAGES.md)与[当前状态](PROJECT_STATUS.md)。入口为 `ProactiveContactSettings.tsx`，应用为 `application/proactive_contact.py`，持久门禁为 `persistence/contact_gate.py`，迁移为0035。
+当前仅支持同事由双人共同休闲，不是任意多人 Episode。详见[实施契约](proposals/2026-10-04-proactive-contact.md)、[离线消息](OFFLINE_MESSAGES.md)与[当前状态](PROJECT_STATUS.md)。入口为 `ProactiveContactSettings.tsx`，应用为 `application/proactive_contact.py`，持久门禁为 `persistence/contact_gate.py`，迁移为0035。
 
 ## 容量与本地准备
 

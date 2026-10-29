@@ -13,7 +13,7 @@ POST https://generativelanguage.googleapis.com/v1/interactions
 x-goog-api-key: <ephemeral credential>
 ```
 
-它不调用 `generateContent`、OpenAI-compatible Gemini endpoint 或 Google SDK。每次 adapter 调用只有一次 HTTP attempt；retry、fallback、budget reservation、accounting START/FINALIZE 继续由通用 execution/routing 层负责。实现没有 production default wiring，也没有真实付费 API 测试。
+它不调用 `generateContent`、OpenAI-compatible Gemini endpoint 或 Google SDK。每次 adapter 调用只有一次 HTTP attempt；retry、fallback、budget reservation、accounting START/FINALIZE 继续由通用 execution/routing 层负责。当前生产组装已注入此adapter，见[组装入口](LLM_PRODUCTION_COMPOSITION.md)；历史离线fixtures不代表实际型号／服务已验收，具体结果查状态清单。
 
 每个请求都显式发送：
 

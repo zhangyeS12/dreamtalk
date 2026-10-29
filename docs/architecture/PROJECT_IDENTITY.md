@@ -1,6 +1,6 @@
 # 项目名称与兼容标识
 
-正式公开名称为 **dreamtalk**（小写）。README、网页标题、应用标题、Tauri 产品名和新构建产物使用此名称。源码与Windows预发布已公开于[GitHub](https://github.com/zhangyeS12/dreamtalk)；当前版本见[主页](../../README.md)。
+正式公开名称为 **dreamtalk**（小写）。README、网页标题、应用标题、Tauri 产品名和新构建产物使用此名称。源码与Windows预发布已公开于[GitHub](https://github.com/zhangyeS12/dreamtalk)；当前版本、公开发行和本地源码差异见[状态清单](../PROJECT_STATUS.md)。
 
 以下旧标识暂时保持稳定，以便现有开发数据、会话与导入内容继续可用：
 

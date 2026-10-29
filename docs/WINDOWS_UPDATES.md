@@ -1,8 +1,8 @@
 # Windows 应用更新
 
-当前公开版本与发行证据统一见[状态清单](PROJECT_STATUS.md#当前基线)，沿用既有完整安装包和固定[更新频道](https://github.com/zhangyeS12/dreamtalk/releases/tag/update-preview)。0.1.48及后续安装清单修复属于历史记录，详见[修复记录](maintenance/2026-10-08-update-manifest-fix.md)；0.1.91的发布证据见[发行记录](maintenance/2026-10-26-release-0191.md)。真实跨版升级仍由用户验收。
+当前公开版本与发行证据统一见[状态清单](PROJECT_STATUS.md#当前基线)，沿用既有完整安装包和固定[更新频道](https://github.com/zhangyeS12/dreamtalk/releases/tag/update-preview)。应用内签名更新、独立完整保护快照、卸载保留及未完成交接恢复均已有实现；更新保护不占用五位置存档的手动位置，见[存档手册](DATA_BACKUPS.md)。真实跨版升级与失败恢复仍须分别验收。
 
-**0.1.78增加存档保护与可靠更新。** 本轮补独立完整存档快照、卸载保留、真实存档核对、缺旧清单修复升级及未完成升级回退，见[存档](DATA_BACKUPS.md)和[原记录](maintenance/2026-10-14-save-safety.md)。2026-10-17当前源码五位置改动保留独立更新保护，不占用手动位置，纳入0.1.82发行范围。以下旧包行为按其版本区分，0.1.78源码能力不代表0.1.77下载包已经具备。
+旧清单修复与早期保护流程分别见[清单记录](maintenance/2026-10-08-update-manifest-fix.md)和[保护记录](maintenance/2026-10-14-save-safety.md)，按当时版本追溯；它们不说明当前下载版本，也不扩大当前运行授权。
 
 ## 使用
 
@@ -62,7 +62,7 @@ pwsh -File scripts/updater-signing.ps1 -Mode Import -RecoveryFile E:\Backup\drea
 只有获得对应版本 GitHub 发布授权后执行，并事先明确默认分支同步、Release 和频道操作的范围；历史许可不沿用。各版授权与证据从[状态清单](PROJECT_STATUS.md)及[历史索引](history/README.md)查询。
 
 1. 准备版本及`docs/releases/v<version>.md`用户说明。标签和包内的状态文档应标明“构建时快照，最终公开状态见对应Release及默认分支当前状态”，避免将上一公开版本写成不带时间边界的长期现状。
-2. 提交并核对源码隐私；默认不运行CI，仅用户主动要求时手动触发并记录真实结果。获得对应发行授权后沿既有build-only流程编译签名完整包，核对静态载荷、签名与SHA256。版本标签须固定到实际构建提交。
+2. 核对源码隐私并提交；取得明确推送授权后推送。main、版本标签及PR会自动触发CI，也可手动触发。发行构建要求干净且已提交的源码，并由`scripts/check-release-ci.py`核对该精确提交最新一次适用工作流已完成且成功；缺失、失败、取消或运行中均阻止构建。只有用户明确批准才可跳过CI，并在发行记录写明原因。获得对应发行授权且门禁通过后，沿既有build-only流程编译签名完整包，核对静态载荷、签名与SHA256。版本标签须固定到实际构建提交。
 3. 创建版本Release草稿，上传安装器、`.sig`、便携ZIP、更新清单、SHA256SUMS及修复脚本；附件大小和摘要核对后才公开版本。
 4. 版本资产公开后，最后将该版本`windows.json`上传／替换到固定`update-preview` Release。频道使用更高SemVer、对应完整安装器URL及签名，并核对匿名清单和下载。仅提交源码、仅发布便携包或只创建版本Release都不够。
 5. 发布结果补记到`PROJECT_STATUS.md`及其发行记录。在授权范围内将已验证发行提交及后续文档正常合并或快进到默认分支；遇到分叉先处理冲突，不强推。核对远程默认分支包含发行标签，其应用源码与发行提交一致，后续差异仅为预期文档修正。

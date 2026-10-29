@@ -27,7 +27,7 @@
 /* ---------- Chat workspace ---------- */
 .dt-world .dt-chat-workspace {
   flex: 1 1 auto; min-height: 0;
-  display: grid; grid-template-columns: 320px minmax(0, 1fr); gap: 18px;
+  display: grid; grid-template-columns: 320px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); gap: 18px;
 }
 .dt-world[data-immersive] .dt-chat-workspace { grid-template-columns: minmax(0, 1fr); }
 .dt-world[data-immersive] .dt-chat-workspace > aside { display: none; }

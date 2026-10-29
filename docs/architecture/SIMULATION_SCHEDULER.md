@@ -65,7 +65,7 @@ due 统一定义为 `due_at <= through_world_time`。drain 必须提供正整数
 
 - 新 trigger（包括更早 due）提交；
 - trigger 取消；
-- future clock mutation path 调用 `clock_changed(world_id)`；
+- 世界时钟变更路径调用 `clock_changed(world_id)`；
 - graceful shutdown。
 
 C-006D 的 `WorldClockService` 统一实现 checkpoint、pause、resume、scale change：先按 monotonic elapsed re-anchor，再提交新 state/scale；成功后唤醒 scheduler。运行时不会为了发现 revision 每 100ms 轮询 SQLite。

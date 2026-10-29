@@ -1,6 +1,6 @@
 # Model Registry, Purpose Routing & Safe Provider Fallback — C-005E1
 
-状态（2026-10-07）：provider-neutral operational Model Registry、四类协议 adapter、预算/使用账本与 production bootstrap 接线已实现，见[状态清单](../PROJECT_STATUS.md)。下文 C-005E 各阶段的 offline fixtures 是历史验证记录，不代表当前任意供应商/代理已通过验收；本轮未运行测试或真实 provider。
+状态（2026-10-07）：provider-neutral operational Model Registry、四类协议 adapter、预算/使用账本与 production bootstrap 接线已实现，见[状态清单](../PROJECT_STATUS.md)。下文 C-005E 各阶段的 offline fixtures 是历史验证记录，不代表当前任意供应商/代理已通过验收；当前运行权限遵循工程规则，不沿用历史轮次的测试／提供方授权。
 
 ```text
 Application → immutable RoutePlan → routed invocation context

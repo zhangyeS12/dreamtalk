@@ -6,7 +6,18 @@
 
 **Imported Content != Runtime State；CharacterDefinition != Character；WorldContent != World；LoreEntry != WorldTruth；LoreCollection != WorldContent != Runtime World != WorldTruth。**
 
-迁移源码 head 为 [0037_persistent_chat_recall](../../services/core/src/livingworld/infrastructure/persistence/migrations/versions/0037_persistent_chat_recall.py)，down_revision=0036_character_factions；只增加可重建recall_documents及FTS5/同步触发器。来源、授权、版本和记忆状态仍由原表决定；历史向量分页，冷索引渐进补齐，不改写canonical数据。0036阵营/成员/头像/相识表保留。历史会话身份迁移为 [0018_chat_conversations](../../services/core/src/livingworld/infrastructure/persistence/migrations/versions/0018_chat_conversations.py)。未读取用户存档确认实际 cursor。下文各阶段旧 head 描述保留其阶段语境，不表示当前 head。
+当前完整迁移链以[状态清单](../PROJECT_STATUS.md)及源码[migration.py](../../services/core/src/livingworld/infrastructure/persistence/migration.py)的`HEAD_REVISION`为准。`0037_persistent_chat_recall`只说明派生索引的创建来源；它增加recall_documents、FTS5／同步触发器及历史向量存储，不改写聊天、记忆有效状态或canonical事件。来源／授权／版本在查询和写派生页时重新核验。
+
+后续应用表已沿同一迁移链追加，不能把下文基础表清单当作完整当前schema：
+
+| 模块 | 已有存储范围 |
+| --- | --- |
+| 聊天／记忆／事件 | 私聊和固定群聊、执行／恢复、摘要、长期条目、参考报告、世界动态与派生召回索引 |
+| 日常／社交／地点 | Director、相遇、共同休闲、主动联系、阵营／相识、作者地点层级与移动规则、停用和世界删除回执 |
+| 配音／媒体 | 音色、配音attempt／缓存／试听、三库表情、素材及识图设置／计次 |
+| 当前聊天创作／视觉 | 玩家设定身份／专用卡、世界风格、聊天路线、动态卡词条及来源、会话置顶／反馈、背景／立绘 |
+
+表的唯一创建与升级入口是Alembic；应用元数据、内容图、canonical投影及无正文财务账本保持各自边界。完整存档／恢复保护见[存档手册](../DATA_BACKUPS.md)，不会将聊天路线切换解释成世界或财务回退。
 
 C-006D 不新增表或列。`SqlAlchemyWorldClockStore` 用 SQLite writer transaction 和 expected Revision 替换完整 durable anchor；logical time、non-regressing UTC anchor、scale、RUNNING/PAUSED 与下一 revision 同 commit。process monotonic timestamps 永不写入 SQLite。startup target anchor 在任何 due drain 前提交；因此 mid-catch-up restart 只继续 PENDING trigger，不重新累计离线时间。
 
@@ -34,7 +45,7 @@ C-006D 不新增表或列。`SqlAlchemyWorldClockStore` 用 SQLite writer transa
 
 使用独立 [ContentBase / Records](../../services/core/src/livingworld/infrastructure/persistence/content_models.py)，与 runtime Base 完全分离。四种 root 独立表保证 typed 身份边界，没有巨型泛型 JSON 表；正文不用逐文本过度规范化。当前需求按 ID 读取，不为尚不存在的搜索增加索引或 FTS 业务表。DB CHECK 强制 JSON 合法、版本 1、非负整数 revision、hash 长度与必要非空标签；读取重新校验 canonical 数据、完整哈希、独立元数据与 collection_id 一致性。
 
-[SqlAlchemyContentRepository](../../services/core/src/livingworld/infrastructure/persistence/content_repository.py) 使用既有 Database 的 engine/session factory，数据库仍位于 app data；无新存储进程或依赖。ContentDraft 封闭图在应用边界验证 Lore/asset/raw 引用及重复 typed IDs，root references 保留 canonical JSON 中，不使用 polymorphic runtime FK。当前无删除 API，整批创建/编辑/依赖复用同一事务；未来若增加删除/独立依赖修改，须维持该图约束。
+[SqlAlchemyContentRepository](../../services/core/src/livingworld/infrastructure/persistence/content_repository.py) 使用既有 Database 的 engine/session factory，数据库仍位于 app data；无新存储进程或依赖。ContentDraft 封闭图在应用边界验证 Lore/asset/raw 引用及重复 typed IDs，root references 保留 canonical JSON 中，不使用 polymorphic runtime FK。该内容仓库端口只读写不可变图；产品层已提供当前世界卡／书停用及明确条目删除，保留旧快照／来源和运行历史，不能推断为没有删除界面。整批创建／编辑／依赖复用同一事务，独立依赖修改须维持图约束。
 
 C-004C1 新 owned entry 的 collection_id 使用明确内容 FK，集合 references 必须与 Draft 及 DB 实际成员精确一致；新条目 NULL 在 application commit 与 repository 双重拒绝。定义以 lore_collection_ids 引用共享集合，不拥有删除权；无 destructive cascade，条目归属不能通过本任务重新指定。所有成员、定义引用、raw/asset 依赖仍在一个内容事务内写入。
 
@@ -85,7 +96,7 @@ bootstrap（创建、初始化、最终释放 Database）
 
 SQL echo 默认关闭，hide_parameters=True；结构化日志继续沿用 allowlist，不记录 SQL 参数、secret、token、prompt 或会话内容。
 
-## 2. 当前 schema
+## 2. Canonical基础schema
 
 所有世界内引用用复合外键携带 world_id；无级联删除。主键的 world_id 前缀同时支持世界内查找，不重复建立同列索引。
 
@@ -153,12 +164,12 @@ C-006A 只增加无副作用 effective-time derivation 和 runtime monotonic gua
 
 启动行为：
 
-1. 空 DB：直接 Alembic upgrade head，按 revision chain 执行至当前 0018。
+1. 空 DB：直接 Alembic upgrade head，按源码revision chain执行至HEAD_REVISION。
 2. 无 Alembic cursor 的 C-002 DB：只接受精确 legacy 表/列/PK/DDL、schema_version=(1,1)、一条匹配名称与 checksum 的历史记录和合法 UTC 审计时间；验证通过后 stamp 0001，再正常 upgrade head。旧迁移不重跑，已有行原样保留。
 3. 已有 Alembic cursor：由该 revision 驱动升级；legacy 元数据只做一致性检查。不能用 schema_version 推算或选择待执行迁移。
 4. 未知版本、checksum 漂移、缺失/损坏历史、结构差异、部分领域表、cursor 冲突或未知额外 schema 对象：抛出 MigrationCompatibilityError，事务回滚并停止启动；不自动修复、drop/recreate 或 stamp head。
 
-**审计语义转换：** schema_version 继续保留 1，migration_history 保留旧基础迁移记录，即使 Alembic 已到 0005。两表是 C-002 兼容/历史证据，不反映当前领域 schema cursor；本阶段不追加或同步新 Alembic 审计记录。新库的 0001 建立等价基础记录，接管已有库时不改变 applied_at 或任何原有列。
+**审计语义转换：** schema_version 继续保留 1，migration_history 保留旧基础迁移记录，不随后续Alembic升级同步增长。两表是 C-002 兼容/历史证据，不反映当前领域 schema cursor；本阶段不追加或同步新 Alembic 审计记录。新库的 0001 建立等价基础记录，接管已有库时不改变 applied_at 或任何原有列。
 
 0002 管理的数据库先按该历史 revision 的精确已知形状校验，再由 Alembic 执行 0003；结构检查不能自行选择或猜测迁移版本。部分增加指标或未知差异仍 fail closed。0003 的 downgrade 明确要求 review，因为删除已提交命令指纹会破坏重试安全，不自动丢弃幂等证据。
 
@@ -197,7 +208,7 @@ Repeat startup 正常调用 Alembic upgrade head，不重放 revision、不重�
 
 权限过滤必须先于 semantic retrieval / prompt assembly；C-003D 的 list/get SQL 强制 world/scope/owner 条件，见 [knowledge_readers.py](../../services/core/src/livingworld/infrastructure/persistence/knowledge_readers.py)。内部 exact-source repository 与 snapshot inspection 不分发给角色/玩家；返回 source_assertion_id 也不授予源读取权限。CommandReceipt 的 versioned JSON 结果新增可选 typed ObservationId，兼容旧结果无此 key，不需额外回执 schema 迁移。
 
-C-003C 回归见 [命令集成测试](../../tests/application/test_commands.py) 和 [0003 迁移回归](../../tests/persistence/test_command_migration.py)；C-003D 验证见 [知识访问集成测试](../../tests/application/test_knowledge_access.py) 和 [Observation 迁移回归](../../tests/persistence/test_observation_migration.py)。C-003E1 见 [ledger 测试](../../tests/application/test_ledger.py)、[0005 迁移测试](../../tests/persistence/test_ledger_migration.py) 与 [重建测试](../../tests/application/test_replay.py)。C-006B 见 [action tests](../../tests/application/test_action_resolution.py)、[scene tests](../../tests/application/test_scenes.py) 与 [0012 migration test](../../tests/persistence/test_action_scene_migration.py)。C-006C 见 [sparse activation tests](../../tests/application/test_sparse_activation.py)、[scheduler tests](../../tests/application/test_simulation_scheduler.py) 与 [0013 migration tests](../../tests/persistence/test_simulation_migration.py)。C-006D clock/catch-up/restart/barrier 见 [clock reconciliation tests](../../tests/application/test_clock_reconciliation.py)。C-007A 见 [memory domain tests](../../tests/domain/test_memory.py)、[memory application tests](../../tests/application/test_episodic_memory.py) 与 [0014 migration tests](../../tests/persistence/test_memory_migration.py)；该 C-007A 阶段 head 为 0014，当前源码 head 见顶部。Timeline/Checkpoint 产品功能仍未实现；这里的 clock checkpoint 仅表示 durable time anchor，不是 FR-22 世界快照。独立 operational 预算见 [LLM_BUDGET_GUARD.md](LLM_BUDGET_GUARD.md)。
+C-003C 回归见 [命令集成测试](../../tests/application/test_commands.py) 和 [0003 迁移回归](../../tests/persistence/test_command_migration.py)；C-003D 验证见 [知识访问集成测试](../../tests/application/test_knowledge_access.py) 和 [Observation 迁移回归](../../tests/persistence/test_observation_migration.py)。C-003E1 见 [ledger 测试](../../tests/application/test_ledger.py)、[0005 迁移测试](../../tests/persistence/test_ledger_migration.py) 与 [重建测试](../../tests/application/test_replay.py)。C-006B 见 [action tests](../../tests/application/test_action_resolution.py)、[scene tests](../../tests/application/test_scenes.py) 与 [0012 migration test](../../tests/persistence/test_action_scene_migration.py)。C-006C 见 [sparse activation tests](../../tests/application/test_sparse_activation.py)、[scheduler tests](../../tests/application/test_simulation_scheduler.py) 与 [0013 migration tests](../../tests/persistence/test_simulation_migration.py)。C-006D clock/catch-up/restart/barrier 见 [clock reconciliation tests](../../tests/application/test_clock_reconciliation.py)。C-007A 见 [memory domain tests](../../tests/domain/test_memory.py)、[memory application tests](../../tests/application/test_episodic_memory.py) 与 [0014 migration tests](../../tests/persistence/test_memory_migration.py)；0014仅为亲历记忆表的创建来源，当前完整迁移链见顶部。完整世界时间线分支／合并仍未实现；聊天分支／只读检查点及完整本机存档已各自实现，不能混为同一功能。这里的clock checkpoint仅表示durable time anchor，不是FR-22世界快照。独立 operational 预算见 [LLM_BUDGET_GUARD.md](LLM_BUDGET_GUARD.md)。
 
 ## 7. Canonical 分配与投影重建
 
@@ -219,7 +230,7 @@ SQLite command UoW 在读取前通过集中 begin hook 的 `livingworld_write_in
 
 FormCharacterBelief 不需要新表、列或索引：复用 knowledge_assertions 的 ownership CHECK、source/provenance 同世界 FK、Decimal/JSON/WorldTime 编码。新断言 revision=0，source/provenance 可 SQL NULL，提供时原样保存；不要求对应 Truth 或 Observation。没有 semantic 去重、命题唯一约束或自动调和。
 
-**C-003E2 无 schema 变更，Alembic head 保持 0005_canonical_ledger；不创建 0006。** schema_version=1 和旧 migration_history 仍为兼容审计证据，Alembic 是唯一 cursor；旧事件、回执和审计不改写，实际 app-data 数据库未用于验收。
+**C-003E2知识命令复用0005结构，本身不创建新revision；后续内容库及业务迁移已继续追加。** schema_version=1 和旧 migration_history 仍为兼容审计证据，Alembic 是唯一 cursor；旧事件、回执和审计不改写，实际 app-data 数据库未用于验收。
 
 ## C-005D2A：独立物理 attempt accounting
 
@@ -236,4 +247,4 @@ FormCharacterBelief 不需要新表、列或索引：复用 knowledge_assertions
 
 AccountingBase 与 runtime/content 分离，CHECK 加固 mode/enable/revision/window、ordinal/status/settlement/audit。Detector 按 cursor 对 0009 排除新表，对 0010 要求 complete exact shape；Alembic 唯一 authority，DDL failure rollback，prior attempts/audit/world/content rows 不变，downgrade 单独 review。准入 BEGIN IMMEDIATE 后重读所有 policies/history/holds，ALL matching HARD reservations + START 一次 COMMIT 后才 dispatch；final accounting + settlement 同事务。
 
-Unknown/cancel/crash 保留 conservative hold，known priced cost settle并释放 unused capacity，NOT_DISPATCHED release不虚构 zero usage。Known cost > bound 为 durable BOUND_VIOLATION，original/overlapping scope 的 future HARD fail closed；新 ID/window/restart 不自动恢复信任。每 physical exposure 的可信 holds 最大 bound 计一次，unbounded history 为 state uncertain，stale settlement/evidence mismatch 为 integrity degraded。Budget SQL requested_model only；ledger OR predicate 仅 analytics。本地 failure 保留原 provider outcome、不 replay；没有 expiry/reconciliation、dashboard、production catalog/default wiring。实现和测试详见 [LLM_BUDGET_GUARD.md](LLM_BUDGET_GUARD.md)。
+Unknown/cancel/crash 保留 conservative hold，known priced cost settle并释放 unused capacity，NOT_DISPATCHED release不虚构 zero usage。Known cost > bound 为 durable BOUND_VIOLATION，original/overlapping scope 的 future HARD fail closed；新 ID/window/restart 不自动恢复信任。每 physical exposure 的可信 holds 最大 bound 计一次，unbounded history 为 state uncertain，stale settlement/evidence mismatch 为 integrity degraded。Budget SQL requested_model only；ledger OR predicate 仅 analytics。本地 failure 保留原 provider outcome、不 replay；没有自动expiry／reconciliation或金额policy dashboard；catalog和统一执行已接入生产组装。实现和测试详见 [LLM_BUDGET_GUARD.md](LLM_BUDGET_GUARD.md)。

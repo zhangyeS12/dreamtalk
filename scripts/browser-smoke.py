@@ -7,6 +7,7 @@ import re
 from pathlib import Path
 
 from browser_runtime import owned_dev_web
+from chat_browser_checks import check_chat_scroll
 from playwright.sync_api import expect, sync_playwright
 from startup_browser_checks import check_startup_recovery
 
@@ -161,6 +162,7 @@ with owned_dev_web("livingworld-browser-smoke-") as url:
         page.get_by_text("当前聊天模型尚不可用，请在设置中核对模型与路由。", exact=True).wait_for()
         expect(page.get_by_role("textbox", name="发送给Fixture Alice的消息")).to_be_disabled()
         expect(page.get_by_role("button", name="发送", exact=True)).to_be_disabled()
+        check_chat_scroll(page, "Fixture Alice的会话")
         # Opening a chat never pins it; world events stay the only pinned row.
         expect(
             directory.get_by_role("button", name="置顶Fixture Alice", exact=True)
@@ -224,6 +226,7 @@ with owned_dev_web("livingworld-browser-smoke-") as url:
         expect(group_row).to_be_visible()
         group_row.click()
         page.get_by_role("region", name="群聊").wait_for()
+        check_chat_scroll(page, "群聊")
         archive()
         book = page.get_by_role("button", name="预览世界：world_profile_smoke", exact=True)
         expect(book).to_be_enabled()

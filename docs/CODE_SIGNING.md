@@ -1,6 +1,6 @@
 # Code signing policy
 
-Status: the maintainer has submitted the SignPath Foundation application and is awaiting a reply; it has not been approved. No publicly released dreamtalk executable currently carries a SignPath Foundation Windows signature. The existing Tauri updater signature verifies update integrity and does not identify a Windows publisher.
+Recorded status: the maintainer submitted the SignPath Foundation application; this repository contains no recorded approval or Foundation-signed release. Application status requires a new maintainer confirmation, rather than inference from a successful build or CI run. The existing Tauri updater signature verifies update integrity and does not identify a Windows publisher.
 
 ## Requested service
 
@@ -17,7 +17,7 @@ If accepted, the attribution will be: “Free code signing provided by SignPath.
 
 ## Build and artifact policy
 
-The repository contains a GitHub Actions continuous integration workflow, but no successful hosted run has been verified as of 2026-10-16. Current public Windows installers were produced locally; the verifiable GitHub-hosted release build and SignPath integration are not implemented yet. Existing local installers must not be represented as GitHub-built signing candidates.
+The repository contains an automatic GitHub Actions CI workflow, including Windows desktop checks. Verified run and release evidence is recorded in [project status](PROJECT_STATUS.md); an older dated statement that no hosted run had been verified is not the current baseline. Release builds require successful CI for the exact committed source, unless the owner explicitly authorizes and records an override. Public installer provenance must follow its release record: a CI check does not turn a locally built installer into a GitHub-built artifact. SignPath release signing integration is not implemented in the current workflow.
 
 Planned signing candidates are the project's own Windows desktop executable, Core executable, project-owned helper executable, and installer. Third-party binaries retain their own identity and licenses; they are not signed as project-authored code. Optional speech/vision weights and local environments are separate from the installer.
 

@@ -51,6 +51,6 @@ flowchart LR
 | LLM接入与计费 | [生产组装](LLM_PRODUCTION_COMPOSITION.md)、[基础设施](LLM_INFRASTRUCTURE.md)、[路由](LLM_ROUTING.md)、[账本](LLM_ACCOUNTING.md) |
 | 决策与历史 | [ADR](ADR/README.md)、[研究](../research/README.md)、[历史阶段证据](../history/README.md) |
 
-PostgreSQL／pgvector是未来服务端方向，MySQL／Qdrant为后续可评估方案；当前没有因此引入新服务。Redis只在真实分布式需求出现时评估。本地检索复用jieba、FTS5、FastEmbed／BGE、NumPy与DiskCache；模型环境和权重独立，不进入Core依赖和安装载荷。
+PostgreSQL／pgvector是未来服务端方向，MySQL／Qdrant为后续可评估方案；当前没有因此引入新服务。Redis只在真实分布式需求出现时评估。本地检索复用jieba、FTS5、FastEmbed／BGE、NumPy与DiskCache。固定 BGE-small-zh-v1.5 的 ONNX 权重由[准备脚本](../../scripts/prepare-semantic-model.py)固定revision、校验权重SHA256并登记MIT许可，经[Core打包配置](../../scripts/dreamtalk-core.spec)随独立 Core 分发；运行时不下载模型，也不向外部 embedding 服务发送历史。用户另行部署的配音／视觉模型环境和权重保持独立，不进入安装载荷。
 
 改动框架、数据库、Kernel authority或知识隔离须用户决定；普通实现选择采用满足已确认需求的简单方案。研究／历史验收报告用于追溯证据，不能给未批准方向授予实现或运行权限。
