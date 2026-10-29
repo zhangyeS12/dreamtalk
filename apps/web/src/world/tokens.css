@@ -42,6 +42,11 @@
   --dt-glass: rgb(14 18 44 / 0.52);
   --dt-glass-strong: rgb(12 15 38 / 0.78);
   --dt-glass-edge: rgb(255 255 255 / 0.14);
+  --dt-blur: blur(24px);
+  --dt-blur-soft: blur(12px);
+  /* The sun's gold, for the one primary action on a surface */
+  --dt-gold-fill: radial-gradient(circle at 35% 30%, #fff1cc, var(--dt-sun) 58%, #c79546);
+  --dt-gold-ink: #2a1f06;
   /* Script: narration is quieter than spoken lines */
   --dt-script: #c6cdea;
   --dt-dialogue: #fff8e8;

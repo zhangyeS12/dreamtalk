@@ -16,7 +16,7 @@
 .item[data-picked] .handle, .item[data-picked] .remove { display: block; }
 
 .panel { position: absolute; right: 24px; top: 70px; bottom: 96px; width: min(440px, 34%); overflow: auto; padding: 6px 20px 20px; border-radius: 22px;
-  border: 1px solid var(--dt-glass-edge); background: rgb(12 15 36 / 0.88); backdrop-filter: blur(24px); animation: slide 0.4s var(--dt-ease) both; user-select: text; }
+  border: 1px solid var(--dt-glass-edge); background: rgb(12 15 36 / 0.88); backdrop-filter: var(--dt-blur); animation: slide 0.4s var(--dt-ease) both; user-select: text; }
 .panel h3 { margin: 18px 0 10px; color: var(--dt-silver); font-size: 12.5px; font-weight: 600; letter-spacing: 0.14em; }
 .panel > * + .segment, .panel > .swatches, .panel > .toggle { margin-top: 10px; }
 .row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 10px; }
@@ -71,8 +71,8 @@
 .footer button { height: 40px; padding: 0 15px; border: 0; border-radius: 999px; background: none; color: var(--dt-silver); font-size: 13.5px; cursor: pointer; }
 .footer button:hover:not(:disabled) { color: var(--dt-moon); background: rgb(255 255 255 / 0.07); }
 .footer button:disabled { opacity: 0.4; cursor: default; }
-.footer .save { padding: 0 22px; color: #2a1f06; font-weight: 700; background: radial-gradient(circle at 35% 30%, #fff1cc, var(--dt-sun) 58%, #c79546); }
-.footer .save:hover:not(:disabled) { color: #2a1f06; background: radial-gradient(circle at 35% 30%, #fff1cc, var(--dt-sun) 58%, #c79546); filter: brightness(1.06); }
+.footer .save { padding: 0 22px; color: var(--dt-gold-ink); font-weight: 700; background: var(--dt-gold-fill); }
+.footer .save:hover:not(:disabled) { color: var(--dt-gold-ink); background: var(--dt-gold-fill); filter: brightness(1.06); }
 .designer :focus-visible { outline: 2px solid var(--dt-sun); outline-offset: 2px; }
 @keyframes fade { from { opacity: 0; } }
 @keyframes slide { from { opacity: 0; translate: 16px 0; } }

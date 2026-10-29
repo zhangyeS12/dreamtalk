@@ -1,12 +1,8 @@
 import { memo } from "react";
+import { starField } from "./sky";
 import styles from "./WorldScene.module.css";
 
-// Deterministic star field so the night sky never reshuffles between renders.
-const STARS = Array.from({ length: 96 }, (_, index) => {
-  const a = Math.sin(index * 12.9898) * 43758.5453, b = Math.sin(index * 78.233) * 12345.678;
-  const x = a - Math.floor(a), y = b - Math.floor(b);
-  return { x: x * 100, y: y * 70, size: 0.4 + ((x + y) % 1) * 0.9, delay: -(index % 9) * 0.6 };
-});
+const STARS = starField(96);
 
 /**
  * The world behind every panel: sky, sun or moon, drifting cloud, distant land.

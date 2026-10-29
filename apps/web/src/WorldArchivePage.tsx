@@ -11,7 +11,10 @@ import { ExampleWorldPanel } from "./ExampleWorldPanel";
 import { ArchiveRoom, archiveSky } from "./world/archive/ArchiveRoom";
 import { BookDesigner } from "./world/archive/BookDesigner";
 import { FaceArt, type ShelfAppearance } from "./world/archive/Book3D";
-import { designFor, type ShelfFace } from "./world/archive/bookDesign";
+import type { ShelfFace } from "./world/archive/bookDesign";
+import { bookLook, shelfAppearance } from "./world/archive/bookLook";
+import { useWindowStill } from "./world/useWindowStill";
+import { trapTab } from "./world/focusTrap";
 import { formatClock, skyAt, worldClock } from "./world/sky";
 import styles from "./world/archive/Archive.module.css";
 const NIGHT = skyAt(0);
@@ -267,32 +270,25 @@ export function WorldArchivePage({ client, initialWorldId, onEnter, displayTime,
   };
   const homeWorld = worlds.find(item => item.world_id === skyWorldId) ?? worlds.find(item => item.world_id === initialWorldId);
   const sky = archiveSky(homeWorld);
+  const still = useWindowStill();
   const homeClock = homeWorld ? worldClock(homeWorld.world_time) : null;
-  const savedAppearances = useMemo(() => Object.fromEntries(worlds.map(item => {
-    const look = covers.appearances[item.world_id];
-    const value: ShelfAppearance = {
-      design: designFor(look?.full, item.name), uploads: look?.uploads ?? {},
-      art: { front: look?.urls.front, spine: look?.urls.spine, back: look?.urls.back, jacket: look?.jacket, jacketAspect: look?.jacketAspect },
-    };
-    return [item.world_id, value];
-  })), [worlds, covers.appearances]);
+  const savedAppearances = useMemo(() => Object.fromEntries(worlds.map(item => [item.world_id, shelfAppearance(covers.appearances[item.world_id], item.name)])), [worlds, covers.appearances]);
   // While designing, only the designed book's entry changes, so the rest of the shelf does not re-render.
   const appearances = useMemo(() => selectedId && designDraft && savedAppearances[selectedId]
     ? { ...savedAppearances, [selectedId]: designDraft } : savedAppearances, [savedAppearances, selectedId, designDraft]);
   const selectedTime = world?.world_time;
   const selectedSky = useMemo(() => { if (selectedTime === undefined) return null; const clock = worldClock(selectedTime); return skyAt(clock ? clock.minuteOfDay : 0); }, [selectedTime]);
-  const travelLook = travelling ? { name: travelling.name, design: appearances[travelling.world_id]?.design ?? designFor(undefined, travelling.name), art: appearances[travelling.world_id]?.art ?? {},
-    uploads: appearances[travelling.world_id]?.uploads ?? {}, sky: selectedSky ?? skyAt(0), paused: travelling.clock_state === "paused" } : null;
+  const travelLook = travelling ? bookLook(travelling, appearances[travelling.world_id]) : null;
   const locked = busy || entering || coverBusy;
   const sheet = (title: string, note: string | undefined, onClose: () => void, children: ReactNode, headingRef?: Ref<HTMLHeadingElement>) => <>
     <div className={styles.scrim} onClick={onClose} />
-    <section className={styles.sheet} role="dialog" aria-modal="true" aria-label={title} onKeyDown={event => { if (event.key === "Escape") { event.preventDefault(); onClose(); } }}>
+    <section className={styles.sheet} role="dialog" aria-modal="true" aria-label={title} onKeyDown={event => { if (event.key === "Escape") { event.preventDefault(); onClose(); } else trapTab(event); }}>
       <header><h2 ref={headingRef} tabIndex={-1}>{title}</h2>{note && <p>{note}</p>}<button type="button" className={styles.close} aria-label="收起" onClick={onClose}>×</button></header>
       <div className={`${styles.sheetBody} dt-world world-workspace dt-sheet-body`}>{children}</div>
     </section>
   </>;
 
-  return <div className={`product-shell dt-world ${styles.root}`} style={sky.style} data-entering={travelling ? "" : undefined}>
+  return <div className={`product-shell dt-world ${styles.root}`} style={sky.style} data-entering={travelling ? "" : undefined} data-still={still || undefined}>
     <ArchiveRoom body={sky.body} />
     <header className={styles.hud}>
       <div className={styles.brand}><img src="/brand/dreamtalk-logo.png" alt="dreamtalk" width="40" height="36" />

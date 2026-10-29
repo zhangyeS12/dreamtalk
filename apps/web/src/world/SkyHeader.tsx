@@ -1,26 +1,7 @@
-import type { CSSProperties, ReactNode } from "react";
+import type { ReactNode } from "react";
 import type { WorldSettings } from "@dreamtalk/api-client";
 import { formatClock, skyAt, worldClock } from "./sky";
 import styles from "./SkyHeader.module.css";
-
-/** Sky colours and sun/moon position as CSS custom properties for the workspace root. */
-export function skyStyle(world: WorldSettings | undefined): CSSProperties {
-  const clock = world ? worldClock(world.world_time) : null;
-  if (!clock) return {};
-  const sky = skyAt(clock.minuteOfDay);
-  return {
-    "--dt-sky-zenith": sky.zenith,
-    "--dt-sky-horizon": sky.horizon,
-    "--dt-sky-x": sky.body.x.toFixed(4),
-    "--dt-sky-altitude": sky.body.altitude.toFixed(4),
-    "--dt-stars": sky.stars.toFixed(3),
-  } as CSSProperties;
-}
-
-export function skyBody(world: WorldSettings | undefined): "sun" | "moon" | null {
-  const clock = world ? worldClock(world.world_time) : null;
-  return clock ? skyAt(clock.minuteOfDay).body.kind : null;
-}
 
 /** The world's name written into its own sky, with the real clock beneath it. */
 export function SkyHeader({ world, modeSwitch, onArchive, status }: {
@@ -52,13 +33,4 @@ export function SkyHeader({ world, modeSwitch, onArchive, status }: {
       </button>
     </div>
   </header>;
-}
-
-export function SegmentedSwitch<T extends string>({ label, value, options, onChange }: {
-  label: string; value: T; options: ReadonlyArray<{ value: T; label: string }>; onChange: (value: T) => void;
-}) {
-  return <div className={styles.segmented} role="group" aria-label={label}>
-    {options.map(option => <button key={option.value} type="button" aria-pressed={option.value === value}
-      onClick={() => onChange(option.value)}>{option.label}</button>)}
-  </div>;
 }

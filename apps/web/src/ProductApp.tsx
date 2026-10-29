@@ -37,7 +37,9 @@ import { CelestialEmpty, WorkspaceIcon } from "./WorkspacePrimitives";
 import "./product.css";
 import "./world-terminal.css";
 import { NavRail, WORLD_TABS } from "./world/NavRail";
-import { SegmentedSwitch, SkyHeader, skyBody, skyStyle } from "./world/SkyHeader";
+import { SkyHeader } from "./world/SkyHeader";
+import { SegmentedSwitch } from "./world/SegmentedSwitch";
+import { skyOf, skyVars } from "./world/sky";
 import { WorldNotices, WorldShell } from "./world/WorldShell";
 import { ChatDirectory } from "./world/chat/ChatDirectory";
 
@@ -202,8 +204,9 @@ function WorldWorkspaceContent({ client, initialWorldId, initialTab, onArchive }
   };
   const leaveChatGuard = () => !dirty.chat || window.confirm("当前会话有未发送的草稿或正在处理的请求，是否离开会话？已发起的生成可能继续。");
   const immersiveChat = immersive && tab === "chats";
+  const sky = skyOf(world);
   return <WorldShell className={`product-shell world-workspace world-tab-${tab}${contactsManagementOpen ? " contacts-editing" : ""}${immersiveChat ? " immersive-mode" : ""}`}
-    style={skyStyle(world)} immersive={immersiveChat} paused={world?.clock_state === "paused"} body={skyBody(world)}
+    style={(sky ? skyVars(sky) : {}) as CSSProperties} immersive={immersiveChat} paused={world?.clock_state === "paused"} body={sky?.body.kind ?? null}
     sky={<SkyHeader world={world} onArchive={returnArchive} status={<span role="status" className="sr-only">核心已就绪</span>}
       modeSwitch={tab === "chats" ? <SegmentedSwitch label="聊天显示模式" value={immersive ? "immersive" : "normal"}
         options={[{ value: "normal", label: "普通" }, { value: "immersive", label: "沉浸" }]} onChange={value => setImmersiveMode(value === "immersive")} /> : undefined} />}

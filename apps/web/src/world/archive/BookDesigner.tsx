@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import type { BookDesign, BookDesignSticker, CoreClient, CoverCrop, CoverFace, WorldCover, WorldCoverWrite, WorldSettings } from "@dreamtalk/api-client";
 import { coverPreview } from "../../coverPreview";
 import type { Sky } from "../sky";
@@ -246,6 +246,31 @@ export function BookDesigner({ client, world, sky, face: shelfFace, onFaceReques
     const up = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
     window.addEventListener("pointermove", move); window.addEventListener("pointerup", up);
   };
+  // Keyboard: arrows move by 1% (Shift: 5%); with Alt, left/right rotate and up/down resize.
+  const nudge = (event: KeyboardEvent<HTMLElement>, item: Item) => {
+    const arrows: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+    const step = arrows[event.key]; if (!step || event.target !== event.currentTarget) return;
+    event.preventDefault();
+    if (!event.repeat) checkpoint();
+    const by = event.shiftKey ? 5 : 1;
+    change(draft => {
+      const target = item.kind === "title" ? draft.title : item.kind === "window" ? draft.sky_window : draft.stickers[face][item.index!];
+      if (event.altKey && item.kind === "sticker") {
+        const sticker = draft.stickers[face][item.index!];
+        if (step[0]) sticker.r = Math.max(-720, Math.min(720, sticker.r + step[0] * by * 3));
+        else sticker.w = Math.max(2, Math.min(160, sticker.w - step[1] * by));
+        return;
+      }
+      if (event.altKey && item.kind === "window") {
+        draft.sky_window.w = Math.max(4, Math.min(100, draft.sky_window.w + step[0] * by));
+        draft.sky_window.h = Math.max(4, Math.min(100, draft.sky_window.h - step[1] * by));
+        return;
+      }
+      const limit = item.kind === "sticker" ? [-20, 120] : [0, 100];
+      target.x = Math.max(limit[0], Math.min(limit[1], target.x + step[0] * by));
+      target.y = Math.max(limit[0], Math.min(limit[1], target.y + step[1] * by));
+    }, false);
+  };
   const flat: BookLook = { ...look, design: { ...design, stickers: { front: [], spine: [], back: [] } } };
   const editable: Array<{ item: Item; label: string; style: CSSProperties; src?: string }> = [];
   if (face === "front" && design.title.text) editable.push({ item: { kind: "title" }, label: "书名", style: { left: `${design.title.x}%`, top: `${design.title.y}%`, width: design.title.vertical ? "16%" : "64%", height: design.title.vertical ? "54%" : "12%" } });
@@ -270,17 +295,19 @@ export function BookDesigner({ client, world, sky, face: shelfFace, onFaceReques
     }}>
     <div className={styles.dim} aria-hidden="true" />
     <div className={styles.canvasWrap}>
-      <span className={styles.canvasLabel}>{FACE_LABELS[face]} · 拖动调整位置，拖右下角圆点缩放和旋转</span>
+      <span className={styles.canvasLabel}>{FACE_LABELS[face]} · 拖动调整位置，拖右下角圆点缩放和旋转；选中后可用方向键微调</span>
       <div ref={canvas} className={styles.canvas} style={{ width: faceWidth * scale, height: BOOK_HEIGHT * scale }}
         onPointerDown={event => { if (event.target === event.currentTarget || (event.target as HTMLElement).dataset.paper !== undefined) setPicked(null); }}>
         <span data-paper="" className={styles.paper} style={{ width: faceWidth, height: BOOK_HEIGHT, transform: `scale(${scale})`, "--T": `${faceWidth}px` } as CSSProperties}><FaceArt look={flat} face={face} stickers={false} /></span>
         <span className={styles.safe} aria-hidden="true" />
         {editable.map(({ item, label, style, src }) => <div key={`${item.kind}:${item.index ?? ""}`} className={styles.item} data-picked={sameItem(picked, item) || undefined}
           style={item.kind === "sticker" ? style : { ...style, transform: "translate(-50%, -50%)" }} onPointerDown={event => grab(event, item)}
-          role="button" tabIndex={0} aria-label={`选择${label}`} onFocus={() => setPicked(item)}>
+          role="group" tabIndex={0} aria-label={`${label}：方向键移动${item.kind === "title" ? "" : "，Alt+方向键旋转或缩放"}`} aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown"
+          onFocus={() => setPicked(item)} onKeyDown={event => nudge(event, item)}>
           {src && <img src={src} alt="" draggable={false} />}
           {item.kind !== "title" && <span className={styles.handle} data-handle="resize" title="缩放和旋转" />}
-          <button type="button" className={styles.remove} aria-label={`删除${label}`} onPointerDown={event => { event.stopPropagation(); removeItem(item); }}>×</button>
+          <button type="button" className={styles.remove} aria-label={`删除${label}`} onPointerDown={event => { event.stopPropagation(); removeItem(item); }}
+            onClick={event => { if (event.detail === 0) removeItem(item); }}>×</button>
         </div>)}
       </div>
     </div>

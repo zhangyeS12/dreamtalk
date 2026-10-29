@@ -35,6 +35,8 @@
   animation: notice-in 220ms var(--dt-ease);
 }
 .notices .notice p { flex: 1; margin: 0; }
+.notices .statusRegion { display: grid; }
+.notices .statusRegion:empty { margin-top: -8px; } /* takes no gap while empty */
 .notices .notice[data-tone="error"] { background: rgb(58 24 40 / 0.9); color: var(--dt-danger-ink); border-color: rgb(242 144 126 / 0.4); }
 .notices .notice[data-tone="notice"]::before {
   content: ""; flex: none; width: 8px; height: 8px; margin-top: 7px; background: var(--dt-sun);

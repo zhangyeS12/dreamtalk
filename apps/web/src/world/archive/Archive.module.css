@@ -9,6 +9,7 @@
 .sky { position: absolute; inset: 0; background: linear-gradient(to bottom, var(--dt-sky-zenith), color-mix(in oklab, var(--dt-sky-zenith) 50%, var(--dt-sky-horizon)) 60%, var(--dt-sky-horizon)); }
 .stars { position: absolute; inset: 0 0 30% 0; opacity: var(--dt-stars); }
 .stars i { position: absolute; width: 2px; height: 2px; border-radius: 50%; background: #fff; box-shadow: 0 0 6px #fff; animation: twinkle 5s ease-in-out infinite; }
+.root[data-still] .stars i { animation-play-state: paused; }
 @keyframes twinkle { 50% { opacity: 0.3; } }
 .body { position: absolute; border-radius: 50%; left: calc(10% + var(--dt-sky-x) * 80%); top: calc(80% - var(--dt-sky-altitude) * 62%); }
 .body[data-kind="moon"] { width: 70px; height: 70px; margin: -35px; box-shadow: inset -16px 8px 0 0 #e9edfb; rotate: -20deg; }
@@ -26,7 +27,7 @@
 .brand h1 { margin: 0; color: var(--dt-moon); font-size: 18px; font-weight: 600; letter-spacing: 0.2em; line-height: 1.3; outline: none; }
 .brand p { margin: 2px 0 0; color: rgb(238 240 248 / 0.72); font-size: 12.5px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .pill, .hud :global(.desktop-update-entry) { display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 16px; border-radius: 999px;
-  border: 1px solid var(--dt-glass-edge); background: rgb(8 10 24 / 0.55); color: var(--dt-silver); font-size: 13px; cursor: pointer; backdrop-filter: blur(12px); white-space: nowrap; }
+  border: 1px solid var(--dt-glass-edge); background: rgb(8 10 24 / 0.55); color: var(--dt-silver); font-size: 13px; cursor: pointer; backdrop-filter: var(--dt-blur-soft); white-space: nowrap; }
 .pill:hover:not(:disabled), .hud :global(.desktop-update-entry:hover) { color: var(--dt-moon); background: rgb(8 10 24 / 0.82); }
 .pill:disabled { opacity: 0.5; cursor: default; }
 .pill[aria-expanded="true"] { color: #10142f; background: var(--dt-moon); }
@@ -35,7 +36,7 @@
 .brand h1:focus, .brand h1:focus-visible { outline: none; }
 .stage { position: absolute; inset: 0; z-index: 1; }
 .hud :global(.desktop-update-entry svg) { width: 16px; height: 16px; }
-.hud :global(.desktop-update-entry.has-update) { color: #2a1f06; border-color: transparent; background: radial-gradient(circle at 35% 30%, #fff1cc, var(--dt-sun) 58%, #c79546); }
+.hud :global(.desktop-update-entry.has-update) { color: var(--dt-gold-ink); border-color: transparent; background: var(--dt-gold-fill); }
 
 /* ---------- The pulled-out world: a tag top-right, actions along the bottom ---------- */
 .tag { position: absolute; z-index: 10; right: 26px; top: 70px; width: min(340px, calc(100% - 52px)); padding: 14px 16px 14px 14px; border-radius: 16px;
@@ -52,8 +53,8 @@
 .actions button { height: 40px; padding: 0 16px; border: 0; border-radius: 999px; background: none; color: var(--dt-silver); font-size: 13.5px; cursor: pointer; white-space: nowrap; }
 .actions button:hover:not(:disabled) { color: var(--dt-moon); background: rgb(255 255 255 / 0.07); }
 .actions button:disabled { opacity: 0.45; cursor: default; }
-.actions .enter, .gold { padding: 0 24px; color: #2a1f06; font-weight: 700; letter-spacing: 0.08em; background: radial-gradient(circle at 35% 30%, #fff1cc, var(--dt-sun) 58%, #c79546); box-shadow: 0 0 22px -4px rgb(240 203 133 / 0.6); }
-.actions .enter:hover:not(:disabled) { color: #2a1f06; background: radial-gradient(circle at 35% 30%, #fff1cc, var(--dt-sun) 58%, #c79546); filter: brightness(1.06); }
+.actions .enter, .gold { padding: 0 24px; color: var(--dt-gold-ink); font-weight: 700; letter-spacing: 0.08em; background: var(--dt-gold-fill); box-shadow: 0 0 22px -4px rgb(240 203 133 / 0.6); }
+.actions .enter:hover:not(:disabled) { color: var(--dt-gold-ink); background: var(--dt-gold-fill); filter: brightness(1.06); }
 .actions .delete { color: var(--dt-danger-ink); opacity: 0.75; font-size: 12.5px; }
 .actions .sep { width: 1px; height: 20px; background: rgb(255 255 255 / 0.12); }
 .actions :focus-visible, .tag :focus-visible { outline: 2px solid var(--dt-sun); outline-offset: 2px; }
@@ -81,7 +82,7 @@
 /* ---------- Sheets: settings-style content over the dimmed shelf ---------- */
 .scrim { position: absolute; inset: 0; z-index: 20; background: rgb(3 4 10 / 0.6); backdrop-filter: blur(3px); animation: fade 0.25s ease both; }
 .sheet { position: absolute; z-index: 21; left: 50%; top: 50%; translate: -50% -50%; width: min(1040px, calc(100% - 48px)); max-height: calc(100% - 120px); display: flex; flex-direction: column;
-  border-radius: 22px; border: 1px solid var(--dt-glass-edge); background: rgb(12 15 36 / 0.92); backdrop-filter: blur(24px); box-shadow: 0 40px 80px -20px rgb(0 0 0 / 0.9); animation: pop 0.3s var(--dt-ease) both; user-select: text; }
+  border-radius: 22px; border: 1px solid var(--dt-glass-edge); background: rgb(12 15 36 / 0.92); backdrop-filter: var(--dt-blur); box-shadow: 0 40px 80px -20px rgb(0 0 0 / 0.9); animation: pop 0.3s var(--dt-ease) both; user-select: text; }
 .sheet > header { position: relative; flex: none; padding: 20px 64px 14px 26px; border-bottom: 1px solid rgb(255 255 255 / 0.07); }
 .sheet > header h2 { margin: 0; color: var(--dt-moon); font-size: 19px; font-weight: 600; letter-spacing: 0.1em; outline: none; }
 .sheet > header p { margin: 4px 0 0; color: var(--dt-silver); font-size: 12.5px; }

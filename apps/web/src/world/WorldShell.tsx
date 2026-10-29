@@ -1,5 +1,6 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { WorldScene } from "./WorldScene";
+import { useWindowStill } from "./useWindowStill";
 import styles from "./WorldShell.module.css";
 import "./tokens.css";
 import "./theme.css";
@@ -12,7 +13,8 @@ export function WorldShell({ className, style, sky, rail, immersive, paused, bod
   className: string; style: CSSProperties; sky: ReactNode; rail: ReactNode; immersive: boolean; paused: boolean;
   body: "sun" | "moon" | null; children: ReactNode;
 }) {
-  return <div className={`dt-world ${styles.shell} ${className}`} style={style} data-immersive={immersive || undefined} data-paused={paused || undefined}>
+  const still = useWindowStill();
+  return <div className={`dt-world ${styles.shell} ${className}`} style={style} data-immersive={immersive || undefined} data-paused={paused || undefined} data-still={still || undefined}>
     <WorldScene kind={body} />
     {sky}
     {!immersive && <div className={styles.railSlot}>{rail}</div>}
@@ -38,6 +40,7 @@ export function WorldNotices({ error, notice, onDismissError, onDismissNotice }:
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 7 10 10M7 17 17 7" /></svg>
       </button>
     </div> : null}
-    {shownNotice ? <div className={styles.notice} data-tone="notice"><p role="status">{shownNotice}</p></div> : null}
+    {/* Alerts are announced when inserted; a status region must already exist, so it always does. */}
+    <div className={styles.statusRegion} role="status">{shownNotice ? <div className={styles.notice} data-tone="notice"><p>{shownNotice}</p></div> : null}</div>
   </div>;
 }

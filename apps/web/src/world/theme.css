@@ -68,12 +68,12 @@
 .dt-world.world-workspace .primary-button,
 .dt-world.world-workspace :is(.handbook-panel, .social-stage, .contacts-page, .profile-page) button.primary-button {
   border: 0; border-radius: 999px; padding: 10px 22px;
-  background: radial-gradient(circle at 35% 30%, #fff1cc, var(--dt-sun) 60%, #c79546); color: #2a1f06; font-weight: 600;
+  background: var(--dt-gold-fill); color: var(--dt-gold-ink); font-weight: 600;
   box-shadow: 0 0 20px -4px rgb(240 203 133 / 0.55);
 }
 .dt-world.world-workspace .primary-button:hover:not(:disabled),
 .dt-world.world-workspace :is(.handbook-panel, .social-stage, .contacts-page, .profile-page) button.primary-button:hover:not(:disabled) {
-  background: radial-gradient(circle at 35% 30%, #fff1cc, var(--dt-sun) 60%, #c79546); color: #2a1f06; filter: brightness(1.06);
+  background: var(--dt-gold-fill); color: var(--dt-gold-ink); filter: brightness(1.06);
 }
 .dt-world .secondary-button {
   border-radius: 999px; padding: 9px 18px; border: 1px solid var(--dt-glass-edge);

@@ -145,3 +145,30 @@ export function contrast(a: string, b: string): number {
   const [high, low] = [luminance(a), luminance(b)].sort((x, y) => y - x);
   return (high + 0.05) / (low + 0.05);
 }
+
+/** The sky over a world right now, or null when its clock is not a real time. */
+export function skyOf(world: { world_time: string } | undefined): Sky | null {
+  const clock = world ? worldClock(world.world_time) : null;
+  return clock ? skyAt(clock.minuteOfDay) : null;
+}
+
+/** A sky as the registered `--dt-sky-*` custom properties (see tokens.css). */
+export function skyVars(sky: Sky): Record<string, string> {
+  return {
+    "--dt-sky-zenith": sky.zenith,
+    "--dt-sky-horizon": sky.horizon,
+    "--dt-sky-x": sky.body.x.toFixed(4),
+    "--dt-sky-altitude": sky.body.altitude.toFixed(4),
+    "--dt-stars": sky.stars.toFixed(3),
+  };
+}
+
+export type Star = { x: number; y: number; size: number; delay: number };
+/** A deterministic star field (percent positions) so the night never reshuffles between renders. */
+export function starField(count: number): Star[] {
+  return Array.from({ length: count }, (_, index) => {
+    const a = Math.sin(index * 12.9898) * 43758.5453, b = Math.sin(index * 78.233) * 12345.678;
+    const x = a - Math.floor(a), y = b - Math.floor(b);
+    return { x: x * 100, y: y * 70, size: 0.4 + ((x + y) % 1) * 0.9, delay: -(index % 9) * 0.6 };
+  });
+}

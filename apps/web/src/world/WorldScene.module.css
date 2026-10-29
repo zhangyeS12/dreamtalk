@@ -51,7 +51,8 @@
 
 /* Paused worlds hold still and lose a little colour. */
 :global([data-paused]) .scene { filter: saturate(0.45); }
-:global([data-paused]) .stars i, :global([data-paused]) .cloud { animation-play-state: paused; }
+:global([data-paused]) .stars i, :global([data-paused]) .cloud,
+:global([data-still]) .stars i, :global([data-still]) .cloud { animation-play-state: paused; }
 
 @media (prefers-reduced-motion: reduce) {
   .stars i, .cloud { animation: none; }

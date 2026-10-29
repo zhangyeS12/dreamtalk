@@ -1,9 +1,9 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type FocusEvent, type KeyboardEvent, type MouseEvent, type PointerEvent as ReactPointerEvent, type WheelEvent as ReactWheelEvent } from "react";
 import type { WorldSettings } from "@dreamtalk/api-client";
 import { BlankFaces, Book3DFaces, type BookLook, type ShelfAppearance } from "./world/archive/Book3D";
-import { BLANK_THICKNESS, FACE_LABELS, THICKNESS, designFor, type ShelfFace } from "./world/archive/bookDesign";
+import { BLANK_THICKNESS, FACE_LABELS, THICKNESS, type ShelfFace } from "./world/archive/bookDesign";
 import { FACE_YAW, ease, faceFromYaw, lapsFor, poseCss, restPose, ringLayout, ringPosition, yawToward, type Pose, type RingLayout } from "./world/archive/ring";
-import { skyAt, worldClock } from "./world/sky";
+import { bookLook } from "./world/archive/bookLook";
 import styles from "./world/archive/Shelf.module.css";
 
 const MIN_BOOKS = 12;
@@ -13,7 +13,6 @@ type Book = { key: string; name: string; world?: WorldSettings; blankIndex?: num
 /** One drawn copy of a book. `css` remembers what was last written so frames only touch changed styles. */
 type Node = { el: HTMLElement; book: Book; lap: number; dx: number; hover: number; css: Map<string, string> };
 
-const nightSky = skyAt(0);
 const SETTLE_STALL_MS = 600;
 
 function write(node: Node, property: string, value: string) {
@@ -55,9 +54,7 @@ export function WorldShelf({ worlds, appearances, selectedKey, initialWorldId, d
     for (const world of worlds) {
       const appearance = appearances[world.world_id], cached = cache.get(world.world_id);
       if (cached && cached.world === world && cached.appearance === appearance) { next.set(world.world_id, cached.look); continue; }
-      const clock = worldClock(world.world_time);
-      const look: BookLook = { name: world.name, design: appearance?.design ?? designFor(undefined, world.name), art: appearance?.art ?? {},
-        uploads: appearance?.uploads ?? {}, sky: clock ? skyAt(clock.minuteOfDay) : nightSky, paused: world.clock_state === "paused" };
+      const look = bookLook(world, appearance);
       cache.set(world.world_id, { world, appearance, look }); next.set(world.world_id, look);
     }
     for (const id of cache.keys()) if (!next.has(id)) cache.delete(id);

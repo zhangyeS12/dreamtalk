@@ -58,7 +58,7 @@
   position: absolute; z-index: 30; top: calc(100% + 8px); right: 0;
   display: grid; min-width: 200px; padding: 6px;
   border-radius: 16px; border: 1px solid var(--dt-glass-edge);
-  background: var(--dt-glass-strong); backdrop-filter: blur(24px);
+  background: var(--dt-glass-strong); backdrop-filter: var(--dt-blur);
   box-shadow: 0 24px 48px -16px rgb(0 0 0 / 0.75);
 }
 .frame .menuPanel button {
@@ -87,7 +87,7 @@
 .frame .tools :global(.chat-path-panel) {
   margin: 8px 18px; max-height: min(56vh, 520px); overflow: auto;
   padding: 16px 18px; border-radius: 18px; border: 1px solid var(--dt-glass-edge);
-  background: var(--dt-glass-strong); backdrop-filter: blur(24px);
+  background: var(--dt-glass-strong); backdrop-filter: var(--dt-blur);
   box-shadow: 0 24px 48px -20px rgb(0 0 0 / 0.7);
 }
 
@@ -210,7 +210,7 @@
 .frame .composerStatus :global(.reply-recovery:empty) { display: none; }
 .frame .composerStatus :global(.reply-recovery button) {
   height: 28px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--dt-glass-edge);
-  background: var(--dt-glass-strong); color: var(--dt-silver); font-size: 12px; cursor: pointer; backdrop-filter: blur(12px);
+  background: var(--dt-glass-strong); color: var(--dt-silver); font-size: 12px; cursor: pointer; backdrop-filter: var(--dt-blur-soft);
 }
 .frame .composerStatus :global(.reply-recovery button:hover:not(:disabled)) { color: var(--dt-moon); }
 .frame .composerStatus :global(.reply-recovery [role="alertdialog"]) {
@@ -221,7 +221,7 @@
   position: relative; display: flex; align-items: flex-end; gap: 8px;
   padding: 8px 8px 8px 10px; border-radius: 28px;
   background: var(--dt-glass-strong); border: 1px solid var(--dt-glass-edge);
-  backdrop-filter: blur(24px);
+  backdrop-filter: var(--dt-blur);
   box-shadow: 0 24px 50px -20px rgb(0 0 0 / 0.8), inset 0 1px 0 rgb(255 255 255 / 0.08);
   transition: border-color var(--dt-quick) var(--dt-ease), box-shadow var(--dt-quick) var(--dt-ease);
 }
@@ -243,13 +243,13 @@
 .frame .sticker :global(.sticker-picker-body) {
   position: absolute; z-index: 30; left: 0; bottom: calc(100% + 10px); width: min(440px, 100%);
   max-height: 360px; overflow: auto; padding: 14px; border-radius: 20px;
-  border: 1px solid var(--dt-glass-edge); background: var(--dt-glass-strong); backdrop-filter: blur(24px);
+  border: 1px solid var(--dt-glass-edge); background: var(--dt-glass-strong); backdrop-filter: var(--dt-blur);
   box-shadow: 0 24px 48px -16px rgb(0 0 0 / 0.75);
 }
 .frame .send {
   flex: none; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   min-width: 46px; height: 46px; padding: 0 12px; border: 0; border-radius: 999px; cursor: pointer;
-  background: radial-gradient(circle at 35% 30%, #fff1cc, var(--dt-sun) 55%, #c79546); color: #2a1f06;
+  background: var(--dt-gold-fill); color: var(--dt-gold-ink);
   box-shadow: 0 0 24px -2px rgb(240 203 133 / 0.55);
   transition: filter var(--dt-quick) var(--dt-ease), opacity var(--dt-quick) var(--dt-ease);
 }
@@ -264,7 +264,7 @@
 .frame :global(.chat-mention-actions) { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 0 16px; color: var(--dt-silver); font-size: 12px; }
 .frame :global(.chat-mention-actions button) {
   height: 28px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--dt-glass-edge);
-  background: var(--dt-glass-strong); color: var(--dt-moon); font-size: 12.5px; cursor: pointer; backdrop-filter: blur(12px);
+  background: var(--dt-glass-strong); color: var(--dt-moon); font-size: 12.5px; cursor: pointer; backdrop-filter: var(--dt-blur-soft);
 }
 .frame :global(.chat-mention-actions button:hover:not(:disabled)) { border-color: rgb(240 203 133 / 0.5); color: var(--dt-sun-bright); }
 /* ---------- Immersive stage: the character steps into the world ---------- */

@@ -1,25 +1,14 @@
 import { memo, type CSSProperties, type ReactNode } from "react";
 import type { WorldSettings } from "@dreamtalk/api-client";
-import { mixOklab, skyAt, worldClock } from "../sky";
+import { mixOklab, skyAt, skyOf, skyVars, starField } from "../sky";
 import styles from "./Archive.module.css";
 
-const STARS = Array.from({ length: 110 }, (_, index) => {
-  const a = Math.sin(index * 12.9898) * 43758.5453, b = Math.sin(index * 78.233) * 12345.678;
-  const x = a - Math.floor(a), y = b - Math.floor(b);
-  return { x: x * 100, y: y * 70, size: 0.4 + ((x + y) % 1) * 0.9, delay: -(index % 9) * 0.6 };
-});
+const STARS = starField(110);
 
 /** Sky variables for the archive: the last world's current hour, or a timeless night. */
 export function archiveSky(world: WorldSettings | undefined): { style: CSSProperties; body: "sun" | "moon" } {
-  const clock = world ? worldClock(world.world_time) : null;
-  const sky = skyAt(clock ? clock.minuteOfDay : 0);
-  return {
-    body: sky.body.kind,
-    style: {
-      "--dt-sky-zenith": sky.zenith, "--dt-sky-horizon": sky.horizon, "--rim": mixOklab(sky.horizon, "#ffffff", 0.25),
-      "--dt-sky-x": sky.body.x.toFixed(4), "--dt-sky-altitude": sky.body.altitude.toFixed(4), "--dt-stars": sky.stars.toFixed(3),
-    } as CSSProperties,
-  };
+  const sky = skyOf(world) ?? skyAt(0);
+  return { body: sky.body.kind, style: { ...skyVars(sky), "--rim": mixOklab(sky.horizon, "#ffffff", 0.25) } as CSSProperties };
 }
 
 /** A dark room whose only light is a window onto that sky. */
