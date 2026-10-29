@@ -12,6 +12,8 @@ uv sync --frozen
 npm run lint
 npm run typecheck:core
 npm run check:contracts
+npm test
+uv run --frozen pytest
 ```
 
 | 目录 | 职责 |
@@ -32,9 +34,24 @@ Python 类型门禁采用锁定的 Pyright 1.1.414（MIT），复用现有 Node 
 
 当前客户端业务 JSON 接口已全部使用生成的响应校验，覆盖聊天／记忆、内容、活动／事件、媒体／配音及开发者视图；JSON 写请求用 satisfies 核对实际请求模型。服务端绑定同源响应模型，扩展字段保留，流式进度也使用生成校验。二进制／multipart 和 SSE 传输约束仍单独处理，Tauri 宿主控制协议继续独立；不能宣称三端所有契约已生成。Python 的 Field 范围及严格校验继续由服务端执行，浏览器守卫不是完整 JSON Schema 校验器。
 
+## 前端约定
+
+新界面位于 apps/web/src/world/，使用 CSS Modules 和 `world/tokens.css` 的设计变量。旧的全局样式表都包在 `@layer legacy` 中，模块样式天然优先，不需要 `!important` 或叠加类名。新增全局样式表时也放进这个层。
+
+`npm run lint` 包含 eslint-plugin-react-hooks 7.1.1（MIT，仅开发依赖，不进入安装包）。只启用经典的 rules-of-hooks 与 exhaustive-deps 两条规则，没有启用 React Compiler 相关规则。exhaustive-deps 在新界面（world/ 目录、书架、档案页和聊天视图）是错误，在较早的视图中是警告：那些文件有意只依赖单个字段，并在清理函数中递增请求计数。引入原因是新界面的帧循环和回调大量依赖闭包，缺失依赖曾在评审中造成真实缺陷；现有 ESLint 配置不包含这类检查，维护成本是随 React 升级更新插件版本。
+
+浏览器检查都启动隔离的 Core＋Vite（`scripts/browser_runtime.py`，临时 APPDATA／LOCALAPPDATA，不读真实存档、不调用模型）：
+
+```powershell
+npm run test:web-smoke
+uv run --frozen --group browser-test python scripts/visual-check.py --sky-time 18:40
+```
+
+前者是 CI 使用的完整流程检查；后者把书架、聊天、沉浸、通讯录、设置和“我”的截图写到 artifacts/browser-checks/visual/，并在按钮文字几乎透明或通讯录详情无法滚动时失败。两者按可访问名称定位元素，界面文案改动时需同步。
+
 ## 编译与验证
 
-验证权限统一遵守 [AGENTS第20节](../AGENTS.md#20-current-verification-responsibility)。用户负责最终验收；现有离线测试（pytest、vitest、静态检查）可在隔离临时目录直接运行，缺陷修复和新功能应补回归测试。真实模型／凭据探测、真实存档操作及用户机器上已安装应用的运行仍须当前具体授权。
+验证权限统一遵守 [AGENTS第20节](../AGENTS.md#20-current-verification-responsibility)。用户负责最终验收；现有离线测试（pytest、vitest、静态检查）可在隔离临时目录直接运行，缺陷修复和新功能应补回归测试。需要旧版本存档的升级测试用 tests/legacy_store.py：`database_at` 按真实迁移链建出指定旧版本的空库，`rewind_store` 把当前库改写成旧版本的结构并保留已有行；不要再手工删表或改写 `alembic_version`，那样在后续迁移追加字段时会失效。真实模型／凭据探测、真实存档操作及用户机器上已安装应用的运行仍须当前具体授权。
 
 必要本机交付用 `npm run build:desktop:local`，独立 Cargo 目标及版本／摘要回执在 artifacts/local-desktop；共享 target/debug 不作快捷方式目标。先核对当前是否须保留旧版供更新验收，不能覆盖其入口。`build:desktop` 供 CI／原生工程检查；源码 EXE 依赖开发环境，对外完整包须另含 Core 与资源。
 
