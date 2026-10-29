@@ -1462,6 +1462,8 @@ export type BookThickness = ("thin" | "normal" | "thick");
 export function isBookThickness(value: unknown): value is BookThickness { return (value === "thin" || value === "normal" || value === "thick"); }
 export type BookFont = ("yahei" | "hei" | "song" | "kai" | "fangsong");
 export function isBookFont(value: unknown): value is BookFont { return (value === "yahei" || value === "hei" || value === "song" || value === "kai" || value === "fangsong"); }
+export type BuiltinSticker = ("star" | "moon" | "sun" | "seal" | "ribbon" | "film" | "sakura" | "tape" | "heart");
+export function isBuiltinSticker(value: unknown): value is BuiltinSticker { return (value === "star" || value === "moon" || value === "sun" || value === "seal" || value === "ribbon" || value === "film" || value === "sakura" || value === "tape" || value === "heart"); }
 export type BookDesignTitle = {
   text: string;
   font: BookFont;
@@ -2113,7 +2115,7 @@ export type HttpWorldCovers_Strict = object;
 export function isHttpWorldCovers_Strict(value: unknown): value is HttpWorldCovers_Strict { return isObject(value); }
 export type HttpWorldCoversDesignTitleWrite = HttpWorldCovers_Strict & {
   text: string;
-  font: ("yahei" | "hei" | "song" | "kai" | "fangsong");
+  font: BookFont;
   color: string;
   size: number;
   vertical: boolean;
@@ -2121,7 +2123,7 @@ export type HttpWorldCoversDesignTitleWrite = HttpWorldCovers_Strict & {
   y: number;
 };
 export function isHttpWorldCoversDesignTitleWrite(value: unknown): value is HttpWorldCoversDesignTitleWrite {
-  return (isObject(value)) && (typeof value.text === "string") && ((value.font === "yahei" || value.font === "hei" || value.font === "song" || value.font === "kai" || value.font === "fangsong")) && (typeof value.color === "string") && (typeof value.size === "number") && (typeof value.vertical === "boolean") && (typeof value.x === "number") && (typeof value.y === "number") && (isHttpWorldCovers_Strict(value));
+  return (isObject(value)) && (typeof value.text === "string") && (isBookFont(value.font)) && (typeof value.color === "string") && (typeof value.size === "number") && (typeof value.vertical === "boolean") && (typeof value.x === "number") && (typeof value.y === "number") && (isHttpWorldCovers_Strict(value));
 }
 export type HttpWorldCoversDesignSkyWindowWrite = HttpWorldCovers_Strict & {
   on: boolean;
@@ -2156,10 +2158,10 @@ export function isHttpWorldCoversDesignStickersWrite(value: unknown): value is H
 export type HttpWorldCoversBookDesignWrite = HttpWorldCovers_Strict & {
   version: (1);
   template: string;
-  material: ("paper" | "cloth" | "leather" | "gloss" | "holo");
+  material: BookMaterial;
   case_color: string;
   edge: ("paper" | "gilt");
-  thickness: ("thin" | "normal" | "thick");
+  thickness: BookThickness;
   wrap: boolean;
   brand: boolean;
   title: HttpWorldCoversDesignTitleWrite;
@@ -2167,7 +2169,7 @@ export type HttpWorldCoversBookDesignWrite = HttpWorldCovers_Strict & {
   stickers: HttpWorldCoversDesignStickersWrite;
 };
 export function isHttpWorldCoversBookDesignWrite(value: unknown): value is HttpWorldCoversBookDesignWrite {
-  return (isObject(value)) && ((value.version === 1)) && (typeof value.template === "string") && ((value.material === "paper" || value.material === "cloth" || value.material === "leather" || value.material === "gloss" || value.material === "holo")) && (typeof value.case_color === "string") && ((value.edge === "paper" || value.edge === "gilt")) && ((value.thickness === "thin" || value.thickness === "normal" || value.thickness === "thick")) && (typeof value.wrap === "boolean") && (typeof value.brand === "boolean") && (isHttpWorldCoversDesignTitleWrite(value.title)) && (isHttpWorldCoversDesignSkyWindowWrite(value.sky_window)) && (isHttpWorldCoversDesignStickersWrite(value.stickers)) && (isHttpWorldCovers_Strict(value));
+  return (isObject(value)) && ((value.version === 1)) && (typeof value.template === "string") && (isBookMaterial(value.material)) && (typeof value.case_color === "string") && ((value.edge === "paper" || value.edge === "gilt")) && (isBookThickness(value.thickness)) && (typeof value.wrap === "boolean") && (typeof value.brand === "boolean") && (isHttpWorldCoversDesignTitleWrite(value.title)) && (isHttpWorldCoversDesignSkyWindowWrite(value.sky_window)) && (isHttpWorldCoversDesignStickersWrite(value.stickers)) && (isHttpWorldCovers_Strict(value));
 }
 export type HttpWorldCoversCoverWrite = {
   mode: ("text" | "image");

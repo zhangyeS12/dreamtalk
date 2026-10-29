@@ -98,6 +98,8 @@ export function WorldShelf({ worlds, appearances, selectedKey, initialWorldId, d
     ? { px: -(viewport.current?.clientWidth ?? 1200) * 0.29, py: -10, pz: -80, tilt: 0 }
     : { px: 0, py: -12, pz: 120, tilt: -4 }, []);
 
+  // The frame loop is created once; it reaches helpers that close over render state through this ref.
+  const loop = useRef({ snap: () => {}, reportFace: () => {} });
   const step = useCallback(function step(now: number) {
     const state = engine.current, { reduced: still, selectedKey: wanted, laps: count } = props.current;
     state.lastFrame = now;
@@ -108,11 +110,11 @@ export function WorldShelf({ worlds, appearances, selectedKey, initialWorldId, d
       if (t === 1) { const done = state.tween.done; state.tween = null; done?.(); }
     } else if (!state.dragging && !state.chosen && Math.abs(state.velocity) > 0.08 && !still) {
       state.offset += state.velocity; state.velocity *= 0.94; moving = true;
-      if (Math.abs(state.velocity) <= 0.08) snap();
+      if (Math.abs(state.velocity) <= 0.08) loop.current.snap();
     }
     if (state.chosen && !state.spin.dragging && !state.returning && (Math.abs(state.spin.vy) > 0.01 || Math.abs(state.spin.vp) > 0.01)) {
       state.spin.yaw += state.spin.vy; state.spin.pitch = Math.max(-25, Math.min(25, state.spin.pitch + state.spin.vp));
-      state.spin.vy *= 0.93; state.spin.vp *= 0.9; moving = true; reportFace();
+      state.spin.vy *= 0.93; state.spin.vp *= 0.9; moving = true; loop.current.reportFace();
     }
     for (const [key, start] of state.grow) if (now - start.start < 720) moving = true; else state.grow.delete(key);
     const layout = layoutAt(now), half = (viewport.current?.clientWidth ?? 1200) / 2;
@@ -175,6 +177,7 @@ export function WorldShelf({ worlds, appearances, selectedKey, initialWorldId, d
     if (next === lastFace.current) return;
     lastFace.current = next; setFace(next); props.current.onFace?.(next);
   }
+  loop.current = { snap, reportFace: () => reportFace() };
   const turnTo = useCallback((target: ShelfFace) => {
     const spin = engine.current.spin;
     spin.yaw = yawToward(spin.yaw, target === "front" && !props.current.designing ? -68 : FACE_YAW[target]);
@@ -230,7 +233,7 @@ export function WorldShelf({ worlds, appearances, selectedKey, initialWorldId, d
     if (state.chosen?.book.key === selectedKey && !state.returning) return;
     const pick = () => pendingNode.current?.book.key === selectedKey ? pendingNode.current : nearest(node => node.book.key === selectedKey, 0);
     const begin = async () => {
-      const node = pick(); if (!node) { onSettled(selectedKey); return; }
+      const node = pick(); if (!node) { props.current.onSettled(selectedKey); return; }
       if (previous) await new Promise(resolve => setTimeout(resolve, props.current.reduced ? 0 : 260));
       if (cancelled) return;
       await travel(node.dx, 460);
@@ -245,10 +248,10 @@ export function WorldShelf({ worlds, appearances, selectedKey, initialWorldId, d
     // report that it is out. Settle only when frames have actually stopped arriving.
     const watch = window.setInterval(() => {
       if (cancelled || state.settledKey === selectedKey || props.current.selectedKey !== selectedKey) return;
-      if (document.hidden || (state.awake && performance.now() - state.lastFrame > SETTLE_STALL_MS)) { state.settledKey = selectedKey; onSettled(selectedKey); }
+      if (document.hidden || (state.awake && performance.now() - state.lastFrame > SETTLE_STALL_MS)) { state.settledKey = selectedKey; props.current.onSettled(selectedKey); }
     }, 300);
     return () => { cancelled = true; window.clearInterval(watch); };
-  }, [selectedKey]);
+  }, [selectedKey, travel, wake]);
   useEffect(() => { if (faceRequest) turnTo(faceRequest.face); }, [faceRequest, turnTo]);
   useEffect(() => { if (engine.current.chosen) { if (designing) turnTo("front"); wake(); } }, [designing, turnTo, wake]);
 

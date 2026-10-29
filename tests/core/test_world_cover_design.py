@@ -259,3 +259,23 @@ def test_design_edits_keep_optimistic_revisions(api):
         json=write(design(material="paper"), revision=1),
     )
     assert fresh.status_code == 200 and fresh.json()["design"]["material"] == "paper"
+
+
+def test_web_client_draws_exactly_what_the_core_accepts():
+    """The book designer is TypeScript; its sticker set and limits must match these models."""
+    import re
+    from pathlib import Path
+
+    from livingworld.adapters.http.world_covers import BUILTIN_STICKERS, STICKER_LIMITS
+
+    source = (
+        Path(__file__).resolve().parents[2] / "apps/web/src/world/archive/bookDesign.ts"
+    ).read_text(encoding="utf-8")
+    table = source[source.index("export const BUILTIN_STICKERS") :]
+    table = table[: table.index("\n};")]
+    assert re.findall(r"^  (\w+): \{ label", table, re.MULTILINE) == list(BUILTIN_STICKERS)
+    limits = re.search(r"STICKER_LIMIT: Record<DesignFace, number> = \{([^}]*)\}", source)
+    assert limits is not None
+    assert {
+        face: int(count) for face, count in re.findall(r"(\w+): (\d+)", limits.group(1))
+    } == STICKER_LIMITS

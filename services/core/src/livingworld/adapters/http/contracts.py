@@ -442,6 +442,9 @@ from livingworld.adapters.http.wire_contracts.worlds import (
     BookThickness as BookThickness,
 )
 from livingworld.adapters.http.wire_contracts.worlds import (
+    BuiltinSticker as BuiltinSticker,
+)
+from livingworld.adapters.http.wire_contracts.worlds import (
     CoverCrop as CoverCrop,
 )
 from livingworld.adapters.http.wire_contracts.worlds import (

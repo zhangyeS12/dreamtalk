@@ -98,6 +98,10 @@ class WorldCoverFaces(TypedDict):
 type BookMaterial = Literal["paper", "cloth", "leather", "gloss", "holo"]
 type BookThickness = Literal["thin", "normal", "thick"]
 type BookFont = Literal["yahei", "hei", "song", "kai", "fangsong"]
+# Bundled vector stickers; the web client must draw every one (bookDesign.ts).
+type BuiltinSticker = Literal[
+    "star", "moon", "sun", "seal", "ribbon", "film", "sakura", "tape", "heart"
+]
 
 
 @with_config(ConfigDict(extra="allow"))

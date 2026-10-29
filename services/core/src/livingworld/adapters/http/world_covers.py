@@ -1,12 +1,18 @@
 """Authenticated local image and presentation endpoints, with bounded uploads."""
 
-from typing import Literal
+from typing import Literal, get_args
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from livingworld.adapters.http import contracts as wire
+from livingworld.adapters.http.wire_contracts.worlds import (
+    BookFont,
+    BookMaterial,
+    BookThickness,
+    BuiltinSticker,
+)
 from livingworld.application.errors import EntityNotFoundError
 from livingworld.application.world_covers import MAX_IMAGE_BYTES, CoverCrop, CoverError
 from livingworld.domain.contracts import API_PROTOCOL
@@ -31,7 +37,9 @@ class FaceWrite(BaseModel):
 
 HEX_COLOR = r"^#[0-9a-fA-F]{6}$"
 DIGEST = r"^[0-9a-f]{64}$"
-BUILTIN_STICKERS = ("star", "moon", "sun", "seal", "ribbon", "film", "sakura", "tape", "heart")
+# The design vocabulary lives once, in the wire contract the web client is generated from.
+BUILTIN_STICKERS: tuple[str, ...] = get_args(BuiltinSticker.__value__)
+STICKER_LIMITS = {"front": 24, "spine": 12, "back": 24}
 
 
 class _Strict(BaseModel):
@@ -40,7 +48,7 @@ class _Strict(BaseModel):
 
 class DesignTitleWrite(_Strict):
     text: str = Field(max_length=60)
-    font: Literal["yahei", "hei", "song", "kai", "fangsong"]
+    font: BookFont
     color: str = Field(pattern=HEX_COLOR)
     size: float = Field(ge=12, le=96)
     vertical: bool = Field(strict=True)
@@ -77,9 +85,9 @@ class DesignStickerWrite(_Strict):
 
 
 class DesignStickersWrite(_Strict):
-    front: list[DesignStickerWrite] = Field(max_length=24)
-    spine: list[DesignStickerWrite] = Field(max_length=12)
-    back: list[DesignStickerWrite] = Field(max_length=24)
+    front: list[DesignStickerWrite] = Field(max_length=STICKER_LIMITS["front"])
+    spine: list[DesignStickerWrite] = Field(max_length=STICKER_LIMITS["spine"])
+    back: list[DesignStickerWrite] = Field(max_length=STICKER_LIMITS["back"])
 
 
 class BookDesignWrite(_Strict):
@@ -87,10 +95,10 @@ class BookDesignWrite(_Strict):
 
     version: Literal[1]
     template: str = Field(max_length=24)
-    material: Literal["paper", "cloth", "leather", "gloss", "holo"]
+    material: BookMaterial
     case_color: str = Field(pattern=HEX_COLOR)
     edge: Literal["paper", "gilt"]
-    thickness: Literal["thin", "normal", "thick"]
+    thickness: BookThickness
     wrap: bool = Field(strict=True)
     brand: bool = Field(strict=True)
     title: DesignTitleWrite

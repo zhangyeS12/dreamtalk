@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
-import type { BookDesign, BookDesignSticker, CoreClient, CoverCrop, CoverFace, WorldCover, WorldCoverWrite, WorldSettings } from "@dreamtalk/api-client";
+import type { BookDesign, BookDesignSticker, BuiltinSticker, CoreClient, CoverCrop, CoverFace, WorldCover, WorldCoverWrite, WorldSettings } from "@dreamtalk/api-client";
 import { coverPreview } from "../../coverPreview";
 import type { Sky } from "../sky";
 import { FaceArt, type BookLook, type ShelfAppearance } from "./Book3D";
@@ -275,7 +275,7 @@ export function BookDesigner({ client, world, sky, face: shelfFace, onFaceReques
   const editable: Array<{ item: Item; label: string; style: CSSProperties; src?: string }> = [];
   if (face === "front" && design.title.text) editable.push({ item: { kind: "title" }, label: "书名", style: { left: `${design.title.x}%`, top: `${design.title.y}%`, width: design.title.vertical ? "16%" : "64%", height: design.title.vertical ? "54%" : "12%" } });
   if (face === "front" && design.sky_window.on) editable.push({ item: { kind: "window" }, label: "天窗", style: { left: `${design.sky_window.x}%`, top: `${design.sky_window.y}%`, width: `${design.sky_window.w}%`, height: `${design.sky_window.h}%` } });
-  design.stickers[face].forEach((sticker, index) => editable.push({ item: { kind: "sticker", index }, label: sticker.kind === "builtin" ? BUILTIN_STICKERS[sticker.ref]?.label ?? "贴纸" : "我的图片",
+  design.stickers[face].forEach((sticker, index) => editable.push({ item: { kind: "sticker", index }, label: sticker.kind === "builtin" ? BUILTIN_STICKERS[sticker.ref as BuiltinSticker]?.label ?? "贴纸" : "我的图片",
     src: stickerSource(sticker, uploads), style: { left: `${sticker.x}%`, top: `${sticker.y}%`, width: `${sticker.w}%`, opacity: sticker.opacity, transform: `translate(-50%, -50%) rotate(${sticker.r}deg)` } }));
   const pickedSticker = picked?.kind === "sticker" ? design.stickers[face][picked.index!] : undefined;
   const color = (value: string, label: string, onPick: (value: string) => void, list: string[]) => <div className={styles.swatches} role="group" aria-label={label}>

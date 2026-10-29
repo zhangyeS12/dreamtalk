@@ -1,4 +1,4 @@
-import type { BookDesign, BookDesignSticker, WorldCover } from "@dreamtalk/api-client";
+import type { BookDesign, BookDesignSticker, BookMaterial, BuiltinSticker, WorldCover } from "@dreamtalk/api-client";
 import { stableHash } from "../hash";
 
 /** Book proportions follow the saved cover images (196:286 faces, 42:286 spine). */
@@ -19,7 +19,9 @@ export const FONTS: Record<BookDesign["title"]["font"], { label: string; stack: 
   kai: { label: "楷体", stack: "'KaiTi', 'STKaiti', 'Noto Serif CJK SC', serif" },
   fangsong: { label: "仿宋", stack: "'FangSong', 'STFangsong', 'Noto Serif CJK SC', serif" },
 };
-export const MATERIALS: Array<[BookDesign["material"], string]> = [["paper", "纸面"], ["cloth", "布面"], ["leather", "皮革"], ["gloss", "亮面"], ["holo", "镭射"]];
+// Typed by the generated unions: a value the Core accepts but the client cannot draw fails the build.
+const MATERIAL_LABELS: Record<BookMaterial, string> = { paper: "纸面", cloth: "布面", leather: "皮革", gloss: "亮面", holo: "镭射" };
+export const MATERIALS = Object.entries(MATERIAL_LABELS) as Array<[BookMaterial, string]>;
 export const CASE_COLORS = ["#111218", "#2b2f45", "#3d4a5c", "#5b2333", "#1f4037", "#b8875a", "#e9e4d8", "#f4c7d0"];
 export const INK_COLORS = ["#ffffff", "#f3d27d", "#1b1d2a", "#e24a4a", "#94d0ff"];
 
@@ -30,7 +32,7 @@ const sunRays = Array.from({ length: 12 }, (_, i) => {
 }).join("");
 
 /** Built-in stickers are bundled vector art; user stickers are this world's uploaded images. */
-export const BUILTIN_STICKERS: Record<string, { label: string; src: string }> = {
+export const BUILTIN_STICKERS: Record<BuiltinSticker, { label: string; src: string }> = {
   star: { label: "四芒星", src: svg('<path d="M50 4 58 42 96 50 58 58 50 96 42 58 4 50 42 42Z" fill="#f3d27d"/>') },
   moon: { label: "新月", src: svg('<path d="M64 10a42 42 0 1 0 26 74A36 36 0 1 1 64 10Z" fill="#eef1fb"/>') },
   sun: { label: "太阳", src: svg(`<circle cx="50" cy="50" r="22" fill="#ffcf6b"/><g stroke="#ffcf6b" stroke-width="6" stroke-linecap="round">${sunRays}</g>`) },
@@ -69,7 +71,7 @@ export function designFor(cover: Pick<WorldCover, "mode" | "title" | "show_title
 }
 
 export function stickerSource(item: BookDesignSticker, uploads: Record<string, string>): string | undefined {
-  return item.kind === "builtin" ? BUILTIN_STICKERS[item.ref]?.src : uploads[item.ref];
+  return item.kind === "builtin" ? BUILTIN_STICKERS[item.ref as BuiltinSticker]?.src : uploads[item.ref];
 }
 
 /** A stable spine treatment chosen from the world's name, never random. */
@@ -79,7 +81,7 @@ export function spineStyle(name: string): 0 | 1 | 2 {
 
 export const cloneDesign = (design: BookDesign): BookDesign => JSON.parse(JSON.stringify(design)) as BookDesign;
 
-/** Per-face sticker limits; the Core rejects more (adapters/http/world_covers.py). */
+/** Per-face sticker limits; must equal STICKER_LIMITS in adapters/http/world_covers.py (tested there). */
 export const STICKER_LIMIT: Record<DesignFace, number> = { front: 24, spine: 12, back: 24 };
 const DESIGN_FACES: DesignFace[] = ["front", "spine", "back"];
 const stickerId = (face: DesignFace, item: BookDesignSticker) => [face, item.kind, item.ref, item.x, item.y, item.w, item.r, item.opacity].join("|");

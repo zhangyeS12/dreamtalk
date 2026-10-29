@@ -22,7 +22,8 @@ it("requires preview confirmation, reuses an uncertain save and generates only o
   }
   render(<Harness />);
   const previewButton = await screen.findByRole("button", { name: "预览修改" });
-  expect(document.activeElement).toBe(screen.getByLabelText("聊天路线"));
+  // The panel takes focus once the path snapshot arrives, which can be after the button renders.
+  await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText("聊天路线")));
   fireEvent.click(previewButton);
   expect(commit).not.toHaveBeenCalled(); expect(onGenerate).not.toHaveBeenCalled();
   fireEvent.click(await screen.findByRole("button", { name: "确认保存并生成" }));

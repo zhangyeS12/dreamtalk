@@ -35,7 +35,7 @@ export function StartupSplash({ ready, failed, failureCode = "", onRetry, onComp
     let visibilityTicket = 0;
     let deadline: number | undefined;
     let unlisten: (() => void) | undefined;
-    const useFallback = () => {
+    const showFallback = () => {
       if (!active) return;
       abandoned = true;
       window.clearTimeout(deadline);
@@ -46,7 +46,7 @@ export function StartupSplash({ ready, failed, failureCode = "", onRetry, onComp
       // Readiness does not skip the shot. Hidden autostart still creates no WebGL.
       if (reduced || abandoned || document.hidden || visibilityNow.current !== true || started || leaving.current || stopped.current) return;
       started = true;
-      deadline = window.setTimeout(() => { if (!didPaint) useFallback(); }, 3000);
+      deadline = window.setTimeout(() => { if (!didPaint) showFallback(); }, 3000);
       void import("./celestialVortex").then(({ createCelestialVortex }) => {
         if (!active || abandoned) return;
         if (!surface.current || document.hidden || visibilityNow.current !== true || leaving.current || stopped.current) {
@@ -58,7 +58,7 @@ export function StartupSplash({ ready, failed, failureCode = "", onRetry, onComp
         });
         if (!active || abandoned) { scene.dispose(); return; }
         vortex.current = scene;
-      }).catch(useFallback);
+      }).catch(showFallback);
     };
     const visibility = async () => {
       const ticket = ++visibilityTicket;
@@ -73,7 +73,7 @@ export function StartupSplash({ ready, failed, failureCode = "", onRetry, onComp
           const [shownNative, minimized] = await Promise.all([appWindow.isVisible(), appWindow.isMinimized()]);
           shown = shownNative && !minimized && !document.hidden;
         } catch {
-          if (active && ticket === visibilityTicket) useFallback();
+          if (active && ticket === visibilityTicket) showFallback();
           shown = !document.hidden;
         }
       }
