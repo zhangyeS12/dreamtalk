@@ -1,5 +1,6 @@
 /* ---------- The archive room ---------- */
-.root { position: fixed; inset: 0; overflow: hidden; isolation: isolate; color: var(--dt-moon); background: #05060f; user-select: none;
+/* clip, not hidden: a focused 3D book must never scroll the fixed stage sideways. */
+.root { position: fixed; inset: 0; overflow: clip; isolation: isolate; color: var(--dt-moon); background: #05060f; user-select: none;
   transition: --dt-sky-zenith 1.4s linear, --dt-sky-horizon 1.4s linear, --dt-sky-x 1.4s linear, --dt-sky-altitude 1.4s linear, --dt-stars 1.4s linear; }
 .room { position: absolute; inset: 0; z-index: 0; background: radial-gradient(120% 80% at 50% 40%, #0b0d1d, #04050c 70%); pointer-events: none; }
 .window { position: absolute; left: 3%; right: 3%; top: 7%; bottom: 13%; overflow: hidden; border-radius: 6px;
