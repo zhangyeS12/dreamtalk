@@ -1,5 +1,5 @@
 import { DesktopUpdateEntry, useDesktopUpdateBlock } from "./DesktopUpdates";
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type ReactNode, type Ref } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ComponentProps, type FormEvent, type ReactNode, type Ref } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { CoreClient, CoreRequestError, type WorldSettings, type WorldContentItem } from "@dreamtalk/api-client";
 import { ModelSetup } from "./ModelSetup";
@@ -10,6 +10,8 @@ import { SaveBackupPanel } from "./SaveBackups";
 import { ExampleWorldPanel } from "./ExampleWorldPanel";
 import { ArchiveRoom, archiveSky } from "./world/archive/ArchiveRoom";
 import { BookDesigner } from "./world/archive/BookDesigner";
+import { CardGuide, CharacterLibrary } from "./world/cards/CharacterLibrary";
+import { PackCollection } from "./world/cards/packs/PackCollection";
 import { FaceArt, type ShelfAppearance } from "./world/archive/Book3D";
 import type { ShelfFace } from "./world/archive/bookDesign";
 import { bookLook, shelfAppearance } from "./world/archive/bookLook";
@@ -21,12 +23,18 @@ const NIGHT = skyAt(0);
 import "./world/tokens.css";
 import "./world/theme.css";
 
-export function WorldArchivePage({ client, initialWorldId, onEnter, displayTime, onStartupStatus }: {
+export function WorldArchivePage({ client, initialWorldId, onEnter, displayTime, onStartupStatus, renderCardCollection }: {
   client: CoreClient; initialWorldId: string | null;
   onEnter: (id: string, hasIdentity: boolean) => void; displayTime: (raw: string) => string;
   onStartupStatus?: (ready: boolean) => void;
+  renderCardCollection?: (props: ComponentProps<typeof CharacterLibrary>) => ReactNode;
 }) {
   const covers = useWorldCovers(client);
+  const [collection, setCollection] = useState<"worlds" | "cards">("worlds");
+  const [carryingCard, setCarryingCard] = useState(false);
+  const [cardEditing, setCardEditing] = useState(false);
+  const [cardCount, setCardCount] = useState(0);
+  const [cardGuide, setCardGuide] = useState(false);
   const [designing, setDesigning] = useState(false);
   const [designDraft, setDesignDraft] = useState<ShelfAppearance | null>(null);
   const [shelfFace, setShelfFace] = useState<ShelfFace>("front");
@@ -156,6 +164,7 @@ export function WorldArchivePage({ client, initialWorldId, onEnter, displayTime,
       .find(element => element.dataset.bookKey === selectionKey);
     clearSelection(); book?.focus({ preventScroll: true });
   };
+  const browseWorldsWithCard = useCallback(() => { setSelectedId(""); setBlankIndex(null); setReadyKey(null); setCreating(false); setCollection("worlds"); }, []);
   const select = (id: string) => {
     if (id === selectedId) { closeSelection(); return; }
     if (!leaveEditor()) return;
@@ -279,7 +288,7 @@ export function WorldArchivePage({ client, initialWorldId, onEnter, displayTime,
   const selectedTime = world?.world_time;
   const selectedSky = useMemo(() => { if (selectedTime === undefined) return null; const clock = worldClock(selectedTime); return skyAt(clock ? clock.minuteOfDay : 0); }, [selectedTime]);
   const travelLook = travelling ? bookLook(travelling, appearances[travelling.world_id]) : null;
-  const locked = busy || entering || coverBusy;
+  const locked = busy || entering || coverBusy || cardEditing;
   const sheet = (title: string, note: string | undefined, onClose: () => void, children: ReactNode, headingRef?: Ref<HTMLHeadingElement>) => <>
     <div className={styles.scrim} onClick={onClose} />
     <section className={styles.sheet} role="dialog" aria-modal="true" aria-label={title} onKeyDown={event => { if (event.key === "Escape") { event.preventDefault(); onClose(); } else trapTab(event); }}>
@@ -288,24 +297,25 @@ export function WorldArchivePage({ client, initialWorldId, onEnter, displayTime,
     </section>
   </>;
 
-  return <div className={`product-shell dt-world ${styles.root}`} style={sky.style} data-entering={travelling ? "" : undefined} data-still={still || undefined}>
+  return <div className={`product-shell dt-world ${styles.root}`} style={sky.style} data-collection={collection} data-entering={travelling ? "" : undefined} data-still={still || undefined}>
+    <div className={styles.collectionViewport}>
     <ArchiveRoom body={sky.body} />
     <header className={styles.hud}>
       <div className={styles.brand}><img src="/brand/dreamtalk-logo.png" alt="dreamtalk" width="40" height="36" />
         <div><h1 ref={heading} tabIndex={-1}>世界档案库</h1>
-          <p>{homeWorld && homeClock ? `刚从「${homeWorld.name}」回来 · ${formatClock(homeClock)} ${skyAt(homeClock.minuteOfDay).phase}` : "挑一本书，走进其中的世界。"}</p></div></div>
-      <DesktopUpdateEntry />
+          <p>{collection === "cards" ? "把故事装进书里，把相遇留在卡上。" : homeWorld && homeClock ? `刚从「${homeWorld.name}」回来 · ${formatClock(homeClock)} ${skyAt(homeClock.minuteOfDay).phase}` : "挑一本书，走进其中的世界。"}</p></div></div>
+      {collection === "worlds" ? <><DesktopUpdateEntry />
       <button type="button" className={styles.pill} aria-expanded={backupsOpen} disabled={locked} onClick={() => { if (backupsOpen || leaveEditor()) setBackupsOpen(value => !value); }}>
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h11l3 3v13H5Z" /><path d="M8 4v5h7V4M8 20v-6h8v6" /></svg>存档</button>
       <button type="button" className={styles.pill} aria-expanded={modelOpen} disabled={locked} onClick={() => { if (modelOpen) { leaveEditor(); return; } if (leaveEditor()) { clearSelection(); setModelOpen(true); } }}>
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h2M10 17h10" /><circle cx="16" cy="7" r="2" /><circle cx="8" cy="17" r="2" /></svg>模型设置</button>
       <button type="button" className={styles.pill} aria-expanded={exampleOpen} disabled={loading || locked} onClick={() => { if (leaveEditor()) setExampleOpen(current => !current); }}>体验校园示例</button>
       <button type="button" className={styles.pill} disabled={loading || locked} onClick={refreshArchive} aria-label={loading ? "正在读取…" : "刷新书架"} title="刷新书架">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 5v5h-5M4 19v-5h5M5.2 8a7.5 7.5 0 0 1 12-3L20 8M4 16l2.8 3a7.5 7.5 0 0 0 12-3" /></svg></button>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 5v5h-5M4 19v-5h5M5.2 8a7.5 7.5 0 0 1 12-3L20 8M4 16l2.8 3a7.5 7.5 0 0 0 12-3" /></svg></button></> : <button type="button" className={styles.pill} disabled={locked} onClick={() => setCardGuide(true)}>使用指南</button>}
     </header>
 
-    <main className={styles.stage}>
-      <WorldShelf worlds={worlds} appearances={appearances} selectedKey={selectionKey} initialWorldId={initialWorldId} loading={loading} disabled={locked} vacatedIndex={vacatedIndex}
+    <main id="world-collection" className={styles.stage} data-collection-hidden={collection !== "worlds" || undefined} aria-hidden={collection !== "worlds"} inert={collection !== "worlds"}>
+      <WorldShelf worlds={worlds} appearances={appearances} selectedKey={selectionKey} initialWorldId={initialWorldId} loading={loading} disabled={locked || carryingCard} vacatedIndex={vacatedIndex}
         onSelect={select} onCreate={selectBlank} onClose={closeSelection} onSettled={settled} designing={designing && Boolean(world) && previewReady}
         faceRequest={faceRequest} onFace={setShelfFace} />
       {previewReady && !designing && <section key={selectionKey} id="archive-preview" aria-label={blankIndex !== null ? "创建世界档案" : "所选世界预览"} aria-busy={entering}
@@ -344,6 +354,8 @@ export function WorldArchivePage({ client, initialWorldId, onEnter, displayTime,
         </> : <aside className={styles.tag}><span /><p className={styles.books}>这个世界暂时无法读取，请刷新书架。</p></aside>}
       </section>}
     </main>
+    <CardCollectionRenderer render={renderCardCollection} client={client} worlds={worlds} active={collection === "cards"} onBrowseWorlds={browseWorldsWithCard} onCarryChange={setCarryingCard} onJoined={contentChanged} onEditingChange={setCardEditing} onCountChange={setCardCount} />
+    {cardGuide && <CardGuide onClose={() => setCardGuide(false)} />}
     <div className={styles.notices}>
       {error && <p role="alert">{error} <button type="button" disabled={locked || loading} onClick={refreshArchive}>刷新书架</button></p>}
       {deletionCleanup && <p role="status">「{deletionCleanup.name}」的删除结果或收尾待确认。<button type="button" disabled={locked} onClick={() => void deleteWorld(deletionCleanup, true)}>重试清理</button></p>}
@@ -371,5 +383,15 @@ export function WorldArchivePage({ client, initialWorldId, onEnter, displayTime,
       </div>
     </>}
     <p className="sr-only" role="status">{travelling ? `正在进入「${travelling.name}」` : ""}</p>
+    </div>
+    <nav className={styles.collectionSwitch} data-collection-switch data-collection={collection} data-editing={cardEditing || undefined} aria-label="选择档案库" onKeyDown={event => { if (!locked && !carryingCard && (event.key === "ArrowLeft" || event.key === "ArrowRight")) { event.preventDefault(); event.stopPropagation(); const value = event.key === "ArrowLeft" ? "worlds" : "cards"; const button = event.currentTarget.querySelector<HTMLButtonElement>(`[data-collection-option='${value}']`); button?.click(); button?.focus(); } }}>
+      <span className={styles.collectionThumb} aria-hidden="true" />
+      {(["worlds", "cards"] as const).map(value => <button key={value} data-collection-option={value} type="button" aria-pressed={collection === value} disabled={locked || carryingCard}
+        onClick={() => { if (collection !== value && leaveEditor()) { setBackupsOpen(false); setExampleOpen(false); setCollection(value); } }}>{value === "worlds" ? <><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h6c1.5 0 2 .8 2 2v13c0-1.3-.7-2-2-2H4zM20 5h-6c-1.5 0-2 .8-2 2v13c0-1.3.7-2 2-2h6z" /></svg>世界书<small aria-hidden="true">{worlds.length}</small></> : <><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="3" /><path d="M7 10h4m-4 4h7m3-4h.01" /></svg>角色卡<small aria-hidden="true">{cardCount}</small></>}</button>)}
+    </nav>
   </div>;
+}
+
+function CardCollectionRenderer({ render, ...props }: ComponentProps<typeof CharacterLibrary> & { render?: (props: ComponentProps<typeof CharacterLibrary>) => ReactNode }) {
+  return render ? render(props) : <PackCollection {...props} />;
 }

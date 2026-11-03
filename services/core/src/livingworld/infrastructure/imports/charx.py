@@ -4,6 +4,7 @@ import io
 import posixpath
 import re
 import stat
+import struct
 import zipfile
 import zlib
 
@@ -12,6 +13,13 @@ from livingworld.application.imports import ContentImportError
 
 def read_charx(payload: bytes, *, max_json_bytes: int, max_entries: int) -> bytes:
     try:
+        tail = payload[-65557:]
+        end = tail.rfind(b"PK\x05\x06")
+        if end < 0 or len(tail) - end < 22:
+            raise ContentImportError("invalid_character_card_archive")
+        count = struct.unpack_from("<H", tail, end + 10)[0]
+        if count > max_entries:
+            raise ContentImportError("character_card_archive_entry_limit")
         with zipfile.ZipFile(io.BytesIO(payload)) as archive:
             files = archive.infolist()
             if len(files) > max_entries:
@@ -26,6 +34,7 @@ def read_charx(payload: bytes, *, max_json_bytes: int, max_entries: int) -> byte
                     or "\0" in name
                     or "\\" in name
                     or posixpath.isabs(path)
+                    or ".." in name.split("/")
                     or ".." in path.split("/")
                     or re.match(r"^[A-Za-z]:", name)
                     or name in seen

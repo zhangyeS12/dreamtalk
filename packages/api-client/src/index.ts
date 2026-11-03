@@ -1,4 +1,10 @@
+import { isCharacterPack } from "./contracts.generated";
+import type { CharacterPack } from "./contracts.generated";
+export type { CharacterPack, PackDesign, PackFaceDesign } from "./contracts.generated";
 import { isChatPathSnapshot, isChatPathPreview, isChatPathResult, isCharacterEvolutionEntry } from "./contracts.generated";
+import { isLibraryCardItem, isLibraryCardRead, isLibraryCardPreview, isLibraryCardJoinPreview } from "./contracts.generated";
+import type { LibraryCardItem, LibraryCardRead, LibraryCardPreview, LibraryCardJoinPreview, CardDesign, CoverCrop } from "./contracts.generated";
+export type { LibraryCardItem, LibraryCardRead, LibraryCardPreview, LibraryCardJoinPreview, CardDesign, CardFaceDesign, CardLayer, CardMaterial, CardLayerKind } from "./contracts.generated";
 import type { ChatPathSnapshot, ChatPathPreview, ChatPathResult, PathDraft, PathConfirm } from "./contracts.generated";
 export type { ChatPath, ChatPathSnapshot, ChatPathPreview, ChatPathResult, PathDraft, PathConfirm, LoreControls, CharacterEvolutionEntry } from "./contracts.generated";
 import type { CharacterEvolutionEntry } from "./contracts.generated";
@@ -40,6 +46,7 @@ export const API_PROTOCOL = contract.api_protocol;
 
 
 export function fileExportPath(request: FileExportRequest): string {
+  if (request.kind === "library_card") return `/card-library/${encodeURIComponent(request.item_id)}/export?${new URLSearchParams({ expected_revision: String(request.expected_revision), expected_digest: request.expected_digest })}`;
   const segment = request.kind === "content" ? "content" : "conversations";
   const params = new URLSearchParams({ format: request.format, expected_digest: request.expected_digest });
   if (request.kind === "content") {
@@ -134,6 +141,75 @@ export class CoreRequestError extends Error {
 
 
 export class CoreClient {
+  cardPacks(signal?: AbortSignal): Promise<CharacterPack[]> {
+    return this.contractRequest("/card-packs", (value): value is CharacterPack[] => Array.isArray(value) && value.every(isCharacterPack), { signal });
+  }
+  saveCardPack(pack: CharacterPack): Promise<CharacterPack> {
+    return this.contractRequest(`/card-packs/${encodeURIComponent(pack.id)}`, isCharacterPack, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ expected_revision: Number(pack.revision), name: pack.name, subtitle: pack.subtitle, cardIds: pack.cardIds, design: pack.design } satisfies Requests.HttpCardPacksPackSave) });
+  }
+  includeCardInPack(pack: CharacterPack, cardId: string): Promise<CharacterPack> {
+    return this.contractRequest(`/card-packs/${encodeURIComponent(pack.id)}/members/${encodeURIComponent(cardId)}`, isCharacterPack, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ expected_revision: Number(pack.revision) } satisfies Requests.HttpCardPacksIncludeCard) });
+  }
+  uploadPackImage(packId: string, file: File): Promise<CoverImage> {
+    return this.contractRequest(`/card-packs/${encodeURIComponent(packId)}/images`, isCoverImage, { method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: file });
+  }
+  cropPackImage(packId: string, digest: string, crop: CoverCrop): Promise<CoverImage> {
+    return this.contractRequest(`/card-packs/${encodeURIComponent(packId)}/images/${encodeURIComponent(digest)}/crop`, isCoverImage, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(crop satisfies Requests.HttpCardLibraryImageCropWrite) });
+  }
+  packImage(packId: string, digest: string, signal?: AbortSignal): Promise<Blob> {
+    return this.productRequest(`/card-packs/${encodeURIComponent(packId)}/images/${encodeURIComponent(digest)}`, { signal }, true);
+  }
+  discardPackDraft(packId: string): Promise<DiscardWorldContentResult> {
+    return this.contractRequest(`/card-packs/${encodeURIComponent(packId)}/discard`, isDiscardWorldContentResult, { method: "POST" });
+  }
+  libraryCards(signal?: AbortSignal): Promise<LibraryCardItem[]> {
+    return this.contractRequest("/card-library", (value): value is LibraryCardItem[] => Array.isArray(value) && value.every(isLibraryCardItem), { signal });
+  }
+  libraryCard(id: string, signal?: AbortSignal): Promise<LibraryCardRead> {
+    return this.contractRequest(`/card-library/${encodeURIComponent(id)}`, isLibraryCardRead, { signal });
+  }
+  previewLibraryImport(file: File): Promise<LibraryCardPreview> {
+    return this.contractRequest("/card-library/import/preview", isLibraryCardPreview, { method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: file });
+  }
+  libraryShareInfo(card: LibraryCardItem, signal?: AbortSignal): Promise<ContentExportInfo> {
+    return this.contractRequest(`/card-library/${encodeURIComponent(card.card_id)}/export/info?expected_revision=${Number(card.revision)}`, isContentExportInfo, { signal });
+  }
+  libraryPreviewImage(preview: string, digest: string, signal?: AbortSignal): Promise<Blob> {
+    return this.productRequest(`/card-library/previews/${encodeURIComponent(preview)}/images/${encodeURIComponent(digest)}`, { signal }, true);
+  }
+  previewLibraryEditor(draft: ContentEditorDraft, editing?: LibraryCardItem): Promise<LibraryCardPreview> {
+    return this.contractRequest("/card-library/editor/preview", isLibraryCardPreview, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ draft, card_id: editing?.card_id ?? null, expected_revision: editing ? Number(editing.revision) : 0 } satisfies Requests.HttpCardLibraryEditorPreview) });
+  }
+  confirmLibraryCard(preview: LibraryCardPreview): Promise<LibraryCardItem> {
+    return this.contractRequest(`/card-library/previews/${encodeURIComponent(preview.preview_id)}/commit`, isLibraryCardItem, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ card_id: preview.card_id, reviewed_hash: preview.reviewed_hash } satisfies Requests.HttpCardLibraryReview) });
+  }
+  previewLibraryChanges(card: LibraryCardItem, original: ContentEditorDraft, draft: ContentEditorDraft): Promise<LibraryCardPreview> {
+    const fields: Requests.HttpContentEditorPagesHeaderPatch = Object.fromEntries(Object.entries(draft).filter(([key, value]) => key !== "kind" && key !== "entries" && JSON.stringify(value) !== JSON.stringify(original[key as keyof ContentEditorDraft])));
+    return this.contractRequest(`/card-library/${encodeURIComponent(card.card_id)}/editor/preview-changes?expected_revision=${Number(card.revision)}`, isLibraryCardPreview, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fields } satisfies Requests.HttpContentEditorPagesEditorPatchRequest) });
+  }
+  discardLibraryPreview(id: string): Promise<DiscardWorldContentResult> {
+    return this.contractRequest(`/card-library/previews/${encodeURIComponent(id)}/discard`, isDiscardWorldContentResult, { method: "POST" });
+  }
+  saveLibraryDesign(card: LibraryCardItem, design: CardDesign): Promise<LibraryCardItem> {
+    return this.contractRequest(`/card-library/${encodeURIComponent(card.card_id)}/design`, isLibraryCardItem, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ expected_revision: Number(card.revision), design } satisfies Requests.HttpCardLibraryDesignSave) });
+  }
+  uploadLibraryImage(card: string, file: File): Promise<CoverImage> {
+    return this.contractRequest(`/card-library/${encodeURIComponent(card)}/images`, isCoverImage, { method: "POST", headers: { "Content-Type": file.type || "application/octet-stream" }, body: file });
+  }
+  cropLibraryImage(card: string, digest: string, crop: CoverCrop): Promise<CoverImage> {
+    return this.contractRequest(`/card-library/${encodeURIComponent(card)}/images/${encodeURIComponent(digest)}/crop`, isCoverImage, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(crop satisfies Requests.HttpCardLibraryImageCropWrite) });
+  }
+  async libraryImage(card: string, digest: string, signal?: AbortSignal): Promise<Blob> {
+    const response = await this.fetcher(new URL(`/api/v${API_PROTOCOL}/card-library/${encodeURIComponent(card)}/images/${encodeURIComponent(digest)}`, this.endpoint), { headers: { Authorization: `Bearer ${this.connection.token}` }, credentials: "omit", cache: "no-store", signal });
+    if (!response.ok) throw new CoreRequestError(response.status, "card_library_image_unavailable");
+    return response.blob();
+  }
+  previewLibraryJoin(card: LibraryCardItem, world: string): Promise<LibraryCardJoinPreview> {
+    return this.contractRequest(`/card-library/${encodeURIComponent(card.card_id)}/worlds/${encodeURIComponent(world)}/preview`, isLibraryCardJoinPreview, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ expected_revision: Number(card.revision) } satisfies Requests.HttpCardLibraryJoinPreview) });
+  }
+  confirmLibraryJoin(card: string, world: string, preview: LibraryCardJoinPreview, location: string | null): Promise<WorldContentItem> {
+    return this.contractRequest(`/card-library/${encodeURIComponent(card)}/worlds/${encodeURIComponent(world)}/commit`, isWorldContentItem, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ import_id: preview.content.import_id, reviewed_hash: preview.content.reviewed_hash, initial_location_id: location } satisfies Requests.HttpCardLibraryJoinConfirm) });
+  }
   mediaSettings(world: string, signal?: AbortSignal): Promise<ChatMediaSettings> { return this.contractRequest(`/worlds/${world}/media/settings`, isChatMediaSettings, { signal }); }
   saveMediaSettings(world: string, settings: ChatMediaSettings): Promise<ChatMediaSettings> { return this.contractRequest(`/worlds/${world}/media/settings`, isChatMediaSettings, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(settings satisfies Requests.ChatMediaSettings) }); }
   mediaUsage(world: string): Promise<MediaUsageResult> { return this.contractRequest(`/worlds/${world}/media/usage`, isMediaUsageResult); }

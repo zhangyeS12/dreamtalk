@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>dreamtalk · 角色卡交互预览</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+<iframe id="native-worlds" class="native-worlds" src="native/world-shelf.html" title="现有世界档案库"></iframe>
+<div class="app" id="app">
+  <header class="app-header">
+    <div class="brand"><img src="dreamtalk-logo.png" alt="dreamtalk"><div><h1>世界档案库</h1><p>把故事装进书里，把相遇留在卡上。</p></div></div>
+    <div class="header-actions"><span class="preview-label">交互预览</span><button class="quiet" id="guide-button">使用指南</button><button class="quiet" id="reset-button" aria-label="重置演示">重置</button></div>
+  </header>
+
+  <main class="archive" id="archive">
+    <div class="sky" aria-hidden="true"><div class="sky-moon"></div><div class="hills hill-back"></div><div class="hills hill-front"></div></div>
+    <div class="collection-caption"><span id="collection-name">世界书架</span><span id="collection-count">6 个世界</span></div>
+    <div class="stage" id="stage" aria-label="世界书架，左右拖动浏览" tabindex="0">
+      <div class="shelf-board board-top" aria-hidden="true"></div>
+      <div class="shelf-board board-bottom" aria-hidden="true"></div>
+      <div class="ring" id="world-ring" role="group" aria-label="循环世界书架"></div>
+      <div class="ring" id="card-ring" role="group" aria-label="循环角色卡库" hidden></div>
+      <div class="floor-glow" aria-hidden="true"></div>
+    </div>
+    <button class="arrow prev" id="previous" aria-label="上一个">‹</button>
+    <button class="arrow next" id="next" aria-label="下一个">›</button>
+
+    <div class="selected-info" id="selected-info" hidden>
+      <div class="character-copy"><h2 id="selected-name"></h2><p id="selected-role"></p></div>
+      <div class="character-actions"><button class="quiet" id="design-button">✧ <span>设计卡面</span></button><button class="gold" id="add-button">加入世界 <span aria-hidden="true">↗</span></button></div>
+    </div>
+    <div class="rotation-tools" id="rotation-tools" hidden>
+      <button class="quiet" id="turn-front">正面</button><button class="quiet" id="turn-back">背面</button><button class="quiet" id="rotation-done">归位 <span aria-hidden="true">×</span></button>
+    </div>
+
+    <aside class="world-detail" id="world-detail" aria-label="世界详情" hidden>
+      <div class="detail-heading"><div><span>这本书中的相遇</span><h2 id="world-title"></h2></div><button class="icon-button" id="close-world" aria-label="关闭世界详情">×</button></div>
+      <div id="world-members"></div>
+      <button class="quiet" id="map-button">查看地点图 <span aria-hidden="true">↗</span></button>
+    </aside>
+
+    <div class="bottom-nav">
+      <p id="stage-hint">左右拖动书架 · 首尾相接 · 点击书本查看世界</p>
+      <div class="collection-switch" id="collection-switch" role="tablist" aria-label="档案类型">
+        <span class="switch-thumb" aria-hidden="true"></span><span class="switch-progress" aria-hidden="true"></span>
+        <button role="tab" id="world-tab" aria-selected="true" aria-controls="world-ring" data-view="worlds"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h6c1.5 0 2 .8 2 2v13c0-1.3-.7-2-2-2H4zM20 5h-6c-1.5 0-2 .8-2 2v13c0-1.3.7-2 2-2h6z"/></svg>世界书<span id="world-count">6</span></button>
+        <button role="tab" id="card-tab" aria-selected="false" aria-controls="card-ring" data-view="cards" tabindex="-1"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M7 10h4m-4 4h7m3-4h.01"/></svg>角色卡<span id="card-count">4</span></button>
+      </div>
+      <p class="preview-note">独立预览 · 所有角色与世界均为演示内容</p>
+    </div>
+  </main>
+
+  <aside class="designer" id="designer" aria-label="角色卡设计器" hidden>
+    <div class="designer-heading"><div><span>让每次相遇都有自己的模样</span><h2>角色卡设计</h2></div><button class="icon-button" id="cancel-design" aria-label="取消设计">×</button></div>
+    <div class="designer-scroll">
+      <div class="face-tabs" role="group" aria-label="设计面"><button id="design-front" aria-pressed="true">正面</button><button id="design-back" aria-pressed="false">背面</button></div>
+      <div class="symmetry-tools"><button class="quiet" id="apply-symmetry">对称到背面 <span aria-hidden="true">→</span></button><button class="quiet" id="undo-symmetry" aria-label="撤销上次对称" hidden>撤销</button></div>
+      <p class="field-note">两面独立设计。对称操作将正面应用到背面，之后仍可分别修改。</p>
+      <section><h3>卡片信息</h3><label>角色名称<input id="edit-name" maxlength="16"></label><label>身份描述<input id="edit-role" maxlength="35"></label></section>
+      <section><h3>底色与质感</h3><div class="swatches" id="swatches" role="group" aria-label="卡片配色"></div><label>卡面材质<select aria-label="卡面材质" id="edit-material"><option value="matte">哑光纸面</option><option value="metal">细纹金属</option><option value="gloss">亮面覆膜</option><option value="holo">虹彩镭射</option></select></label><label class="check"><input type="checkbox" id="edit-frame">显示细边框</label></section>
+      <section><h3>图片组件</h3><label class="upload">＋ 上传并裁剪图片<input type="file" id="upload-image" accept="image/png,image/jpeg,image/webp"></label><div class="image-controls" id="image-controls" hidden><div class="image-actions"><button class="quiet" id="recrop-image">重新裁剪</button><button class="quiet" id="remove-image">移除图片</button></div><label>图片透明度<input type="range" id="image-opacity" min="15" max="100" value="100"></label><p class="field-note">保留原图，可随时重新选择显示区域。</p></div></section>
+      <section><h3>添加组件</h3><div class="sticker-palette" id="sticker-palette" role="group" aria-label="贴纸组件"></div><button class="quiet full-width" id="add-text">＋ 添加自定义文字</button><p class="field-note">卡面上的组件可直接拖动。</p></section>
+      <section id="layer-editor" hidden><h3>当前组件</h3><label id="layer-text-label">文字内容<input id="layer-text" maxlength="32"></label><label>大小<input type="range" id="layer-size" min="12" max="90"></label><label>旋转角度<input type="range" id="layer-rotation" min="-180" max="180"></label><label>透明度<input type="range" id="layer-opacity" min="15" max="100"></label><label>组件颜色<input type="color" id="layer-color"></label><button class="quiet danger" id="delete-layer">删除组件</button></section>
+    </div>
+    <div class="designer-footer"><button class="quiet" id="revert-design">取消</button><button class="gold" id="save-design">保存设计</button></div>
+  </aside>
+
+  <dialog id="crop-dialog" class="crop-dialog" aria-labelledby="crop-title"><button class="dialog-close icon-button" data-close="crop-dialog" aria-label="取消图片裁剪">×</button><h2 id="crop-title">裁剪正面图片</h2><p>拖动图片选择显示区域，可缩放、旋转或调整裁剪框大小。</p><iframe id="crop-frame" src="native/crop-editor.html" title="图片裁剪工具"></iframe><p id="crop-error" role="alert" hidden></p><div class="dialog-actions"><button class="quiet" data-close="crop-dialog">取消</button><button class="gold" id="crop-apply" disabled>应用到卡面</button></div></dialog>
+  <div class="drag-ghost" id="drag-ghost" aria-hidden="true" hidden></div>
+  <div class="drag-caption" id="drag-caption" hidden></div>
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+  <dialog id="add-dialog" aria-labelledby="add-title">
+    <form id="add-form"><button type="button" class="dialog-close icon-button" data-close="add-dialog" aria-label="关闭添加确认">×</button><div class="dialog-emblem">↗</div><h2 id="add-title">将角色加入世界</h2><p id="add-description"></p>
+      <label>目标世界<select aria-label="目标世界" id="target-world" required></select></label><label>初始地点<select aria-label="初始地点" id="initial-place"><option value="">无</option></select></label>
+      <p class="location-note" id="location-note">无地点的角色不能移动，也不显示在地点图中。</p>
+      <p class="retain-note">原角色卡会保留在卡库中，可继续加入其他世界。</p>
+      <div class="dialog-actions"><button type="button" class="quiet" data-close="add-dialog">取消</button><button type="submit" class="gold" id="confirm-add">确认加入</button></div>
+    </form>
+  </dialog>
+  <dialog id="create-dialog" aria-labelledby="create-title">
+    <form id="create-form"><button type="button" class="dialog-close icon-button" data-close="create-dialog" aria-label="关闭新建">×</button><div class="dialog-emblem">＋</div><h2 id="create-title">一张新的角色卡</h2><p id="create-description">写下名字，把新的相遇放进卡库。</p><label>名称<input id="create-name" required maxlength="16" placeholder="为角色取个名字"></label><label id="create-role-label">身份描述<input id="create-role" maxlength="35" placeholder="例如：夜航记录员"></label><div class="dialog-actions"><button type="button" class="quiet" data-close="create-dialog">取消</button><button class="gold" type="submit">创建</button></div></form>
+  </dialog>
+  <dialog id="map-dialog" class="map-dialog" aria-labelledby="map-title"><button class="dialog-close icon-button" data-close="map-dialog" aria-label="关闭地点图">×</button><h2 id="map-title">地点图</h2><p class="map-intro">仅展示已设置地点的角色。</p><div id="map-content"></div></dialog>
+  <dialog id="guide-dialog" aria-labelledby="guide-title"><button class="dialog-close icon-button" data-close="guide-dialog" aria-label="关闭使用指南">×</button><h2 id="guide-title">从一张卡，到一个世界</h2><ol class="guide-steps"><li><strong>挑选角色卡</strong><p>切到角色卡，左右拖动空白区域浏览。点击卡片后会弹到眼前、正面朝向你，可直接转动、设计或加入世界。</p></li><li><strong>拿起，再跨页</strong><p>在自然悬浮状态下按住卡片，拖到下方胶囊并稍作停留。展开查看或DIY时，卡片主体固定。切回世界书后，继续按住拖动。</p></li><li><strong>放进某本书里</strong><p>目标世界书亮起金色边缘时松手，选择初始地点并确认。默认地点为“无”。</p></li></ol><p>卡库中的原卡始终保留。也可使用“加入世界”按钮完成相同操作。</p><p class="field-note">左右方向键切换；Esc 取消拖动、退出查看或关闭面板。</p><button class="gold full-width" data-close="guide-dialog">开始体验</button></dialog>
+</div>
+</body>
+</html>

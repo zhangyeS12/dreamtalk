@@ -145,9 +145,7 @@ with owned_dev_web("livingworld-browser-smoke-") as url:
             root / "tests/fixtures/character_cards/v2.json"
         )
         manager.get_by_role("heading", name="导入预览", exact=True).wait_for()
-        manager.get_by_role("combobox", name="初始地点（必选）", exact=True).select_option(
-            label="家"
-        )
+        manager.get_by_role("combobox", name="初始地点", exact=True).select_option(label="家")
         manager.get_by_role("button", name="确认加入当前世界", exact=True).click()
         page.get_by_text("已加入当前世界，可在通讯录查看角色。", exact=True).wait_for()
         page.locator(".contacts-workspace .conversation-row").click()
@@ -199,9 +197,7 @@ with owned_dev_web("livingworld-browser-smoke-") as url:
             root / "tests/fixtures/character_cards/group_second.json"
         )
         manager.get_by_role("heading", name="导入预览", exact=True).wait_for()
-        manager.get_by_role("combobox", name="初始地点（必选）", exact=True).select_option(
-            label="家"
-        )
+        manager.get_by_role("combobox", name="初始地点", exact=True).select_option(label="家")
         manager.get_by_role("button", name="确认加入当前世界", exact=True).click()
         page.get_by_text("已加入当前世界，可在通讯录查看角色。", exact=True).wait_for()
         expect(page.locator(".contacts-workspace .conversation-row")).to_have_count(2)

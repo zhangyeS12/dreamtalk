@@ -17,6 +17,8 @@
 | 功能 | 文档 |
 | --- | --- |
 | 书架、封面、示例 | [书架](WORLD_ARCHIVE.md)、[书本设计与封面](WORLD_COVERS.md)、[校园示例](EXAMPLE_WORLD.md) |
+| 可视角色卡、双面DIY、裁剪与拖入世界 | [独立角色卡库](CHARACTER_CARD_LIBRARY.md) |
+| 可视卡包／独立网页参考 | [正式装卡契约](CHARACTER_CARD_LIBRARY.md#卡包与装卡)、[预览入口与复用边界](previews/CARD_PACKS.md) |
 | 聊天、记忆与来源 | [聊天](CHAT_FUNCTIONAL_EXPERIENCE.md)、[长期记忆](LONG_TERM_MEMORY.md)、[上下文与召回](CONTEXT_AND_RECALL.md)、[亲历召回](EXPERIENCE_RECALL.md) |
 | 聊天背景、角色立绘与沉浸模式 | [聊天模型与显示契约](architecture/CHAT_MODEL.md#聊天视觉与沉浸模式)、设置页与通讯录角色档案 |
 | 玩家设定身份 | [人物绑定、预览确认与逐角色初始认识](PLAYER_PERSONA.md) |

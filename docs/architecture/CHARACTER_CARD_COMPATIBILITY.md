@@ -39,6 +39,6 @@ V3 无法读取但 chara 可读取时，预览明确标记来自 V2，确认按�
 
 ## 导出与工程检查边界
 
-输入兼容转换位于 card_compatibility.py、card_lore.py；严格 schema 单独位于 card_schema.py，导出直接使用该 schema。canonical 内容优先，输出继续生成规范 V2/V3 JSON，不把坏源字段重新包装成合法输出；未启用的书和未打包附件给出损失提示。原始文件保留与规范 JSON 导出是两个不同操作。
+输入兼容转换位于 card_compatibility.py、card_lore.py；严格 schema 单独位于 card_schema.py，导出直接使用该 schema。canonical 内容优先，输出继续生成规范 V2/V3 JSON，不把坏源字段重新包装成合法输出；未启用的书和未打包附件给出损失提示。原始文件保留与规范 JSON 导出是两个不同操作。首页库卡另支持[完整角色卡分享](../CHARACTER_CARD_LIBRARY.md#完整角色卡分享)：CHARX中的CCv3主体用于格式兼容，dreamtalk扩展容器恢复完整作者图、双面设计和卡面图片；普通CHARX导入仍只规范化其主体，未经识别的附件不自动启用。
 
 现有`tests/application/test_character_card_import.py`已包含V1转换、缺省兼容和损坏容器等回归；不再沿用早期“旧断言尚未修订”的停止点。实际检查结果只维护在状态清单及对应记录；测试存在不代表本轮运行通过，真实导入、确认保存、重启及导出往返仍按具体场景验收。

@@ -36,7 +36,16 @@ class FileExportRequestVariant2(TypedDict):
     through_position: WireNumber
 
 
-type FileExportRequest = FileExportRequestVariant1 | FileExportRequestVariant2
+class FileExportRequestVariant3(TypedDict):
+    kind: Literal["library_card"]
+    item_id: str
+    expected_revision: int
+    expected_digest: str
+
+
+type FileExportRequest = (
+    FileExportRequestVariant1 | FileExportRequestVariant2 | FileExportRequestVariant3
+)
 
 
 @with_config(ConfigDict(extra="allow"))

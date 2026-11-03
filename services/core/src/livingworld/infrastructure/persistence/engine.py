@@ -375,6 +375,37 @@ class Database:
 
         return CharacterEvolutionStore(self._sessions)
 
+    def card_pack_service(self):
+        from livingworld.application.card_packs import CardPackService
+        from livingworld.infrastructure.persistence.card_packs import CardPackStore
+        from livingworld.infrastructure.world_cover_images import PillowCoverImageProcessor
+
+        return CardPackService(
+            CardPackStore(self._sessions), self.content_asset_store(), PillowCoverImageProcessor()
+        )
+
+    def card_library_service(self, world_content, activities):
+        from livingworld.application.card_library import CardLibraryService
+        from livingworld.infrastructure.card_library_share import CardShareCodec
+        from livingworld.infrastructure.clock import SystemWallClock
+        from livingworld.infrastructure.imports.character_cards import CharacterCardImporter
+        from livingworld.infrastructure.imports.lorebooks import LorebookImporter
+        from livingworld.infrastructure.persistence.card_library import CardLibraryStore
+        from livingworld.infrastructure.world_cover_images import PillowCoverImageProcessor
+
+        return CardLibraryService(
+            CardLibraryStore(self._sessions),
+            self.content_repository(),
+            CharacterCardImporter(),
+            LorebookImporter().normalize_embedded,
+            SystemWallClock(),
+            world_content,
+            activities,
+            self.content_asset_store(),
+            PillowCoverImageProcessor(),
+            CardShareCodec(PillowCoverImageProcessor()),
+        )
+
     def example_world_store(self):
         from livingworld.infrastructure.persistence.example_worlds import (
             SqlAlchemyExampleWorldStore,

@@ -1,6 +1,7 @@
 """Authenticated bounded binary upload, review and world-owned content read boundary."""
 
 import re
+from typing import Protocol
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -14,11 +15,15 @@ from livingworld.application.errors import EntityNotFoundError
 from livingworld.application.imports import ContentImportError
 from livingworld.application.lore_activation import lore_activation_summary
 from livingworld.application.world_content import (
-    AcceptedWorldContent,
     ImportKind,
     WorldContentService,
 )
-from livingworld.domain.content.models import CharacterDefinition, LoreCollection, LoreEntry
+from livingworld.domain.content.models import (
+    CanonicalContent,
+    CharacterDefinition,
+    LoreCollection,
+    LoreEntry,
+)
 from livingworld.domain.content.serialization import json_value
 from livingworld.domain.contracts import API_PROTOCOL
 from livingworld.domain.identifiers import WorldId
@@ -35,7 +40,20 @@ class LoreExposure(BaseModel):
     common: bool
 
 
-def _view(item: AcceptedWorldContent, common_ids: set[tuple[UUID, UUID]] | None = None) -> dict:
+class AuthoredView(Protocol):
+    @property
+    def contents(self) -> tuple[CanonicalContent, ...]: ...
+    @property
+    def import_id(self) -> UUID: ...
+    @property
+    def replaces_import_id(self) -> UUID | None: ...
+    @property
+    def kind(self) -> str: ...
+    @property
+    def reviewed_hash(self) -> str: ...
+
+
+def _view(item: AuthoredView, common_ids: set[tuple[UUID, UUID]] | None = None) -> dict:
     characters = [root for root in item.contents if isinstance(root, CharacterDefinition)]
     collections = [root for root in item.contents if isinstance(root, LoreCollection)]
     collection_by_id = {root.content_id: root for root in collections}
@@ -165,20 +183,21 @@ def world_content_router(service: WorldContentService, authorize, activities=Non
                 identity,
                 import_id,
                 body.reviewed_hash,
-                initial_location_required=activities is not None,
-                initial_location_provided=body.initial_location_id is not None,
             )
             if (
                 saved.kind == "character"
                 and saved.replaces_import_id is None
-                and body.initial_location_id is not None
                 and activities is not None
             ):
                 try:
                     from livingworld.domain.identifiers import LocationId
 
                     await activities.initialize_card(
-                        identity, saved.import_id, LocationId(identity, body.initial_location_id)
+                        identity,
+                        saved.import_id,
+                        LocationId(identity, body.initial_location_id)
+                        if body.initial_location_id is not None
+                        else None,
                     )
                 except Exception:
                     # The authored receipt remains durable. Retrying this exact

@@ -10,6 +10,66 @@ AT_BOTTOM = """s => s.clientHeight > 40 && s.scrollHeight > s.clientHeight + 100
     && Math.abs(s.scrollHeight - s.clientHeight - s.scrollTop) < 3"""
 
 
+def check_context_references(page: Page, label: str) -> None:
+    """Close a long synthetic reference report in desktop and narrow chat layouts."""
+    pattern = re.compile(r".*/conversations/[^/]+/context-reports/([^/?]+)$")
+
+    def report(route):
+        route.fulfill(
+            json={
+                "turn_id": pattern.match(route.request.url).group(1),
+                "reports": [
+                    {
+                        "speaker_id": "00000000-0000-4000-8000-000000000002",
+                        "version": 1,
+                        "input_upper_bound": 45224,
+                        "output_upper_bound": 4776,
+                        "remaining_before_call": 50000,
+                        "retrieval": "hybrid",
+                        "context_reduced": True,
+                        "references_omitted": 0,
+                        "categories": [
+                            {"label": f"合成参考类别 {index}", "included": 1, "omitted": 0}
+                            for index in range(1, 31)
+                        ],
+                        "references": [],
+                    }
+                ],
+            }
+        )
+
+    page.route(pattern, report)
+    viewport = page.viewport_size
+    thread = page.get_by_role("region", name=label, exact=True)
+    panel = thread.get_by_role("region", name="本次参考内容", exact=True)
+    opener = thread.get_by_role("button", name="本次参考内容", exact=True).last
+    close = panel.get_by_role("button", name="关闭本次参考内容", exact=True)
+    try:
+        for width in (1440, 640):
+            page.set_viewport_size({"width": width, "height": 900})
+            opener.click()
+            expect(panel.get_by_text("合成参考类别 30", exact=False)).to_have_count(1)
+            expect(close).to_be_visible()
+            expect(close).to_be_focused()
+            assert panel.evaluate("e => e.scrollHeight > e.clientHeight + 100")
+            panel.evaluate("e => { e.scrollTop = e.scrollHeight; }")
+            # A displayed button can still be clipped: require it to remain hit-testable.
+            close.click(trial=True)
+            assert panel.evaluate("e => e.scrollTop") > 100
+            close.click()
+            expect(panel).to_have_count(0)
+            expect(opener).to_be_focused()
+            opener.click()
+            expect(close).to_be_focused()
+            close.press("Escape")
+            expect(panel).to_have_count(0)
+            expect(opener).to_be_focused()
+    finally:
+        page.unroute(pattern, report)
+        if viewport:
+            page.set_viewport_size(viewport)
+
+
 def check_chat_scroll(page: Page, label: str) -> None:
     """Check each shared chat surface, re-entry, polling and narrow/immersive layouts."""
     messages_pattern = re.compile(r".*/conversations/([^/]+)/messages/page.*")
@@ -90,6 +150,7 @@ def check_chat_scroll(page: Page, label: str) -> None:
                 page.wait_for_timeout(150)
                 assert page.locator("main").evaluate("e => e.scrollTop") == 0
             latest()
+        check_context_references(page, label)
         page.set_viewport_size({"width": 1440, "height": 900})
         page.get_by_role("group", name="聊天显示模式").get_by_role(
             "button", name="沉浸", exact=True
@@ -100,6 +161,7 @@ def check_chat_scroll(page: Page, label: str) -> None:
         latest()
         assert not directory.is_visible()
         assert 40 in reads, "latest visible messages were not acknowledged by the chat scroller"
+        check_context_references(page, label)
     finally:
         page.get_by_role("group", name="聊天显示模式").get_by_role(
             "button", name="普通", exact=True

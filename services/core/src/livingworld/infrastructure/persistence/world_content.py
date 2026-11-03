@@ -302,6 +302,23 @@ class SqlAlchemyWorldContentStore:
                 if await session.get(WorldRecord, item.world_id.value) is None:
                     raise EntityNotFoundError("world_not_found")
                 previous = None
+                from livingworld.infrastructure.persistence.card_library_models import (
+                    CardLibraryRecord,
+                    CardLibraryWorldRecord,
+                )
+
+                library_link = None
+                if item.library_card_id is not None:
+                    card = await session.get(CardLibraryRecord, item.library_card_id)
+                    if card is None or card.revision != item.library_card_revision:
+                        raise ContentConflictError("card_library_changed")
+                    library_link = await session.get(
+                        CardLibraryWorldRecord, (item.library_card_id, item.world_id.value)
+                    )
+                    if library_link is not None:
+                        linked = await session.get(WorldContentImportRecord, library_link.import_id)
+                        if linked is not None and linked.removed_at is None:
+                            raise ContentConflictError("card_library_already_added")
                 if item.replaces_import_id is not None:
                     previous = await session.get(WorldContentImportRecord, item.replaces_import_id)
                     successor = await session.scalar(
@@ -356,6 +373,29 @@ class SqlAlchemyWorldContentStore:
                                     entry_id=new_id,
                                 )
                             )
+                if item.library_card_id is not None:
+                    await session.flush()
+                    if library_link is None:
+                        session.add(
+                            CardLibraryWorldRecord(
+                                card_id=item.library_card_id,
+                                world_id=item.world_id.value,
+                                import_id=item.import_id,
+                                source_revision=item.library_card_revision,
+                            )
+                        )
+                    else:
+                        library_link.import_id = item.import_id
+                        library_link.source_revision = item.library_card_revision
+                elif previous is not None and item.kind == "character":
+                    await session.flush()
+                    link = await session.scalar(
+                        select(CardLibraryWorldRecord).where(
+                            CardLibraryWorldRecord.import_id == previous.import_id
+                        )
+                    )
+                    if link is not None:
+                        link.import_id = item.import_id
         except IntegrityError:
             raise ContentConflictError("Import persistence conflict") from None
         return item

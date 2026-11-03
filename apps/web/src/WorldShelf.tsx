@@ -429,5 +429,5 @@ const ShelfBook = memo(function ShelfBook({ bookRef, bookKey, focusable, look, t
   return focusable
     ? <button type="button" ref={bookRef} data-copy="" data-book-key={bookKey} className={styles.book} style={style}
       disabled={disabled} aria-pressed={pressed} aria-controls="archive-preview" aria-label={label} onFocus={onFocus} onClick={onClick}>{content}</button>
-    : <div ref={bookRef} data-copy="" className={styles.book} style={style} aria-hidden="true">{content}</div>;
+    : <div ref={bookRef} data-copy="" data-book-key={bookKey} className={styles.book} style={style} aria-hidden="true">{content}</div>;
 });

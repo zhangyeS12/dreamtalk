@@ -27,6 +27,8 @@ class AcceptedWorldContent:
     kind: ImportKind
     contents: tuple[CanonicalContent, ...]
     replaces_import_id: UUID | None = None
+    library_card_id: UUID | None = None
+    library_card_revision: int | None = None
 
 
 def unchanged_lore_entry_pairs(
@@ -205,6 +207,10 @@ class WorldContentService:
         kind: ImportKind,
         draft: ContentDraft,
         replaces_import_id: UUID | None = None,
+        *,
+        import_id: UUID | None = None,
+        library_card_id: UUID | None = None,
+        library_card_revision: int | None = None,
     ) -> PendingWorldContent:
         await self.store.require_world(world_id)
         if replaces_import_id is not None:
@@ -218,12 +224,14 @@ class WorldContentService:
             raise ContentImportError("preview_capacity_reached")
         preview = ImportDraft(draft).preview()
         item = AcceptedWorldContent(
-            uuid4(),
+            import_id or uuid4(),
             world_id,
             preview.content.preview_hash,
             kind,
             draft.contents,
             replaces_import_id,
+            library_card_id,
+            library_card_revision,
         )
         pending = PendingWorldContent(item, preview, monotonic() + 15 * 60)
         self._pending[item.import_id] = pending
@@ -234,14 +242,19 @@ class WorldContentService:
         if pending is not None and pending.item.world_id == world_id:
             del self._pending[import_id]
 
+    def pending(self, world_id: WorldId, import_id: UUID) -> PendingWorldContent | None:
+        value = self._pending.get(import_id)
+        return (
+            value
+            if value is not None and value.item.world_id == world_id and value.expires > monotonic()
+            else None
+        )
+
     async def commit(
         self,
         world_id: WorldId,
         import_id: UUID,
         reviewed_hash: str,
-        *,
-        initial_location_required=False,
-        initial_location_provided=False,
     ) -> AcceptedWorldContent:
         existing = await self.store.find(import_id)
         if existing is not None:
@@ -253,13 +266,6 @@ class WorldContentService:
             raise ContentImportError("preview_expired")
         if pending.item.world_id != world_id or pending.item.reviewed_hash != reviewed_hash:
             raise ContentConflictError("Import confirmation mismatch")
-        if (
-            initial_location_required
-            and pending.item.kind == "character"
-            and pending.item.replaces_import_id is None
-            and not initial_location_provided
-        ):
-            raise ContentImportError("character_initial_location_required")
         result = await self.store.accept(pending.item, pending.preview)
         self._pending.pop(import_id, None)
         return result

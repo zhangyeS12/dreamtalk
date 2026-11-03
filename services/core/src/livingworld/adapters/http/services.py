@@ -7,6 +7,8 @@ from dataclasses import dataclass, fields
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from livingworld.application.card_library import CardLibraryService
+    from livingworld.application.card_packs import CardPackService
     from livingworld.application.character_activity_setup import CharacterActivitySetupService
     from livingworld.application.chat_conversations import ChatConversationService
     from livingworld.application.chat_export import ChatExportService
@@ -57,6 +59,8 @@ class HttpServices:
     character_evolution: CharacterEvolutionStore | None = None
     player_persona: PlayerPersonaService | None = None
     world_content: WorldContentService | None = None
+    card_library: CardLibraryService | None = None
+    card_packs: CardPackService | None = None
     player_onboarding: LocalPlayerOnboardingService | None = None
     chat_conversations: ChatConversationService | None = None
     chat_messages: ChatMessageService | None = None

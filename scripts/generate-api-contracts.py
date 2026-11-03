@@ -67,17 +67,25 @@ def generate() -> str:
                     and isinstance(value.value, ast.Constant)
                     and isinstance(value.value.value, str)
                 ]
-    # Request DTOs stay beside their HTTP handlers; their actual fields/defaults are authoritative.
-    for path in sorted(SOURCE.parent.glob("*.py")):
+    # HTTP requests and the shared card-design schema own their actual fields/defaults.
+    for path in [
+        *sorted(SOURCE.parent.glob("*.py")),
+        SOURCE.parents[2] / "application/card_design.py",
+    ]:
         if path == SOURCE:
             continue
         tree = ast.parse(path.read_text(encoding="utf-8"))
-        local = {
-            node.name
-            for node in tree.body
-            if isinstance(node, ast.ClassDef)
-            and any(isinstance(base, ast.Name) and base.id == "BaseModel" for base in node.bases)
-        }
+        local = {"Strict"} if path.stem in {"card_library", "card_packs"} else set()
+        local.update(
+            {
+                node.name
+                for node in tree.body
+                if isinstance(node, ast.ClassDef)
+                and any(
+                    isinstance(base, ast.Name) and base.id == "BaseModel" for base in node.bases
+                )
+            }
+        )
         changed = True
         while changed:
             previous = set(local)
@@ -88,7 +96,11 @@ def generate() -> str:
                 and any(isinstance(base, ast.Name) and base.id in local for base in node.bases)
             )
             changed = previous != local
-        prefix = "Http" + "".join(part.title() for part in path.stem.split("_"))
+        prefix = (
+            "HttpCardLibrary"
+            if path.stem == "card_design"
+            else "Http" + "".join(part.title() for part in path.stem.split("_"))
+        )
         for node in tree.body:
             if not isinstance(node, ast.ClassDef) or node.name not in local:
                 continue
@@ -100,8 +112,29 @@ def generate() -> str:
                     self.name_prefix = name_prefix
 
                 def visit_Name(self, node: ast.Name) -> ast.Name:
-                    if node.id in self.local_names:
-                        node.id = self.name_prefix + node.id
+                    if node.id in self.local_names or (
+                        self.name_prefix in {"HttpCardLibrary", "HttpCardPacks"}
+                        and node.id
+                        in {
+                            "Strict",
+                            "DesignWrite",
+                            "ImageCropWrite",
+                            "PackDesignWrite",
+                            "LayerWrite",
+                        }
+                    ):
+                        node.id = (
+                            "HttpCardLibrary"
+                            if node.id
+                            in {
+                                "Strict",
+                                "DesignWrite",
+                                "ImageCropWrite",
+                                "PackDesignWrite",
+                                "LayerWrite",
+                            }
+                            else self.name_prefix
+                        ) + node.id
                     elif node.id in {"EditorDraft", "EditorEntry"}:
                         node.id = "Content" + node.id
                     elif node.id == "StrictBool":

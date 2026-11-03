@@ -1,13 +1,27 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { CoreClient, type ChatContextReports } from "@dreamtalk/api-client";
+import styles from "./ContextReferencePanel.module.css";
 
 export function ContextReferencePanel({ client, worldId, conversationId, turnId, names, onClose }: {
   client: CoreClient; worldId: string; conversationId: string; turnId: string;
   names: Map<string, string>; onClose: () => void;
 }) {
   const panel = useRef<HTMLElement>(null);
+  const closeButton = useRef<HTMLButtonElement>(null);
+  const titleId = useId();
   const [result, setResult] = useState<ChatContextReports | null>(null);
   const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const element = panel.current;
+    closeButton.current?.focus({ preventScroll: true });
+    return () => {
+      const active = document.activeElement;
+      if (opener?.isConnected && (active === document.body || element?.contains(active))) {
+        opener.focus({ preventScroll: true });
+      }
+    };
+  }, []);
   useEffect(() => {
     const controller = new AbortController();
     setResult(null); setFailed(false);
@@ -17,8 +31,10 @@ export function ContextReferencePanel({ client, worldId, conversationId, turnId,
     }).catch(() => { if (!controller.signal.aborted) setFailed(true); });
     return () => { controller.abort(); cancelAnimationFrame(frame); };
   }, [client, worldId, conversationId, turnId]);
-  return <section ref={panel} className="context-references" aria-label="本次参考内容">
-    <div className="thread-heading"><h3>本次参考内容</h3><button type="button" className="text-action" onClick={onClose}>关闭</button></div>
+  return <section ref={panel} className={`context-references ${styles.panel}`} aria-labelledby={titleId} onKeyDown={event => {
+    if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); onClose(); }
+  }}>
+    <header className={styles.header}><h3 id={titleId}>本次参考内容</h3><button ref={closeButton} type="button" className={styles.close} aria-label="关闭本次参考内容" onClick={onClose}>关闭</button></header>
     <p>查看生成前准备的资料，不会调用模型。数量只统计本次选出的候选，不代表全部存档；Token 上界是预留额度，实际用量以服务账单为准。</p>
     {failed ? <p role="alert">未能读取，请关闭后重试。</p> : result === null ? <p role="status">正在读取…</p> : result.reports.length === 0 ? <p>此轮没有参考记录，可能来自旧版本或生成前已停止。</p> : result.reports.map((report, index) => <article key={`${report.speaker_id}-${index}`}>
       <h4>{names.get(report.speaker_id) ?? "角色"}</h4>

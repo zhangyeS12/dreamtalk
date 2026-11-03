@@ -1,5 +1,12 @@
 {
   "include": [
+    "services/core/src/livingworld/application/card_packs.py",
+    "services/core/src/livingworld/infrastructure/persistence/card_packs.py",
+    "services/core/src/livingworld/application/card_design.py",
+    "services/core/src/livingworld/infrastructure/card_library_share.py",
+    "services/core/src/livingworld/application/card_library.py",
+    "services/core/src/livingworld/infrastructure/persistence/card_library.py",
+    "services/core/src/livingworld/infrastructure/persistence/card_library_models.py",
     "services/core/src/livingworld/application/chat_speaker_labels.py",
     "services/core/src/livingworld/application/chat_paths.py",
     "services/core/src/livingworld/application/lore_controls.py",

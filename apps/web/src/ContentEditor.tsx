@@ -218,7 +218,7 @@ export function ContentEditor({ client, worldId, kind, editing, onSaved, onCance
     finally { if (live.current) setBusy(false); }
   };
   const save = async () => {
-    if (!preview || (preview.kind === "character" && !editing && !initialLocation)) return;
+    if (!preview) return;
     setBusy(true); setError("");
     try {
       const saved = await client.commitWorldContent(worldId, preview, preview.kind === "character" && !editing ? initialLocation : undefined);
@@ -256,7 +256,7 @@ export function ContentEditor({ client, worldId, kind, editing, onSaved, onCance
   const shownEntries = paged ? draft.entries : draft.entries.slice(entryOffset, entryOffset + 32);
   const disabled = busy || generating || loading || loadFailed;
   const reviewActions = preview && (
-      <div className="profile-actions"><button type="button" className="primary-button" disabled={busy || (kind === "character" && !editing && !initialLocation)} onClick={() => void save()}>{busy ? "正在保存…" : editing ? "确认更新当前世界" : "确认加入当前世界"}</button>
+      <div className="profile-actions"><button type="button" className="primary-button" disabled={busy} onClick={() => void save()}>{busy ? "正在保存…" : editing ? "确认更新当前世界" : "确认加入当前世界"}</button>
         <button type="button" className="secondary-button" disabled={busy} onClick={() => { pending.current = null; void client.discardWorldContent(worldId, preview.import_id).catch(() => undefined); setPreview(null); }}>返回编辑</button></div>
   );
   return <div className="content-editor">

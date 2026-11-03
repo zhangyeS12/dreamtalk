@@ -9,6 +9,11 @@ use uuid::Uuid;
 #[derive(Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ExportRequest {
+    LibraryCard {
+        item_id: Uuid,
+        expected_revision: u64,
+        expected_digest: String,
+    },
     Voice {
         world_id: Uuid,
         item_id: Uuid,
@@ -43,6 +48,23 @@ impl ExportRequest {
                     .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
         }
         match self {
+            Self::LibraryCard {
+                item_id,
+                expected_revision,
+                expected_digest,
+            } if expected_revision > 0
+                && expected_revision <= i64::MAX as u64
+                && digest(&expected_digest) =>
+            {
+                Ok((
+                    format!("/card-library/{item_id}/export"),
+                    vec![
+                        ("expected_revision".into(), expected_revision.to_string()),
+                        ("expected_digest".into(), expected_digest),
+                    ],
+                    "charx",
+                ))
+            }
             Self::Voice { world_id, item_id } => Ok((
                 format!("/worlds/{world_id}/voices/{item_id}/export"),
                 Vec::new(),
@@ -230,4 +252,49 @@ pub async fn save_file_export(
             .to_string_lossy()
             .into_owned(),
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ExportRequest;
+    use uuid::Uuid;
+
+    #[test]
+    fn library_card_export_is_bound_to_revision_and_digest() {
+        let id = Uuid::nil();
+        let (path, query, extension) = ExportRequest::LibraryCard {
+            item_id: id,
+            expected_revision: 7,
+            expected_digest: "a".repeat(64),
+        }
+        .query()
+        .unwrap();
+        assert_eq!(path, format!("/card-library/{id}/export"));
+        assert_eq!(extension, "charx");
+        assert_eq!(
+            query,
+            vec![
+                ("expected_revision".into(), "7".into()),
+                ("expected_digest".into(), "a".repeat(64))
+            ]
+        );
+        for (revision, digest) in [
+            (0, "a".repeat(64)),
+            (1, "A".repeat(64)),
+            (1, "../file".into()),
+        ] {
+            assert!(ExportRequest::LibraryCard {
+                item_id: id,
+                expected_revision: revision,
+                expected_digest: digest
+            }
+            .query()
+            .is_err());
+        }
+        assert!(serde_json::from_value::<ExportRequest>(serde_json::json!({
+            "kind":"library_card", "item_id":id, "expected_revision":7,
+            "expected_digest":"a".repeat(64), "path":"C:/arbitrary"
+        }))
+        .is_err());
+    }
 }

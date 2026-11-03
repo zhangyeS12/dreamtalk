@@ -527,6 +527,8 @@ async def run(
                     database.player_persona_store(), CharacterCardImporter(), wall_clock
                 ),
                 world_content=world_content,
+                card_library=database.card_library_service(world_content, activity_setup),
+                card_packs=database.card_pack_service(),
                 player_onboarding=onboarding,
                 chat_conversations=chat_conversations,
                 chat_messages=chat_messages,

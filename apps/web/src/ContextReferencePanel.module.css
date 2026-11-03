@@ -1,0 +1,48 @@
+.panel {
+  overscroll-behavior: contain;
+}
+
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--dt-line);
+  background: var(--dt-surface);
+  color: var(--dt-moon);
+}
+
+.header h3 {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: var(--dt-text-l);
+  line-height: 1.5;
+}
+
+.close {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 8px 16px;
+  border: 1px solid var(--dt-line-strong);
+  border-radius: var(--dt-radius-m);
+  background: var(--dt-raised);
+  color: var(--dt-moon);
+  font: inherit;
+  cursor: pointer;
+}
+
+.close:hover {
+  background: var(--dt-hover);
+}
+
+.close:focus-visible {
+  outline: 2px solid var(--dt-sun);
+  outline-offset: 2px;
+}

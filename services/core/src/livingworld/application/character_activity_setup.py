@@ -79,10 +79,14 @@ class CharacterActivitySetupService:
         return player, tuple(characters)
 
     async def initialize_card(self, world_id, import_id: UUID, location_id):
+        contact = await self._chats.ensure_contact(world_id, import_id)
+        if location_id is None:
+            # A contact has an identity without physical presence. No placeholder
+            # location, movement or fabricated initial-placement event is created.
+            return contact.character_id
         player = await self._players.selected_player(world_id)
         if player is None:
             raise CharacterActivitySetupError("activity_player_changed")
-        contact = await self._chats.ensure_contact(world_id, import_id)
         existing = await self._directory.locations(player, (contact.character_id,))
         if contact.character_id in existing:
             return contact.character_id

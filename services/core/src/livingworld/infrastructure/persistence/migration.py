@@ -11,6 +11,7 @@ from alembic.config import Config
 from sqlalchemy import CheckConstraint, Connection, MetaData, UniqueConstraint, inspect, text
 
 from livingworld.infrastructure.persistence import (  # noqa: F401
+    card_library_models,
     character_card_bindings,
     chat_path_models,
     deletion_models,
@@ -131,7 +132,9 @@ CHARACTER_EVOLUTION_REVISION = "0058_character_evolution"
 CHARACTER_EVOLUTION_PROVENANCE_REVISION = "0059_character_evolution_provenance"
 CHAT_PREFERENCES_REVISION = "0060_chat_preferences"
 CHAT_VISUALS_REVISION = "0061_chat_visuals"
-HEAD_REVISION = CHAT_VISUALS_REVISION
+CARD_LIBRARY_REVISION = "0062_card_library"
+CARD_PACK_REVISION = "0063_card_packs"
+HEAD_REVISION = CARD_PACK_REVISION
 
 # One reviewed linear chain replaces repeated hand-maintained suffix sets.
 _SUPPORTED_REVISIONS = (
@@ -196,7 +199,11 @@ _SUPPORTED_REVISIONS = (
     CHARACTER_EVOLUTION_PROVENANCE_REVISION,
     CHAT_PREFERENCES_REVISION,
     CHAT_VISUALS_REVISION,
+    CARD_LIBRARY_REVISION,
+    CARD_PACK_REVISION,
 )
+CARD_PACK_TABLES = {"card_packs", "card_pack_members", "card_pack_images"}
+CARD_LIBRARY_TABLES = {"card_library", "card_library_images", "card_library_worlds"}
 CHAT_VISUAL_TABLES = {
     "chat_visual_backgrounds",
     "chat_character_backgrounds",
@@ -441,6 +448,8 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
     )
     pre_chat_preferences_revision = revision not in _REVISION_RANGES[CHAT_PREFERENCES_REVISION]
     pre_chat_visuals_revision = revision not in _REVISION_RANGES[CHAT_VISUALS_REVISION]
+    pre_card_pack_revision = revision not in _REVISION_RANGES[CARD_PACK_REVISION]
+    pre_card_library_revision = revision not in _REVISION_RANGES[CARD_LIBRARY_REVISION]
     pre_example_revision = revision not in _REVISION_RANGES[EXAMPLE_WORLD_REVISION]
     pre_recall_revision = revision not in _REVISION_RANGES[RECALL_REVISION]
     pre_location_policy_revision = revision not in _REVISION_RANGES[LOCATION_REVISION]
@@ -513,6 +522,7 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         CHARACTER_EVOLUTION_PROVENANCE_REVISION,
         CHAT_PREFERENCES_REVISION,
         CHAT_VISUALS_REVISION,
+        CARD_LIBRARY_REVISION,
     }:
         _fail("alembic_revision_unsupported")
     # Through 0020, chat revisions only add tables. Validate each historical
@@ -699,6 +709,10 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
         expected -= CHARACTER_EVOLUTION_TABLES
     if pre_chat_visuals_revision:
         expected -= CHAT_VISUAL_TABLES
+    if pre_card_pack_revision:
+        expected -= CARD_PACK_TABLES
+    if pre_card_library_revision:
+        expected -= CARD_LIBRARY_TABLES
     if tables != expected:
         _fail("alembic_schema_state_mismatch")
     _validate_auxiliary_objects(
@@ -720,6 +734,8 @@ def _validate_managed_state(connection: Connection, revision: str) -> None:
             pre_character_evolution_provenance_revision=pre_character_evolution_provenance_revision,
             pre_chat_preferences_revision=pre_chat_preferences_revision,
             pre_chat_visuals_revision=pre_chat_visuals_revision,
+            pre_card_library_revision=pre_card_library_revision,
+            pre_card_pack_revision=pre_card_pack_revision,
             pre_example_revision=pre_example_revision,
             pre_chat_revision=pre_chat_revision,
             pre_message_revision=pre_message_revision,
@@ -835,6 +851,8 @@ def _validate_domain_shape(
     pre_character_evolution_provenance_revision: bool = True,
     pre_chat_preferences_revision: bool = True,
     pre_chat_visuals_revision: bool = True,
+    pre_card_library_revision: bool = True,
+    pre_card_pack_revision: bool = True,
     pre_chat_revision: bool | None = None,
     pre_message_revision: bool | None = None,
     pre_dispatch_revision: bool | None = None,
@@ -901,6 +919,10 @@ def _validate_domain_shape(
         if pre_character_evolution_revision and table.name in CHARACTER_EVOLUTION_TABLES:
             continue
         if pre_chat_visuals_revision and table.name in CHAT_VISUAL_TABLES:
+            continue
+        if pre_card_pack_revision and table.name in CARD_PACK_TABLES:
+            continue
+        if pre_card_library_revision and table.name in CARD_LIBRARY_TABLES:
             continue
         if pre_player_card_revision and table.name == "world_player_cards":
             continue

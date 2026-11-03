@@ -77,6 +77,8 @@ ImportPreview.lorebooks 提供源条目数、canonical 条目数、collection ID
 
 ## 7. 保留事项
 
+首页的[角色卡库](../CHARACTER_CARD_LIBRARY.md)在现有导入边界上增加本机模板保存与独立世界副本：库内新建仍走原生`authored_graph`，文件导入仍保留原始字节及兼容警告；模板预览、确认及卡修订CAS不写运行世界。加入世界另经预览确认，为完整闭包重分配typed内容ID，接受事务同时建立来源关联，不按同名合并，也不携带世界聊天／记忆。初始地点默认无，确认后可创建通讯录身份但不放置；物理初始化仅在明确选择真实地点时执行。
+
 Character Card字段映射、兼容namespaces和资源限制沿既有契约。当前导入选择、Builder草稿／来源流程与验收见[状态清单](../PROJECT_STATUS.md)；内容定义与运行状态保持分离，不将导入视为自动知识分配或完整运行世界恢复。
 
 测试见 [test_content_boundary.py](../../tests/application/test_content_boundary.py)、[test_content.py](../../tests/domain/test_content.py) 与 [test_content_persistence.py](../../tests/persistence/test_content_persistence.py)。冻结产品规则见 [PRODUCT_SPEC.md](../product/PRODUCT_SPEC.md)，Stage 2 回归见 [STAGE_2_ACCEPTANCE.md](https://github.com/zhangyeS12/dreamtalk/blob/485b512a5dac8da7077326d1cd3daea5eb3304c8/docs/architecture/STAGE_2_ACCEPTANCE.md)。
@@ -96,3 +98,5 @@ native snapshot acceptance 与普通 next-revision edit 分开。canonical graph
 `preview-changes` 只接收有界字段修改、明确删除的来源条目ID及新增条目；后端基于指定的当前不可变版本合并完整图。未加载、未修改条目及不透明兼容字段保留，来源不存在／重复更新／同时删除与更新／过期版本拒绝。新增与修改字段继续执行原校验，新增条目不得携带伪造来源ID；单次修改正文最多4MiB，条目总量沿导入边界最多10000。原生完整稿也使用相同总量边界。
 
 合并仅创建完整预览，仍由 reviewed hash 确认提交；不自动保存页面或丢弃其他页修改。角色后台来源使用元数据版本链解析，正常长版本链不设128次替换上限；真实循环或无效来源继续拒绝。当前实现与检查证据见[状态清单](../PROJECT_STATUS.md)。
+
+卡库的[完整CHARX分享](../CHARACTER_CARD_LIBRARY.md#完整角色卡分享)在同一预览／确认边界恢复经校验的原生作者图、双面设计和当前引用图片。只接受角色／世界书作者内容，不接受WorldContent或运行世界；确认前不写库卡，确认事务同时保存模板和图片元数据。外层原文件保留，后续再次分享过滤无引用来源，避免递归嵌套。

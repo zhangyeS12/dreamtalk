@@ -1,0 +1,2 @@
+.pack-preview-note { position: fixed; left: 29px; bottom: 24px; z-index: 51; color: #98a9c3; font: 10px "Microsoft YaHei UI", system-ui, sans-serif; pointer-events: none; }
+@media (max-width: 680px) { .pack-preview-note { left: 15px; top: 61px; bottom: auto; font-size: 8px; } }

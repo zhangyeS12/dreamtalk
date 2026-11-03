@@ -10,6 +10,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
+from livingworld.adapters.http.card_library import card_library_router
+from livingworld.adapters.http.card_packs import card_packs_router
 from livingworld.adapters.http.character_activity_setup import character_activity_setup_router
 from livingworld.adapters.http.character_evolution import character_evolution_router
 from livingworld.adapters.http.chat_conversations import chat_conversation_router
@@ -149,6 +151,10 @@ def create_app(
                 services.world_content, authorize, services.character_activity_setup
             )
         )
+        if services.card_packs is not None:
+            app.include_router(card_packs_router(services.card_packs, authorize))
+        if services.card_library is not None:
+            app.include_router(card_library_router(services.card_library, authorize))
         if services.content_builder is not None and services.content_repository is not None:
             app.include_router(
                 content_authoring_router(

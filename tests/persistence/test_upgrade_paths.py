@@ -119,6 +119,54 @@ def test_physical_column_order_is_not_part_of_schema_contract(tmp_path, monkeypa
     asyncio.run(run())
 
 
+def test_card_pack_upgrade_preserves_existing_library_payload_and_images(tmp_path):
+    """0063 adds empty containers; it must not rewrite or auto-enrol existing cards."""
+
+    async def run():
+        database = Database(tmp_path)
+        try:
+            await _upgrade_to(database, "0062_card_library")
+            async with database.engine.begin() as connection:
+                await connection.execute(
+                    text(
+                        "INSERT INTO card_library VALUES (:id, 'Existing card', 7, :digest, "
+                        ":draft, :design, '2026-11-01T12:00:00Z')"
+                    ),
+                    dict(
+                        id="d" * 32,
+                        digest="e" * 64,
+                        draft='{"original":"synthetic preserved payload"}',
+                        design='{"original":"synthetic independent faces"}',
+                    ),
+                )
+                await connection.execute(
+                    text(
+                        "INSERT INTO card_library_images VALUES "
+                        "(:id, :digest, 10, 'image/png', 2, 3)"
+                    ),
+                    dict(id="d" * 32, digest="e" * 64),
+                )
+                before = (await connection.execute(text("SELECT * FROM card_library"))).all()
+                images = (await connection.execute(text("SELECT * FROM card_library_images"))).all()
+            await database.initialize()
+            async with database.engine.connect() as connection:
+                assert (
+                    await connection.execute(text("SELECT * FROM card_library"))
+                ).all() == before
+                assert (
+                    await connection.execute(text("SELECT * FROM card_library_images"))
+                ).all() == images
+                for table in ["card_packs", "card_pack_members", "card_pack_images"]:
+                    assert (
+                        await connection.execute(text(f"SELECT count(*) FROM {table}"))
+                    ).scalar_one() == 0
+            assert await _current_revision(database) == HEAD_REVISION
+        finally:
+            await database.close()
+
+    asyncio.run(run())
+
+
 @pytest.mark.parametrize(
     "mutation",
     [

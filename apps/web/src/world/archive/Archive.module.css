@@ -2,6 +2,15 @@
 /* clip, not hidden: a focused 3D book must never scroll the fixed stage sideways. */
 .root { position: fixed; inset: 0; overflow: clip; isolation: isolate; color: var(--dt-moon); background: #05060f; user-select: none;
   transition: --dt-sky-zenith 1.4s linear, --dt-sky-horizon 1.4s linear, --dt-sky-x 1.4s linear, --dt-sky-altitude 1.4s linear, --dt-stars 1.4s linear; }
+.collectionViewport { position: absolute; inset: 0 0 92px; }
+.stage[data-collection-hidden] { visibility: hidden; pointer-events: none; }
+.collectionSwitch { position: absolute; bottom: 18px; left: 50%; translate: -50% 0; display: flex; width: 296px; height: 56px; padding: 5px; box-sizing: border-box; border: 1px solid #424a63; border-radius: 999px; background: #101626; box-shadow: 0 8px 28px #0006; z-index: 50; }
+.collectionSwitch button { flex: 1; border: 0; border-radius: 999px; background: none; color: #b7c1dc; font: 14px var(--dt-font); cursor: pointer; }
+.collectionSwitch button[aria-pressed="true"] { background: #30354a; color: #f6e9c8; box-shadow: inset 0 1px 0 #ffffff18; }
+.collectionSwitch button:focus-visible { outline: 2px solid var(--dt-sun); outline-offset: 3px; }
+.collectionSwitch button:disabled { cursor: default; }
+.collectionSwitch[data-editing] { opacity: .4; pointer-events: none; }
+@media (max-width: 680px) { .collectionViewport { bottom: 82px; }.collectionSwitch { width: 278px; height: 52px; bottom: 15px; } }
 .room { position: absolute; inset: 0; z-index: 0; background: radial-gradient(120% 80% at 50% 40%, #0b0d1d, #04050c 70%); pointer-events: none; }
 .window { position: absolute; left: 3%; right: 3%; top: 7%; bottom: 13%; overflow: hidden; border-radius: 6px;
   box-shadow: 0 0 0 10px #090a14, 0 0 0 11px rgb(255 255 255 / 0.04), 0 0 120px 10px color-mix(in oklab, var(--dt-sky-horizon) 35%, transparent); }
@@ -119,3 +128,17 @@
   .actions { flex-wrap: wrap; justify-content: center; width: calc(100% - 24px); border-radius: 22px; }
   .tag { top: 112px; }
 }
+
+/* The approved card page retains its own header geometry; worlds keep the existing HUD. */
+.root[data-collection="cards"] .hud { height: 100px; box-sizing: border-box; padding: 24px 38px; gap: 20px; background: linear-gradient(#0d101d,#151a2b); }
+.root[data-collection="cards"] .brand { gap: 16px; }.root[data-collection="cards"] .brand img { width: 46px; height: 46px; }.root[data-collection="cards"] .brand h1 { font-size: 23px; font-weight: 650; letter-spacing: .08em; }.root[data-collection="cards"] .brand p { margin-top: 5px; font-size: 12px; color: #9ca6c6; }
+.collectionSwitch[data-editing] { left: calc((100% - 330px) / 2); }
+@media (max-width: 950px) { .root[data-collection="cards"] .hud { height: 86px; padding: 20px 25px; }.root[data-collection="cards"] .brand img { width: 39px; height: 39px; }.root[data-collection="cards"] .brand h1 { font-size: 20px; }.root[data-collection="cards"] .brand p { font-size: 11px; }.collectionSwitch[data-editing] { left: calc((100% - 292px) / 2); } }
+@media (max-width: 680px) { .root[data-collection="cards"] .hud { height: 80px; padding: 17px; gap: 8px; }.root[data-collection="cards"] .brand { gap: 9px; }.root[data-collection="cards"] .brand img { width: 31px; height: 31px; }.root[data-collection="cards"] .brand h1 { font-size: 17px; letter-spacing: .04em; }.root[data-collection="cards"] .brand p { font-size: 10px; max-width: 210px; }.collectionSwitch[data-editing] { display: none; } }
+@media (max-height: 680px) and (min-width: 681px) { .root[data-collection="cards"] .hud { height: 75px; padding-top: 14px; padding-bottom: 14px; } }
+
+.collectionSwitch { width: 304px; border: 0; outline: 1px solid rgb(159 176 218 / .25); background: #0a0e1b; box-shadow: none; isolation: isolate; }
+.collectionSwitch button { position: relative; z-index: 1; display: flex; align-items: center; justify-content: center; gap: 9px; }.collectionSwitch button[aria-pressed="true"] { background: none; box-shadow: none; }.collectionSwitch small { font-size: 11px; opacity: .7; }.collectionSwitch svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.collectionThumb { position: absolute; left: 5px; top: 5px; width: 147px; height: 46px; border-radius: 999px; background: #30354a; box-shadow: inset 0 1px 0 rgb(255 255 255 / .1); transition: transform 240ms var(--dt-ease); }.collectionSwitch[data-collection="cards"] .collectionThumb { transform: translateX(147px); }
+@media (max-width: 680px) { .collectionSwitch { width: 284px; padding: 4px; }.collectionThumb { left: 4px; top: 4px; width: 138px; height: 44px; }.collectionSwitch[data-collection="cards"] .collectionThumb { transform: translateX(138px); } }
+@media (prefers-reduced-motion: reduce) { .collectionThumb { transition: none; } }

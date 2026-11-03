@@ -33,6 +33,12 @@ CONTENT_TABLES = {
     "voice_cards",
     "chat_media_assets",
     "world_covers",
+    "card_library",
+    "card_library_images",
+    "card_library_worlds",
+    "card_packs",
+    "card_pack_members",
+    "card_pack_images",
 }
 
 

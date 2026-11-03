@@ -181,6 +181,123 @@ export type WorldNewsStatus = {
 export function isWorldNewsStatus(value: unknown): value is WorldNewsStatus {
   return (isObject(value)) && (typeof value.enabled === "boolean") && (typeof value.consented === "boolean") && (isWireNumber(value.revision)) && ((value.state === "off" || value.state === "idle" || value.state === "generating" || value.state === "ready" || value.state === "attention")) && ((typeof value.error === "string" || value.error === null)) && (isWireNumber(value.pending)) && (isWireNumber(value.batch_total)) && (isWireNumber(value.batch_processed)) && (typeof value.model_available === "boolean") && ((typeof value.model === "string" || value.model === null));
 }
+export type CardMaterial = ("matte" | "metal" | "gloss" | "holo");
+export function isCardMaterial(value: unknown): value is CardMaterial { return (value === "matte" || value === "metal" || value === "gloss" || value === "holo"); }
+export type CardLayerKind = ("name" | "role" | "text" | "sticker");
+export function isCardLayerKind(value: unknown): value is CardLayerKind { return (value === "name" || value === "role" || value === "text" || value === "sticker"); }
+export type CardLayer = {
+  anchor?: ("center" | "start");
+  id: string;
+  kind: CardLayerKind;
+  text: string;
+  x: number;
+  y: number;
+  size: number;
+  rotation: number;
+  opacity: number;
+  color: string;
+};
+export function isCardLayer(value: unknown): value is CardLayer {
+  return (isObject(value)) && ((!("anchor" in value) || ((value.anchor === "center" || value.anchor === "start")))) && (typeof value.id === "string") && (isCardLayerKind(value.kind)) && (typeof value.text === "string") && (typeof value.x === "number") && (typeof value.y === "number") && (typeof value.size === "number") && (typeof value.rotation === "number") && (typeof value.opacity === "number") && (typeof value.color === "string");
+}
+export type CardFaceDesign = {
+  layout: ("portrait" | "notes");
+  color: string;
+  accent: string;
+  material: CardMaterial;
+  frame: boolean;
+  image_digest: (string | null);
+  source_digest: (string | null);
+  crop: (CoverCrop | null);
+  image_opacity: number;
+  layers: Array<CardLayer>;
+};
+export function isCardFaceDesign(value: unknown): value is CardFaceDesign {
+  return (isObject(value)) && ((value.layout === "portrait" || value.layout === "notes")) && (typeof value.color === "string") && (typeof value.accent === "string") && (isCardMaterial(value.material)) && (typeof value.frame === "boolean") && ((typeof value.image_digest === "string" || value.image_digest === null)) && ((typeof value.source_digest === "string" || value.source_digest === null)) && ((isCoverCrop(value.crop) || value.crop === null)) && (typeof value.image_opacity === "number") && ((Array.isArray(value.layers) && value.layers.every(item => isCardLayer(item))));
+}
+export type CardDesign = {
+  version: (1);
+  display_name: string;
+  subtitle: string;
+  glyph: string;
+  front: CardFaceDesign;
+  back: CardFaceDesign;
+};
+export function isCardDesign(value: unknown): value is CardDesign {
+  return (isObject(value)) && ((value.version === 1)) && (typeof value.display_name === "string") && (typeof value.subtitle === "string") && (typeof value.glyph === "string") && (isCardFaceDesign(value.front)) && (isCardFaceDesign(value.back));
+}
+export type LibraryCardItem = {
+  card_id: string;
+  name: string;
+  revision: WireNumber;
+  design: (CardDesign | null);
+  world_ids: Array<string>;
+};
+export function isLibraryCardItem(value: unknown): value is LibraryCardItem {
+  return (isObject(value)) && (typeof value.card_id === "string") && (typeof value.name === "string") && (isWireNumber(value.revision)) && ((isCardDesign(value.design) || value.design === null)) && ((Array.isArray(value.world_ids) && value.world_ids.every(item => typeof item === "string")));
+}
+export type LibraryCardRead = {
+  card: LibraryCardItem;
+  draft: ContentEditorDraft;
+};
+export function isLibraryCardRead(value: unknown): value is LibraryCardRead {
+  return (isObject(value)) && (isLibraryCardItem(value.card)) && (isContentEditorDraft(value.draft));
+}
+export type LibraryCardPreview = {
+  preview_id: string;
+  card_id: string;
+  expected_revision: WireNumber;
+  reviewed_hash: string;
+  content: WorldContentItem;
+  shared?: boolean;
+  design?: (CardDesign | null);
+  image_count?: number;
+};
+export function isLibraryCardPreview(value: unknown): value is LibraryCardPreview {
+  return (isObject(value)) && (typeof value.preview_id === "string") && (typeof value.card_id === "string") && (isWireNumber(value.expected_revision)) && (typeof value.reviewed_hash === "string") && (isWorldContentItem(value.content)) && ((!("shared" in value) || (typeof value.shared === "boolean"))) && ((!("design" in value) || ((isCardDesign(value.design) || value.design === null)))) && ((!("image_count" in value) || (typeof value.image_count === "number")));
+}
+export type LibraryCardJoinPreview = {
+  card_id: string;
+  source_revision: WireNumber;
+  content: WorldContentItem;
+};
+export function isLibraryCardJoinPreview(value: unknown): value is LibraryCardJoinPreview {
+  return (isObject(value)) && (typeof value.card_id === "string") && (isWireNumber(value.source_revision)) && (isWorldContentItem(value.content));
+}
+export type PackFaceDesign = {
+  color: string;
+  accent: string;
+  material: CardMaterial;
+  frame: boolean;
+  glyph: string;
+  image: (string | null);
+  source: (string | null);
+  crop: (CoverCrop | null);
+  imageOpacity: number;
+  layers: Array<CardLayer>;
+};
+export function isPackFaceDesign(value: unknown): value is PackFaceDesign {
+  return (isObject(value)) && (typeof value.color === "string") && (typeof value.accent === "string") && (isCardMaterial(value.material)) && (typeof value.frame === "boolean") && (typeof value.glyph === "string") && ((typeof value.image === "string" || value.image === null)) && ((typeof value.source === "string" || value.source === null)) && ((isCoverCrop(value.crop) || value.crop === null)) && (typeof value.imageOpacity === "number") && ((Array.isArray(value.layers) && value.layers.every(item => isCardLayer(item))));
+}
+export type PackDesign = {
+  version: (1);
+  front: PackFaceDesign;
+  back: PackFaceDesign;
+};
+export function isPackDesign(value: unknown): value is PackDesign {
+  return (isObject(value)) && ((value.version === 1)) && (isPackFaceDesign(value.front)) && (isPackFaceDesign(value.back));
+}
+export type CharacterPack = {
+  id: string;
+  name: string;
+  subtitle: string;
+  cardIds: Array<string>;
+  design: PackDesign;
+  revision: WireNumber;
+};
+export function isCharacterPack(value: unknown): value is CharacterPack {
+  return (isObject(value)) && (typeof value.id === "string") && (typeof value.name === "string") && (typeof value.subtitle === "string") && ((Array.isArray(value.cardIds) && value.cardIds.every(item => typeof item === "string"))) && (isPackDesign(value.design)) && (isWireNumber(value.revision));
+}
 export type CharacterEvolutionEntry = {
   entry_id: string;
   field: ("description" | "personality" | "background" | "scenario" | "speech_guidance");
@@ -915,8 +1032,17 @@ export type FileExportRequestVariant2 = {
 export function isFileExportRequestVariant2(value: unknown): value is FileExportRequestVariant2 {
   return (isObject(value)) && ((value.kind === "chat")) && (typeof value.world_id === "string") && (typeof value.item_id === "string") && ((value.format === "txt" || value.format === "json")) && (typeof value.player_id === "string") && (typeof value.expected_digest === "string") && (isWireNumber(value.through_position));
 }
-export type FileExportRequest = (FileExportRequestVariant1 | FileExportRequestVariant2);
-export function isFileExportRequest(value: unknown): value is FileExportRequest { return (isFileExportRequestVariant1(value) || isFileExportRequestVariant2(value)); }
+export type FileExportRequestVariant3 = {
+  kind: ("library_card");
+  item_id: string;
+  expected_revision: number;
+  expected_digest: string;
+};
+export function isFileExportRequestVariant3(value: unknown): value is FileExportRequestVariant3 {
+  return (isObject(value)) && ((value.kind === "library_card")) && (typeof value.item_id === "string") && (typeof value.expected_revision === "number") && (typeof value.expected_digest === "string");
+}
+export type FileExportRequest = ((FileExportRequestVariant1 | FileExportRequestVariant2) | FileExportRequestVariant3);
+export function isFileExportRequest(value: unknown): value is FileExportRequest { return ((isFileExportRequestVariant1(value) || isFileExportRequestVariant2(value)) || isFileExportRequestVariant3(value)); }
 export type ContentExportInfoWarningsItem = {
   code: string;
   path: string;
@@ -1729,6 +1855,58 @@ export function isLoreControls(value: unknown): value is LoreControls {
 }
 export type LLMRuntimeStatus = ("ready" | "partially_configured" | "unconfigured" | "degraded");
 export function isLLMRuntimeStatus(value: unknown): value is LLMRuntimeStatus { return (value === "ready" || value === "partially_configured" || value === "unconfigured" || value === "degraded"); }
+export type HttpCardLibraryEditorPreview = HttpCardLibraryStrict & {
+  draft: ContentEditorDraft;
+  card_id?: (string | null);
+  expected_revision?: number;
+};
+export function isHttpCardLibraryEditorPreview(value: unknown): value is HttpCardLibraryEditorPreview {
+  return (isObject(value)) && (isContentEditorDraft(value.draft)) && ((!("card_id" in value) || ((typeof value.card_id === "string" || value.card_id === null)))) && ((!("expected_revision" in value) || (typeof value.expected_revision === "number"))) && (isHttpCardLibraryStrict(value));
+}
+export type HttpCardLibraryReview = HttpCardLibraryStrict & {
+  card_id: string;
+  reviewed_hash: string;
+};
+export function isHttpCardLibraryReview(value: unknown): value is HttpCardLibraryReview {
+  return (isObject(value)) && (typeof value.card_id === "string") && (typeof value.reviewed_hash === "string") && (isHttpCardLibraryStrict(value));
+}
+export type HttpCardLibraryDesignSave = HttpCardLibraryStrict & {
+  expected_revision: number;
+  design: HttpCardLibraryDesignWrite;
+};
+export function isHttpCardLibraryDesignSave(value: unknown): value is HttpCardLibraryDesignSave {
+  return (isObject(value)) && (typeof value.expected_revision === "number") && (isHttpCardLibraryDesignWrite(value.design)) && (isHttpCardLibraryStrict(value));
+}
+export type HttpCardLibraryJoinPreview = HttpCardLibraryStrict & {
+  expected_revision: number;
+};
+export function isHttpCardLibraryJoinPreview(value: unknown): value is HttpCardLibraryJoinPreview {
+  return (isObject(value)) && (typeof value.expected_revision === "number") && (isHttpCardLibraryStrict(value));
+}
+export type HttpCardLibraryJoinConfirm = HttpCardLibraryStrict & {
+  import_id: string;
+  reviewed_hash: string;
+  initial_location_id?: (string | null);
+};
+export function isHttpCardLibraryJoinConfirm(value: unknown): value is HttpCardLibraryJoinConfirm {
+  return (isObject(value)) && (typeof value.import_id === "string") && (typeof value.reviewed_hash === "string") && ((!("initial_location_id" in value) || ((typeof value.initial_location_id === "string" || value.initial_location_id === null)))) && (isHttpCardLibraryStrict(value));
+}
+export type HttpCardPacksPackSave = HttpCardLibraryStrict & {
+  expected_revision: number;
+  name: string;
+  subtitle: string;
+  cardIds: Array<string>;
+  design: HttpCardLibraryPackDesignWrite;
+};
+export function isHttpCardPacksPackSave(value: unknown): value is HttpCardPacksPackSave {
+  return (isObject(value)) && (typeof value.expected_revision === "number") && (typeof value.name === "string") && (typeof value.subtitle === "string") && ((Array.isArray(value.cardIds) && value.cardIds.every(item => typeof item === "string"))) && (isHttpCardLibraryPackDesignWrite(value.design)) && (isHttpCardLibraryStrict(value));
+}
+export type HttpCardPacksIncludeCard = HttpCardLibraryStrict & {
+  expected_revision: number;
+};
+export function isHttpCardPacksIncludeCard(value: unknown): value is HttpCardPacksIncludeCard {
+  return (isObject(value)) && (typeof value.expected_revision === "number") && (isHttpCardLibraryStrict(value));
+}
 export type HttpCharacterActivitySetupInitialActivityRequest = {
   player_id: string;
   location_id: string;
@@ -2241,4 +2419,80 @@ export type HttpWorldStyleStyleConfirm = HttpWorldStyleStyleDraft & {
 };
 export function isHttpWorldStyleStyleConfirm(value: unknown): value is HttpWorldStyleStyleConfirm {
   return (isObject(value)) && (typeof value.preview_id === "string") && ((value.confirmed === true)) && (isHttpWorldStyleStyleDraft(value));
+}
+export type HttpCardLibraryStrict = object;
+export function isHttpCardLibraryStrict(value: unknown): value is HttpCardLibraryStrict { return isObject(value); }
+export type HttpCardLibraryImageCropWrite = HttpCardLibraryStrict & {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotation?: (0 | 90 | 180 | 270);
+};
+export function isHttpCardLibraryImageCropWrite(value: unknown): value is HttpCardLibraryImageCropWrite {
+  return (isObject(value)) && (typeof value.x === "number") && (typeof value.y === "number") && (typeof value.width === "number") && (typeof value.height === "number") && ((!("rotation" in value) || ((value.rotation === 0 || value.rotation === 90 || value.rotation === 180 || value.rotation === 270)))) && (isHttpCardLibraryStrict(value));
+}
+export type HttpCardLibraryLayerWrite = HttpCardLibraryStrict & {
+  anchor?: ("center" | "start");
+  id: string;
+  kind: ("name" | "role" | "text" | "sticker");
+  text: string;
+  x: number;
+  y: number;
+  size: number;
+  rotation: number;
+  opacity: number;
+  color: string;
+};
+export function isHttpCardLibraryLayerWrite(value: unknown): value is HttpCardLibraryLayerWrite {
+  return (isObject(value)) && ((!("anchor" in value) || ((value.anchor === "center" || value.anchor === "start")))) && (typeof value.id === "string") && ((value.kind === "name" || value.kind === "role" || value.kind === "text" || value.kind === "sticker")) && (typeof value.text === "string") && (typeof value.x === "number") && (typeof value.y === "number") && (typeof value.size === "number") && (typeof value.rotation === "number") && (typeof value.opacity === "number") && (typeof value.color === "string") && (isHttpCardLibraryStrict(value));
+}
+export type HttpCardLibraryFaceWrite = HttpCardLibraryStrict & {
+  layout: string;
+  color: string;
+  accent: string;
+  material: ("matte" | "metal" | "gloss" | "holo");
+  frame: boolean;
+  image_digest?: (string | null);
+  source_digest?: (string | null);
+  crop?: (HttpCardLibraryImageCropWrite | null);
+  image_opacity: number;
+  layers: Array<HttpCardLibraryLayerWrite>;
+};
+export function isHttpCardLibraryFaceWrite(value: unknown): value is HttpCardLibraryFaceWrite {
+  return (isObject(value)) && (typeof value.layout === "string") && (typeof value.color === "string") && (typeof value.accent === "string") && ((value.material === "matte" || value.material === "metal" || value.material === "gloss" || value.material === "holo")) && (typeof value.frame === "boolean") && ((!("image_digest" in value) || ((typeof value.image_digest === "string" || value.image_digest === null)))) && ((!("source_digest" in value) || ((typeof value.source_digest === "string" || value.source_digest === null)))) && ((!("crop" in value) || ((isHttpCardLibraryImageCropWrite(value.crop) || value.crop === null)))) && (typeof value.image_opacity === "number") && ((Array.isArray(value.layers) && value.layers.every(item => isHttpCardLibraryLayerWrite(item)))) && (isHttpCardLibraryStrict(value));
+}
+export type HttpCardLibraryDesignWrite = HttpCardLibraryStrict & {
+  version: number;
+  display_name: string;
+  subtitle: string;
+  glyph: string;
+  front: HttpCardLibraryFaceWrite;
+  back: HttpCardLibraryFaceWrite;
+};
+export function isHttpCardLibraryDesignWrite(value: unknown): value is HttpCardLibraryDesignWrite {
+  return (isObject(value)) && (typeof value.version === "number") && (typeof value.display_name === "string") && (typeof value.subtitle === "string") && (typeof value.glyph === "string") && (isHttpCardLibraryFaceWrite(value.front)) && (isHttpCardLibraryFaceWrite(value.back)) && (isHttpCardLibraryStrict(value));
+}
+export type HttpCardLibraryPackFaceWrite = HttpCardLibraryStrict & {
+  color: string;
+  accent: string;
+  material: ("matte" | "metal" | "gloss" | "holo");
+  frame: boolean;
+  glyph: string;
+  image?: (string | null);
+  source?: (string | null);
+  crop?: (HttpCardLibraryImageCropWrite | null);
+  imageOpacity: number;
+  layers: Array<HttpCardLibraryLayerWrite>;
+};
+export function isHttpCardLibraryPackFaceWrite(value: unknown): value is HttpCardLibraryPackFaceWrite {
+  return (isObject(value)) && (typeof value.color === "string") && (typeof value.accent === "string") && ((value.material === "matte" || value.material === "metal" || value.material === "gloss" || value.material === "holo")) && (typeof value.frame === "boolean") && (typeof value.glyph === "string") && ((!("image" in value) || ((typeof value.image === "string" || value.image === null)))) && ((!("source" in value) || ((typeof value.source === "string" || value.source === null)))) && ((!("crop" in value) || ((isHttpCardLibraryImageCropWrite(value.crop) || value.crop === null)))) && (typeof value.imageOpacity === "number") && ((Array.isArray(value.layers) && value.layers.every(item => isHttpCardLibraryLayerWrite(item)))) && (isHttpCardLibraryStrict(value));
+}
+export type HttpCardLibraryPackDesignWrite = HttpCardLibraryStrict & {
+  version: (1);
+  front: HttpCardLibraryPackFaceWrite;
+  back: HttpCardLibraryPackFaceWrite;
+};
+export function isHttpCardLibraryPackDesignWrite(value: unknown): value is HttpCardLibraryPackDesignWrite {
+  return (isObject(value)) && ((value.version === 1)) && (isHttpCardLibraryPackFaceWrite(value.front)) && (isHttpCardLibraryPackFaceWrite(value.back)) && (isHttpCardLibraryStrict(value));
 }
