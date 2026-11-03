@@ -133,8 +133,8 @@ def card_library_router(service, authorize):
         service.discard(preview_id)
         return {"discarded": True}
 
-    @router.get("/previews/{preview_id}/images/{digest}")
-    async def preview_image(preview_id: UUID, digest: str):
+    @router.get("/previews/{preview_id}/images/{digest}", response_class=Response)
+    async def preview_image(preview_id: UUID, digest: str) -> Response:
         try:
             data, info = service.preview_image(preview_id, digest)
         except ContentImportError as error:
@@ -157,12 +157,12 @@ def card_library_router(service, authorize):
             "warnings": [],
         }
 
-    @router.get("/{card_id}/export")
+    @router.get("/{card_id}/export", response_class=Response)
     async def export(
         card_id: UUID,
         expected_revision: int = Query(ge=1),
         expected_digest: str = Query(pattern=r"^[a-f0-9]{64}$"),
-    ):
+    ) -> Response:
         result = await call(service.export(card_id, expected_revision))
         if result.digest != expected_digest:
             raise HTTPException(409, "card_library_changed")
@@ -215,8 +215,8 @@ def card_library_router(service, authorize):
         await call(service.store.load(card_id))
         return await call(service.upload(card_id, await bounded(request, 10 * 1024 * 1024)))
 
-    @router.get("/{card_id}/images/{digest}")
-    async def image(card_id: UUID, digest: str):
+    @router.get("/{card_id}/images/{digest}", response_class=Response)
+    async def image(card_id: UUID, digest: str) -> Response:
         if not re.fullmatch(r"[a-f0-9]{64}", digest):
             raise HTTPException(404, "card_library_image_not_found")
         data, info = await call(service.image(card_id, digest))

@@ -73,8 +73,8 @@ def card_packs_router(service, authorize):
             data.extend(chunk)
         return await call(service.upload(pack_id, bytes(data)))
 
-    @router.get("/{pack_id}/images/{digest}")
-    async def image(pack_id: UUID, digest: str = Path(pattern=r"^[a-f0-9]{64}$")):
+    @router.get("/{pack_id}/images/{digest}", response_class=Response)
+    async def image(pack_id: UUID, digest: str = Path(pattern=r"^[a-f0-9]{64}$")) -> Response:
         data, info = await call(service.image(pack_id, digest))
         return Response(
             data,

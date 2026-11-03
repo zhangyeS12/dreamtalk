@@ -3,10 +3,28 @@
 import ast
 from pathlib import Path
 
+from fastapi import FastAPI
 from livingworld.adapters.http import contracts
+from livingworld.adapters.http.card_library import card_library_router
+from livingworld.adapters.http.card_packs import card_packs_router
 from pydantic import TypeAdapter
 
 HTTP = Path(__file__).resolve().parents[2] / "services/core/src/livingworld/adapters/http"
+
+
+def test_card_binary_routes_do_not_advertise_json_payloads():
+    app = FastAPI()
+    app.include_router(card_library_router(object(), lambda: None))
+    app.include_router(card_packs_router(object(), lambda: None))
+    paths = app.openapi()["paths"]
+    for path in [
+        "/api/v1/card-library/previews/{preview_id}/images/{digest}",
+        "/api/v1/card-library/{card_id}/export",
+        "/api/v1/card-library/{card_id}/images/{digest}",
+        "/api/v1/card-packs/{pack_id}/images/{digest}",
+    ]:
+        assert "application/json" not in paths[path]["get"]["responses"]["200"].get("content", {})
+    assert paths["/api/v1/card-packs"]["get"]["responses"]["200"]["content"]["application/json"]
 
 
 def test_business_json_routes_cannot_silently_lose_their_response_schema():
