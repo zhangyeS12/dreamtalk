@@ -90,8 +90,8 @@ class ExamplePlugin(private val activity: Activity): Plugin(activity) {
                 }
             } catch (failure: Exception) {
                 val description = failure.message ?: ""
-                val safe = listOf("mobile_busy", "mobile_invalid", "mobile_secure_store", "mobile_core_start_failed", "mobile_background_consent", "mobile_notification_permission", "mobile_background_start_failed", "model_update_new_secret_required").firstOrNull { description.contains(it) }
-                    ?: listOf("save_busy", "save_tasks_running", "save_slot_changed", "save_slot_empty", "save_snapshot_damaged", "save_import_invalid", "save_newer_application_required", "save_recovery_required", "save_restore_interrupted", "save_startup_backup_failed").firstOrNull { description.contains(it) } ?: "mobile_operation_failed"
+                val safe = listOf("mobile_busy", "mobile_invalid", "mobile_secure_store", "mobile_core_start_failed", "mobile_core_timeout", "mobile_data_path_invalid", "mobile_background_consent", "mobile_notification_permission", "mobile_background_start_failed", "model_update_new_secret_required").firstOrNull { description.contains(it) }
+                    ?: listOf("save_busy", "save_tasks_running", "save_slot_changed", "save_slot_empty", "save_snapshot_damaged", "save_import_invalid", "save_newer_application_required", "save_recovery_required", "save_link_rejected", "save_path_invalid", "save_restore_interrupted", "save_startup_backup_failed").firstOrNull { description.contains(it) } ?: "mobile_operation_failed"
                 // Code-only diagnostics: exception text may contain credentials or inputs.
                 val diagnostic = JSONObject().put("app", "dreamtalk").put("native_error", failure.javaClass.simpleName).put("code", safe)
                 val frames = org.json.JSONArray()

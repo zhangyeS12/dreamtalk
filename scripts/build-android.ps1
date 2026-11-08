@@ -1,11 +1,20 @@
 #Requires -Version 7.0
+param([switch]$SkipCI)
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location -LiteralPath $root
 $env:PYTHONUTF8 = '1'
-& 'D:/LivingWorld/.venv/Scripts/python.exe' scripts/check-android-release-ci.py
-if ($LASTEXITCODE -ne 0) { throw 'Exact-commit Android CI or source verification failed' }
+if ($SkipCI) {
+    $releaseVersion = (Get-Content -LiteralPath (Join-Path $root 'package.json') -Raw | ConvertFrom-Json).version
+    $authorizationFile = Join-Path $root ('artifacts/github-android-personal-' + $releaseVersion.Replace('.','') + '/release-authorization.json')
+    $authorization = Get-Content -LiteralPath $authorizationFile -Raw | ConvertFrom-Json
+    if ($authorization.version -ne $releaseVersion -or -not $authorization.user_authorized_release -or -not $authorization.user_authorized_skip_ci) { throw 'Explicit release CI exception missing' }
+    Write-Host 'CI skipped for this release by explicit user instruction; local build/signature/payload checks remain enabled.'
+} else {
+    & 'D:/LivingWorld/.venv/Scripts/python.exe' scripts/check-android-release-ci.py
+    if ($LASTEXITCODE -ne 0) { throw 'Exact-commit Android CI or source verification failed' }
+}
 $env:JAVA_HOME = (Get-ChildItem -LiteralPath (Join-Path $root 'build-tools/jdk21') -Directory | Select-Object -First 1).FullName
 $env:ANDROID_HOME = Join-Path $root 'build-tools/android-sdk'
 $location = Get-Content -LiteralPath (Join-Path $root 'build-tools/temporary-build-location.json') -Raw | ConvertFrom-Json

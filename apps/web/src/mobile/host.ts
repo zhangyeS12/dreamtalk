@@ -15,6 +15,7 @@ export async function hostCall<T>(operation: string, payload: unknown = {}): Pro
 }
 export function feedback(error: unknown): string {
   const code = error instanceof Error ? error.message : String(error);
+  if (["mobile_core_start_failed", "mobile_core_timeout", "mobile_data_path_invalid", "save_link_rejected", "save_path_invalid"].some(value => code.includes(value))) return "本机核心未能启动，请复制启动诊断并发给工程端排查。";
   if (code.includes("save_recovery_required")) return "存档需要恢复确认，请查看存档与恢复。";
   if (code.includes("mobile_notification_permission")) return "尚未允许通知，请在系统设置中开启消息通知。";
   if (code.includes("mobile_background_start_failed")) return "后台尚未启动，请核对系统后台运行限制后重试。";

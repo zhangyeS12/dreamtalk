@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import secrets
 import threading
 import time
@@ -25,11 +26,93 @@ _maintenance = None
 _shutdown = None
 _start_error = None
 _start_diagnostic = {}
+_start_phase = "not_started"
 _credentials = None
 _session = None
 _startup_backup_done = False
 _startup_backup_error = None
 _allowed_origins = ("http://tauri.localhost", "https://tauri.localhost", "tauri://localhost")
+
+
+_START_CODES = frozenset(
+    {
+        "mobile_data_path_invalid",
+        "mobile_secure_store",
+        "mobile_core_start_failed",
+        "mobile_core_timeout",
+        "mobile_core_exited",
+        "save_link_rejected",
+        "save_path_invalid",
+        "save_recovery_required",
+        "save_record_invalid",
+        "save_restore_interrupted",
+        "save_slot_catalog_invalid",
+        "save_backup_location_invalid",
+        "save_snapshot_damaged",
+        "save_database_missing",
+    }
+)
+
+
+def _record_start_failure(error, phase=None):
+    """Keep fixed failure facts only; never exception text, paths, settings or locals."""
+    global _start_error, _start_diagnostic
+    if _start_diagnostic.get("error_type"):
+        return
+    import traceback
+
+    error_type = type(error).__name__.rsplit(".", 1)[-1]
+    if not re.fullmatch(r"[A-Za-z_][A-Za-z_0-9]{0,127}", error_type):
+        error_type = "UnknownError"
+    _start_error = error_type
+    args = error.args
+    code = (
+        args[0]
+        if len(args) == 1 and type(args[0]) is str and args[0] in _START_CODES
+        else "mobile_startup_failed"
+    )
+    frames = []
+    for frame in traceback.extract_tb(error.__traceback__):
+        path = Path(frame.filename)
+        if "livingworld" not in path.parts:
+            continue
+        parts = path.parts[path.parts.index("livingworld") :]
+        module = ".".join((*parts[:-1], path.stem))
+        frames.append(
+            {
+                "module": module,
+                "file": path.name,
+                "line": frame.lineno,
+                "function": frame.name,
+            }
+        )
+    _start_diagnostic = {
+        "phase": phase or _start_phase,
+        "code": code,
+        "error_type": error_type,
+        "frames": frames[-8:],
+    }
+    if isinstance(error, ModuleNotFoundError) and isinstance(error.name, str):
+        if re.fullmatch(r"[A-Za-z_][A-Za-z_0-9]*(?:\.[A-Za-z_][A-Za-z_0-9]*)*", error.name):
+            _start_diagnostic["missing_module"] = error.name[:160]
+
+
+def _data_root(host):
+    # This parent is provided by Android Context, never a user-selected path.
+    # Resolve only that trusted prefix: keep a linked managed root/child rejectable.
+    path = Path(str(host.dataDirectory()))
+    if not path.is_absolute() or not path.name:
+        raise ValueError("mobile_data_path_invalid")
+    return path.parent.resolve() / path.name
+
+
+def _diagnostics():
+    return {
+        "app": "dreamtalk",
+        "android_preview": "0.1.4",
+        "core_running": bool(_thread and _thread.is_alive()),
+        "startup": _start_diagnostic or {"phase": _start_phase},
+    }
 
 
 def _sync_visibility():
@@ -198,10 +281,14 @@ def _start():
         _maintenance, \
         _shutdown, \
         _startup_backup_done, \
-        _startup_backup_error
+        _startup_backup_error, \
+        _start_diagnostic, \
+        _start_phase
     if _thread and _thread.is_alive():
         return
     _start_error, _loop, _maintenance, _shutdown = None, None, None, None
+    _start_diagnostic = {}
+    _start_phase = "storage_prepare"
     _root.mkdir(parents=True, exist_ok=True)
     from livingworld.bootstrap.mobile_storage import prepare_storage
 
@@ -212,6 +299,7 @@ def _start():
         raise ValueError("save_recovery_required")
     from livingworld.infrastructure.save_safety import guard
 
+    _start_phase = "storage_guard"
     if (_root / "data/runtime.sqlite3").exists() and guard(_root, include_snapshots=False)[
         "recovery_required"
     ]:
@@ -223,7 +311,7 @@ def _start():
             state = save_slots.status()
             save_slots.save(
                 _root,
-                "0.1.3",
+                "0.1.4",
                 0,
                 (state["slots"][0] or {}).get("name", "自动存档"),
                 state["revision"],
@@ -232,6 +320,7 @@ def _start():
         except Exception:
             # Keep the current database usable; show an explicit manual retry.
             _startup_backup_done, _startup_backup_error = True, "save_startup_backup_failed"
+    _start_phase = "model_configuration"
     runtime = _root / "runtime"
     runtime.mkdir(exist_ok=True)
     _bootstrap_secret, _nonce = secrets.token_hex(32), str(uuid4())
@@ -242,6 +331,7 @@ def _start():
 
     load_configuration(temporary)
     temporary.replace(config_path)
+    _start_phase = "bootstrap_write"
     bootstrap = runtime / "bootstrap.json"
     bootstrap.write_text(
         json.dumps(
@@ -262,35 +352,25 @@ def _start():
     (runtime / "ready.json").unlink(missing_ok=True)
 
     def run():
-        global _start_error, _start_diagnostic
+        phase = "core_import"
         try:
             from livingworld.bootstrap.cli import run as run_core
 
+            phase = "core_run"
             asyncio.run(run_core(bootstrap, native_host=__import__(__name__, fromlist=["attach"])))
+            if not _shutdown or not _shutdown.event.is_set():
+                _record_start_failure(RuntimeError("mobile_core_exited"), phase)
         except BaseException as error:
-            import traceback
-
-            _start_error = type(error).__name__
-            _start_diagnostic = {
-                "error_type": _start_error,
-                "frames": [
-                    {
-                        "file": Path(frame.filename).name,
-                        "line": frame.lineno,
-                        "function": frame.name,
-                    }
-                    for frame in traceback.extract_tb(error.__traceback__)[-8:]
-                ],
-            }
-            if isinstance(error, ModuleNotFoundError):
-                _start_diagnostic["missing_module"] = error.name
+            _record_start_failure(error, phase)
 
     _thread = threading.Thread(target=run, name="dreamtalk-core", daemon=True)
     _thread.start()
 
 
 def _connection():
+    global _start_phase, _start_error, _start_diagnostic
     _start()
+    _start_phase = "readiness"
     ready = _root / "runtime/ready.json"
     deadline = time.monotonic() + 75
     while time.monotonic() < deadline:
@@ -304,13 +384,16 @@ def _connection():
             pass
         else:
             if result.get("instance_nonce") == _nonce:
+                if _start_error or not _thread.is_alive():
+                    raise ValueError("mobile_core_start_failed")
+                _start_error, _start_diagnostic, _start_phase = None, {}, "ready"
                 return {
                     "endpoint": result["endpoint"],
                     "generation": result["generation"],
                     "token": derive_session(_bootstrap_secret, _nonce, result["generation"]),
                 }
         time.sleep(0.05)
-    raise ValueError("mobile_core_start_failed")
+    raise ValueError("mobile_core_timeout")
 
 
 def _stop_if_idle():
@@ -336,26 +419,39 @@ def _stop_if_idle():
 
 
 def dispatch(operation, payload, host):
-    global _root, _host, _settings
+    global _start_diagnostic, _start_error, _start_phase
+    with _lock:
+        # Diagnostics must remain usable even if directory or Keystore setup failed.
+        if operation == "copy_diagnostics":
+            host.copyDiagnostic(json.dumps(_diagnostics(), ensure_ascii=False))
+            return json.dumps({"result": True})
+        starting = operation == "connection" and not (_thread and _thread.is_alive())
+        if starting:
+            _start_diagnostic, _start_error, _start_phase = {}, None, "data_directory"
+        try:
+            return _dispatch(operation, payload, host)
+        except BaseException as error:
+            if operation == "connection":
+                _record_start_failure(error)
+            raise
+
+
+def _dispatch(operation, payload, host):
+    global _root, _host, _settings, _start_phase
     with _lock:
         _host = host
-        _root = Path(str(host.dataDirectory()))
+        _root = _data_root(host)
         if not _settings:
+            if operation == "connection":
+                _start_phase = "secure_store"
             try:
                 _settings = json.loads(str(host.secureRead()))
-            except Exception:
+            except Exception as error:
+                if operation == "connection":
+                    _record_start_failure(error, "secure_store")
                 raise ValueError("mobile_secure_store") from None
         value = json.loads(payload)
-        if operation == "copy_diagnostics":
-            diagnostic = {
-                "app": "dreamtalk",
-                "android_preview": "0.1.3",
-                "core_running": bool(_thread and _thread.is_alive()),
-                "startup": _start_diagnostic,
-            }
-            host.copyDiagnostic(json.dumps(diagnostic, ensure_ascii=False))
-            result = True
-        elif operation == "visibility":
+        if operation == "visibility":
             _sync_visibility()
             result = True
         elif operation == "connection":

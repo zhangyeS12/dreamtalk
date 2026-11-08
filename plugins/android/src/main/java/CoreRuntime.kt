@@ -40,7 +40,7 @@ import org.json.JSONObject
             System.loadLibrary("dreamtalk_mobile")
         }
     }
-    fun dataDirectory(): String = java.io.File(context.filesDir, "dreamtalk").absolutePath
+    fun dataDirectory(): String = java.io.File(context.filesDir.canonicalFile, "dreamtalk").absolutePath
     fun isForeground(): Boolean = foreground
     fun isBackgroundRunning(): Boolean = serviceRunning
     fun tokenUpperBound(payload: String): Long = NativeBounds().tokenUpperBound(payload)
