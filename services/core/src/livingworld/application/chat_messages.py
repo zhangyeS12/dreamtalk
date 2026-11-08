@@ -1,0 +1,541 @@
+"""Durable player sends; model dispatch and character replies are separate steps."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+from dataclasses import dataclass, field
+from datetime import datetime
+from typing import TYPE_CHECKING, Literal, Protocol
+
+if TYPE_CHECKING:
+    from livingworld.application.chat_media import ChatMediaService
+
+from livingworld.application.errors import EntityNotFoundError
+from livingworld.application.player_event_feed import PlayerEventFeedService
+from livingworld.domain.contracts import RequestId
+from livingworld.domain.identifiers import (
+    CharacterId,
+    ChatTurnId,
+    ConversationId,
+    MessageId,
+    PlayerId,
+)
+
+MAX_PROMPT_TRANSCRIPT_MESSAGES = 128
+
+
+@dataclass(frozen=True, slots=True)
+class ChatMessage:
+    message_id: MessageId
+    conversation_id: ConversationId
+    turn_id: ChatTurnId
+    position: int
+    sender_id: PlayerId | CharacterId
+    text: str = field(repr=False)
+    created_at_utc: datetime
+    story_sent_at_utc: datetime | None = None
+    media: dict | None = field(default=None, repr=False)
+    feedback: Literal["up", "down"] | None = None
+    privacy: tuple[dict, ...] = field(default=(), repr=False)
+    private_context: bool = field(default=False, repr=False, compare=False)
+    privacy_fallback: bool | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ChatMessagePage:
+    messages: tuple[ChatMessage, ...]
+    next_before_position: int | None
+
+
+@dataclass(frozen=True, slots=True)
+class RecentDialogue:
+    message: ChatMessage = field(repr=False)
+    kind: Literal["direct", "group"]
+    speakers: tuple[tuple[CharacterId, str], ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class PlayerSend:
+    turn_id: ChatTurnId
+    message: ChatMessage
+    token_ceiling: int
+    status: str
+    source_turn_id: ChatTurnId | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class DirectTurnView:
+    """Owner-scoped durable outcome; claimed work is never implicitly retried."""
+
+    sent: PlayerSend
+    state: str
+    reply: ChatMessage | None = field(repr=False)
+
+
+@dataclass(frozen=True, slots=True)
+class GroupTurnView:
+    sent: PlayerSend
+    state: str
+    replies: tuple[ChatMessage, ...] = field(repr=False)
+
+
+@dataclass(frozen=True, slots=True)
+class ClaimedDirectTurn:
+    """A durable, one-time claim; an interrupted claim is never auto-replayed."""
+
+    turn_id: ChatTurnId
+    conversation_id: ConversationId
+    player_id: PlayerId
+    character_id: CharacterId
+    player_message: ChatMessage = field(repr=False)
+    token_ceiling: int
+    source_turn_id: ChatTurnId | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ClaimedGroupTurn:
+    """One durable group dispatch with its fixed participant set."""
+
+    turn_id: ChatTurnId
+    conversation_id: ConversationId
+    player_id: PlayerId
+    character_ids: tuple[CharacterId, ...]
+    player_message: ChatMessage = field(repr=False)
+    token_ceiling: int
+    source_turn_id: ChatTurnId | None = None
+
+
+class ChatMessageStore(Protocol):
+    async def set_feedback(
+        self, conversation_id: ConversationId, player_id: PlayerId, message_id: MessageId, feedback
+    ) -> ChatMessage: ...
+    async def save_context_report(self, source, speaker, report) -> None: ...
+
+    async def context_reports(self, conversation, turn_id, player) -> dict: ...
+
+    async def send_player(
+        self,
+        request_id: RequestId,
+        conversation_id: ConversationId,
+        player_id: PlayerId,
+        text: str,
+        token_ceiling: int,
+        fingerprint: str,
+    ) -> PlayerSend: ...
+
+    async def send_group_player(
+        self,
+        request_id: RequestId,
+        conversation_id: ConversationId,
+        player_id: PlayerId,
+        text: str,
+        token_ceiling: int,
+        fingerprint: str,
+        *,
+        privacy=(),
+    ) -> PlayerSend: ...
+
+    async def list_for_player(
+        self, conversation_id: ConversationId, player_id: PlayerId
+    ) -> tuple[ChatMessage, ...]: ...
+
+    async def page_for_player(
+        self,
+        conversation_id: ConversationId,
+        player_id: PlayerId,
+        limit: int,
+        before_position: int | None,
+    ) -> ChatMessagePage: ...
+
+    async def source_for_player(
+        self,
+        conversation_id: ConversationId,
+        player_id: PlayerId,
+        message_id: MessageId,
+    ) -> ChatMessagePage: ...
+
+    async def context_for_player(
+        self,
+        conversation_id: ConversationId,
+        player_id: PlayerId,
+        current: ChatMessage,
+        allow_current_replies: bool,
+        reply_turn_id: ChatTurnId | None = None,
+    ) -> tuple[ChatMessage, ...]: ...
+
+    async def seen_group_messages(
+        self,
+        character_id: CharacterId,
+        player_id: PlayerId,
+        limit: int,
+        exclude_conversation_id: ConversationId | None,
+    ) -> tuple[ChatMessage, ...]: ...
+
+    async def recent_dialogue(
+        self, character: CharacterId, player: PlayerId, current: ChatMessage
+    ) -> tuple[RecentDialogue, ...]: ...
+
+    async def direct_turn(
+        self, conversation_id: ConversationId, turn_id: ChatTurnId, player_id: PlayerId
+    ) -> DirectTurnView: ...
+
+    async def group_turn(
+        self, conversation_id: ConversationId, turn_id: ChatTurnId, player_id: PlayerId
+    ) -> GroupTurnView: ...
+
+    async def claim_direct(
+        self, conversation_id: ConversationId, turn_id: ChatTurnId, player_id: PlayerId
+    ) -> ClaimedDirectTurn: ...
+
+    async def complete_direct(
+        self, claim: ClaimedDirectTurn, text: str, *, events=(), memories=()
+    ) -> ChatMessage: ...
+
+    async def claim_group(
+        self, conversation_id: ConversationId, turn_id: ChatTurnId, player_id: PlayerId
+    ) -> ClaimedGroupTurn: ...
+
+    async def complete_group_reply(
+        self,
+        claim: ClaimedGroupTurn,
+        character_id: CharacterId,
+        ordinal: int,
+        text: str,
+        *,
+        events=(),
+        memories=(),
+    ) -> ChatMessage: ...
+
+    async def finish_group(self, claim: ClaimedGroupTurn) -> GroupTurnView: ...
+
+    async def reply_recovery(self, conversation, source, player) -> dict: ...
+
+    async def create_reply_recovery(
+        self, request, conversation, source, player, expected, ceiling
+    ) -> dict: ...
+
+    async def fail_reply_execution(self, sent, known_failure: bool) -> None: ...
+
+    async def recover_reply_executions(self) -> None: ...
+
+
+class ChatMessageService:
+    def __init__(self, store: ChatMessageStore, players: PlayerEventFeedService) -> None:
+        self._store = store
+        self._players = players
+        self.media: ChatMediaService | None = None
+
+    async def _player(self, conversation_id: ConversationId) -> PlayerId:
+        player = await self._players.selected_player(conversation_id.world_id)
+        if player is None:
+            raise EntityNotFoundError("selected_player_required")
+        return player
+
+    async def send_player(
+        self,
+        request_id: RequestId,
+        conversation_id: ConversationId,
+        text: str,
+        token_ceiling: int,
+        *,
+        sticker_entry_id=None,
+    ) -> PlayerSend:
+        return await self._send_player(
+            request_id,
+            conversation_id,
+            text,
+            token_ceiling,
+            group=False,
+            sticker_entry_id=sticker_entry_id,
+        )
+
+    async def send_group_player(
+        self,
+        request_id: RequestId,
+        conversation_id: ConversationId,
+        text: str,
+        token_ceiling: int,
+        *,
+        sticker_entry_id=None,
+        privacy=(),
+    ) -> PlayerSend:
+        """Internal group runner entry; the public send path remains direct-only."""
+        return await self._send_player(
+            request_id,
+            conversation_id,
+            text,
+            token_ceiling,
+            group=True,
+            sticker_entry_id=sticker_entry_id,
+            privacy=privacy,
+        )
+
+    async def _send_player(
+        self,
+        request_id: RequestId,
+        conversation_id: ConversationId,
+        text: str,
+        token_ceiling: int,
+        *,
+        group: bool,
+        sticker_entry_id=None,
+        privacy=(),
+    ) -> PlayerSend:
+        if (
+            not isinstance(text, str)
+            or (not text.strip() and sticker_entry_id is None)
+            or len(text.encode("utf-8")) > 65536
+        ):
+            raise ValueError("chat_message_invalid")
+        if (
+            isinstance(token_ceiling, bool)
+            or not isinstance(token_ceiling, int)
+            or token_ceiling <= 0
+        ):
+            raise ValueError("chat_token_ceiling_invalid")
+        from livingworld.application.chat_privacy import normalize_privacy
+
+        privacy = normalize_privacy(text, privacy)
+        if privacy and not group:
+            raise ValueError("chat_privacy_group_required")
+        player = await self._player(conversation_id)
+        semantics = {
+            "world_id": str(conversation_id.world_id.value),
+            "conversation_id": str(conversation_id.value),
+            "player_id": str(player.value),
+            "text": text,
+            "token_ceiling": token_ceiling,
+        }
+        if sticker_entry_id is not None:
+            semantics["sticker_entry_id"] = str(sticker_entry_id)
+        if privacy:
+            semantics["privacy"] = privacy
+        fingerprint = hashlib.sha256(
+            json.dumps(semantics, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode(
+                "utf-8"
+            )
+        ).hexdigest()
+        send = self._store.send_group_player if group else self._store.send_player
+        return await send(
+            request_id,
+            conversation_id,
+            player,
+            text,
+            token_ceiling,
+            fingerprint,
+            **({"sticker_entry_id": sticker_entry_id} if sticker_entry_id else {}),
+            **({"privacy": privacy} if privacy else {}),
+        )
+
+    async def list_messages(self, conversation_id: ConversationId) -> tuple[ChatMessage, ...]:
+        return await self._store.list_for_player(
+            conversation_id, await self._player(conversation_id)
+        )
+
+    async def set_feedback(
+        self, conversation_id: ConversationId, message_id: MessageId, feedback: str | None
+    ) -> ChatMessage:
+        if message_id.world_id != conversation_id.world_id or feedback not in {None, "up", "down"}:
+            raise ValueError("chat_feedback_invalid")
+        return await self._store.set_feedback(
+            conversation_id, await self._player(conversation_id), message_id, feedback
+        )
+
+    async def page_messages(
+        self, conversation_id: ConversationId, limit: int, before_position: int | None = None
+    ) -> ChatMessagePage:
+        if type(limit) is not int or not 1 <= limit <= 100:
+            raise ValueError("chat_page_limit_invalid")
+        if before_position is not None and (
+            type(before_position) is not int or before_position < 1
+        ):
+            raise ValueError("chat_page_cursor_invalid")
+        return await self._store.page_for_player(
+            conversation_id, await self._player(conversation_id), limit, before_position
+        )
+
+    async def message_source(
+        self, conversation_id: ConversationId, message_id: MessageId
+    ) -> ChatMessagePage:
+        if message_id.world_id != conversation_id.world_id:
+            raise EntityNotFoundError("chat_world_mismatch")
+        return await self._store.source_for_player(
+            conversation_id, await self._player(conversation_id), message_id
+        )
+
+    async def context_messages(
+        self,
+        conversation_id: ConversationId,
+        current: ChatMessage,
+        *,
+        allow_current_replies: bool,
+        reply_turn_id: ChatTurnId | None = None,
+    ) -> tuple[ChatMessage, ...]:
+        if current.conversation_id != conversation_id:
+            raise EntityNotFoundError("chat_world_mismatch")
+        return await self._store.context_for_player(
+            conversation_id,
+            await self._player(conversation_id),
+            current,
+            allow_current_replies,
+            **({"reply_turn_id": reply_turn_id} if reply_turn_id is not None else {}),
+        )
+
+    async def seen_group_messages(
+        self,
+        character_id: CharacterId,
+        *,
+        limit: int = 32,
+        exclude_conversation_id: ConversationId | None = None,
+    ) -> tuple[ChatMessage, ...]:
+        """Group delivery follows fixed membership, regardless of who spoke."""
+        if type(limit) is not int or not 1 <= limit <= 100:
+            raise ValueError("chat_page_limit_invalid")
+        if (
+            exclude_conversation_id is not None
+            and exclude_conversation_id.world_id != character_id.world_id
+        ):
+            raise EntityNotFoundError("chat_world_mismatch")
+        player = await self._players.selected_player(character_id.world_id)
+        if player is None:
+            raise EntityNotFoundError("selected_player_required")
+        return await self._store.seen_group_messages(
+            character_id, player, limit, exclude_conversation_id
+        )
+
+    async def recent_dialogue(
+        self, character: CharacterId, current: ChatMessage
+    ) -> tuple[RecentDialogue, ...]:
+        if character.world_id != current.conversation_id.world_id:
+            raise EntityNotFoundError("chat_world_mismatch")
+        return await self._store.recent_dialogue(
+            character, await self._player(current.conversation_id), current
+        )
+
+    async def direct_turn(
+        self, conversation_id: ConversationId, turn_id: ChatTurnId
+    ) -> DirectTurnView:
+        return await self._store.direct_turn(
+            conversation_id, turn_id, await self._player(conversation_id)
+        )
+
+    async def group_turn(
+        self, conversation_id: ConversationId, turn_id: ChatTurnId
+    ) -> GroupTurnView:
+        return await self._store.group_turn(
+            conversation_id, turn_id, await self._player(conversation_id)
+        )
+
+    async def claim_direct(
+        self, conversation_id: ConversationId, turn_id: ChatTurnId
+    ) -> ClaimedDirectTurn:
+        return await self._store.claim_direct(
+            conversation_id, turn_id, await self._player(conversation_id)
+        )
+
+    async def complete_direct(
+        self, claim: ClaimedDirectTurn, text: str, *, events=(), memories=(), media=None
+    ) -> ChatMessage:
+        self._validate_reply(text)
+        return (
+            await self._store.complete_direct(
+                claim,
+                text,
+                events=events,
+                memories=memories,
+                **({"media": media} if media is not None else {}),
+            )
+            if events or memories or media
+            else await self._store.complete_direct(claim, text)
+        )
+
+    async def claim_group(
+        self, conversation_id: ConversationId, turn_id: ChatTurnId
+    ) -> ClaimedGroupTurn:
+        return await self._store.claim_group(
+            conversation_id, turn_id, await self._player(conversation_id)
+        )
+
+    async def complete_group_reply(
+        self,
+        claim: ClaimedGroupTurn,
+        character_id: CharacterId,
+        ordinal: int,
+        text: str,
+        *,
+        events=(),
+        memories=(),
+        media=None,
+        privacy=(),
+        private_context=False,
+        privacy_fallback=None,
+    ) -> ChatMessage:
+        self._validate_reply(text)
+        if type(ordinal) is not int or ordinal < 0:
+            raise ValueError("chat_reply_ordinal_invalid")
+        return (
+            await self._store.complete_group_reply(
+                claim,
+                character_id,
+                ordinal,
+                text,
+                events=events,
+                memories=memories,
+                **({"media": media} if media is not None else {}),
+                **({"privacy_fallback": privacy_fallback} if privacy_fallback is not None else {}),
+                **(
+                    {"privacy": privacy, "private_context": private_context}
+                    if privacy or private_context
+                    else {}
+                ),
+            )
+            if events
+            or memories
+            or media
+            or privacy
+            or private_context
+            or privacy_fallback is not None
+            else await self._store.complete_group_reply(claim, character_id, ordinal, text)
+        )
+
+    async def finish_group(self, claim: ClaimedGroupTurn) -> GroupTurnView:
+        return await self._store.finish_group(claim)
+
+    @staticmethod
+    def _validate_reply(text: str) -> None:
+        if not isinstance(text, str) or not text.strip() or len(text.encode("utf-8")) > 65536:
+            raise ValueError("chat_reply_invalid")
+
+    async def reply_recovery(self, conversation_id, source_turn_id):
+        return await self._store.reply_recovery(
+            conversation_id, source_turn_id, await self._player(conversation_id)
+        )
+
+    async def create_reply_recovery(
+        self, request_id, conversation_id, source_turn_id, expected, ceiling
+    ):
+        if type(ceiling) is not int or not 1 <= ceiling <= 9223372036854775807:
+            raise ValueError("chat_token_ceiling_invalid")
+        return await self._store.create_reply_recovery(
+            request_id,
+            conversation_id,
+            source_turn_id,
+            await self._player(conversation_id),
+            expected,
+            ceiling,
+        )
+
+    async def save_context_report(self, source, speaker, report):
+        await self._store.save_context_report(source, speaker, report)
+
+    async def context_reports(self, conversation, turn):
+        return await self._store.context_reports(
+            conversation, turn, await self._player(conversation)
+        )
+
+    async def fail_reply_execution(self, sent, known_failure):
+        await self._store.fail_reply_execution(sent, known_failure)
+
+    async def recover_reply_executions(self):
+        await self._store.recover_reply_executions()

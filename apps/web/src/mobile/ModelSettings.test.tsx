@@ -1,0 +1,32 @@
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { vi, test, expect, beforeEach, afterEach } from "vitest";
+import { ModelSettings } from "./ModelSettings";
+import { hostCall } from "./host";
+vi.mock("./host", () => ({ hostCall: vi.fn(), feedback: () => "还有任务正在处理，请完成后再保存设置。" }));
+const call = vi.mocked(hostCall);
+afterEach(cleanup);
+beforeEach(() => { vi.clearAllMocks(); localStorage.clear(); });
+test("API credentials cross the native boundary and are cleared after saving", async () => {
+  call.mockResolvedValueOnce(null).mockResolvedValueOnce({});
+  const reconnect = vi.fn().mockResolvedValue(undefined);
+  render(<ModelSettings onConfigured={reconnect} />);
+  await screen.findByRole("button", { name: "保存 API 设置" });
+  fireEvent.change(screen.getByLabelText("模型名称"), { target: { value: "test-model" } });
+  fireEvent.change(screen.getByLabelText("API 地址"), { target: { value: "https://example.invalid/v1" } });
+  fireEvent.change(screen.getByLabelText("API 密钥"), { target: { value: "synthetic-test-credential" } });
+  fireEvent.change(screen.getByLabelText("最大输入容量（Token）"), { target: { value: "8192" } });
+  fireEvent.click(screen.getByRole("button", { name: "保存 API 设置" }));
+  await waitFor(() => expect(reconnect).toHaveBeenCalledOnce());
+  expect(call).toHaveBeenLastCalledWith("configure_model", expect.objectContaining({ secret: "synthetic-test-credential" }));
+  expect((screen.getByLabelText("API 密钥") as HTMLInputElement).value).toBe("");
+  expect(JSON.stringify(localStorage)).not.toContain("synthetic-test-credential");
+});
+test("busy saves keep the entered credential for explicit retry", async () => {
+  call.mockResolvedValueOnce({ provider_kind: "openai-compatible", model_id: "test-model", base_url: "https://example.invalid/v1", max_billable_input_tokens: 8192, max_output_tokens: 1024, streaming: true, timeout_ms: 120000 }).mockRejectedValueOnce("mobile_busy");
+  render(<ModelSettings onConfigured={vi.fn()} />);
+  await screen.findByRole("button", { name: "保存 API 设置" });
+  fireEvent.change(screen.getByLabelText("API 密钥"), { target: { value: "synthetic-test-credential" } });
+  fireEvent.click(screen.getByRole("button", { name: "保存 API 设置" }));
+  await screen.findByRole("alert");
+  expect((screen.getByLabelText("API 密钥") as HTMLInputElement).value).toBe("synthetic-test-credential");
+});

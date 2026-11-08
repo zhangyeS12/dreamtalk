@@ -1,0 +1,53 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "dreamtalk-core"
+version = "0.1.0"
+description = "dreamtalk application runtime foundation"
+license = "Apache-2.0"
+requires-python = ">=3.12"
+dependencies = [
+    "aiosqlite>=0.20,<1",
+    "alembic>=1.14,<2",
+    "ddgs==9.16.0",
+    "diskcache==5.6.3",
+    "fastapi>=0.115,<1",
+    "fastembed==0.8.1",
+    "httpx>=0.28,<1",
+    "tinytag==2.2.1",
+    "jieba==0.42.1",
+    "jsonschema>=4.26,<5",
+    "pillow==12.3.0",
+    "pydantic>=2.10,<3",
+    "referencing>=0.37,<1",
+    "sqlalchemy[asyncio]>=2.0,<3",
+    "uvicorn>=0.34,<1",
+]
+
+[project.scripts]
+dreamtalk-core = "livingworld.bootstrap.cli:main"
+livingworld-core = "livingworld.bootstrap.cli:main"
+
+[dependency-groups]
+browser-test = ["playwright>=1.63,<2"]
+packaging = ["pyinstaller>=6.16,<7"]
+dev = [
+    "pytest>=8.3,<10",
+    "ruff>=0.11,<1",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["services/core/src/livingworld"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests/core", "tests/domain", "tests/persistence", "tests/application"]
+addopts = "-ra"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC"]

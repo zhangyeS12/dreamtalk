@@ -1,0 +1,16 @@
+node_modules/
+.venv*/
+__pycache__/
+.pytest_cache/
+build-tools/
+private/
+artifacts/
+apps/web/dist/
+**/target/
+**/build/
+**/.gradle/
+**/local.properties
+*.pyc
+*.p12
+*.jks
+*.dpapi

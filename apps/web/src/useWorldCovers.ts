@@ -1,0 +1,132 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+import { CoreClient, type WorldCover } from "@dreamtalk/api-client";
+type CoverFace = "front" | "spine" | "back";
+export type BookAppearance = { cover: Pick<WorldCover, "mode" | "title" | "show_title">; urls: Partial<Record<CoverFace, string>> };
+
+/** Everything a designed book needs: saved cover, face images, wrap image and sticker images. */
+export type CoverAppearance = BookAppearance & { full: WorldCover; jacket?: string; jacketAspect?: number; uploads: Record<string, string> };
+
+export function useWorldCovers(client: CoreClient, worldId?: string, enabled = true) {
+  const [covers, setCovers] = useState<WorldCover[]>([]);
+  const [appearances, setAppearances] = useState<Record<string, CoverAppearance>>({});
+  const [metadataReady, setMetadataReady] = useState(false);
+  const [error, setError] = useState("");
+  const live = useRef(true);
+  const sequence = useRef(0);
+  const cache = useRef(new Map<string, string>());
+  const refresh = useCallback(async () => {
+    if (!enabled) return;
+    const epoch = ++sequence.current;
+    setMetadataReady(false);
+    try {
+      const result = await client.listWorldCovers();
+      if (live.current && sequence.current === epoch) {
+        setCovers(worldId ? result.filter(cover => cover.world_id === worldId) : result); setError("");
+      }
+    } catch {
+      if (live.current && sequence.current === epoch) setError("封面暂时无法读取，已保留默认文字外观。刷新书架可重试。");
+    } finally { if (live.current && sequence.current === epoch) setMetadataReady(true); }
+  }, [client, worldId, enabled]);
+  useEffect(() => {
+    live.current = true; setAppearances({}); void refresh();
+    const urls = cache.current;
+    return () => { live.current = false; sequence.current += 1; urls.forEach(url => URL.revokeObjectURL(url)); urls.clear(); };
+  }, [refresh]);
+  useEffect(() => {
+    if (!enabled || !metadataReady) return;
+    const controller = new AbortController();
+    const epoch = sequence.current;
+    let cancelled = false;
+    const active = () => !cancelled && live.current && sequence.current === epoch;
+    // Optional local artwork must never hold the launch hostage. On timeout,
+    // finish every book's text appearance; explicit refresh can retry the images.
+    const timer = window.setTimeout(() => controller.abort(), 5000);
+    const load = async () => {
+      const result: Record<string, CoverAppearance> = {};
+      const fetchUrl = async (cover: WorldCover, digest: string) => {
+        const key = `${cover.world_id}:${digest}`;
+        let url = cache.current.get(key);
+        if (!url && !controller.signal.aborted) {
+          try {
+            const blob = await client.coverImage(cover.world_id, digest, controller.signal);
+            if (!active()) return undefined;
+            url = URL.createObjectURL(blob); cache.current.set(key, url);
+          } catch {
+            if (active()) setError("部分封面图片无法读取，已保留文字外观。刷新书架可重试。");
+          }
+        }
+        return url;
+      };
+      for (const cover of covers) {
+        if (worldId && cover.world_id !== worldId) continue;
+        const urls: BookAppearance["urls"] = {}, uploads: Record<string, string> = {};
+        let jacket: string | undefined, jacketAspect: number | undefined;
+        if (cover.mode === "image" || cover.design) for (const face of ["front", "spine", "back"] as const) {
+          const display = cover.faces[face]?.display;
+          if (!display) continue;
+          const key = `${cover.world_id}:${display.digest}`;
+          let url = cache.current.get(key);
+          if (!url && !controller.signal.aborted) {
+            try {
+              const blob = await client.coverImage(cover.world_id, display.digest, controller.signal);
+              if (!active()) return;
+              url = URL.createObjectURL(blob); cache.current.set(key, url);
+            } catch {
+              if (!active()) return;
+              setError("部分封面图片无法读取，已保留文字外观。刷新书架可重试。");
+            }
+          }
+          if (url) urls[face] = url;
+        }
+        const front = cover.faces.front;
+        if (cover.mode === "image" && cover.design?.wrap && front) {
+          jacket = await fetchUrl(cover, front.source.digest);
+          if (!active()) return;
+          jacketAspect = Number(front.source.width) / Number(front.source.height);
+        }
+        for (const digest of new Set(Object.values(cover.design?.stickers ?? {}).flat().filter(item => item.kind === "image").map(item => item.ref))) {
+          const url = await fetchUrl(cover, digest);
+          if (!active()) return;
+          if (url) uploads[digest] = url;
+        }
+        result[cover.world_id] = { cover, urls, full: cover, jacket, jacketAspect, uploads };
+      }
+      clearTimeout(timer);
+      if (active()) setAppearances(result);
+    };
+    void load();
+    return () => { cancelled = true; clearTimeout(timer); controller.abort(); };
+  }, [client, covers, enabled, metadataReady, worldId]);
+  useEffect(() => {
+    // Effects run after the new appearance commits. Keep the old artwork while
+    // its replacement loads, and protect current keys that a load may reuse.
+    const displayed = new Set(Object.values(appearances).flatMap(appearance => Object.values(appearance.urls)));
+    const needed = new Set<string>();
+    if (enabled) for (const cover of covers) {
+      if (worldId && cover.world_id !== worldId) continue;
+      for (const item of Object.values(cover.design?.stickers ?? {}).flat()) if (item.kind === "image") needed.add(`${cover.world_id}:${item.ref}`);
+      if (cover.mode !== "image" && !cover.design) continue;
+      if (cover.design?.wrap && cover.faces.front) needed.add(`${cover.world_id}:${cover.faces.front.source.digest}`);
+      for (const face of ["front", "spine", "back"] as const) {
+        const display = cover.faces[face]?.display;
+        if (display) needed.add(`${cover.world_id}:${display.digest}`);
+      }
+    }
+    for (const [key, url] of cache.current) {
+      if (needed.has(key) || displayed.has(url)) continue;
+      URL.revokeObjectURL(url);
+      cache.current.delete(key);
+    }
+  }, [appearances, covers, enabled, worldId]);
+  const saved = useCallback((cover: WorldCover) => {
+    sequence.current += 1;
+    setMetadataReady(true); setError(""); setCovers(current => [...current.filter(item => item.world_id !== cover.world_id), cover]);
+  }, []);
+  const ready = !enabled || metadataReady && covers.every(cover => appearances[cover.world_id]?.cover === cover);
+  const removed = useCallback((id: string) => {
+    sequence.current += 1;
+    setCovers(current => current.filter(item => item.world_id !== id));
+    setAppearances(current => Object.fromEntries(Object.entries(current).filter(([key]) => key !== id)));
+  }, []);
+  return { appearances, error, ready, refresh, saved, removed };
+}

@@ -1,0 +1,1174 @@
+"""Atomic, idempotent transcript writes, independent of the WorldEvent ledger."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+from dataclasses import replace
+from datetime import UTC, datetime
+from uuid import uuid4
+
+from sqlalchemy import and_, func, or_, select
+
+from livingworld.application.chat_diagnostics import chat_phase
+from livingworld.application.chat_messages import (
+    MAX_PROMPT_TRANSCRIPT_MESSAGES,
+    ChatMessage,
+    ChatMessagePage,
+    ClaimedDirectTurn,
+    ClaimedGroupTurn,
+    DirectTurnView,
+    GroupTurnView,
+    PlayerSend,
+)
+from livingworld.application.chat_privacy import (
+    clean_private_message,
+    normalize_privacy,
+    project_message,
+    validate_targets,
+)
+from livingworld.application.errors import (
+    ChatTurnUnavailableError,
+    EntityNotFoundError,
+    IdempotencyConflictError,
+)
+from livingworld.domain.contracts import RequestId
+from livingworld.domain.identifiers import (
+    CharacterId,
+    ChatTurnId,
+    ConversationId,
+    MessageId,
+    PlayerId,
+    WorldId,
+)
+from livingworld.infrastructure.persistence.authored_lifecycle import require_active_conversation
+from livingworld.infrastructure.persistence.chat_context_report import ChatContextReportMixin
+from livingworld.infrastructure.persistence.chat_path_queries import (
+    active_message_clause,
+    require_writable_path,
+    stamp_message,
+    stamp_turn,
+)
+from livingworld.infrastructure.persistence.chat_reply_recovery import ChatReplyRecoveryMixin
+from livingworld.infrastructure.persistence.long_chat_memory import record_chat_memories
+from livingworld.infrastructure.persistence.mapping import to_domain
+from livingworld.infrastructure.persistence.models import (
+    ChatConversationRecord,
+    ChatMessageRecord,
+    ChatParticipantRecord,
+    ChatReplyExecutionRecord,
+    ChatReplyRecoveryRecord,
+    ChatTurnDispatchRecord,
+    ChatTurnRecord,
+    LocalPlayerBindingRecord,
+    WorldClockRecord,
+)
+from livingworld.infrastructure.persistence.world_story import record_chat_events
+
+
+def _message(row: ChatMessageRecord) -> ChatMessage:
+    world_id = WorldId(row.world_id)
+    if (row.sender_player_id is None) == (row.sender_character_id is None):
+        raise EntityNotFoundError("chat_state_invalid")
+    sender = (
+        PlayerId(world_id, row.sender_player_id)
+        if row.sender_player_id is not None
+        else CharacterId(world_id, row.sender_character_id)
+    )
+    message = ChatMessage(
+        MessageId(world_id, row.message_id),
+        ConversationId(world_id, row.conversation_id),
+        ChatTurnId(world_id, row.turn_id),
+        row.position,
+        sender,
+        row.text,
+        row.created_at_utc,
+        row.story_sent_at_utc,
+        json.loads(row.media_json) if row.media_json else None,
+        row.feedback,
+        tuple(json.loads(row.privacy_json)) if row.privacy_json else (),
+        privacy_fallback=row.privacy_fallback,
+    )
+    return clean_private_message(message, sensitive=row.privacy_json is not None)
+
+
+def _same_reply_text(row, text):
+    media = json.loads(row.media_json) if row.media_json else None
+    if media and media.get("only_media"):
+        return media.get("fallback_hash") == hashlib.sha256(text.encode()).hexdigest()
+    return row.text == text
+
+
+class SqlAlchemyChatMessageStore(ChatContextReportMixin, ChatReplyRecoveryMixin):
+    def __init__(self, sessions, time_source=None) -> None:
+        self._sessions, self._time_source = sessions, time_source
+
+    async def _story_time(self, session, world, events):
+        if not events or self._time_source is None:
+            return None
+        clock = await session.get(WorldClockRecord, world)
+        return self._time_source.read(to_domain(clock)).microseconds if clock is not None else None
+
+    async def _conversation(self, session, conversation_id: ConversationId, player_id: PlayerId):
+        if conversation_id.world_id != player_id.world_id:
+            raise EntityNotFoundError("chat_world_mismatch")
+        conversation = await session.get(
+            ChatConversationRecord, (conversation_id.world_id.value, conversation_id.value)
+        )
+        if conversation is None or conversation.player_id != player_id.value:
+            raise EntityNotFoundError("conversation_not_found")
+        return conversation
+
+    async def send_player(
+        self,
+        request_id: RequestId,
+        conversation_id: ConversationId,
+        player_id: PlayerId,
+        text: str,
+        token_ceiling: int,
+        fingerprint: str,
+        *,
+        sticker_entry_id=None,
+    ) -> PlayerSend:
+        return await self._send_player(
+            request_id,
+            conversation_id,
+            player_id,
+            text,
+            token_ceiling,
+            fingerprint,
+            expected_kind="direct",
+            sticker_entry_id=sticker_entry_id,
+        )
+
+    async def send_group_player(
+        self,
+        request_id: RequestId,
+        conversation_id: ConversationId,
+        player_id: PlayerId,
+        text: str,
+        token_ceiling: int,
+        fingerprint: str,
+        *,
+        sticker_entry_id=None,
+        privacy=(),
+    ) -> PlayerSend:
+        return await self._send_player(
+            request_id,
+            conversation_id,
+            player_id,
+            text,
+            token_ceiling,
+            fingerprint,
+            expected_kind="group",
+            sticker_entry_id=sticker_entry_id,
+            privacy=privacy,
+        )
+
+    async def _send_player(
+        self,
+        request_id: RequestId,
+        conversation_id: ConversationId,
+        player_id: PlayerId,
+        text: str,
+        token_ceiling: int,
+        fingerprint: str,
+        *,
+        expected_kind: str,
+        sticker_entry_id=None,
+        privacy=(),
+    ) -> PlayerSend:
+        async with self._sessions() as session, session.begin():
+            # SQLite obtains a write reservation before any receipt/position read.
+            await session.connection(execution_options={"livingworld_write_intent": True})
+            existing = await session.scalar(
+                select(ChatTurnRecord).where(ChatTurnRecord.request_id == request_id.value)
+            )
+            if existing is not None:
+                if (
+                    existing.world_id != conversation_id.world_id.value
+                    or existing.conversation_id != conversation_id.value
+                    or existing.fingerprint != fingerprint
+                    or existing.token_ceiling != token_ceiling
+                ):
+                    raise IdempotencyConflictError("chat_request_conflict")
+            conversation = await self._conversation(session, conversation_id, player_id)
+            if conversation.kind != expected_kind:
+                raise ChatTurnUnavailableError(
+                    "group_turn_unavailable" if expected_kind == "direct" else "group_turn_required"
+                )
+            if existing is not None:
+                message = await session.scalar(
+                    select(ChatMessageRecord).where(
+                        ChatMessageRecord.world_id == existing.world_id,
+                        ChatMessageRecord.turn_id == existing.turn_id,
+                        ChatMessageRecord.sender_player_id == player_id.value,
+                    )
+                )
+                if message is None:
+                    raise EntityNotFoundError("chat_state_invalid")
+                return PlayerSend(
+                    ChatTurnId(conversation_id.world_id, existing.turn_id),
+                    _message(message),
+                    existing.token_ceiling,
+                    existing.status,
+                )
+            privacy = normalize_privacy(text, privacy)
+            if privacy:
+                from livingworld.infrastructure.persistence.models import CharacterRecord
+
+                participants = (
+                    await session.execute(
+                        select(ChatParticipantRecord.character_id, CharacterRecord.name)
+                        .join(
+                            CharacterRecord,
+                            and_(
+                                CharacterRecord.world_id == ChatParticipantRecord.world_id,
+                                CharacterRecord.character_id == ChatParticipantRecord.character_id,
+                            ),
+                        )
+                        .where(
+                            ChatParticipantRecord.world_id == conversation_id.world_id.value,
+                            ChatParticipantRecord.conversation_id == conversation_id.value,
+                        )
+                    )
+                ).all()
+                if expected_kind != "group":
+                    raise ValueError("chat_privacy_group_required")
+                validate_targets(
+                    text, privacy, [(str(identity), name) for identity, name in participants]
+                )
+            await require_writable_path(
+                session, conversation_id.world_id.value, conversation_id.value
+            )
+            await require_active_conversation(
+                session, conversation_id.world_id.value, conversation_id.value
+            )
+            position = (
+                await session.scalar(
+                    select(func.max(ChatMessageRecord.position)).where(
+                        ChatMessageRecord.world_id == conversation_id.world_id.value,
+                        ChatMessageRecord.conversation_id == conversation_id.value,
+                    )
+                )
+                or 0
+            ) + 1
+            turn_id = uuid4()
+            message_id = uuid4()
+            created_at = datetime.now(UTC)
+            session.add(
+                ChatTurnRecord(
+                    world_id=conversation_id.world_id.value,
+                    turn_id=turn_id,
+                    conversation_id=conversation_id.value,
+                    request_id=request_id.value,
+                    fingerprint=fingerprint,
+                    token_ceiling=token_ceiling,
+                    status="pending",
+                    created_at_utc=created_at,
+                )
+            )
+            await session.flush()
+            row = ChatMessageRecord(
+                world_id=conversation_id.world_id.value,
+                message_id=message_id,
+                conversation_id=conversation_id.value,
+                turn_id=turn_id,
+                position=position,
+                sender_player_id=player_id.value,
+                sender_character_id=None,
+                text=text if text.strip() else "[表情]",
+                privacy_json=json.dumps(privacy, ensure_ascii=False) if privacy else None,
+                created_at_utc=created_at,
+            )
+            session.add(row)
+            await session.flush()
+            await stamp_message(session, row)
+            await stamp_turn(
+                session,
+                await session.get(ChatTurnRecord, (conversation_id.world_id.value, turn_id)),
+            )
+            if sticker_entry_id is not None:
+                from livingworld.infrastructure.persistence.chat_media import attach_player_media
+
+                await attach_player_media(session, row, sticker_entry_id)
+                if not text.strip():
+                    value = json.loads(row.media_json)
+                    value["only_media"] = True
+                    row.media_json = json.dumps(value, ensure_ascii=False)
+            return PlayerSend(
+                ChatTurnId(conversation_id.world_id, turn_id),
+                _message(row),
+                token_ceiling,
+                "pending",
+            )
+
+    async def list_for_player(
+        self, conversation_id: ConversationId, player_id: PlayerId
+    ) -> tuple[ChatMessage, ...]:
+        async with self._sessions() as session:
+            await self._conversation(session, conversation_id, player_id)
+            rows = (
+                await session.scalars(
+                    select(ChatMessageRecord)
+                    .where(
+                        active_message_clause(ChatMessageRecord),
+                        ChatMessageRecord.world_id == conversation_id.world_id.value,
+                        ChatMessageRecord.conversation_id == conversation_id.value,
+                    )
+                    .order_by(ChatMessageRecord.position)
+                )
+            ).all()
+            return tuple(_message(row) for row in rows)
+
+    async def set_feedback(
+        self, conversation_id: ConversationId, player_id: PlayerId, message_id: MessageId, feedback
+    ) -> ChatMessage:
+        if message_id.world_id != conversation_id.world_id or feedback not in {None, "up", "down"}:
+            raise ValueError("chat_feedback_invalid")
+        async with self._sessions() as session, session.begin():
+            await self._conversation(session, conversation_id, player_id)
+            row = await session.scalar(
+                select(ChatMessageRecord).where(
+                    active_message_clause(ChatMessageRecord),
+                    ChatMessageRecord.world_id == conversation_id.world_id.value,
+                    ChatMessageRecord.conversation_id == conversation_id.value,
+                    ChatMessageRecord.message_id == message_id.value,
+                    ChatMessageRecord.sender_character_id.is_not(None),
+                )
+            )
+            if row is None:
+                raise EntityNotFoundError("chat_feedback_message_not_found")
+            row.feedback = feedback
+            await session.flush()
+            return _message(row)
+
+    async def seen_group_messages(
+        self,
+        character_id: CharacterId,
+        player_id: PlayerId,
+        limit: int,
+        exclude_conversation_id: ConversationId | None,
+    ) -> tuple[ChatMessage, ...]:
+        if character_id.world_id != player_id.world_id:
+            raise EntityNotFoundError("chat_world_mismatch")
+        async with self._sessions() as session:
+            statement = (
+                select(ChatMessageRecord)
+                .join(
+                    ChatParticipantRecord,
+                    and_(
+                        ChatParticipantRecord.world_id == ChatMessageRecord.world_id,
+                        ChatParticipantRecord.conversation_id == ChatMessageRecord.conversation_id,
+                    ),
+                )
+                .join(
+                    ChatConversationRecord,
+                    and_(
+                        ChatConversationRecord.world_id == ChatMessageRecord.world_id,
+                        ChatConversationRecord.conversation_id == ChatMessageRecord.conversation_id,
+                    ),
+                )
+                .where(
+                    active_message_clause(ChatMessageRecord),
+                    ChatMessageRecord.world_id == character_id.world_id.value,
+                    ChatParticipantRecord.character_id == character_id.value,
+                    ChatConversationRecord.player_id == player_id.value,
+                    ChatConversationRecord.kind == "group",
+                )
+            )
+            if exclude_conversation_id is not None:
+                statement = statement.where(
+                    ChatMessageRecord.conversation_id != exclude_conversation_id.value
+                )
+            rows = (
+                await session.scalars(
+                    statement.order_by(
+                        ChatMessageRecord.created_at_utc.desc(),
+                        ChatMessageRecord.message_id.desc(),
+                    ).limit(limit)
+                )
+            ).all()
+            return tuple(project_message(_message(row), character_id) for row in reversed(rows))
+
+    async def recent_dialogue(self, character, player, current):
+        from livingworld.infrastructure.persistence.recent_dialogue import recent_dialogue
+
+        return await recent_dialogue(self._sessions, character, player, current, _message)
+
+    async def page_for_player(
+        self,
+        conversation_id: ConversationId,
+        player_id: PlayerId,
+        limit: int,
+        before_position: int | None,
+    ) -> ChatMessagePage:
+        async with self._sessions() as session:
+            await self._conversation(session, conversation_id, player_id)
+            statement = select(ChatMessageRecord).where(
+                active_message_clause(ChatMessageRecord),
+                ChatMessageRecord.world_id == conversation_id.world_id.value,
+                ChatMessageRecord.conversation_id == conversation_id.value,
+            )
+            if before_position is not None:
+                statement = statement.where(ChatMessageRecord.position < before_position)
+            rows = (
+                await session.scalars(
+                    statement.order_by(ChatMessageRecord.position.desc()).limit(limit + 1)
+                )
+            ).all()
+            has_older = len(rows) > limit
+            messages = tuple(_message(row) for row in reversed(rows[:limit]))
+            return ChatMessagePage(
+                messages,
+                messages[0].position if has_older else None,
+            )
+
+    async def source_for_player(
+        self,
+        conversation_id: ConversationId,
+        player_id: PlayerId,
+        message_id: MessageId,
+    ) -> ChatMessagePage:
+        if message_id.world_id != conversation_id.world_id:
+            raise EntityNotFoundError("chat_world_mismatch")
+        async with self._sessions() as session:
+            await self._conversation(session, conversation_id, player_id)
+            # Resolve the stable ID under the current binding before reading text.
+            scope = (
+                active_message_clause(ChatMessageRecord),
+                ChatMessageRecord.world_id == conversation_id.world_id.value,
+                ChatMessageRecord.conversation_id == conversation_id.value,
+                LocalPlayerBindingRecord.player_id == player_id.value,
+            )
+            binding = LocalPlayerBindingRecord.world_id == ChatMessageRecord.world_id
+            position = await session.scalar(
+                select(ChatMessageRecord.position)
+                .join(LocalPlayerBindingRecord, binding)
+                .where(*scope, ChatMessageRecord.message_id == message_id.value)
+            )
+            if position is None:
+                raise EntityNotFoundError("chat_message_source_unavailable")
+            rows = (
+                await session.scalars(
+                    select(ChatMessageRecord)
+                    .join(LocalPlayerBindingRecord, binding)
+                    .where(
+                        *scope,
+                        ChatMessageRecord.position.between(max(1, position - 3), position + 3),
+                    )
+                    .order_by(ChatMessageRecord.position)
+                    .limit(7)
+                )
+            ).all()
+            if not any(row.message_id == message_id.value for row in rows):
+                raise EntityNotFoundError("chat_message_source_unavailable")
+            return ChatMessagePage(tuple(_message(row) for row in rows), None)
+
+    async def context_for_player(
+        self,
+        conversation_id: ConversationId,
+        player_id: PlayerId,
+        current: ChatMessage,
+        allow_current_replies: bool,
+        reply_turn_id: ChatTurnId | None = None,
+    ) -> tuple[ChatMessage, ...]:
+        if current.conversation_id != conversation_id:
+            raise EntityNotFoundError("chat_world_mismatch")
+        world_id = conversation_id.world_id.value
+        conversation_value = conversation_id.value
+        current_turn = (reply_turn_id or current.turn_id).value
+        async with self._sessions() as session:
+            await self._conversation(session, conversation_id, player_id)
+            # Descending positions reproduce the old "latest message in turn" order.
+            # Only as many distinct prior turns as could fit the prompt are needed.
+            prior_turns = []
+            seen = set()
+            cursor = current.position + 1
+            while len(prior_turns) < MAX_PROMPT_TRANSCRIPT_MESSAGES:
+                rows = (
+                    await session.execute(
+                        select(ChatMessageRecord.turn_id, ChatMessageRecord.position)
+                        .where(
+                            active_message_clause(ChatMessageRecord),
+                            ChatMessageRecord.world_id == world_id,
+                            ChatMessageRecord.conversation_id == conversation_value,
+                            ChatMessageRecord.position < cursor,
+                            ChatMessageRecord.turn_id != current_turn,
+                        )
+                        .order_by(ChatMessageRecord.position.desc())
+                        .limit(64)
+                    )
+                ).all()
+                for turn_id, _ in rows:
+                    if turn_id not in seen:
+                        seen.add(turn_id)
+                        prior_turns.append(turn_id)
+                        if len(prior_turns) == MAX_PROMPT_TRANSCRIPT_MESSAGES:
+                            break
+                if len(rows) < 64 or len(prior_turns) == MAX_PROMPT_TRANSCRIPT_MESSAGES:
+                    break
+                cursor = rows[-1].position
+
+            visible = ChatMessageRecord.position <= current.position
+            if allow_current_replies:
+                visible = or_(
+                    visible,
+                    ChatMessageRecord.turn_id == current_turn,
+                )
+            rows = (
+                await session.scalars(
+                    select(ChatMessageRecord)
+                    .where(
+                        active_message_clause(ChatMessageRecord),
+                        ChatMessageRecord.world_id == world_id,
+                        ChatMessageRecord.conversation_id == conversation_value,
+                        ChatMessageRecord.turn_id.in_([current_turn, *prior_turns]),
+                        visible,
+                    )
+                    .order_by(ChatMessageRecord.position)
+                )
+            ).all()
+            # Recovery replies have their own durable attempt ID. For prompt
+            # history only, pair past replies with their one original question;
+            # otherwise complete-turn trimming could retain an orphan reply.
+            recoveries = (
+                await session.scalars(
+                    select(ChatReplyRecoveryRecord).where(
+                        ChatReplyRecoveryRecord.world_id == world_id,
+                        ChatReplyRecoveryRecord.turn_id.in_({row.turn_id for row in rows}),
+                        ChatReplyRecoveryRecord.turn_id != current_turn,
+                    )
+                )
+            ).all()
+            sources = {item.turn_id: item.source_turn_id for item in recoveries}
+            missing_sources = set(sources.values()) - {row.turn_id for row in rows}
+            if missing_sources:
+                questions = (
+                    await session.scalars(
+                        select(ChatMessageRecord).where(
+                            active_message_clause(ChatMessageRecord),
+                            ChatMessageRecord.world_id == world_id,
+                            ChatMessageRecord.conversation_id == conversation_value,
+                            ChatMessageRecord.turn_id.in_(missing_sources),
+                            ChatMessageRecord.sender_player_id == player_id.value,
+                            ChatMessageRecord.position <= current.position,
+                        )
+                    )
+                ).all()
+                if {row.turn_id for row in questions} != missing_sources:
+                    raise EntityNotFoundError("chat_state_invalid")
+                rows.extend(questions)
+            return tuple(
+                replace(
+                    _message(row),
+                    turn_id=ChatTurnId(conversation_id.world_id, sources[row.turn_id]),
+                )
+                if row.turn_id in sources
+                else _message(row)
+                for row in sorted(rows, key=lambda item: item.position)
+            )
+
+    async def direct_turn(
+        self, conversation_id: ConversationId, turn_id: ChatTurnId, player_id: PlayerId
+    ) -> DirectTurnView:
+        if turn_id.world_id != conversation_id.world_id:
+            raise EntityNotFoundError("chat_world_mismatch")
+        async with self._sessions() as session:
+            conversation = await self._conversation(session, conversation_id, player_id)
+            if conversation.kind != "direct":
+                raise ChatTurnUnavailableError("direct_turn_required")
+            await require_active_conversation(
+                session, conversation_id.world_id.value, conversation_id.value
+            )
+            turn = await session.get(
+                ChatTurnRecord, (conversation_id.world_id.value, turn_id.value)
+            )
+            if (
+                turn is None
+                or turn.kind not in {"player", "retry"}
+                or turn.conversation_id != conversation_id.value
+            ):
+                raise EntityNotFoundError("chat_turn_not_found")
+            rows = (
+                await session.scalars(
+                    select(ChatMessageRecord).where(
+                        active_message_clause(ChatMessageRecord),
+                        ChatMessageRecord.world_id == conversation_id.world_id.value,
+                        ChatMessageRecord.conversation_id == conversation_id.value,
+                        ChatMessageRecord.turn_id == turn_id.value,
+                    )
+                )
+            ).all()
+            player_rows = [row for row in rows if row.sender_player_id == player_id.value]
+            if turn.kind == "retry":
+                player_rows = [
+                    await self._source_message(session, conversation_id, turn, player_id)
+                ]
+                rows = [*player_rows, *rows]
+            replies = [row for row in rows if row.sender_character_id is not None]
+            if len(player_rows) != 1 or len(replies) > 1 or len(rows) != 1 + len(replies):
+                raise EntityNotFoundError("chat_state_invalid")
+            recovery = await session.get(ChatReplyRecoveryRecord, (turn.world_id, turn.turn_id))
+            sent = PlayerSend(
+                turn_id,
+                _message(player_rows[0]),
+                turn.token_ceiling,
+                turn.status,
+                ChatTurnId(conversation_id.world_id, recovery.source_turn_id) if recovery else None,
+            )
+            dispatch = await session.get(
+                ChatTurnDispatchRecord, (conversation_id.world_id.value, turn_id.value)
+            )
+            if replies and dispatch is None:
+                raise EntityNotFoundError("chat_state_invalid")
+            state = "completed" if replies else "claimed" if dispatch else "pending"
+            return DirectTurnView(sent, state, _message(replies[0]) if replies else None)
+
+    async def group_turn(
+        self, conversation_id: ConversationId, turn_id: ChatTurnId, player_id: PlayerId
+    ) -> GroupTurnView:
+        if turn_id.world_id != conversation_id.world_id:
+            raise EntityNotFoundError("chat_world_mismatch")
+        async with self._sessions() as session:
+            conversation = await self._conversation(session, conversation_id, player_id)
+            if conversation.kind != "group":
+                raise ChatTurnUnavailableError("group_turn_required")
+            await require_active_conversation(
+                session, conversation_id.world_id.value, conversation_id.value
+            )
+            turn = await session.get(
+                ChatTurnRecord, (conversation_id.world_id.value, turn_id.value)
+            )
+            if (
+                turn is None
+                or turn.kind not in {"player", "retry"}
+                or turn.conversation_id != conversation_id.value
+            ):
+                raise EntityNotFoundError("chat_turn_not_found")
+            rows = (
+                await session.scalars(
+                    select(ChatMessageRecord)
+                    .where(
+                        active_message_clause(ChatMessageRecord),
+                        ChatMessageRecord.world_id == conversation_id.world_id.value,
+                        ChatMessageRecord.conversation_id == conversation_id.value,
+                        ChatMessageRecord.turn_id == turn_id.value,
+                    )
+                    .order_by(ChatMessageRecord.position)
+                )
+            ).all()
+            player_rows = [row for row in rows if row.sender_player_id == player_id.value]
+            if turn.kind == "retry":
+                player_rows = [
+                    await self._source_message(session, conversation_id, turn, player_id)
+                ]
+                rows = [*player_rows, *rows]
+            replies = [row for row in rows if row.sender_character_id is not None]
+            if len(player_rows) != 1 or len(rows) != 1 + len(replies):
+                raise EntityNotFoundError("chat_state_invalid")
+            participants = {
+                value
+                for value in await session.scalars(
+                    select(ChatParticipantRecord.character_id).where(
+                        ChatParticipantRecord.world_id == conversation_id.world_id.value,
+                        ChatParticipantRecord.conversation_id == conversation_id.value,
+                    )
+                )
+            }
+            if len(participants) < 2 or any(
+                row.sender_character_id not in participants for row in replies
+            ):
+                raise EntityNotFoundError("chat_state_invalid")
+            dispatch = await session.get(
+                ChatTurnDispatchRecord, (conversation_id.world_id.value, turn_id.value)
+            )
+            if (replies and dispatch is None) or (
+                dispatch is not None and dispatch.completed_at_utc is not None and not replies
+            ):
+                raise EntityNotFoundError("chat_state_invalid")
+            state = (
+                "completed"
+                if dispatch is not None and dispatch.completed_at_utc is not None
+                else "claimed"
+                if dispatch is not None
+                else "pending"
+            )
+            recovery = await session.get(ChatReplyRecoveryRecord, (turn.world_id, turn.turn_id))
+            sent = PlayerSend(
+                turn_id,
+                _message(player_rows[0]),
+                turn.token_ceiling,
+                turn.status,
+                ChatTurnId(conversation_id.world_id, recovery.source_turn_id) if recovery else None,
+            )
+            return GroupTurnView(sent, state, tuple(_message(row) for row in replies))
+
+    async def claim_direct(
+        self, conversation_id: ConversationId, turn_id: ChatTurnId, player_id: PlayerId
+    ) -> ClaimedDirectTurn:
+        if turn_id.world_id != conversation_id.world_id:
+            raise EntityNotFoundError("chat_world_mismatch")
+        async with self._sessions() as session, session.begin():
+            await session.connection(execution_options={"livingworld_write_intent": True})
+            conversation = await self._conversation(session, conversation_id, player_id)
+            if conversation.kind != "direct":
+                raise ChatTurnUnavailableError("direct_turn_required")
+            await require_writable_path(
+                session, conversation_id.world_id.value, conversation_id.value
+            )
+            await require_active_conversation(
+                session, conversation_id.world_id.value, conversation_id.value
+            )
+            turn = await session.get(
+                ChatTurnRecord, (conversation_id.world_id.value, turn_id.value)
+            )
+            if (
+                turn is None
+                or turn.kind not in {"player", "retry"}
+                or turn.conversation_id != conversation_id.value
+            ):
+                raise EntityNotFoundError("chat_turn_not_found")
+            if turn.status != "pending":
+                raise ChatTurnUnavailableError("chat_turn_state_invalid")
+            if (
+                await session.get(
+                    ChatTurnDispatchRecord, (conversation_id.world_id.value, turn_id.value)
+                )
+                is not None
+            ):
+                raise ChatTurnUnavailableError("chat_turn_already_claimed")
+            participants = (
+                await session.scalars(
+                    select(ChatParticipantRecord).where(
+                        ChatParticipantRecord.world_id == conversation_id.world_id.value,
+                        ChatParticipantRecord.conversation_id == conversation_id.value,
+                    )
+                )
+            ).all()
+            if len(participants) != 1:
+                raise ChatTurnUnavailableError("direct_participant_invalid")
+            await self._active_attempt(session, conversation_id, turn)
+            player_message = await self._source_message(session, conversation_id, turn, player_id)
+            execution = ChatReplyExecutionRecord(
+                world_id=turn.world_id, turn_id=turn.turn_id, state="running"
+            )
+            session.add(execution)
+            if player_message is None or player_message.conversation_id != conversation_id.value:
+                raise EntityNotFoundError("chat_state_invalid")
+            session.add(
+                ChatTurnDispatchRecord(
+                    world_id=conversation_id.world_id.value,
+                    turn_id=turn_id.value,
+                    claimed_at_utc=datetime.now(UTC),
+                )
+            )
+            await session.flush()
+            return ClaimedDirectTurn(
+                turn_id,
+                conversation_id,
+                player_id,
+                CharacterId(conversation_id.world_id, participants[0].character_id),
+                _message(player_message),
+                turn.token_ceiling,
+                ChatTurnId(conversation_id.world_id, player_message.turn_id)
+                if turn.kind == "retry"
+                else None,
+            )
+
+    async def complete_direct(
+        self, claim: ClaimedDirectTurn, text: str, *, events=(), memories=(), media=None
+    ) -> ChatMessage:
+        if not (
+            claim.turn_id.world_id
+            == claim.conversation_id.world_id
+            == claim.player_id.world_id
+            == claim.character_id.world_id
+        ):
+            raise EntityNotFoundError("chat_world_mismatch")
+        world_id = claim.conversation_id.world_id.value
+        async with self._sessions() as session, session.begin():
+            await session.connection(execution_options={"livingworld_write_intent": True})
+            conversation = await self._conversation(session, claim.conversation_id, claim.player_id)
+            turn = await session.get(ChatTurnRecord, (world_id, claim.turn_id.value))
+            dispatch = await session.get(ChatTurnDispatchRecord, (world_id, claim.turn_id.value))
+            participant = await session.get(
+                ChatParticipantRecord,
+                (world_id, claim.conversation_id.value, claim.character_id.value),
+            )
+            player_message = (
+                await self._source_message(session, claim.conversation_id, turn, claim.player_id)
+                if turn is not None
+                else None
+            )
+            if turn is not None:
+                await self._active_attempt(session, claim.conversation_id, turn, completing=True)
+            if (
+                conversation.kind != "direct"
+                or turn is None
+                or turn.conversation_id != claim.conversation_id.value
+                or turn.token_ceiling != claim.token_ceiling
+                or dispatch is None
+                or participant is None
+                or player_message is None
+                or _message(player_message) != claim.player_message
+            ):
+                raise ChatTurnUnavailableError("chat_turn_claim_invalid")
+            existing = await session.scalar(
+                select(ChatMessageRecord).where(
+                    ChatMessageRecord.world_id == world_id,
+                    ChatMessageRecord.turn_id == claim.turn_id.value,
+                    ChatMessageRecord.sender_character_id.is_not(None),
+                )
+            )
+            if existing is not None:
+                if existing.sender_character_id != claim.character_id.value or not _same_reply_text(
+                    existing, text
+                ):
+                    raise IdempotencyConflictError("chat_reply_conflict")
+                return _message(existing)
+            position = (
+                await session.scalar(
+                    select(func.max(ChatMessageRecord.position)).where(
+                        ChatMessageRecord.world_id == world_id,
+                        ChatMessageRecord.conversation_id == claim.conversation_id.value,
+                    )
+                )
+                or 0
+            ) + 1
+            row = ChatMessageRecord(
+                world_id=world_id,
+                message_id=uuid4(),
+                conversation_id=claim.conversation_id.value,
+                turn_id=claim.turn_id.value,
+                position=position,
+                sender_player_id=None,
+                sender_character_id=claim.character_id.value,
+                text=text,
+                created_at_utc=datetime.now(UTC),
+            )
+            session.add(row)
+            await session.flush()
+            await stamp_message(session, row)
+            await record_chat_events(
+                session,
+                row,
+                claim.player_id,
+                events,
+                await self._story_time(session, world_id, events),
+            )
+            chat_phase("persist_memories")
+            await record_chat_memories(
+                session,
+                row,
+                claim.player_id,
+                memories,
+                await self._story_time(session, world_id, memories),
+                source_player=player_message,
+            )
+            from livingworld.infrastructure.persistence.chat_media import attach_character_media
+
+            chat_phase("persist_reply")
+            await attach_character_media(session, row, claim, media)
+            execution = await session.get(ChatReplyExecutionRecord, (world_id, claim.turn_id.value))
+            if execution is not None:
+                execution.state = "completed"
+            chat_phase("persist_commit")
+            return _message(row)
+
+    async def claim_group(
+        self, conversation_id: ConversationId, turn_id: ChatTurnId, player_id: PlayerId
+    ) -> ClaimedGroupTurn:
+        if turn_id.world_id != conversation_id.world_id:
+            raise EntityNotFoundError("chat_world_mismatch")
+        async with self._sessions() as session, session.begin():
+            await session.connection(execution_options={"livingworld_write_intent": True})
+            conversation = await self._conversation(session, conversation_id, player_id)
+            if conversation.kind != "group":
+                raise ChatTurnUnavailableError("group_turn_required")
+            await require_writable_path(
+                session, conversation_id.world_id.value, conversation_id.value
+            )
+            await require_active_conversation(
+                session, conversation_id.world_id.value, conversation_id.value
+            )
+            turn = await session.get(
+                ChatTurnRecord, (conversation_id.world_id.value, turn_id.value)
+            )
+            if (
+                turn is None
+                or turn.kind not in {"player", "retry"}
+                or turn.conversation_id != conversation_id.value
+            ):
+                raise EntityNotFoundError("chat_turn_not_found")
+            if turn.status != "pending":
+                raise ChatTurnUnavailableError("chat_turn_state_invalid")
+            if (
+                await session.get(
+                    ChatTurnDispatchRecord, (conversation_id.world_id.value, turn_id.value)
+                )
+                is not None
+            ):
+                raise ChatTurnUnavailableError("chat_turn_already_claimed")
+            participants = (
+                await session.scalars(
+                    select(ChatParticipantRecord)
+                    .where(
+                        ChatParticipantRecord.world_id == conversation_id.world_id.value,
+                        ChatParticipantRecord.conversation_id == conversation_id.value,
+                    )
+                    .order_by(ChatParticipantRecord.character_id)
+                )
+            ).all()
+            if len(participants) < 2:
+                raise ChatTurnUnavailableError("group_participants_invalid")
+            await self._active_attempt(session, conversation_id, turn)
+            player_message = await self._source_message(session, conversation_id, turn, player_id)
+            execution = ChatReplyExecutionRecord(
+                world_id=turn.world_id, turn_id=turn.turn_id, state="running"
+            )
+            session.add(execution)
+            if player_message is None or player_message.conversation_id != conversation_id.value:
+                raise EntityNotFoundError("chat_state_invalid")
+            session.add(
+                ChatTurnDispatchRecord(
+                    world_id=conversation_id.world_id.value,
+                    turn_id=turn_id.value,
+                    claimed_at_utc=datetime.now(UTC),
+                )
+            )
+            await session.flush()
+            return ClaimedGroupTurn(
+                turn_id,
+                conversation_id,
+                player_id,
+                tuple(CharacterId(conversation_id.world_id, p.character_id) for p in participants),
+                _message(player_message),
+                turn.token_ceiling,
+                ChatTurnId(conversation_id.world_id, player_message.turn_id)
+                if turn.kind == "retry"
+                else None,
+            )
+
+    async def complete_group_reply(
+        self,
+        claim: ClaimedGroupTurn,
+        character_id: CharacterId,
+        ordinal: int,
+        text: str,
+        *,
+        events=(),
+        memories=(),
+        media=None,
+        privacy=(),
+        private_context=False,
+        privacy_fallback=None,
+    ) -> ChatMessage:
+        privacy = normalize_privacy(text, privacy)
+        if privacy_fallback is not None and (
+            type(privacy_fallback) is not bool
+            or not private_context
+            or (
+                privacy_fallback
+                and privacy
+                != normalize_privacy(
+                    text,
+                    [
+                        {
+                            "start": 0,
+                            "end": len(text.encode("utf-16-le")) // 2,
+                            "character_id": str(character_id.value),
+                        }
+                    ],
+                )
+            )
+        ):
+            raise ValueError("chat_privacy_fallback_invalid")
+        if any(span["character_id"] != str(character_id.value) for span in privacy):
+            raise ValueError("chat_privacy_invalid")
+        private_context = private_context or any(
+            span["character_id"] == str(character_id.value) for span in claim.player_message.privacy
+        )
+        if not (
+            claim.turn_id.world_id
+            == claim.conversation_id.world_id
+            == claim.player_id.world_id
+            == character_id.world_id
+        ):
+            raise EntityNotFoundError("chat_world_mismatch")
+        world_id = claim.conversation_id.world_id.value
+        async with self._sessions() as session, session.begin():
+            await session.connection(execution_options={"livingworld_write_intent": True})
+            conversation = await self._conversation(session, claim.conversation_id, claim.player_id)
+            turn = await session.get(ChatTurnRecord, (world_id, claim.turn_id.value))
+            dispatch = await session.get(ChatTurnDispatchRecord, (world_id, claim.turn_id.value))
+            participants = (
+                await session.scalars(
+                    select(ChatParticipantRecord)
+                    .where(
+                        ChatParticipantRecord.world_id == world_id,
+                        ChatParticipantRecord.conversation_id == claim.conversation_id.value,
+                    )
+                    .order_by(ChatParticipantRecord.character_id)
+                )
+            ).all()
+            player_message = (
+                await self._source_message(session, claim.conversation_id, turn, claim.player_id)
+                if turn is not None
+                else None
+            )
+            if turn is not None:
+                await self._active_attempt(session, claim.conversation_id, turn, completing=True)
+            if (
+                conversation.kind != "group"
+                or turn is None
+                or turn.conversation_id != claim.conversation_id.value
+                or turn.token_ceiling != claim.token_ceiling
+                or dispatch is None
+                or len(participants) < 2
+                or tuple(p.character_id for p in participants)
+                != tuple(item.value for item in claim.character_ids)
+                or character_id not in claim.character_ids
+                or player_message is None
+                or _message(player_message) != claim.player_message
+            ):
+                raise ChatTurnUnavailableError("chat_turn_claim_invalid")
+            replies = (
+                await session.scalars(
+                    select(ChatMessageRecord)
+                    .where(
+                        ChatMessageRecord.world_id == world_id,
+                        ChatMessageRecord.turn_id == claim.turn_id.value,
+                        ChatMessageRecord.sender_character_id.is_not(None),
+                    )
+                    .order_by(ChatMessageRecord.position)
+                )
+            ).all()
+            if ordinal < len(replies):
+                existing = replies[ordinal]
+                if (
+                    existing.sender_character_id != character_id.value
+                    or not _same_reply_text(existing, text)
+                    or (tuple(json.loads(existing.privacy_json)) if existing.privacy_json else ())
+                    != tuple(privacy)
+                    or existing.privacy_fallback != privacy_fallback
+                ):
+                    raise IdempotencyConflictError("chat_reply_conflict")
+                return _message(existing)
+            if dispatch.completed_at_utc is not None:
+                raise ChatTurnUnavailableError("group_turn_completed")
+            if ordinal != len(replies):
+                raise ChatTurnUnavailableError("chat_reply_ordinal_gap")
+            position = (
+                await session.scalar(
+                    select(func.max(ChatMessageRecord.position)).where(
+                        ChatMessageRecord.world_id == world_id,
+                        ChatMessageRecord.conversation_id == claim.conversation_id.value,
+                    )
+                )
+                or 0
+            ) + 1
+            row = ChatMessageRecord(
+                world_id=world_id,
+                message_id=uuid4(),
+                conversation_id=claim.conversation_id.value,
+                turn_id=claim.turn_id.value,
+                position=position,
+                sender_player_id=None,
+                sender_character_id=character_id.value,
+                text=text,
+                privacy_json=json.dumps(normalize_privacy(text, privacy))
+                if privacy or private_context
+                else None,
+                privacy_fallback=privacy_fallback,
+                created_at_utc=datetime.now(UTC),
+            )
+            session.add(row)
+            await session.flush()
+            await stamp_message(session, row)
+            if private_context or privacy:
+                events, media = (), None
+                private_context = True
+            await record_chat_events(
+                session,
+                row,
+                claim.player_id,
+                events,
+                await self._story_time(session, world_id, events),
+            )
+            chat_phase("persist_memories")
+            await record_chat_memories(
+                session,
+                row,
+                claim.player_id,
+                memories,
+                await self._story_time(session, world_id, memories),
+                source_player=player_message,
+                private_owner=character_id.value if private_context else None,
+            )
+            from livingworld.infrastructure.persistence.chat_media import attach_character_media
+
+            chat_phase("persist_reply")
+            await attach_character_media(session, row, claim, media)
+            chat_phase("persist_commit")
+            return _message(row)
+
+    async def finish_group(self, claim: ClaimedGroupTurn) -> GroupTurnView:
+        if not (
+            claim.turn_id.world_id == claim.conversation_id.world_id == claim.player_id.world_id
+            and all(item.world_id == claim.conversation_id.world_id for item in claim.character_ids)
+        ):
+            raise EntityNotFoundError("chat_world_mismatch")
+        world_id = claim.conversation_id.world_id.value
+        async with self._sessions() as session, session.begin():
+            await session.connection(execution_options={"livingworld_write_intent": True})
+            conversation = await self._conversation(session, claim.conversation_id, claim.player_id)
+            turn = await session.get(ChatTurnRecord, (world_id, claim.turn_id.value))
+            dispatch = await session.get(ChatTurnDispatchRecord, (world_id, claim.turn_id.value))
+            player_message = (
+                await self._source_message(session, claim.conversation_id, turn, claim.player_id)
+                if turn is not None
+                else None
+            )
+            if turn is not None:
+                await self._active_attempt(session, claim.conversation_id, turn, completing=True)
+            participants = tuple(
+                await session.scalars(
+                    select(ChatParticipantRecord.character_id)
+                    .where(
+                        ChatParticipantRecord.world_id == world_id,
+                        ChatParticipantRecord.conversation_id == claim.conversation_id.value,
+                    )
+                    .order_by(ChatParticipantRecord.character_id)
+                )
+            )
+            reply_count = await session.scalar(
+                select(func.count())
+                .select_from(ChatMessageRecord)
+                .where(
+                    ChatMessageRecord.world_id == world_id,
+                    ChatMessageRecord.turn_id == claim.turn_id.value,
+                    ChatMessageRecord.sender_character_id.is_not(None),
+                )
+            )
+            if (
+                conversation.kind != "group"
+                or turn is None
+                or turn.conversation_id != claim.conversation_id.value
+                or turn.token_ceiling != claim.token_ceiling
+                or dispatch is None
+                or player_message is None
+                or _message(player_message) != claim.player_message
+                or participants != tuple(item.value for item in claim.character_ids)
+                or not reply_count
+            ):
+                raise ChatTurnUnavailableError("chat_turn_claim_invalid")
+            if dispatch.completed_at_utc is None:
+                dispatch.completed_at_utc = datetime.now(UTC)
+                execution = await session.get(
+                    ChatReplyExecutionRecord, (world_id, claim.turn_id.value)
+                )
+                if execution is not None:
+                    execution.state = "completed"
+                await session.flush()
+        return await self.group_turn(claim.conversation_id, claim.turn_id, claim.player_id)

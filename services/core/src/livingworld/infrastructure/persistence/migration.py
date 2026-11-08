@@ -1,0 +1,1585 @@
+"""Alembic ownership and the one-time C-002 compatibility takeover."""
+
+from __future__ import annotations
+
+import re
+from datetime import datetime, timedelta
+from importlib.resources import files
+
+from alembic import command
+from alembic.config import Config
+from sqlalchemy import CheckConstraint, Connection, MetaData, UniqueConstraint, inspect, text
+
+from livingworld.infrastructure.persistence import (  # noqa: F401
+    card_library_models,
+    character_card_bindings,
+    chat_path_models,
+    deletion_models,
+    director_rotation,
+    location_policy_models,  # noqa: F401
+    media_models,
+    player_persona_models,
+    speech_models,
+)
+from livingworld.infrastructure.persistence.chat_visual_models import (  # noqa: F401
+    ChatCharacterBackgroundRecord,
+    ChatCharacterExpressionRecord,
+    ChatVisualBackgroundRecord,
+)
+from livingworld.infrastructure.persistence.content_builder import (
+    ContentBuilderJobRecord,  # noqa: F401
+)
+from livingworld.infrastructure.persistence.content_models import ContentBase
+from livingworld.infrastructure.persistence.conversation_memory import (
+    ConversationMemoryDraftRecord,  # noqa: F401
+    ConversationMemoryRevisionRecord,  # noqa: F401
+)
+from livingworld.infrastructure.persistence.director_models import (
+    DirectorSettingsRecord,  # noqa: F401
+)
+from livingworld.infrastructure.persistence.encounter_models import (
+    EncounterSettingsRecord,  # noqa: F401
+)
+from livingworld.infrastructure.persistence.errors import MigrationCompatibilityError
+from livingworld.infrastructure.persistence.faction_models import (
+    AcquaintanceFactionSourceRecord,  # noqa: F401
+    AcquaintanceRecord,  # noqa: F401
+    CharacterAvatarRecord,  # noqa: F401
+    FactionMemberRecord,  # noqa: F401
+    FactionRecord,  # noqa: F401
+)
+from livingworld.infrastructure.persistence.llm_models import AccountingBase
+from livingworld.infrastructure.persistence.long_memory_models import (
+    LongChatMemoryRecord,  # noqa: F401
+)
+from livingworld.infrastructure.persistence.models import Base
+from livingworld.infrastructure.persistence.offline_contact_models import (
+    OfflineContactSettingsRecord,  # noqa: F401
+)
+from livingworld.infrastructure.persistence.proactive_models import (
+    ProactiveSettingsRecord,  # noqa: F401
+)
+from livingworld.infrastructure.persistence.recall_index_models import (
+    FTS_SQL,
+    FTS_TABLES,
+    FTS_TRIGGERS,
+    RecallDocumentRecord,  # noqa: F401
+)
+from livingworld.infrastructure.persistence.shared_activity_models import (
+    SharedActivityRecord,  # noqa: F401
+)
+from livingworld.infrastructure.persistence.story_models import ChatStoryRecord  # noqa: F401
+from livingworld.infrastructure.persistence.world_cover_models import WorldCoverRecord  # noqa: F401
+
+LEGACY_REVISION = "0001_legacy_runtime_foundation"
+DOMAIN_BASELINE_REVISION = "0002_world_domain_persistence"
+COMMAND_REVISION = "0003_command_pipeline"
+OBSERVATION_REVISION = "0004_observation_identity"
+LEDGER_REVISION = "0005_canonical_ledger"
+CONTENT_REVISION = "0006_canonical_content"
+LORE_REVISION = "0007_lore_collections"
+PACKAGE_REVISION = "0008_native_content_packages"
+ACCOUNTING_REVISION = "0009_llm_accounting"
+BUDGET_REVISION = "0010_llm_budget_guard"
+SIMULATION_REVISION = "0011_simulation_scheduler"
+ACTION_REVISION = "0012_action_scenes_perception"
+SPARSE_REVISION = "0013_sparse_simulation_activation"
+MEMORY_REVISION = "0014_episodic_memory"
+BINDING_REVISION = "0015_local_player_binding"
+PROFILE_REVISION = "0016_local_profiles"
+WORLD_CONTENT_REVISION = "0017_world_content_imports"
+CHAT_CONVERSATION_REVISION = "0018_chat_conversations"
+CHAT_MESSAGE_REVISION = "0019_chat_messages"
+CHAT_DISPATCH_REVISION = "0020_chat_turn_dispatch"
+CHAT_COMPLETION_REVISION = "0021_group_turn_completion"
+COMMON_LORE_REVISION = "0022_world_common_lore"
+BUILDER_REVISION = "0023_content_builder_jobs"
+CONVERSATION_MEMORY_REVISION = "0024_conversation_memory"
+DIRECTOR_REVISION = "0025_director_runtime"
+LOCAL_LOCATION_REVISION = "0026_local_location_catalog"
+OFFLINE_CONTACT_REVISION = "0027_offline_contact"
+STORY_REVISION = "0028_world_event_journal"
+LONG_MEMORY_REVISION = "0029_long_chat_memory"
+COVER_REVISION = "0030_world_covers"
+REPLY_RECOVERY_REVISION = "0031_chat_reply_recovery"
+CONTEXT_REPORT_REVISION = "0032_chat_context_reports"
+ENCOUNTER_REVISION = "0033_character_encounters"
+SHARED_REVISION = "0034_shared_activities"
+PROACTIVE_REVISION = "0035_proactive_contact"
+FACTION_REVISION = "0036_character_factions"
+RECALL_REVISION = "0037_persistent_chat_recall"
+LOCATION_REVISION = "0038_location_policies"
+MOBILITY_REVISION = "0039_character_mobility"
+REMOVAL_REVISION = "0040_authored_removal"
+ROTATION_REVISION = "0041_director_rotation"
+DELETION_REVISION = "0042_world_deletion"
+ACQUAINTANCE_SOURCE_REVISION = "0043_acquaintance_sources"
+LOCATION_NAME_SCOPE_REVISION = "0044_location_name_scopes"
+SPEECH_REVISION = "0045_character_speech"
+SPEECH_CACHE_REVISION = "0046_speech_cache_attempts"
+SPEECH_PREVIEW_REVISION = "0047_speech_preview"
+MEDIA_REVISION = "0048_chat_media"
+LOCAL_MODEL_LIMITS_REVISION = "0049_local_model_limits"
+STICKER_LIBRARY_FRESHNESS_REVISION = "0050_sticker_library_freshness"
+MEDIA_FREQUENCY_KIND_REVISION = "0051_media_frequency_kind"
+STICKER_DESCRIPTION_REVISION = "0052_sticker_entry_description"
+EXAMPLE_WORLD_REVISION = "0053_example_world_setup"
+PLAYER_PERSONA_REVISION = "0054_player_personas"
+WORLD_STYLE_REVISION = "0055_world_styles"
+PLAYER_CARD_REVISION = "0056_player_cards"
+CHAT_PATH_REVISION = "0057_chat_paths"
+CHARACTER_EVOLUTION_REVISION = "0058_character_evolution"
+CHARACTER_EVOLUTION_PROVENANCE_REVISION = "0059_character_evolution_provenance"
+CHAT_PREFERENCES_REVISION = "0060_chat_preferences"
+CHAT_VISUALS_REVISION = "0061_chat_visuals"
+CARD_LIBRARY_REVISION = "0062_card_library"
+CARD_PACK_REVISION = "0063_card_packs"
+CHARACTER_EVOLUTION_KIND_REVISION = "0064_character_evolution_kind"
+CHAT_PRIVACY_REVISION = "0065_chat_privacy"
+CHAT_PRIVACY_FALLBACK_REVISION = "0066_chat_privacy_fallback"
+HEAD_REVISION = CHAT_PRIVACY_FALLBACK_REVISION
+
+# One reviewed linear chain replaces repeated hand-maintained suffix sets.
+_SUPPORTED_REVISIONS = (
+    LEGACY_REVISION,
+    DOMAIN_BASELINE_REVISION,
+    COMMAND_REVISION,
+    OBSERVATION_REVISION,
+    LEDGER_REVISION,
+    CONTENT_REVISION,
+    LORE_REVISION,
+    PACKAGE_REVISION,
+    ACCOUNTING_REVISION,
+    BUDGET_REVISION,
+    SIMULATION_REVISION,
+    ACTION_REVISION,
+    SPARSE_REVISION,
+    MEMORY_REVISION,
+    BINDING_REVISION,
+    PROFILE_REVISION,
+    WORLD_CONTENT_REVISION,
+    CHAT_CONVERSATION_REVISION,
+    CHAT_MESSAGE_REVISION,
+    CHAT_DISPATCH_REVISION,
+    CHAT_COMPLETION_REVISION,
+    COMMON_LORE_REVISION,
+    BUILDER_REVISION,
+    CONVERSATION_MEMORY_REVISION,
+    DIRECTOR_REVISION,
+    LOCAL_LOCATION_REVISION,
+    OFFLINE_CONTACT_REVISION,
+    STORY_REVISION,
+    LONG_MEMORY_REVISION,
+    COVER_REVISION,
+    REPLY_RECOVERY_REVISION,
+    CONTEXT_REPORT_REVISION,
+    ENCOUNTER_REVISION,
+    SHARED_REVISION,
+    PROACTIVE_REVISION,
+    FACTION_REVISION,
+    RECALL_REVISION,
+    LOCATION_REVISION,
+    MOBILITY_REVISION,
+    REMOVAL_REVISION,
+    ROTATION_REVISION,
+    DELETION_REVISION,
+    ACQUAINTANCE_SOURCE_REVISION,
+    LOCATION_NAME_SCOPE_REVISION,
+    SPEECH_REVISION,
+    SPEECH_CACHE_REVISION,
+    SPEECH_PREVIEW_REVISION,
+    MEDIA_REVISION,
+    LOCAL_MODEL_LIMITS_REVISION,
+    STICKER_LIBRARY_FRESHNESS_REVISION,
+    MEDIA_FREQUENCY_KIND_REVISION,
+    STICKER_DESCRIPTION_REVISION,
+    EXAMPLE_WORLD_REVISION,
+    PLAYER_PERSONA_REVISION,
+    WORLD_STYLE_REVISION,
+    PLAYER_CARD_REVISION,
+    CHAT_PATH_REVISION,
+    CHARACTER_EVOLUTION_REVISION,
+    CHARACTER_EVOLUTION_PROVENANCE_REVISION,
+    CHAT_PREFERENCES_REVISION,
+    CHAT_VISUALS_REVISION,
+    CARD_LIBRARY_REVISION,
+    CARD_PACK_REVISION,
+    CHARACTER_EVOLUTION_KIND_REVISION,
+    CHAT_PRIVACY_REVISION,
+    CHAT_PRIVACY_FALLBACK_REVISION,
+)
+CARD_PACK_TABLES = {"card_packs", "card_pack_members", "card_pack_images"}
+CARD_LIBRARY_TABLES = {"card_library", "card_library_images", "card_library_worlds"}
+CHAT_VISUAL_TABLES = {
+    "chat_visual_backgrounds",
+    "chat_character_backgrounds",
+    "chat_character_expressions",
+}
+_REVISION_RANGES = {
+    revision: frozenset(_SUPPORTED_REVISIONS[index:])
+    for index, revision in enumerate(_SUPPORTED_REVISIONS)
+}
+CHAT_PATH_TABLES = {
+    "chat_lore_activations",
+    "chat_paths",
+    "chat_path_states",
+    "chat_path_messages",
+    "chat_path_turns",
+    "chat_path_operations",
+    "chat_memory_origins",
+}
+CHARACTER_EVOLUTION_TABLES = {"character_card_evolution"}
+LOCATION_POLICY_TABLES = {
+    "location_policies",
+    "location_character_access",
+    "character_location_policies",
+}
+ROTATION_TABLES = {"director_rotation", "director_rotation_members", "character_card_bindings"}
+DELETION_TABLES = {"group_dissolutions", "world_deletions"}
+ACQUAINTANCE_SOURCE_TABLES = {"character_acquaintance_sources"}
+MEDIA_TABLES = {
+    "chat_media_assets",
+    "chat_sticker_entries",
+    "chat_media_settings",
+    "chat_media_attempts",
+    "chat_media_caption_calls",
+}
+SPEECH_TABLES = {
+    "voice_cards",
+    "character_voices",
+    "speech_settings",
+    "speech_jobs",
+    "speech_call_receipts",
+    "remote_voices",
+}
+FACTION_TABLES = {
+    "character_factions",
+    "character_faction_members",
+    "character_avatars",
+    "character_acquaintances",
+}
+PROACTIVE_TABLES = {
+    "proactive_contact_settings",
+    "proactive_contact_episodes",
+    "chat_read_positions",
+}
+SHARED_TABLES = {"director_shared_settings", "director_shared_activities"}
+ENCOUNTER_TABLES = {"director_encounter_settings", "director_encounters"}
+REPLY_RECOVERY_TABLES = {"chat_reply_executions", "chat_reply_recoveries"}
+COVER_TABLES = {"world_covers", "world_cover_images"}
+LONG_MEMORY_TABLES = {"long_chat_memories", "long_chat_memory_settings"}
+STORY_TABLES = {
+    "world_news_settings",
+    "world_news_marks",
+    "chat_story_entries",
+    "world_news_candidates",
+    "world_news_batches",
+}
+OFFLINE_CONTACT_TABLES = {
+    "offline_contact_settings",
+    "offline_contact_episodes",
+    "local_session_visibility",
+}
+LOCAL_LOCATION_TABLES = {"local_location_catalog"}
+DIRECTOR_TABLES = {"director_settings", "director_plans", "director_candidates"}
+CONVERSATION_MEMORY_TABLES = {"conversation_memory_revisions", "conversation_memory_drafts"}
+BUILDER_JOB_TABLES = {"content_builder_jobs"}
+CHAT_IDENTITY_TABLES = {"chat_conversations", "chat_participants"}
+CHAT_MESSAGE_TABLES = {"chat_turns", "chat_messages"}
+CHAT_DISPATCH_TABLES = {"chat_turn_dispatches"}
+CHAT_TABLES = CHAT_IDENTITY_TABLES | CHAT_MESSAGE_TABLES | CHAT_DISPATCH_TABLES
+WORLD_COMMON_LORE_TABLES = {"world_common_lore"}
+LOCAL_PROFILE_TABLES = {"local_user_profile", "local_world_profiles"}
+BUDGET_TABLES = {"llm_budgets", "llm_budget_reservations"}
+SIMULATION_TABLES = {
+    "simulation_queue_cursors",
+    "simulation_scheduled_triggers",
+    "simulation_activations",
+    "simulation_activation_causes",
+    "simulation_schedule_receipts",
+}
+ACTION_TABLES = {"scenes", "scene_participants"}
+SPARSE_TABLES = {"simulation_activation_causes"}
+MEMORY_TABLES = {"character_memories", "episodic_memory_observation_sources"}
+PACKAGE_TABLES = {"content_import_baselines", "content_asset_blob_bindings"}
+LEGACY_CHECKSUM = "0345ec9d50fd45b01ba0f97ff6f14a25f683fb8d01f08f04ff9dc4892ad1cac5"
+LEGACY_TABLES = {"schema_version", "migration_history"}
+DOMAIN_TABLES = set(Base.metadata.tables)
+CONTENT_TABLES = set(ContentBase.metadata.tables)
+
+_LEGACY_COLUMNS = {
+    "schema_version": [
+        ("singleton", "INTEGER", False, 1),
+        ("version", "INTEGER", True, 0),
+    ],
+    "migration_history": [
+        ("version", "INTEGER", False, 1),
+        ("name", "TEXT", True, 0),
+        ("checksum", "TEXT", True, 0),
+        ("applied_at", "TEXT", True, 0),
+    ],
+}
+_LEGACY_SQL = {
+    "schema_version": (
+        "CREATE TABLE schema_version (singleton INTEGER PRIMARY KEY CHECK(singleton = 1), "
+        "version INTEGER NOT NULL)"
+    ),
+    "migration_history": (
+        "CREATE TABLE migration_history (version INTEGER PRIMARY KEY, name TEXT NOT NULL, "
+        "checksum TEXT NOT NULL, applied_at TEXT NOT NULL)"
+    ),
+}
+_EVENT_TRIGGERS = {
+    f"world_events_no_{action}": (
+        f"CREATE TRIGGER world_events_no_{action} BEFORE {action.upper()} ON world_events "
+        "BEGIN SELECT RAISE(ABORT, 'world_event_immutable'); END"
+    )
+    for action in ("update", "delete")
+}
+
+
+def _normalized_sql(sql: str) -> str:
+    # SQL keywords are case-insensitive; quoted values retain their exact meaning.
+    parts = re.split(r"('(?:''|[^'])*')", sql)
+    return "".join(
+        part if index % 2 else re.sub(r"\s+", "", part).casefold()
+        for index, part in enumerate(parts)
+    )
+
+
+def _fail(code: str) -> None:
+    raise MigrationCompatibilityError(code)
+
+
+def _index_predicate(value: object) -> str:
+    return _normalized_sql(str(value)) if value is not None else ""
+
+
+def _table_names(connection: Connection) -> set[str]:
+    return {
+        row[0]
+        for row in connection.execute(
+            text("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT GLOB 'sqlite_*'")
+        )
+    }
+
+
+def _validate_legacy_shape(connection: Connection) -> None:
+    inspector = inspect(connection)
+    for table_name, expected in _LEGACY_COLUMNS.items():
+        if table_name not in inspector.get_table_names():
+            _fail("legacy_schema_shape_mismatch")
+        actual = [
+            (
+                column["name"],
+                str(column["type"]).upper(),
+                not column["nullable"],
+                column["primary_key"],
+            )
+            for column in inspector.get_columns(table_name)
+        ]
+        if actual != expected:
+            _fail("legacy_schema_shape_mismatch")
+        ddl = connection.execute(
+            text("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = :name"),
+            {"name": table_name},
+        ).scalar_one()
+        if _normalized_sql(ddl) != _normalized_sql(_LEGACY_SQL[table_name]):
+            _fail("legacy_schema_shape_mismatch")
+        if inspector.get_indexes(table_name) or inspector.get_foreign_keys(table_name):
+            _fail("legacy_schema_shape_mismatch")
+
+
+def _validate_legacy_metadata(connection: Connection) -> None:
+    _validate_legacy_shape(connection)
+    try:
+        versions = connection.execute(text("SELECT singleton, version FROM schema_version")).all()
+        history = connection.execute(
+            text(
+                "SELECT version, name, checksum, applied_at FROM migration_history ORDER BY version"
+            )
+        ).all()
+    except Exception:
+        _fail("legacy_metadata_corrupt")
+    if versions != [(1, 1)]:
+        if len(versions) == 1 and versions[0][0] == 1:
+            _fail("legacy_schema_version_unsupported")
+        _fail("legacy_metadata_corrupt")
+    if len(history) != 1 or history[0][0:2] != (1, "runtime_metadata"):
+        _fail("legacy_migration_history_mismatch")
+    if history[0][2] != LEGACY_CHECKSUM:
+        _fail("legacy_checksum_mismatch")
+    try:
+        applied_at = datetime.fromisoformat(history[0][3])
+    except (TypeError, ValueError):
+        _fail("legacy_migration_history_corrupt")
+    if applied_at.tzinfo is None or applied_at.utcoffset() != timedelta(0):
+        _fail("legacy_migration_history_corrupt")
+
+
+def _alembic_config(connection: Connection) -> Config:
+    config = Config()
+    location = files("livingworld.infrastructure.persistence.migrations")
+    config.set_main_option("script_location", str(location))
+    config.attributes["connection"] = connection
+    return config
+
+
+def _current_revision(connection: Connection) -> str:
+    columns = inspect(connection).get_columns("alembic_version")
+    if len(columns) != 1 or (
+        columns[0]["name"],
+        str(columns[0]["type"]).upper(),
+        columns[0]["nullable"],
+        bool(columns[0]["primary_key"]),
+    ) != ("version_num", "VARCHAR(32)", False, True):
+        _fail("alembic_cursor_corrupt")
+    rows = connection.execute(text("SELECT version_num FROM alembic_version")).all()
+    if len(rows) != 1 or not isinstance(rows[0][0], str):
+        _fail("alembic_cursor_corrupt")
+    return rows[0][0]
+
+
+def _validate_managed_state(connection: Connection, revision: str) -> None:
+    # Additive authored/job tables do not change the older runtime shapes.
+    pre_persona_revision = revision not in _REVISION_RANGES[PLAYER_PERSONA_REVISION]
+    pre_chat_privacy_revision = revision not in _REVISION_RANGES[CHAT_PRIVACY_REVISION]
+    pre_chat_privacy_fallback_revision = (
+        revision not in _REVISION_RANGES[CHAT_PRIVACY_FALLBACK_REVISION]
+    )
+    pre_style_revision = revision not in _REVISION_RANGES[WORLD_STYLE_REVISION]
+    pre_player_card_revision = revision not in _REVISION_RANGES[PLAYER_CARD_REVISION]
+    pre_chat_path_revision = revision not in _REVISION_RANGES[CHAT_PATH_REVISION]
+    pre_character_evolution_revision = (
+        revision not in _REVISION_RANGES[CHARACTER_EVOLUTION_REVISION]
+    )
+    pre_character_evolution_provenance_revision = (
+        revision not in _REVISION_RANGES[CHARACTER_EVOLUTION_PROVENANCE_REVISION]
+    )
+    pre_character_evolution_kind_revision = (
+        revision not in _REVISION_RANGES[CHARACTER_EVOLUTION_KIND_REVISION]
+    )
+    pre_chat_preferences_revision = revision not in _REVISION_RANGES[CHAT_PREFERENCES_REVISION]
+    pre_chat_visuals_revision = revision not in _REVISION_RANGES[CHAT_VISUALS_REVISION]
+    pre_card_pack_revision = revision not in _REVISION_RANGES[CARD_PACK_REVISION]
+    pre_card_library_revision = revision not in _REVISION_RANGES[CARD_LIBRARY_REVISION]
+    pre_example_revision = revision not in _REVISION_RANGES[EXAMPLE_WORLD_REVISION]
+    pre_recall_revision = revision not in _REVISION_RANGES[RECALL_REVISION]
+    pre_location_policy_revision = revision not in _REVISION_RANGES[LOCATION_REVISION]
+    pre_mobility_revision = revision not in _REVISION_RANGES[MOBILITY_REVISION]
+    pre_removal_revision = revision not in _REVISION_RANGES[REMOVAL_REVISION]
+    pre_rotation_revision = revision not in _REVISION_RANGES[ROTATION_REVISION]
+    pre_deletion_revision = revision not in _REVISION_RANGES[DELETION_REVISION]
+    pre_acquaintance_source_revision = (
+        revision not in _REVISION_RANGES[ACQUAINTANCE_SOURCE_REVISION]
+    )
+    pre_location_name_scope_revision = (
+        revision not in _REVISION_RANGES[LOCATION_NAME_SCOPE_REVISION]
+    )
+    pre_speech_revision = revision not in _REVISION_RANGES[SPEECH_REVISION]
+    pre_speech_cache_revision = revision not in _REVISION_RANGES[SPEECH_CACHE_REVISION]
+    pre_speech_preview_revision = revision not in _REVISION_RANGES[SPEECH_PREVIEW_REVISION]
+    pre_media_revision = revision not in _REVISION_RANGES[MEDIA_REVISION]
+    pre_sticker_description_revision = (
+        revision not in _REVISION_RANGES[STICKER_DESCRIPTION_REVISION]
+    )
+    pre_media_frequency_kind_revision = (
+        revision not in _REVISION_RANGES[MEDIA_FREQUENCY_KIND_REVISION]
+    )
+    pre_local_model_limits_revision = revision not in _REVISION_RANGES[LOCAL_MODEL_LIMITS_REVISION]
+    pre_sticker_library_freshness_revision = (
+        revision not in _REVISION_RANGES[STICKER_LIBRARY_FRESHNESS_REVISION]
+    )
+    pre_faction_revision = revision not in _REVISION_RANGES[FACTION_REVISION]
+    pre_proactive_revision = revision not in _REVISION_RANGES[PROACTIVE_REVISION]
+    pre_shared_revision = revision not in _REVISION_RANGES[SHARED_REVISION]
+    pre_encounter_revision = revision not in _REVISION_RANGES[ENCOUNTER_REVISION]
+    pre_context_report_revision = revision not in _REVISION_RANGES[CONTEXT_REPORT_REVISION]
+    pre_reply_recovery_revision = revision not in _REVISION_RANGES[REPLY_RECOVERY_REVISION]
+    pre_cover_revision = revision not in _REVISION_RANGES[COVER_REVISION]
+    pre_long_memory_revision = revision not in _REVISION_RANGES[LONG_MEMORY_REVISION]
+    pre_story_revision = revision not in _REVISION_RANGES[STORY_REVISION]
+    pre_offline_contact_revision = revision not in _REVISION_RANGES[OFFLINE_CONTACT_REVISION]
+    pre_local_location_revision = revision not in _REVISION_RANGES[LOCAL_LOCATION_REVISION]
+    pre_director_revision = revision not in _REVISION_RANGES[DIRECTOR_REVISION]
+    pre_conversation_memory_revision = (
+        revision not in _REVISION_RANGES[CONVERSATION_MEMORY_REVISION]
+    )
+    pre_builder_revision = revision not in _REVISION_RANGES[BUILDER_REVISION]
+    pre_completion_revision = revision not in _REVISION_RANGES[CHAT_COMPLETION_REVISION]
+    pre_common_lore_revision = revision not in _REVISION_RANGES[COMMON_LORE_REVISION]
+    if revision in _REVISION_RANGES[CHAT_COMPLETION_REVISION]:
+        revision = CHAT_DISPATCH_REVISION
+    if revision not in {
+        LEGACY_REVISION,
+        DOMAIN_BASELINE_REVISION,
+        COMMAND_REVISION,
+        OBSERVATION_REVISION,
+        LEDGER_REVISION,
+        CONTENT_REVISION,
+        LORE_REVISION,
+        PACKAGE_REVISION,
+        ACCOUNTING_REVISION,
+        BUDGET_REVISION,
+        SIMULATION_REVISION,
+        ACTION_REVISION,
+        SPARSE_REVISION,
+        MEMORY_REVISION,
+        BINDING_REVISION,
+        PROFILE_REVISION,
+        WORLD_CONTENT_REVISION,
+        CHAT_CONVERSATION_REVISION,
+        CHAT_MESSAGE_REVISION,
+        CHAT_DISPATCH_REVISION,
+        CHARACTER_EVOLUTION_REVISION,
+        CHARACTER_EVOLUTION_PROVENANCE_REVISION,
+        CHAT_PREFERENCES_REVISION,
+        CHAT_VISUALS_REVISION,
+        CARD_LIBRARY_REVISION,
+    }:
+        _fail("alembic_revision_unsupported")
+    # Through 0020, chat revisions only add tables. Validate each historical
+    # cursor against that reviewed shape minus its later tables; 0021 is the
+    # separately checked nullable completion column.
+    pre_chat_revision = revision not in {
+        CHAT_CONVERSATION_REVISION,
+        CHAT_MESSAGE_REVISION,
+        CHAT_DISPATCH_REVISION,
+    }
+    pre_message_revision = revision not in {CHAT_MESSAGE_REVISION, CHAT_DISPATCH_REVISION}
+    pre_dispatch_revision = revision != CHAT_DISPATCH_REVISION
+    if revision in {WORLD_CONTENT_REVISION, CHAT_CONVERSATION_REVISION, CHAT_MESSAGE_REVISION}:
+        revision = CHAT_DISPATCH_REVISION
+    _validate_legacy_metadata(connection)
+    tables = _table_names(connection)
+    expected = LEGACY_TABLES | {"alembic_version"}
+    domain_present = revision != LEGACY_REVISION
+    if domain_present:
+        expected |= DOMAIN_TABLES
+        if pre_chat_revision:
+            expected -= CHAT_IDENTITY_TABLES
+        if pre_message_revision:
+            expected -= CHAT_MESSAGE_TABLES
+        if pre_dispatch_revision:
+            expected -= CHAT_DISPATCH_TABLES
+        if revision not in {
+            LEDGER_REVISION,
+            CONTENT_REVISION,
+            LORE_REVISION,
+            PACKAGE_REVISION,
+            ACCOUNTING_REVISION,
+            BUDGET_REVISION,
+            SIMULATION_REVISION,
+            ACTION_REVISION,
+            SPARSE_REVISION,
+            MEMORY_REVISION,
+            BINDING_REVISION,
+            PROFILE_REVISION,
+            CHAT_DISPATCH_REVISION,
+        }:
+            expected -= {"world_ledger_cursors"}
+    if revision in {
+        CONTENT_REVISION,
+        LORE_REVISION,
+        PACKAGE_REVISION,
+        ACCOUNTING_REVISION,
+        BUDGET_REVISION,
+        SIMULATION_REVISION,
+        ACTION_REVISION,
+        SPARSE_REVISION,
+        MEMORY_REVISION,
+        BINDING_REVISION,
+        PROFILE_REVISION,
+        CHAT_DISPATCH_REVISION,
+    }:
+        expected |= CONTENT_TABLES
+        if revision not in {
+            PACKAGE_REVISION,
+            ACCOUNTING_REVISION,
+            BUDGET_REVISION,
+            SIMULATION_REVISION,
+            ACTION_REVISION,
+            SPARSE_REVISION,
+            MEMORY_REVISION,
+            BINDING_REVISION,
+            PROFILE_REVISION,
+            CHAT_DISPATCH_REVISION,
+        }:
+            expected -= PACKAGE_TABLES
+        if revision == CONTENT_REVISION:
+            expected -= {"content_lore_collections"}
+    if revision in {
+        ACCOUNTING_REVISION,
+        BUDGET_REVISION,
+        SIMULATION_REVISION,
+        ACTION_REVISION,
+        SPARSE_REVISION,
+        MEMORY_REVISION,
+        BINDING_REVISION,
+        PROFILE_REVISION,
+        CHAT_DISPATCH_REVISION,
+    }:
+        expected |= set(AccountingBase.metadata.tables)
+        if revision == ACCOUNTING_REVISION:
+            expected -= BUDGET_TABLES
+    if revision not in {
+        SIMULATION_REVISION,
+        ACTION_REVISION,
+        SPARSE_REVISION,
+        MEMORY_REVISION,
+        BINDING_REVISION,
+        PROFILE_REVISION,
+        CHAT_DISPATCH_REVISION,
+    }:
+        expected -= SIMULATION_TABLES
+    elif revision not in {
+        SPARSE_REVISION,
+        MEMORY_REVISION,
+        BINDING_REVISION,
+        PROFILE_REVISION,
+        CHAT_DISPATCH_REVISION,
+    }:
+        expected -= SPARSE_TABLES
+    if revision not in {
+        ACTION_REVISION,
+        SPARSE_REVISION,
+        MEMORY_REVISION,
+        BINDING_REVISION,
+        PROFILE_REVISION,
+        CHAT_DISPATCH_REVISION,
+    }:
+        expected -= ACTION_TABLES
+    if revision not in {
+        MEMORY_REVISION,
+        BINDING_REVISION,
+        PROFILE_REVISION,
+        CHAT_DISPATCH_REVISION,
+    }:
+        expected -= MEMORY_TABLES
+    if revision not in {BINDING_REVISION, PROFILE_REVISION, CHAT_DISPATCH_REVISION}:
+        expected -= {"local_player_bindings"}
+    if revision not in {PROFILE_REVISION, CHAT_DISPATCH_REVISION}:
+        expected -= LOCAL_PROFILE_TABLES
+    if revision != CHAT_DISPATCH_REVISION:
+        expected -= {"world_content_imports"}
+    if pre_recall_revision:
+        expected -= {"recall_documents"}
+    else:
+        expected |= FTS_TABLES
+    if pre_rotation_revision:
+        expected -= ROTATION_TABLES
+    if pre_deletion_revision:
+        expected -= DELETION_TABLES
+    if pre_acquaintance_source_revision:
+        expected -= ACQUAINTANCE_SOURCE_TABLES
+    if pre_speech_revision:
+        expected -= SPEECH_TABLES
+    if pre_media_revision:
+        expected -= MEDIA_TABLES
+    if pre_faction_revision:
+        expected -= FACTION_TABLES
+    if pre_location_policy_revision:
+        expected -= LOCATION_POLICY_TABLES
+    if pre_mobility_revision:
+        expected -= {"character_mobility"}
+    if pre_proactive_revision:
+        expected -= PROACTIVE_TABLES
+    if pre_shared_revision:
+        expected -= SHARED_TABLES
+    if pre_encounter_revision:
+        expected -= ENCOUNTER_TABLES
+    if pre_reply_recovery_revision:
+        expected -= REPLY_RECOVERY_TABLES
+    if pre_cover_revision:
+        expected -= COVER_TABLES
+    if pre_long_memory_revision:
+        expected -= LONG_MEMORY_TABLES
+    if pre_story_revision:
+        expected -= STORY_TABLES
+    if pre_offline_contact_revision:
+        expected -= OFFLINE_CONTACT_TABLES
+    if pre_local_location_revision:
+        expected -= LOCAL_LOCATION_TABLES
+    if pre_director_revision:
+        expected -= DIRECTOR_TABLES
+    if pre_conversation_memory_revision:
+        expected -= CONVERSATION_MEMORY_TABLES
+    if pre_builder_revision:
+        expected -= BUILDER_JOB_TABLES
+    if pre_common_lore_revision:
+        expected -= WORLD_COMMON_LORE_TABLES
+    if pre_example_revision:
+        expected -= {"example_world_setups"}
+    if pre_persona_revision:
+        expected -= {"world_player_personas"}
+    if pre_style_revision:
+        expected -= {"world_styles"}
+    if pre_player_card_revision:
+        expected -= {"world_player_cards"}
+    if pre_chat_path_revision:
+        expected -= CHAT_PATH_TABLES
+    if pre_character_evolution_revision:
+        expected -= CHARACTER_EVOLUTION_TABLES
+    if pre_chat_visuals_revision:
+        expected -= CHAT_VISUAL_TABLES
+    if pre_card_pack_revision:
+        expected -= CARD_PACK_TABLES
+    if pre_card_library_revision:
+        expected -= CARD_LIBRARY_TABLES
+    if tables != expected:
+        _fail("alembic_schema_state_mismatch")
+    _validate_auxiliary_objects(
+        connection,
+        domain_present,
+        recall_present=not pre_recall_revision,
+        mobility_present=not pre_mobility_revision,
+        deletion_present=not pre_deletion_revision,
+    )
+    if domain_present:
+        _validate_domain_shape(
+            connection,
+            revision,
+            pre_persona_revision=pre_persona_revision,
+            pre_chat_privacy_revision=pre_chat_privacy_revision,
+            pre_chat_privacy_fallback_revision=pre_chat_privacy_fallback_revision,
+            pre_style_revision=pre_style_revision,
+            pre_player_card_revision=pre_player_card_revision,
+            pre_chat_path_revision=pre_chat_path_revision,
+            pre_character_evolution_revision=pre_character_evolution_revision,
+            pre_character_evolution_provenance_revision=pre_character_evolution_provenance_revision,
+            pre_character_evolution_kind_revision=pre_character_evolution_kind_revision,
+            pre_chat_preferences_revision=pre_chat_preferences_revision,
+            pre_chat_visuals_revision=pre_chat_visuals_revision,
+            pre_card_library_revision=pre_card_library_revision,
+            pre_card_pack_revision=pre_card_pack_revision,
+            pre_example_revision=pre_example_revision,
+            pre_chat_revision=pre_chat_revision,
+            pre_message_revision=pre_message_revision,
+            pre_dispatch_revision=pre_dispatch_revision,
+            pre_completion_revision=pre_completion_revision,
+            pre_common_lore_revision=pre_common_lore_revision,
+            pre_builder_revision=pre_builder_revision,
+            pre_conversation_memory_revision=pre_conversation_memory_revision,
+            pre_director_revision=pre_director_revision,
+            pre_local_location_revision=pre_local_location_revision,
+            pre_offline_contact_revision=pre_offline_contact_revision,
+            pre_story_revision=pre_story_revision,
+            pre_long_memory_revision=pre_long_memory_revision,
+            pre_cover_revision=pre_cover_revision,
+            pre_reply_recovery_revision=pre_reply_recovery_revision,
+            pre_context_report_revision=pre_context_report_revision,
+            pre_encounter_revision=pre_encounter_revision,
+            pre_shared_revision=pre_shared_revision,
+            pre_proactive_revision=pre_proactive_revision,
+            pre_faction_revision=pre_faction_revision,
+            pre_recall_revision=pre_recall_revision,
+            pre_location_policy_revision=pre_location_policy_revision,
+            pre_mobility_revision=pre_mobility_revision,
+            pre_removal_revision=pre_removal_revision,
+            pre_rotation_revision=pre_rotation_revision,
+            pre_deletion_revision=pre_deletion_revision,
+            pre_acquaintance_source_revision=pre_acquaintance_source_revision,
+            pre_speech_revision=pre_speech_revision,
+            pre_speech_cache_revision=pre_speech_cache_revision,
+            pre_speech_preview_revision=pre_speech_preview_revision,
+            pre_media_revision=pre_media_revision,
+            pre_local_model_limits_revision=pre_local_model_limits_revision,
+            pre_sticker_library_freshness_revision=pre_sticker_library_freshness_revision,
+            pre_media_frequency_kind_revision=pre_media_frequency_kind_revision,
+            pre_sticker_description_revision=pre_sticker_description_revision,
+            pre_location_name_scope_revision=pre_location_name_scope_revision,
+        )
+    if revision in {
+        CONTENT_REVISION,
+        LORE_REVISION,
+        PACKAGE_REVISION,
+        ACCOUNTING_REVISION,
+        BUDGET_REVISION,
+        SIMULATION_REVISION,
+        ACTION_REVISION,
+        SPARSE_REVISION,
+        MEMORY_REVISION,
+        BINDING_REVISION,
+        PROFILE_REVISION,
+        CHAT_DISPATCH_REVISION,
+    }:
+        _validate_domain_shape(connection, revision, ContentBase.metadata)
+
+    if revision in {
+        ACCOUNTING_REVISION,
+        BUDGET_REVISION,
+        SIMULATION_REVISION,
+        ACTION_REVISION,
+        SPARSE_REVISION,
+        MEMORY_REVISION,
+        BINDING_REVISION,
+        PROFILE_REVISION,
+        CHAT_DISPATCH_REVISION,
+    }:
+        _validate_domain_shape(connection, revision, AccountingBase.metadata)
+
+
+def _validate_auxiliary_objects(
+    connection: Connection,
+    domain_present: bool,
+    *,
+    recall_present: bool = False,
+    mobility_present: bool = False,
+    deletion_present: bool = False,
+) -> None:
+    objects = connection.execute(
+        text("SELECT name, type, sql FROM sqlite_master WHERE type IN ('trigger', 'view')")
+    ).all()
+    expected = dict(_EVENT_TRIGGERS) if domain_present else {}
+    if deletion_present:
+        expected["world_events_no_delete"] = deletion_models.WORLD_DELETE_TRIGGER
+        expected["worlds_no_recreate"] = deletion_models.WORLD_RECREATE_TRIGGER
+    if mobility_present:
+        for operation in ("INSERT", "UPDATE"):
+            expected[f"character_residency_{operation.lower()}"] = (
+                f"CREATE TRIGGER character_residency_{operation.lower()} "
+                f"BEFORE {operation} ON character_location_policies "
+                "WHEN NEW.residency NOT IN ('normal','strong','very_strong') "
+                "BEGIN SELECT RAISE(ABORT, 'invalid_location_residency'); END"
+            )
+    if recall_present:
+        expected.update(FTS_TRIGGERS)
+        sql = connection.scalar(text("SELECT sql FROM sqlite_master WHERE name='recall_fts'"))
+        if _normalized_sql(sql or "") != _normalized_sql(FTS_SQL):
+            _fail("migration_schema_objects_mismatch")
+    if {row[0] for row in objects} != set(expected):
+        _fail("migration_schema_objects_mismatch")
+    for name, type_, sql in objects:
+        if type_ != "trigger" or _normalized_sql(sql) != _normalized_sql(expected[name]):
+            _fail("migration_schema_objects_mismatch")
+
+
+def _validate_domain_shape(
+    connection: Connection,
+    revision: str,
+    metadata: MetaData = Base.metadata,
+    *,
+    pre_persona_revision: bool = True,
+    pre_style_revision: bool = True,
+    pre_player_card_revision: bool = True,
+    pre_chat_path_revision: bool = True,
+    pre_character_evolution_revision: bool = True,
+    pre_character_evolution_provenance_revision: bool = True,
+    pre_character_evolution_kind_revision: bool = True,
+    pre_chat_preferences_revision: bool = True,
+    pre_chat_visuals_revision: bool = True,
+    pre_card_library_revision: bool = True,
+    pre_card_pack_revision: bool = True,
+    pre_chat_revision: bool | None = None,
+    pre_message_revision: bool | None = None,
+    pre_dispatch_revision: bool | None = None,
+    pre_completion_revision: bool = True,
+    pre_common_lore_revision: bool = True,
+    pre_builder_revision: bool = True,
+    pre_conversation_memory_revision: bool = True,
+    pre_director_revision: bool = True,
+    pre_local_location_revision: bool = True,
+    pre_offline_contact_revision: bool = True,
+    pre_story_revision: bool = True,
+    pre_long_memory_revision: bool = True,
+    pre_cover_revision: bool = True,
+    pre_reply_recovery_revision: bool = True,
+    pre_context_report_revision: bool = True,
+    pre_encounter_revision: bool = True,
+    pre_shared_revision: bool = True,
+    pre_proactive_revision: bool = True,
+    pre_faction_revision: bool = True,
+    pre_recall_revision: bool = True,
+    pre_location_policy_revision: bool = True,
+    pre_mobility_revision: bool = True,
+    pre_removal_revision: bool = True,
+    pre_rotation_revision: bool = True,
+    pre_deletion_revision: bool = True,
+    pre_acquaintance_source_revision: bool = True,
+    pre_location_name_scope_revision: bool = True,
+    pre_speech_revision: bool = True,
+    pre_speech_cache_revision: bool = True,
+    pre_speech_preview_revision: bool = True,
+    pre_media_revision: bool = True,
+    pre_local_model_limits_revision: bool = True,
+    pre_sticker_library_freshness_revision: bool = True,
+    pre_media_frequency_kind_revision: bool = True,
+    pre_sticker_description_revision: bool = True,
+    pre_example_revision: bool = True,
+    pre_chat_privacy_revision: bool = True,
+    pre_chat_privacy_fallback_revision: bool = True,
+) -> None:
+    """Detect partial/mismatched schemas; never infer a revision from them."""
+
+    inspector = inspect(connection)
+    if pre_chat_revision is None:
+        pre_chat_revision = revision != CHAT_DISPATCH_REVISION
+    if pre_message_revision is None:
+        pre_message_revision = revision != CHAT_DISPATCH_REVISION
+    if pre_dispatch_revision is None:
+        pre_dispatch_revision = revision != CHAT_DISPATCH_REVISION
+    # Explicit reviewed deltas describe historical shapes for each Alembic cursor.
+    # The Alembic cursor selects the expected shape; shape never selects migrations.
+    baseline = revision == DOMAIN_BASELINE_REVISION
+    legacy_observations = revision in {DOMAIN_BASELINE_REVISION, COMMAND_REVISION}
+    added_columns = {
+        "relationships": {"affinity", "trust", "familiarity"},
+        "command_receipts": {"result_payload", "command_fingerprint"},
+    }
+    added_checks = {
+        "ck_relationship_affinity",
+        "ck_relationship_trust",
+        "ck_relationship_familiarity",
+        "ck_command_receipt_command_result",
+    }
+    for table in metadata.sorted_tables:
+        if pre_chat_path_revision and table.name in CHAT_PATH_TABLES:
+            continue
+        if pre_character_evolution_revision and table.name in CHARACTER_EVOLUTION_TABLES:
+            continue
+        if pre_chat_visuals_revision and table.name in CHAT_VISUAL_TABLES:
+            continue
+        if pre_card_pack_revision and table.name in CARD_PACK_TABLES:
+            continue
+        if pre_card_library_revision and table.name in CARD_LIBRARY_TABLES:
+            continue
+        if pre_player_card_revision and table.name == "world_player_cards":
+            continue
+        if pre_style_revision and table.name == "world_styles":
+            continue
+        if pre_persona_revision and table.name == "world_player_personas":
+            continue
+        if pre_example_revision and table.name == "example_world_setups":
+            continue
+        if pre_media_revision and table.name in MEDIA_TABLES:
+            continue
+        if pre_speech_revision and table.name in SPEECH_TABLES:
+            continue
+        if pre_acquaintance_source_revision and table.name in ACQUAINTANCE_SOURCE_TABLES:
+            continue
+        if pre_deletion_revision and table.name in DELETION_TABLES:
+            continue
+        if pre_rotation_revision and table.name in ROTATION_TABLES:
+            continue
+        if pre_mobility_revision and table.name == "character_mobility":
+            continue
+        if pre_location_policy_revision and table.name in LOCATION_POLICY_TABLES:
+            continue
+        if pre_recall_revision and table.name == "recall_documents":
+            continue
+        if pre_faction_revision and table.name in FACTION_TABLES:
+            continue
+        if pre_proactive_revision and table.name in PROACTIVE_TABLES:
+            continue
+        if pre_shared_revision and table.name in SHARED_TABLES:
+            continue
+        if pre_encounter_revision and table.name in ENCOUNTER_TABLES:
+            continue
+        if pre_reply_recovery_revision and table.name in REPLY_RECOVERY_TABLES:
+            continue
+        if pre_cover_revision and table.name in COVER_TABLES:
+            continue
+        if pre_long_memory_revision and table.name in LONG_MEMORY_TABLES:
+            continue
+        if pre_story_revision and table.name in STORY_TABLES:
+            continue
+        if pre_offline_contact_revision and table.name in OFFLINE_CONTACT_TABLES:
+            continue
+        if pre_local_location_revision and table.name in LOCAL_LOCATION_TABLES:
+            continue
+        if pre_director_revision and table.name in DIRECTOR_TABLES:
+            continue
+        if pre_conversation_memory_revision and table.name in CONVERSATION_MEMORY_TABLES:
+            continue
+        if pre_builder_revision and table.name in BUILDER_JOB_TABLES:
+            continue
+        if pre_common_lore_revision and table.name in WORLD_COMMON_LORE_TABLES:
+            continue
+        if pre_chat_revision and table.name in CHAT_IDENTITY_TABLES:
+            continue
+        if pre_message_revision and table.name in CHAT_MESSAGE_TABLES:
+            continue
+        if pre_dispatch_revision and table.name in CHAT_DISPATCH_TABLES:
+            continue
+        if (
+            revision
+            not in {
+                SIMULATION_REVISION,
+                ACTION_REVISION,
+                SPARSE_REVISION,
+                MEMORY_REVISION,
+                BINDING_REVISION,
+                PROFILE_REVISION,
+                CHAT_DISPATCH_REVISION,
+            }
+            and table.name in SIMULATION_TABLES
+        ):
+            continue
+        if (
+            revision
+            not in {
+                SPARSE_REVISION,
+                MEMORY_REVISION,
+                BINDING_REVISION,
+                PROFILE_REVISION,
+                CHAT_DISPATCH_REVISION,
+            }
+            and table.name in SPARSE_TABLES
+        ):
+            continue
+        if (
+            revision
+            not in {
+                ACTION_REVISION,
+                SPARSE_REVISION,
+                MEMORY_REVISION,
+                BINDING_REVISION,
+                PROFILE_REVISION,
+                CHAT_DISPATCH_REVISION,
+            }
+            and table.name in ACTION_TABLES
+        ):
+            continue
+        if (
+            revision
+            not in {MEMORY_REVISION, BINDING_REVISION, PROFILE_REVISION, CHAT_DISPATCH_REVISION}
+            and table.name in MEMORY_TABLES
+        ):
+            continue
+        if revision != CHAT_DISPATCH_REVISION and table.name == "world_content_imports":
+            continue
+        if (
+            revision not in {PROFILE_REVISION, CHAT_DISPATCH_REVISION}
+            and table.name in LOCAL_PROFILE_TABLES
+        ):
+            continue
+        if (
+            revision not in {BINDING_REVISION, PROFILE_REVISION, CHAT_DISPATCH_REVISION}
+            and table.name == "local_player_bindings"
+        ):
+            continue
+        if revision == ACCOUNTING_REVISION and table.name in BUDGET_TABLES:
+            continue
+        if (
+            revision
+            not in {
+                PACKAGE_REVISION,
+                ACCOUNTING_REVISION,
+                BUDGET_REVISION,
+                SIMULATION_REVISION,
+                ACTION_REVISION,
+                SPARSE_REVISION,
+                MEMORY_REVISION,
+                BINDING_REVISION,
+                PROFILE_REVISION,
+                CHAT_DISPATCH_REVISION,
+            }
+            and table.name in PACKAGE_TABLES
+        ):
+            continue
+        if revision == CONTENT_REVISION and table.name == "content_lore_collections":
+            continue
+        if (
+            revision
+            not in {
+                LEDGER_REVISION,
+                CONTENT_REVISION,
+                LORE_REVISION,
+                PACKAGE_REVISION,
+                ACCOUNTING_REVISION,
+                BUDGET_REVISION,
+                SIMULATION_REVISION,
+                ACTION_REVISION,
+                SPARSE_REVISION,
+                MEMORY_REVISION,
+                BINDING_REVISION,
+                PROFILE_REVISION,
+                CHAT_DISPATCH_REVISION,
+            }
+            and table.name == "world_ledger_cursors"
+        ):
+            continue
+        actual = [
+            (column["name"], str(column["type"]).upper(), column["nullable"])
+            for column in inspector.get_columns(table.name)
+        ]
+        expected = [
+            (
+                column.name,
+                column.type.compile(dialect=connection.dialect).upper(),
+                False
+                if (
+                    revision
+                    not in {
+                        SPARSE_REVISION,
+                        MEMORY_REVISION,
+                        BINDING_REVISION,
+                        PROFILE_REVISION,
+                        CHAT_DISPATCH_REVISION,
+                    }
+                    and table.name == "simulation_activations"
+                    and column.name == "source_trigger_id"
+                )
+                else column.nullable,
+            )
+            for column in table.columns
+            if not (
+                pre_sticker_description_revision
+                and table.name == "chat_sticker_entries"
+                and column.name == "description"
+            )
+            if not (
+                pre_media_frequency_kind_revision
+                and table.name == "chat_media_attempts"
+                and column.name == "sent_kind"
+            )
+            if not (
+                pre_sticker_library_freshness_revision
+                and table.name == "chat_sticker_entries"
+                and column.name == "added_at_utc"
+            )
+            if not (
+                pre_local_model_limits_revision
+                and table.name in {"speech_call_receipts", "chat_media_caption_calls"}
+                and column.name == "is_local"
+            )
+            if not (
+                pre_media_revision and table.name == "chat_messages" and column.name == "media_json"
+            )
+            if not (
+                pre_speech_cache_revision
+                and table.name == "speech_jobs"
+                and column.name in {"cache_key", "audio_saved_at"}
+            )
+            if not (
+                pre_speech_preview_revision
+                and table.name == "speech_jobs"
+                and column.name in {"review_state", "base_job_id", "previewed_at"}
+            )
+            if not (
+                pre_location_name_scope_revision
+                and column.name == "name_scope"
+                and table.name == "local_location_catalog"
+            )
+            if not (
+                pre_removal_revision
+                and column.name == "removed_at"
+                and table.name in {"world_content_imports", "local_location_catalog"}
+            )
+            if not (
+                pre_mobility_revision
+                and (table.name, column.name)
+                in {
+                    ("location_policies", "is_region"),
+                    ("character_location_policies", "residency"),
+                }
+            )
+            if not (
+                pre_context_report_revision
+                and table.name == "chat_reply_executions"
+                and column.name == "context_reports"
+            )
+            if not (
+                pre_offline_contact_revision
+                and (
+                    table.name == "chat_turns"
+                    and column.name == "kind"
+                    or table.name == "chat_messages"
+                    and column.name == "story_sent_at_utc"
+                )
+            )
+            if not (
+                pre_completion_revision
+                and table.name == "chat_turn_dispatches"
+                and column.name == "completed_at_utc"
+            )
+            if not (baseline and column.name in added_columns.get(table.name, set()))
+            and not (
+                legacy_observations
+                and table.name == "observations"
+                and column.name == "observation_id"
+            )
+            and not (
+                revision
+                not in {
+                    ACTION_REVISION,
+                    SPARSE_REVISION,
+                    MEMORY_REVISION,
+                    BINDING_REVISION,
+                    PROFILE_REVISION,
+                    CHAT_DISPATCH_REVISION,
+                }
+                and table.name == "observations"
+                and column.name == "basis"
+            )
+            and not (
+                revision
+                not in {
+                    SPARSE_REVISION,
+                    MEMORY_REVISION,
+                    BINDING_REVISION,
+                    PROFILE_REVISION,
+                    CHAT_DISPATCH_REVISION,
+                }
+                and table.name == "simulation_scheduled_triggers"
+                and column.name
+                in {
+                    "activation_target_kind",
+                    "activation_target_id",
+                    "activation_target_character_id",
+                    "activation_kind",
+                    "activation_version",
+                    "activation_coalescing_key",
+                    "activation_attention",
+                }
+            )
+            and not (
+                revision
+                not in {
+                    SPARSE_REVISION,
+                    MEMORY_REVISION,
+                    BINDING_REVISION,
+                    PROFILE_REVISION,
+                    CHAT_DISPATCH_REVISION,
+                }
+                and table.name == "simulation_activations"
+                and column.name
+                in {
+                    "target_kind",
+                    "target_id",
+                    "target_character_id",
+                    "activation_kind",
+                    "activation_version",
+                    "priority",
+                    "enqueue_position",
+                    "coalescing_key",
+                    "attention",
+                }
+            )
+            and not (
+                revision
+                not in {
+                    LEDGER_REVISION,
+                    CONTENT_REVISION,
+                    LORE_REVISION,
+                    PACKAGE_REVISION,
+                    ACCOUNTING_REVISION,
+                    BUDGET_REVISION,
+                    SIMULATION_REVISION,
+                    ACTION_REVISION,
+                    SPARSE_REVISION,
+                    MEMORY_REVISION,
+                    BINDING_REVISION,
+                    PROFILE_REVISION,
+                    CHAT_DISPATCH_REVISION,
+                }
+                and table.name == "world_events"
+                and column.name == "ledger_position"
+            )
+            and not (
+                revision == CONTENT_REVISION
+                and table.name == "content_lore_entries"
+                and column.name == "collection_id"
+            )
+            and not (
+                pre_character_evolution_provenance_revision
+                and table.name == "character_card_evolution"
+                and column.name in {"quote", "confidence"}
+            )
+            and not (
+                pre_character_evolution_kind_revision
+                and table.name == "character_card_evolution"
+                and column.name == "change_kind"
+            )
+            and not (
+                pre_chat_preferences_revision
+                and table.name == "chat_conversations"
+                and column.name == "pinned"
+            )
+            and not (
+                pre_chat_preferences_revision
+                and table.name == "chat_messages"
+                and column.name == "feedback"
+            )
+            and not (
+                pre_chat_privacy_revision
+                and table.name == "chat_messages"
+                and column.name == "privacy_json"
+            )
+            and not (
+                pre_chat_privacy_fallback_revision
+                and table.name == "chat_messages"
+                and column.name == "privacy_fallback"
+            )
+        ]
+        # SQLite appends ALTER TABLE ADD COLUMN at the end while ORM declaration
+        # order is free-form, so physical column order is not part of the
+        # contract. Names, types and nullability still must match exactly.
+        if sorted(actual) != sorted(expected):
+            _fail("alembic_schema_shape_mismatch")
+        expected_pk = [column.name for column in table.primary_key.columns]
+        if legacy_observations and table.name == "observations":
+            expected_pk = [
+                "world_id",
+                "principal_kind",
+                "principal_id",
+                "target_kind",
+                "target_id",
+                "channel",
+                "observed_at",
+            ]
+        if inspector.get_pk_constraint(table.name)["constrained_columns"] != expected_pk:
+            _fail("alembic_schema_shape_mismatch")
+        expected_fks = {
+            (
+                tuple(element.parent.name for element in foreign_key.elements),
+                foreign_key.referred_table.name,
+                tuple(element.column.name for element in foreign_key.elements),
+            )
+            for foreign_key in table.foreign_key_constraints
+            if not (
+                revision
+                not in {
+                    SPARSE_REVISION,
+                    MEMORY_REVISION,
+                    BINDING_REVISION,
+                    PROFILE_REVISION,
+                    CHAT_DISPATCH_REVISION,
+                }
+                and table.name in {"simulation_scheduled_triggers", "simulation_activations"}
+                and foreign_key.referred_table.name == "characters"
+            )
+            if not (
+                revision == CONTENT_REVISION
+                and table.name == "content_lore_entries"
+                and foreign_key.referred_table.name == "content_lore_collections"
+            )
+        }
+        actual_fks = {
+            (tuple(fk["constrained_columns"]), fk["referred_table"], tuple(fk["referred_columns"]))
+            for fk in inspector.get_foreign_keys(table.name)
+        }
+        if actual_fks != expected_fks:
+            _fail("alembic_schema_shape_mismatch")
+        expected_checks = {
+            (constraint.name, _normalized_sql(str(constraint.sqltext)))
+            for constraint in table.constraints
+            if isinstance(constraint, CheckConstraint)
+            and not (
+                pre_location_name_scope_revision
+                and constraint.name == "ck_local_location_name_scope"
+            )
+            and not (baseline and constraint.name in added_checks)
+            and not (
+                revision
+                not in {
+                    SPARSE_REVISION,
+                    MEMORY_REVISION,
+                    BINDING_REVISION,
+                    PROFILE_REVISION,
+                    CHAT_DISPATCH_REVISION,
+                }
+                and constraint.name
+                in {
+                    "ck_simulation_trigger_activation_target",
+                    "ck_simulation_trigger_activation_version",
+                    "ck_simulation_trigger_activation_attention",
+                    "ck_simulation_activation_target",
+                    "ck_simulation_activation_version",
+                    "ck_simulation_activation_priority",
+                    "ck_simulation_activation_enqueue_position",
+                    "ck_simulation_activation_attention",
+                }
+            )
+            and not (
+                revision
+                not in {
+                    LEDGER_REVISION,
+                    CONTENT_REVISION,
+                    LORE_REVISION,
+                    PACKAGE_REVISION,
+                    ACCOUNTING_REVISION,
+                    BUDGET_REVISION,
+                    SIMULATION_REVISION,
+                    ACTION_REVISION,
+                    SPARSE_REVISION,
+                    MEMORY_REVISION,
+                    BINDING_REVISION,
+                    PROFILE_REVISION,
+                    CHAT_DISPATCH_REVISION,
+                }
+                and constraint.name == "ck_world_event_ledger_position"
+            )
+            and not (
+                pre_chat_preferences_revision and constraint.name == "ck_chat_message_feedback"
+            )
+        }
+        if (
+            table.name == "command_receipts"
+            and revision
+            not in {
+                ACTION_REVISION,
+                SPARSE_REVISION,
+                MEMORY_REVISION,
+                BINDING_REVISION,
+                PROFILE_REVISION,
+                CHAT_DISPATCH_REVISION,
+            }
+            and not baseline
+        ):
+            expected_checks.discard(
+                (
+                    "ck_command_receipt_command_result",
+                    _normalized_sql(
+                        "(command_fingerprint IS NULL AND result_payload IS NULL) OR "
+                        "(command_fingerprint IS NOT NULL AND length(command_fingerprint) = 64 "
+                        "AND result_payload IS NOT NULL AND status IN ('committed', 'rejected') "
+                        "AND completed_at IS NOT NULL)"
+                    ),
+                )
+            )
+            expected_checks.add(
+                (
+                    "ck_command_receipt_command_result",
+                    _normalized_sql(
+                        "(command_fingerprint IS NULL AND result_payload IS NULL) OR "
+                        "(command_fingerprint IS NOT NULL AND length(command_fingerprint) = 64 "
+                        "AND result_payload IS NOT NULL AND status = 'committed' "
+                        "AND completed_at IS NOT NULL AND result_event_id IS NOT NULL)"
+                    ),
+                )
+            )
+        actual_checks = {
+            (constraint["name"], _normalized_sql(constraint["sqltext"]))
+            for constraint in inspector.get_check_constraints(table.name)
+        }
+        if actual_checks != expected_checks:
+            _fail("alembic_schema_shape_mismatch")
+        expected_uniques = {
+            tuple(column.name for column in constraint.columns)
+            for constraint in table.constraints
+            if isinstance(constraint, UniqueConstraint)
+            and not (
+                revision
+                not in {
+                    SPARSE_REVISION,
+                    MEMORY_REVISION,
+                    BINDING_REVISION,
+                    PROFILE_REVISION,
+                    CHAT_DISPATCH_REVISION,
+                }
+                and constraint.name == "uq_simulation_activation_enqueue_position"
+            )
+        }
+        actual_uniques = {
+            tuple(constraint["column_names"])
+            for constraint in inspector.get_unique_constraints(table.name)
+        }
+        if pre_location_name_scope_revision and table.name == "local_location_catalog":
+            expected_uniques.discard(("world_id", "name_scope", "name_key"))
+            expected_uniques.add(("world_id", "name_key"))
+        if actual_uniques != expected_uniques:
+            _fail("alembic_schema_shape_mismatch")
+        expected_indexes = {
+            (
+                index.name,
+                tuple(column.name for column in index.columns),
+                bool(index.unique),
+                _index_predicate(index.dialect_options["sqlite"].get("where")),
+            )
+            for index in table.indexes
+            if not (
+                pre_speech_cache_revision
+                and index.name in {"ix_speech_cache_key", "ix_speech_audio_saved"}
+            )
+            if not (pre_speech_preview_revision and index.name == "ix_speech_review")
+            if not (baseline and index.name == "uq_command_request_identity")
+            and not (
+                revision
+                not in {
+                    LEDGER_REVISION,
+                    CONTENT_REVISION,
+                    LORE_REVISION,
+                    PACKAGE_REVISION,
+                    ACCOUNTING_REVISION,
+                    BUDGET_REVISION,
+                    SIMULATION_REVISION,
+                    ACTION_REVISION,
+                    SPARSE_REVISION,
+                    MEMORY_REVISION,
+                    BINDING_REVISION,
+                    PROFILE_REVISION,
+                    CHAT_DISPATCH_REVISION,
+                }
+                and index.name == "uq_world_event_ledger_position"
+            )
+            and not (
+                revision
+                not in {
+                    ACTION_REVISION,
+                    SPARSE_REVISION,
+                    MEMORY_REVISION,
+                    BINDING_REVISION,
+                    PROFILE_REVISION,
+                    CHAT_DISPATCH_REVISION,
+                }
+                and index.name
+                in {
+                    "ix_character_state_location",
+                    "ix_observation_principal_history",
+                    "ix_player_presence_active_location",
+                    "uq_observation_event_principal",
+                }
+            )
+            and not (
+                revision
+                not in {
+                    SPARSE_REVISION,
+                    MEMORY_REVISION,
+                    BINDING_REVISION,
+                    PROFILE_REVISION,
+                    CHAT_DISPATCH_REVISION,
+                }
+                and index.name
+                in {
+                    "ix_simulation_activation_due",
+                    "ix_simulation_activation_target",
+                    "uq_simulation_activation_pending_coalescing",
+                    "ix_simulation_activation_cause_order",
+                    "ix_simulation_activation_cause_identity",
+                }
+            )
+        }
+        actual_indexes = {
+            (
+                index["name"],
+                tuple(index["column_names"]),
+                bool(index["unique"]),
+                _index_predicate(index.get("dialect_options", {}).get("sqlite_where")),
+            )
+            for index in inspector.get_indexes(table.name)
+        }
+        if actual_indexes != expected_indexes:
+            _fail("alembic_schema_shape_mismatch")
+
+
+def upgrade(connection: Connection) -> None:
+    """Upgrade an empty, verified legacy, or already Alembic-managed database."""
+
+    tables = _table_names(connection)
+    config = _alembic_config(connection)
+    if "alembic_version" in tables:
+        _validate_managed_state(connection, _current_revision(connection))
+    elif not tables:
+        _validate_auxiliary_objects(connection, False)
+    elif tables == LEGACY_TABLES:
+        _validate_legacy_metadata(connection)
+        _validate_auxiliary_objects(connection, False)
+        command.stamp(config, LEGACY_REVISION)
+    else:
+        _fail("legacy_schema_ambiguous")
+
+    command.upgrade(config, "head")
+    if _current_revision(connection) != HEAD_REVISION:
+        _fail("alembic_schema_state_mismatch")
+    _validate_managed_state(connection, HEAD_REVISION)

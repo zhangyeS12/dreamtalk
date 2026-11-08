@@ -1,0 +1,24 @@
+{
+  "id": "controlled-deepseek-request",
+  "object": "chat.completion",
+  "created": 1789689600,
+  "model": "controlled-deepseek-model",
+  "system_fingerprint": "controlled-fingerprint",
+  "choices": [
+    {
+      "index": 0,
+      "message": {"role": "assistant", "content": "Controlled answer.", "reasoning_content": "LW_PRIVATE_REASONING_CANARY_NOT_ASSISTANT_TEXT"},
+      "logprobs": null,
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 12,
+    "completion_tokens": 3,
+    "total_tokens": 15,
+    "prompt_cache_hit_tokens": 4,
+    "prompt_cache_miss_tokens": 8,
+    "prompt_tokens_details": {"cached_tokens": 4},
+    "completion_tokens_details": {"reasoning_tokens": 2}
+  }
+}

@@ -1,0 +1,30 @@
+event: interaction.created
+data: {"interaction":{"id":"v1_fixture_stream","status":"in_progress","object":"interaction","model":"gemini-3.8-flash"},"event_type":"interaction.created"}
+
+event: interaction.status_update
+data: {"interaction_id":"v1_fixture_stream","status":"in_progress","event_type":"interaction.status_update"}
+
+event: step.start
+data: {"index":0,"step":{"type":"thought"},"event_type":"step.start"}
+
+event: step.delta
+data: {"index":0,"delta":{"signature":"thought_sig_stream","type":"thought_signature"},"event_type":"step.delta"}
+
+event: step.stop
+data: {"index":0,"event_type":"step.stop"}
+
+event: step.start
+data: {"index":1,"step":{"type":"model_output","content":[{"type":"text","text":"Hel"}]},"event_type":"step.start"}
+
+event: step.delta
+data: {"index":1,"delta":{"text":"lo","type":"text"},"event_type":"step.delta"}
+
+event: step.stop
+data: {"index":1,"event_type":"step.stop"}
+
+event: interaction.completed
+data: {"interaction":{"id":"v1_fixture_stream","status":"completed","usage":{"total_tokens":18,"total_input_tokens":11,"total_cached_tokens":3,"total_output_tokens":2,"total_thought_tokens":5},"service_tier":"standard","object":"interaction","model":"gemini-3.8-flash"},"event_type":"interaction.completed"}
+
+event: done
+data: [DONE]
+

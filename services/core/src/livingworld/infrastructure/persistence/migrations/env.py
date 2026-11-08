@@ -1,0 +1,45 @@
+"""Alembic environment used only through the application-owned connection."""
+
+from alembic import context
+
+from livingworld.infrastructure.persistence import (  # noqa: F401
+    character_card_bindings,
+    director_rotation,
+    location_policy_models,  # noqa: F401
+    media_models,
+    player_persona_models,
+    speech_models,
+)
+from livingworld.infrastructure.persistence.content_builder import (
+    ContentBuilderJobRecord,  # noqa: F401
+)
+from livingworld.infrastructure.persistence.content_models import ContentBase
+from livingworld.infrastructure.persistence.conversation_memory import (
+    ConversationMemoryDraftRecord,  # noqa: F401
+    ConversationMemoryRevisionRecord,  # noqa: F401
+)
+from livingworld.infrastructure.persistence.models import Base
+from livingworld.infrastructure.persistence.story_models import ChatStoryRecord  # noqa: F401
+
+connection = context.config.attributes.get("connection")
+if connection is None:
+    raise RuntimeError("alembic_application_connection_required")
+
+
+def include_object(
+    object: object, name: str | None, type_: str, reflected: bool, compare_to: object
+) -> bool:
+    del object, reflected, compare_to
+    return not (
+        type_ == "table" and name in {"schema_version", "migration_history", "alembic_version"}
+    )
+
+
+context.configure(
+    connection=connection,
+    target_metadata=[Base.metadata, ContentBase.metadata],
+    transactional_ddl=True,
+    include_object=include_object,
+)
+with context.begin_transaction():
+    context.run_migrations()

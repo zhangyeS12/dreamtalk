@@ -1,0 +1,6 @@
+{
+  "default": "../branding/dreamtalk-logo.png",
+  "bg_color": "#0e1330",
+  "android_fg": "../branding/dreamtalk-logo.png",
+  "android_fg_scale": 62
+}

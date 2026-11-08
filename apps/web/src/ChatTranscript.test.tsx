@@ -1,0 +1,181 @@
+import { afterEach, expect, it, vi } from "vitest";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { CoreClient, CoreRequestError, type ChatConversation, type ChatMessage } from "@dreamtalk/api-client";
+import { ChatTranscript } from "./ChatTranscript";
+
+afterEach(cleanup);
+
+it("shows an API-key failure with a settings action and does not replay the request", async () => {
+  const player = { message_id: "m1", turn_id: "t1", conversation_id: "conversation-a", position: 1, sender_kind: "player" as const, sender_id: "player-a", text: "你好", created_at_utc: "2026-01-01T00:00:00Z" };
+  const streamChatReply = vi.fn().mockRejectedValue(new CoreRequestError(502, "chat_provider_authentication"));
+  const client = withChatReads({
+    conversationMessagePage: vi.fn().mockResolvedValue({ items: [], next_before_position: null }),
+    directReplyAvailability: vi.fn().mockResolvedValue({ available: true }),
+    sendPlayerMessage: vi.fn().mockResolvedValue({ turn_id: "t1", message: player }),
+    directTurn: vi.fn().mockResolvedValue({ state: "claimed" }), streamChatReply,
+  } as unknown as CoreClient);
+  const settings = vi.fn();
+  render(<ChatTranscript client={client} worldId="world-a" playerId="player-a" conversation={conversation} tokenCeiling={50_000} onBack={() => {}} onModelSettings={settings} />);
+  const draft = screen.getByRole("textbox");
+  await waitFor(() => expect(draft).toHaveProperty("disabled", false));
+  fireEvent.change(draft, { target: { value: "你好" } });
+  fireEvent.click(screen.getByRole("button", { name: "发送" }));
+  expect(await screen.findByText(/API 密钥无效或已失效/)).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "打开当前世界模型设置" }));
+  expect(settings).toHaveBeenCalledOnce();
+  expect(streamChatReply).toHaveBeenCalledOnce();
+  expect(client.sendPlayerMessage).toHaveBeenCalledOnce();
+});
+
+import { withChatReads } from "./testClient";
+
+const conversation: ChatConversation = {
+  conversation_id: "conversation-a", player_id: "player-a", character_id: "character-a",
+  root_import_id: "import-a", character_name: "角色甲", kind: "direct",
+};
+
+it("shows committed messages in transcript order without turning them into world events", async () => {
+  const rows: ChatMessage[] = [
+    { message_id: "message-a", turn_id: "turn-a", conversation_id: "conversation-a", position: 0, sender_kind: "player", sender_id: "player-a", text: "你好", created_at_utc: "2026-09-24T10:00:00+00:00" },
+    { message_id: "message-b", turn_id: "turn-a", conversation_id: "conversation-a", position: 1, sender_kind: "character", sender_id: "character-a", text: "欢迎回来", created_at_utc: "2026-09-24T10:00:01+00:00" },
+  ];
+  const conversationMessagePage = vi.fn().mockResolvedValue({ items: rows, next_before_position: null });
+  const client = { conversationMessagePage, directReplyAvailability: vi.fn().mockResolvedValue({ available: false }) } as unknown as CoreClient;
+  render(<ChatTranscript client={withChatReads(client)} worldId="world-a" playerId="player-a" conversation={conversation} tokenCeiling={50_000} onBack={() => {}} />);
+  await screen.findByText("欢迎回来");
+  expect(conversationMessagePage).toHaveBeenCalledWith("world-a", "conversation-a", undefined, expect.any(AbortSignal));
+  const list = screen.getByRole("list");
+  expect(list.querySelectorAll("[data-message-id]")[0]?.textContent).toContain("你好");
+  expect(list.querySelectorAll("[data-message-id]")[1]?.textContent).toContain("欢迎回来");
+  expect(await screen.findByText(/当前聊天模型尚不可用/)).toBeTruthy();
+});
+
+it("loads older history without duplicating messages when the latest page refreshes", async () => {
+  const rows: ChatMessage[] = [1, 2, 3].map(position => ({
+    message_id: `message-${position}`, turn_id: `turn-${position}`, conversation_id: "conversation-a",
+    position, sender_kind: "player", sender_id: "player-a", text: `消息${position}`,
+    created_at_utc: "2026-09-24T10:00:00+00:00",
+  }));
+  const conversationMessagePage = vi.fn((_worldId: string, _conversationId: string, beforePosition?: number) =>
+    Promise.resolve(beforePosition === undefined
+      ? { items: rows.slice(1), next_before_position: 2 }
+      : { items: rows.slice(0, 1), next_before_position: null }));
+  const client = { conversationMessagePage, directReplyAvailability: vi.fn().mockResolvedValue({ available: false }) } as unknown as CoreClient;
+  render(<ChatTranscript client={withChatReads(client)} worldId="world-a" playerId="player-a" conversation={conversation} tokenCeiling={50_000} onBack={() => {}} />);
+  await screen.findByText("消息3");
+  expect(screen.queryByText("消息1")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "加载更早消息" }));
+  await screen.findByText("消息1");
+  expect(conversationMessagePage).toHaveBeenCalledWith("world-a", "conversation-a", 2);
+  fireEvent.click(screen.getByRole("button", { name: "刷新记录" }));
+  await waitFor(() => expect(conversationMessagePage).toHaveBeenCalledTimes(3));
+  expect(screen.getAllByText("消息1")).toHaveLength(1);
+  expect(screen.getAllByText("消息2")).toHaveLength(1);
+  expect(screen.getAllByText("消息3")).toHaveLength(1);
+  expect(screen.queryByRole("button", { name: "加载更早消息" })).toBeNull();
+});
+
+it("does not reveal a late transcript from the previous world", async () => {
+  let finishOld!: (page: { items: ChatMessage[]; next_before_position: null }) => void;
+  const old = new Promise<{ items: ChatMessage[]; next_before_position: null }>(resolve => { finishOld = resolve; });
+  const conversationMessagePage = vi.fn((worldId: string) => worldId === "world-a" ? old : Promise.resolve({ items: [], next_before_position: null }));
+  const client = { conversationMessagePage, directReplyAvailability: vi.fn().mockResolvedValue({ available: false }) } as unknown as CoreClient;
+  const renderThread = (worldId: string) => <ChatTranscript key={worldId} client={withChatReads(client)} worldId={worldId} playerId="player-a" conversation={conversation} tokenCeiling={50_000} onBack={() => {}} />;
+  const view = render(renderThread("world-a"));
+  await waitFor(() => expect(conversationMessagePage).toHaveBeenCalledWith("world-a", "conversation-a", undefined, expect.any(AbortSignal)));
+  view.rerender(renderThread("world-b"));
+  await waitFor(() => expect(conversationMessagePage).toHaveBeenCalledWith("world-b", "conversation-a", undefined, expect.any(AbortSignal)));
+  await act(async () => {
+    finishOld({ items: [{ message_id: "private", turn_id: "turn-a", conversation_id: "conversation-a", position: 0, sender_kind: "player", sender_id: "player-a", text: "旧世界私聊", created_at_utc: "2026-09-24T10:00:00+00:00" }], next_before_position: null });
+  });
+  expect(screen.queryByText("旧世界私聊")).toBeNull();
+});
+
+it("sends one durable turn, requests one reply, then refreshes the transcript", async () => {
+  const player: ChatMessage = { message_id: "m1", turn_id: "t1", conversation_id: "conversation-a", position: 1, sender_kind: "player", sender_id: "player-a", text: "你好", created_at_utc: "2026-09-24T10:00:00+00:00" };
+  const reply: ChatMessage = { ...player, message_id: "m2", position: 2, sender_kind: "character", sender_id: "character-a", text: "你好呀" };
+  const conversationMessagePage = vi.fn().mockResolvedValueOnce({ items: [], next_before_position: null }).mockResolvedValue({ items: [player, reply], next_before_position: null });
+  const sendPlayerMessage = vi.fn().mockResolvedValue({ turn_id: "t1", token_ceiling: 50_000, status: "pending", message: player });
+  const generateDirectReply = vi.fn().mockResolvedValue({ turn_id: "t1", state: "completed", player_message: player, reply });
+  const client = { conversationMessagePage, sendPlayerMessage, generateDirectReply, directReplyAvailability: vi.fn().mockResolvedValue({ available: true }) } as unknown as CoreClient;
+  render(<ChatTranscript client={withChatReads(client)} worldId="world-a" playerId="player-a" conversation={conversation} tokenCeiling={50_000} onBack={() => {}} />);
+  await waitFor(() => expect(screen.getByRole("textbox").hasAttribute("disabled")).toBe(false));
+  fireEvent.change(screen.getByRole("textbox"), { target: { value: "你好" } });
+  fireEvent.click(screen.getByRole("button", { name: "发送" }));
+  await screen.findByText("你好呀");
+  expect(sendPlayerMessage).toHaveBeenCalledOnce();
+  expect(sendPlayerMessage.mock.calls[0]?.slice(0, 4)).toEqual(["world-a", "conversation-a", "你好", 50_000]);
+  expect(generateDirectReply).toHaveBeenCalledOnce();
+  expect(generateDirectReply).toHaveBeenCalledWith("world-a", "conversation-a", "t1");
+});
+
+it("sends on Enter but not while composing Chinese text or inserting a newline", async () => {
+  const sendPlayerMessage = vi.fn().mockRejectedValue(new CoreRequestError(422));
+  const client = { conversationMessagePage: vi.fn().mockResolvedValue({ items: [], next_before_position: null }), sendPlayerMessage,
+    directReplyAvailability: vi.fn().mockResolvedValue({ available: true }) } as unknown as CoreClient;
+  render(<ChatTranscript client={withChatReads(client)} worldId="world-a" playerId="player-a" conversation={conversation} tokenCeiling={50_000} onBack={() => {}} />);
+  const draft = await screen.findByRole("textbox");
+  await waitFor(() => expect(draft).toHaveProperty("disabled", false));
+  fireEvent.change(draft, { target: { value: "你好" } });
+  fireEvent.keyDown(draft, { key: "Enter", isComposing: true });
+  fireEvent.keyDown(draft, { key: "Enter", keyCode: 229 });
+  fireEvent.keyDown(draft, { key: "Enter", shiftKey: true });
+  expect(sendPlayerMessage).not.toHaveBeenCalled();
+  fireEvent.keyDown(draft, { key: "Enter" });
+  await waitFor(() => expect(sendPlayerMessage).toHaveBeenCalledOnce());
+});
+
+it("checks an uncertain reply without replaying the model call", async () => {
+  const player: ChatMessage = { message_id: "m1", turn_id: "t1", conversation_id: "conversation-a", position: 1, sender_kind: "player", sender_id: "player-a", text: "你好", created_at_utc: "2026-09-24T10:00:00+00:00" };
+  const sendPlayerMessage = vi.fn().mockResolvedValue({ turn_id: "t1", token_ceiling: 50_000, status: "pending", message: player });
+  const generateDirectReply = vi.fn().mockRejectedValue(new Error("network failure"));
+  const directTurn = vi.fn().mockResolvedValue({ turn_id: "t1", state: "claimed", player_message: player, reply: null });
+  const client = { conversationMessagePage: vi.fn().mockResolvedValue({ items: [player], next_before_position: null }), sendPlayerMessage, generateDirectReply, directTurn, directReplyAvailability: vi.fn().mockResolvedValue({ available: true }) } as unknown as CoreClient;
+  render(<ChatTranscript client={withChatReads(client)} worldId="world-a" playerId="player-a" conversation={conversation} tokenCeiling={50_000} onBack={() => {}} />);
+  await waitFor(() => expect(screen.getByRole("textbox").hasAttribute("disabled")).toBe(false));
+  fireEvent.change(screen.getByRole("textbox"), { target: { value: "你好" } });
+  fireEvent.click(screen.getByRole("button", { name: "发送" }));
+  await screen.findByText(/这轮回复未完成/);
+  expect(generateDirectReply).toHaveBeenCalledOnce();
+  expect(directTurn).toHaveBeenCalledOnce();
+});
+
+it("explains a budget denial without replaying an already saved player message", async () => {
+  const player: ChatMessage = { message_id: "m1", turn_id: "t1", conversation_id: "conversation-a", position: 1, sender_kind: "player", sender_id: "player-a", text: "你好", created_at_utc: "2026-09-24T10:00:00+00:00" };
+  const sendPlayerMessage = vi.fn().mockResolvedValue({ turn_id: "t1", token_ceiling: 50_000, status: "pending", message: player });
+  const generateDirectReply = vi.fn().mockRejectedValue(new CoreRequestError(422));
+  const client = { conversationMessagePage: vi.fn().mockResolvedValue({ items: [player], next_before_position: null }), sendPlayerMessage,
+    generateDirectReply, directTurn: vi.fn().mockResolvedValue({ state: "pending" }),
+    directReplyAvailability: vi.fn().mockResolvedValue({ available: true }) } as unknown as CoreClient;
+  render(<ChatTranscript client={withChatReads(client)} worldId="world-a" playerId="player-a" conversation={conversation} tokenCeiling={50_000} onBack={() => {}} />);
+  await waitFor(() => expect(screen.getByRole("textbox").hasAttribute("disabled")).toBe(false));
+  fireEvent.change(screen.getByRole("textbox"), { target: { value: "你好" } });
+  fireEvent.click(screen.getByRole("button", { name: "发送" }));
+  expect(await screen.findByText(/这轮回复未获预算授权/)).toBeTruthy();
+  expect(sendPlayerMessage).toHaveBeenCalledOnce();
+  expect(generateDirectReply).toHaveBeenCalledOnce();
+});
+
+it("releases a rejected message for editing but reuses identity after an uncertain save", async () => {
+  const sendPlayerMessage = vi.fn()
+    .mockRejectedValueOnce(new CoreRequestError(422))
+    .mockRejectedValueOnce(new Error("connection lost"))
+    .mockRejectedValueOnce(new Error("connection lost"));
+  const client = { conversationMessagePage: vi.fn().mockResolvedValue({ items: [], next_before_position: null }), sendPlayerMessage,
+    directReplyAvailability: vi.fn().mockResolvedValue({ available: true }) } as unknown as CoreClient;
+  render(<ChatTranscript client={withChatReads(client)} worldId="world-a" playerId="player-a" conversation={conversation} tokenCeiling={50_000} onBack={() => {}} />);
+  const draft = await screen.findByRole("textbox");
+  await waitFor(() => expect(draft).toHaveProperty("disabled", false));
+  fireEvent.change(draft, { target: { value: "原文" } });
+  fireEvent.click(screen.getByRole("button", { name: "发送" }));
+  await screen.findByText(/消息未保存/);
+  expect(draft).toHaveProperty("disabled", false);
+  fireEvent.change(draft, { target: { value: "修改后" } });
+  fireEvent.click(screen.getByRole("button", { name: "发送" }));
+  await screen.findByText(/保存结果尚未确认/);
+  expect(draft).toHaveProperty("disabled", true);
+  fireEvent.click(screen.getByRole("button", { name: "重试保存" }));
+  await waitFor(() => expect(sendPlayerMessage).toHaveBeenCalledTimes(3));
+  expect(sendPlayerMessage.mock.calls[1]?.slice(2)).toEqual(sendPlayerMessage.mock.calls[2]?.slice(2));
+  expect(sendPlayerMessage.mock.calls[0]?.[4]).not.toBe(sendPlayerMessage.mock.calls[1]?.[4]);
+});

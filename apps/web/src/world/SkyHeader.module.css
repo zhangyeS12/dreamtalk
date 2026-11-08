@@ -1,0 +1,47 @@
+/* Written directly onto the sky: no bar, no background. */
+.top {
+  grid-area: sky; position: relative; z-index: 2;
+  display: flex; align-items: flex-end; gap: 18px; min-width: 0;
+  padding: 18px 26px 10px 22px;
+  color: var(--dt-moon);
+}
+.top .mark { width: 52px; height: 46px; flex: none; object-fit: contain; filter: drop-shadow(0 4px 14px rgb(0 0 0 / 0.5)); }
+.top .title { display: grid; gap: 4px; min-width: 0; margin-right: auto; text-shadow: 0 2px 16px rgb(0 0 0 / 0.45); }
+.top .name {
+  display: block;
+  margin: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; max-width: 22em;
+  font-size: 30px; font-weight: 600; letter-spacing: 0.14em; line-height: 1.12;
+}
+.top .clock {
+  margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px;
+  font-size: 14px; letter-spacing: 0.04em; color: rgb(238 240 248 / 0.86); font-variant-numeric: tabular-nums;
+}
+.top .phase { font-size: 15px; color: var(--dt-moon); }
+.top .state {
+  align-self: center; padding: 0 9px; border-radius: 999px; line-height: 20px; font-size: 12px; letter-spacing: 0.06em;
+  background: rgb(10 12 32 / 0.5); color: var(--dt-sun-bright); text-shadow: none;
+}
+.top .state[data-tone="danger"] { color: var(--dt-danger-ink); }
+
+.top .actions { display: flex; align-items: center; gap: 10px; flex: none; padding-bottom: 4px; }
+.top .archive {
+  display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 18px;
+  border: 1px solid var(--dt-glass-edge); border-radius: 999px;
+  background: rgb(10 12 32 / 0.38); color: var(--dt-moon); font-size: 14px; cursor: pointer;
+  backdrop-filter: var(--dt-blur-soft);
+  transition: background-color var(--dt-quick) var(--dt-ease);
+}
+.top .archive:hover { background: rgb(10 12 32 / 0.6); }
+.top .archive svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linejoin: round; }
+
+.top button:focus-visible { outline: 2px solid var(--dt-sun); outline-offset: 2px; }
+
+@media (max-width: 860px) {
+  .top { align-items: center; gap: 10px; padding: 10px 12px 6px; }
+  .top .mark { width: 36px; height: 32px; }
+  .top .name { font-size: 20px; letter-spacing: 0.08em; }
+  .top .clock { font-size: 12px; }
+  .top .phase { font-size: 12px; }
+  .top .archive { width: 40px; padding: 0; justify-content: center; }
+  .top .archive span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+}

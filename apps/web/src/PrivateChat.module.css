@@ -1,0 +1,18 @@
+.glasses { display: inline-grid; place-items: center; min-width: 40px; min-height: 36px; padding: 6px 10px; color: var(--dt-moon); border: 1px solid var(--dt-glass-edge); border-radius: 999px; background: var(--dt-glass-strong); cursor: pointer; }
+.glasses:disabled { opacity: .4; cursor: default; }
+.glasses:focus-visible { outline: 2px solid var(--dt-sun-bright); outline-offset: 3px; }
+.draft { flex: 1; position: relative; min-width: 0; display: grid; }
+.draft textarea { width: 100% !important; box-sizing: border-box; position: relative; z-index: 1; }
+.masked textarea { color: transparent !important; caret-color: var(--dt-moon); }
+.masked textarea::selection { color: transparent; background: rgb(135 160 220 / .35); }
+.mirror { position: absolute; inset: 0; overflow: hidden; pointer-events: none; padding: 12px 4px; font: 15.5px/1.55 var(--dt-font); color: var(--dt-moon); white-space: pre-wrap; overflow-wrap: break-word; box-sizing: border-box; }
+.mirror mark { background: #030407; color: transparent; border-radius: 2px; box-decoration-break: clone; }
+.body { min-width: 0; }
+.blackout { padding: .04em .12em; white-space: pre-wrap; overflow-wrap: anywhere; color: #030407; background: #030407; border-radius: 3px; box-decoration-break: clone; -webkit-box-decoration-break: clone; user-select: none; cursor: pointer; }
+.blackout:hover { background: #101521; color: #101521; box-shadow: 0 0 0 1px var(--dt-sun); }
+.blackout:focus-visible, .collapse:focus-visible { outline: 2px solid var(--dt-sun-bright); outline-offset: 3px; }
+.revealed { border-bottom: 1px dashed currentColor; box-decoration-break: clone; -webkit-box-decoration-break: clone; white-space: pre-wrap; }
+.collapse { display: inline; vertical-align: baseline; margin: 0 .3em; padding: 0 .25em; border: 1px solid currentColor; border-radius: 3px; background: transparent; color: inherit; font: inherit; font-size: .65em; cursor: pointer; white-space: nowrap; }
+.protection { margin: 0 0 8px; font-size: 12px; line-height: 1.6; color: var(--dt-silver); }
+.audiences { flex-basis: 100%; color: var(--dt-silver); font-size: 12px; line-height: 1.6; }
+.body .revealed :global(.message-content.message-content-inline) { display: inline; color: inherit; font: inherit; }

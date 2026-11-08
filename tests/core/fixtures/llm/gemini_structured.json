@@ -1,0 +1,19 @@
+{
+  "created": "2026-09-19T00:00:00Z",
+  "id": "v1_fixture_structured",
+  "model": "gemini-3.8-flash",
+  "object": "interaction",
+  "status": "completed",
+  "steps": [
+    {
+      "type": "model_output",
+      "content": [{"type": "text", "text": "{\"answer\":42}"}]
+    }
+  ],
+  "usage": {
+    "total_input_tokens": 9,
+    "total_output_tokens": 5,
+    "total_thought_tokens": 1,
+    "total_tokens": 15
+  }
+}

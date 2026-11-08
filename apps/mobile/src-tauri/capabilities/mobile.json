@@ -1,0 +1,11 @@
+{
+  "identifier": "mobile",
+  "description": "Local mobile host operations for the main view",
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "core:default",
+    "mobile-core:default"
+  ]
+}

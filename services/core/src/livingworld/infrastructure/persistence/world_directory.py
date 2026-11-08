@@ -1,0 +1,31 @@
+"""Read-only world list for the local product surface."""
+
+from sqlalchemy import select
+
+from livingworld.application.world_settings import WorldListing
+from livingworld.domain.identifiers import WorldId
+from livingworld.infrastructure.persistence.deletion_models import WorldDeletionRecord
+from livingworld.infrastructure.persistence.models import ExampleWorldSetupRecord, WorldRecord
+
+
+class SqlAlchemyWorldDirectory:
+    def __init__(self, sessions) -> None:
+        self._sessions = sessions
+
+    async def list_worlds(self) -> tuple[WorldListing, ...]:
+        async with self._sessions() as session:
+            pending = select(ExampleWorldSetupRecord.world_id).where(
+                ExampleWorldSetupRecord.state == "pending"
+            )
+            rows = (
+                await session.scalars(
+                    select(WorldRecord)
+                    .where(~WorldRecord.world_id.in_(pending))
+                    .order_by(WorldRecord.name)
+                )
+            ).all()
+            return tuple(WorldListing(WorldId(row.world_id), row.name) for row in rows)
+
+    async def deleted(self, world_id: WorldId) -> bool:
+        async with self._sessions() as session:
+            return await session.get(WorldDeletionRecord, world_id.value) is not None

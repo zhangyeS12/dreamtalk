@@ -1,0 +1,43 @@
+name: Android source CI
+on:
+  push:
+    branches: ['codex/android-personal-*']
+    tags: ['android-v*']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: android-source-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  source:
+    name: Android offline source checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      HF_HUB_OFFLINE: '1'
+      TRANSFORMERS_OFFLINE: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+        with:
+          version: '0.11.32'
+          python-version: '3.13'
+      - run: uv venv .venv-check --python 3.13
+      - run: uv pip install --python .venv-check/bin/python -r ci/requirements.txt
+      - run: npm ci
+      - run: .venv-check/bin/python scripts/check-android-source.py
+  gate:
+    name: Android CI Gate
+    if: always()
+    needs: [source]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require Android source checks
+        env:
+          RESULT: ${{ needs.source.result }}
+        run: test "$RESULT" = success

@@ -1,0 +1,11 @@
+{
+  "compilerOptions": {
+    "target": "ES2022", "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext", "moduleResolution": "Bundler", "jsx": "react-jsx",
+    "baseUrl": ".", "paths": { "@dreamtalk/api-client": ["packages/api-client/src/index.ts"], "@livingworld/api-client": ["packages/api-client/src/index.ts"] },
+    "strict": true, "noEmit": true, "resolveJsonModule": true,
+    "esModuleInterop": true, "skipLibCheck": true,
+    "types": ["vite/client", "vitest/globals"]
+  },
+  "include": ["apps/web/src", "packages/api-client/src"]
+}

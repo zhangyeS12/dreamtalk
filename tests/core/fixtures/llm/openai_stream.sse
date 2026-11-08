@@ -1,0 +1,16 @@
+data: {"id": "chatcmpl-controlled-stream", "object": "chat.completion.chunk", "model": "controlled-model", "choices": [{"index": 0, "delta": {"role": "assistant", "content": ""}, "finish_reason": null}], "usage": null}
+
+data: {"id": "chatcmpl-controlled-stream", "object": "chat.completion.chunk", "model": "controlled-model", "choices": [{"index": 0, "delta": {"content": "Hel"}, "finish_reason": null}], "usage": null}
+
+data: {"id": "chatcmpl-controlled-stream", "object": "chat.completion.chunk", "model": "controlled-model", "choices": [{"index": 0, "delta": {"content": "lo"}, "finish_reason": null}], "usage": null}
+
+data: {"id": "chatcmpl-controlled-stream", "object": "chat.completion.chunk", "model": "controlled-model", "choices": [{"index": 0, "delta": {"content": " "}, "finish_reason": null}], "usage": null}
+
+data: {"id": "chatcmpl-controlled-stream", "object": "chat.completion.chunk", "model": "controlled-model", "choices": [{"index": 0, "delta": {"content": "世界"}, "finish_reason": null}], "usage": null}
+
+data: {"id": "chatcmpl-controlled-stream", "object": "chat.completion.chunk", "model": "controlled-model", "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}], "usage": null}
+
+data: {"id": "chatcmpl-controlled-stream", "object": "chat.completion.chunk", "model": "controlled-model", "choices": [], "usage": {"prompt_tokens": 12, "completion_tokens": 4, "total_tokens": 16, "completion_tokens_details": {"reasoning_tokens": 2}}}
+
+data: [DONE]
+

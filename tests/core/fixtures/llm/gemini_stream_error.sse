@@ -1,0 +1,12 @@
+event: interaction.created
+data: {"interaction":{"id":"v1_fixture_stream_error","status":"in_progress","object":"interaction","model":"gemini-3.8-flash"},"event_type":"interaction.created"}
+
+event: step.start
+data: {"index":0,"step":{"type":"model_output"},"event_type":"step.start"}
+
+event: step.delta
+data: {"index":0,"delta":{"text":"partial","type":"text"},"event_type":"step.delta"}
+
+event: error
+data: {"error":{"code":"service_unavailable","message":"private provider body"},"event_type":"error"}
+

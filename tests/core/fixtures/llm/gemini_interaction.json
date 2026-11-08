@@ -1,0 +1,25 @@
+{
+  "created": "2026-09-19T00:00:00Z",
+  "id": "v1_fixture_interaction",
+  "model": "gemini-3.8-flash",
+  "object": "interaction",
+  "status": "completed",
+  "steps": [
+    {"type": "thought", "signature": "thought_sig_fixture"},
+    {
+      "type": "model_output",
+      "content": [
+        {"type": "text", "text": "Hello"},
+        {"type": "text", "text": " world"}
+      ]
+    }
+  ],
+  "service_tier": "standard",
+  "usage": {
+    "total_input_tokens": 11,
+    "total_cached_tokens": 3,
+    "total_output_tokens": 2,
+    "total_thought_tokens": 5,
+    "total_tokens": 18
+  }
+}

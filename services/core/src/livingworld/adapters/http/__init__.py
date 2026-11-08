@@ -1,0 +1,1 @@
+"""System-level HTTP adapter."""

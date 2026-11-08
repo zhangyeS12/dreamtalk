@@ -1,0 +1,135 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { API_PROTOCOL, CoreClient } from "./index";
+
+afterEach(() => vi.restoreAllMocks());
+const connection = { endpoint: "http://127.0.0.1:49152", token: "memory-session", generation: "generation" };
+const health = { ready: true, core_version: "0.1.0", api_protocol: API_PROTOCOL, generation: "generation", llm_status: "unconfigured" };
+
+describe("CoreClient", () => {
+  it("uses discovered endpoint and bearer auth", async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify(health)));
+    expect(await new CoreClient(connection, fetcher).health()).toEqual(health);
+    expect(fetcher.mock.calls[0][0].toString()).toBe(`${connection.endpoint}/system/health`);
+    expect(fetcher.mock.calls[0][1].headers.Authorization).toBe("Bearer memory-session");
+  });
+  it.each([{ ...health, generation: "stale" }, { ...health, api_protocol: API_PROTOCOL + 1 }, { ...health, ready: false }])(
+    "rejects incompatible or stale readiness", async (value) => {
+      await expect(new CoreClient(connection, vi.fn().mockResolvedValue(new Response(JSON.stringify(value)))).health())
+        .rejects.toThrow("core_contract_mismatch");
+    },
+  );
+  it("rejects missing session and unsafe endpoint", () => {
+    expect(() => new CoreClient({ ...connection, token: "" })).toThrow("missing_core_session");
+    expect(() => new CoreClient({ ...connection, endpoint: "http://user:password@127.0.0.1" })).toThrow("invalid_core_endpoint");
+  });
+  it("passes request identity for shutdown", async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response("{}"));
+    const id = "0f6d14aa-1363-4451-a1bf-9ed40a9cbb95";
+    await new CoreClient(connection, fetcher).shutdown(id);
+    expect(fetcher.mock.calls[0][1].headers["X-Request-Id"]).toBe(id);
+  });
+  it("uses authenticated developer routes and preserves typed trigger input", async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({ trigger_id: "trigger" })));
+    await new CoreClient(connection, fetcher).scheduleTrigger("world", 1_000_000, "character");
+    expect(fetcher.mock.calls[0][0].toString()).toBe(`${connection.endpoint}/developer/worlds/world/triggers`);
+    expect(fetcher.mock.calls[0][1].headers.Authorization).toBe("Bearer memory-session");
+    expect(JSON.parse(fetcher.mock.calls[0][1].body)).toEqual({
+      delay_microseconds: 1_000_000,
+      target_character_id: "character",
+    });
+  });
+  it("uses versioned authenticated product routes and stable creation identity", async () => {
+    const fetcher = vi.fn().mockImplementation(async () => new Response(JSON.stringify({ world_id: "world" })));
+    const client = new CoreClient(connection, fetcher);
+    const requestId = "0f6d14aa-1363-4451-a1bf-9ed40a9cbb95";
+    await client.createWorld("我的世界", requestId);
+    expect(fetcher.mock.calls[0][0].toString()).toBe(`${connection.endpoint}/api/v${API_PROTOCOL}/worlds`);
+    expect(fetcher.mock.calls[0][1].headers.Authorization).toBe("Bearer memory-session");
+    expect(fetcher.mock.calls[0][1].headers["X-Request-Id"]).toBe(requestId);
+    expect(JSON.parse(fetcher.mock.calls[0][1].body)).toEqual({ name: "我的世界" });
+    fetcher.mockImplementationOnce(async () => new Response("[]"));
+    await client.listProductWorlds();
+    expect(fetcher.mock.calls[1][0].toString()).toBe(`${connection.endpoint}/api/v${API_PROTOCOL}/worlds`);
+  });
+  it("reads a transcript through the authenticated versioned product route", async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response("[]"));
+    expect(await new CoreClient(connection, fetcher).conversationMessages("world", "conversation")).toEqual([]);
+    expect(fetcher.mock.calls[0][0].toString()).toBe(`${connection.endpoint}/api/v${API_PROTOCOL}/worlds/world/conversations/conversation/messages`);
+    expect(fetcher.mock.calls[0][1].headers.Authorization).toBe("Bearer memory-session");
+  });
+  it("reads bounded transcript pages with a stable older-position cursor", async () => {
+    const page = { items: [], next_before_position: null };
+    const fetcher = vi.fn().mockImplementation(async () => new Response(JSON.stringify(page)));
+    const client = new CoreClient(connection, fetcher);
+    expect(await client.conversationMessagePage("world", "conversation")).toEqual(page);
+    expect(fetcher.mock.calls[0][0].toString()).toBe(`${connection.endpoint}/api/v${API_PROTOCOL}/worlds/world/conversations/conversation/messages/page`);
+    expect(fetcher.mock.calls[0][1].headers.Authorization).toBe("Bearer memory-session");
+    await client.conversationMessagePage("world", "conversation", 42);
+    expect(fetcher.mock.calls[1][0].toString()).toBe(`${connection.endpoint}/api/v${API_PROTOCOL}/worlds/world/conversations/conversation/messages/page?before_position=42`);
+  });
+  it("creates and lists group membership without using the direct-chat route", async () => {
+    const group = { conversation_id: "group", player_id: "player", kind: "group", participants: [] };
+    const fetcher = vi.fn().mockImplementation(async () => new Response(JSON.stringify(group)));
+    const client = new CoreClient(connection, fetcher);
+    const id = "0f6d14aa-1363-4451-a1bf-9ed40a9cbb95";
+    expect(await client.createGroupConversation("world", ["card-a", "card-b"], id)).toEqual(group);
+    expect(fetcher.mock.calls[0][0].toString()).toBe(`${connection.endpoint}/api/v${API_PROTOCOL}/worlds/world/conversations/groups`);
+    expect(fetcher.mock.calls[0][1].headers["X-Request-Id"]).toBe(id);
+    expect(JSON.parse(fetcher.mock.calls[0][1].body)).toEqual({ import_ids: ["card-a", "card-b"] });
+    fetcher.mockImplementationOnce(async () => new Response(JSON.stringify([group])));
+    await client.groupConversations("world");
+    expect(fetcher.mock.calls[1][0].toString()).toBe(`${connection.endpoint}/api/v${API_PROTOCOL}/worlds/world/conversations/groups`);
+    expect(fetcher.mock.calls[1][1].headers.Authorization).toBe("Bearer memory-session");
+  });
+  it("rejects malformed product responses before exposing them to the workspace", async () => {
+    const fetcher = vi.fn().mockImplementation(async () => new Response(JSON.stringify([
+      { conversation_id: "group", player_id: "player", kind: "group", participants: [{ character_name: "Missing stable identity" }] },
+    ])));
+    await expect(new CoreClient(connection, fetcher).groupConversations("world"))
+      .rejects.toMatchObject({ status: 502, code: "core_contract_mismatch" });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+  it("sends a player message with a stable request identity and resolved token ceiling", async () => {
+    const pending = { status: "pending", turn_id: "turn", token_ceiling: 50_000, message: {
+      message_id: "message", turn_id: "turn", conversation_id: "chat", position: 1,
+      sender_kind: "player", sender_id: "player", text: "你好", created_at_utc: "2026-10-18T00:00:00Z",
+    } };
+    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify(pending), { status: 202 }));
+    const id = "0f6d14aa-1363-4451-a1bf-9ed40a9cbb95";
+    expect(await new CoreClient(connection, fetcher).sendPlayerMessage("world", "chat", "你好", 50_000, id)).toEqual(pending);
+    expect(fetcher.mock.calls[0][0].toString()).toBe(`${connection.endpoint}/api/v${API_PROTOCOL}/worlds/world/conversations/chat/messages`);
+    expect(fetcher.mock.calls[0][1].method).toBe("POST");
+    expect(fetcher.mock.calls[0][1].headers["X-Request-Id"]).toBe(id);
+    expect(JSON.parse(fetcher.mock.calls[0][1].body)).toEqual({ text: "你好", token_ceiling: 50_000 });
+  });
+  it("uses distinct authenticated group send and turn routes", async () => {
+    const message = { message_id: "message", turn_id: "turn", conversation_id: "group", position: 1,
+      sender_kind: "player", sender_id: "player", text: "@角色乙 你好", created_at_utc: "2026-10-18T00:00:00Z" };
+    const pending = { status: "pending", turn_id: "turn", token_ceiling: 500, message };
+    const turn = { turn_id: "turn", state: "completed", token_ceiling: 500, player_message: message, replies: [] };
+    const fetcher = vi.fn().mockImplementation(async () => new Response(JSON.stringify(turn)))
+      .mockImplementationOnce(async () => new Response(JSON.stringify(pending), { status: 202 }));
+    const client = new CoreClient(connection, fetcher);
+    const id = "0f6d14aa-1363-4451-a1bf-9ed40a9cbb95";
+    await client.sendGroupMessage("world", "group", "@角色乙 你好", 500, id);
+    expect(fetcher.mock.calls[0][0].toString()).toBe(`${connection.endpoint}/api/v${API_PROTOCOL}/worlds/world/conversations/group/group-messages`);
+    expect(fetcher.mock.calls[0][1].headers["X-Request-Id"]).toBe(id);
+    expect(JSON.parse(fetcher.mock.calls[0][1].body)).toEqual({ text: "@角色乙 你好", token_ceiling: 500 });
+    await client.generateGroupReply("world", "group", "turn");
+    expect(fetcher.mock.calls[1][0].toString()).toBe(`${connection.endpoint}/api/v${API_PROTOCOL}/worlds/world/conversations/group/group-turns/turn/reply`);
+    await client.groupTurn("world", "group", "turn");
+    expect(fetcher.mock.calls[2][0].toString()).toBe(`${connection.endpoint}/api/v${API_PROTOCOL}/worlds/world/conversations/group/group-turns/turn`);
+  });
+});
+
+it("sends reviewed chat-path writes as authenticated JSON with stable request identity", async () => {
+  const draft = { action: "candidate" as const, revision: 2, message_id: "message", token_ceiling: 10000 };
+  const request = { draft, reviewed_hash: "a".repeat(64), confirmed: true as const, request_id: "request" };
+  const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({ path_id: "candidate", revision: 3, turn_id: "attempt" })));
+  await new CoreClient(connection, fetcher).commitChatPath("world", "chat", request);
+  expect(fetcher).toHaveBeenCalledOnce();
+  expect(fetcher.mock.calls[0][0].toString()).toBe(`${connection.endpoint}/api/v${API_PROTOCOL}/worlds/world/conversations/chat/paths/commit`);
+  expect(fetcher.mock.calls[0][1].headers["Content-Type"]).toBe("application/json");
+  expect(fetcher.mock.calls[0][1].headers.Authorization).toBe("Bearer memory-session");
+  expect(JSON.parse(fetcher.mock.calls[0][1].body)).toEqual(request);
+});

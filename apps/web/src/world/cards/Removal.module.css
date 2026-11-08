@@ -1,0 +1,10 @@
+.effect { position: fixed; inset: 0; z-index: 40; pointer-events: none; }
+.effect > svg { position: absolute; }
+.effect canvas { position: fixed; pointer-events: none; }
+.name { overflow-wrap: anywhere; }
+.confirm .error { color: #ffc3b6; }
+.confirm > header > button { color: #c6d1e6; background: transparent; border: 1px solid #46506c; }
+.confirm footer button { min-height: 39px; padding: 9px 16px; border: 1px solid #56617c; border-radius: 9px; background: #202a40; color: #dce3ef; font: inherit; cursor: pointer; }
+.confirm footer button.danger { color: #ffd2c7; background: #4a2730; border-color: #a55f55; }
+.confirm footer button:enabled:hover { border-color: #c9b47e; }
+@media (prefers-reduced-motion: reduce) { .effect canvas { display: none; } }

@@ -1,0 +1,32 @@
+{
+  "id": "msg_01LWNativeFixture",
+  "type": "message",
+  "role": "assistant",
+  "model": "claude-test-version-20260901",
+  "content": [
+    {
+      "type": "thinking",
+      "thinking": "LW_ANTHROPIC_REASONING_CANARY"
+    },
+    {
+      "type": "text",
+      "text": "LW_ANTHROPIC_RESPONSE_CANARY"
+    }
+  ],
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "usage": {
+    "input_tokens": 10,
+    "cache_creation_input_tokens": 3,
+    "cache_read_input_tokens": 2,
+    "cache_creation": {
+      "ephemeral_5m_input_tokens": 1,
+      "ephemeral_1h_input_tokens": 2
+    },
+    "output_tokens": 4,
+    "output_tokens_details": {
+      "thinking_tokens": 1
+    },
+    "service_tier": "standard"
+  }
+}

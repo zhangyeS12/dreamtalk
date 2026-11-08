@@ -1,0 +1,12 @@
+.segmented {
+  display: inline-flex; padding: 4px; gap: 2px; border-radius: 999px;
+  border: 1px solid var(--dt-glass-edge); background: rgb(10 12 32 / 0.38); backdrop-filter: var(--dt-blur-soft);
+}
+.segmented button {
+  height: 32px; padding: 0 16px; border: 0; border-radius: 999px; background: transparent;
+  color: rgb(238 240 248 / 0.78); font-size: 13px; cursor: pointer;
+  transition: background-color var(--dt-quick) var(--dt-ease), color var(--dt-quick) var(--dt-ease);
+}
+.segmented button:hover { color: var(--dt-moon); }
+.segmented button[aria-pressed="true"] { background: var(--dt-moon); color: #10142f; font-weight: 600; }
+.segmented button:focus-visible { outline: 2px solid var(--dt-sun); outline-offset: 2px; }

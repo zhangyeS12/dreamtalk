@@ -1,0 +1,5 @@
+{
+  "api_protocol": 1,
+  "loopback_host": "127.0.0.1",
+  "session_derivation": "livingworld-session-v1"
+}

@@ -1,0 +1,90 @@
+"""Generation-local update barrier; no persistence or provider replay."""
+
+import asyncio
+from contextlib import contextmanager
+from time import monotonic
+
+
+class UpdateMaintenance:
+    def __init__(self):
+        self._until = 0.0
+        self.active = 0
+        self._idle = asyncio.Event()
+        self._idle.set()
+        self.deleting = False
+        self.startup_hold = False
+        self.suspended = False
+        self.on_resume = lambda: None
+
+    @property
+    def preparing(self):
+        if self.deleting or self.startup_hold or self.suspended:
+            return True
+        if self._until and monotonic() >= self._until:
+            self._until = 0.0
+            self.on_resume()
+        return bool(self._until)
+
+    def prepare(self):
+        if self.deleting:
+            return self.snapshot()
+        # A lost host must not leave a surviving Core permanently fenced.
+        self._until = monotonic() + 300
+        return self.snapshot()
+
+    def cancel(self):
+        if self.deleting:
+            return self.snapshot()
+        was_preparing = bool(self._until) and not self.startup_hold
+        self._until = 0.0
+        if was_preparing:
+            self.on_resume()
+        return self.snapshot()
+
+    def verified(self):
+        """Only the host releases startup admission after durable save verification."""
+        self.startup_hold = False
+        self._until = monotonic() + 300
+        return self.cancel()
+
+    def begin_deletion(self):
+        if self.preparing or self.active != 1:
+            raise ValueError("world_delete_busy")
+        self.deleting = True
+
+    def end_deletion(self):
+        self.deleting = False
+        self.on_resume()
+
+    def snapshot(self):
+        return {"preparing": self.preparing, "active": self.active}
+
+    @contextmanager
+    def operation(self):
+        # Admission and accounting are synchronous on the single event loop.
+        admitted = not self.preparing
+        if admitted:
+            self.active += 1
+            self._idle.clear()
+        try:
+            yield admitted
+        finally:
+            if admitted:
+                self._finished()
+
+    def spawn(self, coroutine):
+        # A caller already holds an admitted operation while claiming the job.
+        # Account before scheduling, including a task not yet given its first turn.
+        self.active += 1
+        self._idle.clear()
+        task = asyncio.create_task(coroutine)
+        task.add_done_callback(lambda _task: self._finished())
+        return task
+
+    def _finished(self):
+        self.active -= 1
+        if not self.active:
+            self._idle.set()
+
+    async def wait_idle(self):
+        await self._idle.wait()

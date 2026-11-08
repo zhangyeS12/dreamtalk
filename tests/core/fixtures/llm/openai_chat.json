@@ -1,0 +1,21 @@
+{
+  "id": "chatcmpl-controlled-openai",
+  "object": "chat.completion",
+  "created": 1789689600,
+  "model": "controlled-openai-model",
+  "choices": [
+    {
+      "index": 0,
+      "message": {"role": "assistant", "content": "Controlled answer.", "refusal": null, "annotations": []},
+      "logprobs": null,
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 12,
+    "completion_tokens": 3,
+    "total_tokens": 15,
+    "prompt_tokens_details": {"cached_tokens": 4, "audio_tokens": 0},
+    "completion_tokens_details": {"reasoning_tokens": 0, "audio_tokens": 0, "accepted_prediction_tokens": 0, "rejected_prediction_tokens": 0}
+  }
+}
