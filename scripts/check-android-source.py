@@ -29,6 +29,11 @@ def main():
     groups = ["core", "web", "static"] if args.group == "all" else [args.group]
     with ThreadPoolExecutor(max_workers=len(groups)) as pool:
         passed = list(pool.map(runner.check, groups))
+    for name, successful in zip(groups, passed, strict=True):
+        if not successful:
+            print("FAILED CHECK DETAILS: " + name, flush=True)
+            log = runner.WORK / (name + "-checks.log")
+            print(log.read_text(encoding="utf-8", errors="replace")[-50000:], flush=True)
     return 0 if all(passed) else 1
 
 
