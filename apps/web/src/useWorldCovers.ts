@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CoreClient, type WorldCover } from "@dreamtalk/api-client";
 type CoverFace = "front" | "spine" | "back";
 export type BookAppearance = { cover: Pick<WorldCover, "mode" | "title" | "show_title">; urls: Partial<Record<CoverFace, string>> };
@@ -6,11 +6,16 @@ export type BookAppearance = { cover: Pick<WorldCover, "mode" | "title" | "show_
 /** Everything a designed book needs: saved cover, face images, wrap image and sticker images. */
 export type CoverAppearance = BookAppearance & { full: WorldCover; jacket?: string; jacketAspect?: number; uploads: Record<string, string> };
 
-export function useWorldCovers(client: CoreClient, worldId?: string, enabled = true) {
+export function useWorldCovers(client: CoreClient, worldId?: string, enabled = true, visibleWorldIds?: readonly string[]) {
   const [covers, setCovers] = useState<WorldCover[]>([]);
   const [appearances, setAppearances] = useState<Record<string, CoverAppearance>>({});
   const [metadataReady, setMetadataReady] = useState(false);
   const [error, setError] = useState("");
+  const scopeKey = visibleWorldIds?.slice().sort().join("|");
+  const imageCovers = useMemo(() => {
+    const scope = scopeKey === undefined ? null : new Set(scopeKey.split("|"));
+    return covers.filter(cover => !scope || scope.has(cover.world_id));
+  }, [covers, scopeKey]);
   const live = useRef(true);
   const sequence = useRef(0);
   const cache = useRef(new Map<string, string>());
@@ -57,7 +62,7 @@ export function useWorldCovers(client: CoreClient, worldId?: string, enabled = t
         }
         return url;
       };
-      for (const cover of covers) {
+      for (const cover of imageCovers) {
         if (worldId && cover.world_id !== worldId) continue;
         const urls: BookAppearance["urls"] = {}, uploads: Record<string, string> = {};
         let jacket: string | undefined, jacketAspect: number | undefined;
@@ -96,13 +101,13 @@ export function useWorldCovers(client: CoreClient, worldId?: string, enabled = t
     };
     void load();
     return () => { cancelled = true; clearTimeout(timer); controller.abort(); };
-  }, [client, covers, enabled, metadataReady, worldId]);
+  }, [client, imageCovers, enabled, metadataReady, worldId]);
   useEffect(() => {
     // Effects run after the new appearance commits. Keep the old artwork while
     // its replacement loads, and protect current keys that a load may reuse.
     const displayed = new Set(Object.values(appearances).flatMap(appearance => Object.values(appearance.urls)));
     const needed = new Set<string>();
-    if (enabled) for (const cover of covers) {
+    if (enabled) for (const cover of imageCovers) {
       if (worldId && cover.world_id !== worldId) continue;
       for (const item of Object.values(cover.design?.stickers ?? {}).flat()) if (item.kind === "image") needed.add(`${cover.world_id}:${item.ref}`);
       if (cover.mode !== "image" && !cover.design) continue;
@@ -117,12 +122,12 @@ export function useWorldCovers(client: CoreClient, worldId?: string, enabled = t
       URL.revokeObjectURL(url);
       cache.current.delete(key);
     }
-  }, [appearances, covers, enabled, worldId]);
+  }, [appearances, imageCovers, enabled, worldId]);
   const saved = useCallback((cover: WorldCover) => {
     sequence.current += 1;
     setMetadataReady(true); setError(""); setCovers(current => [...current.filter(item => item.world_id !== cover.world_id), cover]);
   }, []);
-  const ready = !enabled || metadataReady && covers.every(cover => appearances[cover.world_id]?.cover === cover);
+  const ready = !enabled || metadataReady && imageCovers.every(cover => appearances[cover.world_id]?.cover === cover);
   const removed = useCallback((id: string) => {
     sequence.current += 1;
     setCovers(current => current.filter(item => item.world_id !== id));

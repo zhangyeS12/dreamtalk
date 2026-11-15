@@ -12,7 +12,7 @@ h1 { font-size: 1.2rem; margin: 3px 0; font-weight: 650; overflow-wrap: anywhere
 h2 { font-size: 1.125rem; } h3 { font-size: 1rem; }
 p { line-height: 1.65; } small { color: #b3bddf; }
 .primary-button { background: #f0cb85; border-color: #f0cb85; color: #2b2008; font-weight: 650; }
-.mobile-app * { backdrop-filter: none !important; box-shadow: none !important; animation: none !important; }
+.mobile-app { --dt-blur: none; --dt-blur-soft: none; }
 .mobile-app { --dt-blur: none; background: #0e1330; min-height: 100dvh; }
 .mobile-top { min-height: 82px; padding: max(16px, env(safe-area-inset-top)) 18px 14px; display: flex; gap: 16px; justify-content: space-between; align-items: center; border-bottom: 1px solid #35405e; background: #131a35; }
 .mobile-top > div { flex: 1; min-width: 0; }.mobile-top-end { width: 60px; }
@@ -62,3 +62,158 @@ p { line-height: 1.65; } small { color: #b3bddf; }
 
 .mobile-settings .mobile-list button > span:first-child { flex: 1; min-width: 0; }
 .mobile-settings .mobile-list button > span:nth-child(2) { flex: none; }
+
+/* Contacts keep desktop contracts in a single, lightweight phone column. */
+.mobile-contacts { color: #eceef7; }
+.mobile-contacts [hidden] { display: none !important; }
+.mobile-contacts .contacts-workspace { display: block; min-height: 0; height: auto; border: 0; background: transparent; }
+.mobile-contacts .conversation-list, .mobile-contacts .conversation-detail { width: 100%; min-width: 0; padding: 0; border: 0; height: auto; max-height: none; overflow: visible; background: transparent; }
+.mobile-contacts .contacts-view-switch { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding: 16px 0; border-top: 1px solid #35405e; border-bottom: 1px solid #35405e; margin: 18px 0; }
+.mobile-contacts .contacts-view-switch button { white-space: normal; padding: 8px 6px; font-size: 14px; }
+.mobile-contacts .contacts-view-switch button[aria-pressed=true] { color: #f0cb85; border-color: #b69c70; background: #26304b; }
+.mobile-contacts .directory-heading { display: flex; gap: 12px; justify-content: space-between; margin: 16px 0; }
+.mobile-contacts .conversation-row { display: flex; align-items: center; width: 100%; gap: 12px; text-align: left; padding: 16px 0; border: 0; border-bottom: 1px solid #35405e; background: transparent; border-radius: 0; }
+.mobile-contacts .row-copy { display: grid; gap: 6px; min-width: 0; flex: 1; }
+.mobile-contacts .contact-portrait { display: inline-grid; place-items: center; width: 44px; height: 44px; border-radius: 10px; background: #273252; color: #f0cb85; overflow: hidden; flex: none; }
+.mobile-contacts .contact-portrait img { width: 100%; height: 100%; object-fit: cover; }
+.mobile-contacts .contact-dossier, .mobile-contacts .mobile-contact-panel { padding: 16px 0; background: transparent; border: 0; min-width: 0; }
+.mobile-contacts .dossier-hero { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 0; border: 0; background: transparent; }
+.mobile-contacts .dossier-portrait { width: 64px; height: 64px; }
+.mobile-contacts .dossier-title { flex: 1; min-width: 0; }
+.mobile-contacts .dossier-title h2 { font-size: 22px; margin: 4px 0 10px; }
+.mobile-contacts .dossier-caption { color: #b3bddf; font-size: 13px; letter-spacing: normal; }
+.mobile-contacts .dossier-factions { display: flex; flex-wrap: wrap; gap: 8px; }
+.mobile-contacts .dossier-factions span { border: 1px solid #46506d; border-radius: 4px; padding: 3px 6px; font-size: 13px; }
+.mobile-contacts .thread-heading, .mobile-contacts .faction-line { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.mobile-contacts .faction-create, .mobile-contacts .character-location-editor, .mobile-contacts .content-workspace, .mobile-contacts .content-preview, .mobile-contacts .content-editor, .mobile-contacts .location-manager, .mobile-contacts .location-workspace { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; padding: 0; min-width: 0; }
+.mobile-contacts .faction-branch { margin: 16px 0 !important; border-left: 2px solid #46506d; padding: 0 0 0 12px; }
+.mobile-contacts .faction-line strong { flex: 1; min-width: 0; }
+.mobile-contacts .faction-member, .mobile-contacts .location-check { display: flex; align-items: flex-start; gap: 10px; margin: 14px 0; }
+.mobile-contacts .contact-portrait-edit { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 12px; }
+.mobile-contacts .contact-portrait-edit label { display: grid; gap: 10px; min-width: 0; width: 100%; }
+.mobile-contacts input[type=file] { max-width: 100%; min-width: 0; }
+.mobile-contacts .profile-actions { align-items: center; }
+.mobile-contacts .mobile-list button > span:first-child { flex: 1; min-width: 0; }
+.mobile-contacts .mobile-list button > span:last-child { flex: none; }
+.mobile-contacts .content-field { display: grid; gap: 8px; padding: 12px 0; }
+.mobile-contacts .content-field dt { font-weight: 600; color: #b3bddf; }.mobile-contacts .content-field dd { margin: 0; white-space: pre-wrap; }
+.mobile-contacts .editor-panel, .mobile-contacts .contacts-management { padding: 0; border: 0; background: transparent; }
+.mobile-contacts .search-field, .mobile-contacts .directory-search { width: 100%; min-width: 0; }
+
+.mobile-contacts { display: flex; flex-direction: column; }
+.mobile-contacts > .contacts-view-switch { order: 1; margin-top: 6px; }
+.mobile-contacts > .contacts-workspace { order: 2; }
+.mobile-contacts > .contacts-management, .mobile-contacts > .editor-panel { order: 3; margin-top: 20px; }
+.mobile-contacts .workspace-icon { width: 20px; height: 20px; flex: none; }
+.mobile-contacts .directory-search { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.mobile-contacts .directory-search input { flex: 1; min-width: 0; }
+.mobile-contacts .directory-search > button { display: inline-flex; align-items: center; padding: 8px; }
+.mobile-contacts .dossier-hero > .primary-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; }
+.mobile-contacts .thread-heading { position: static; padding-inline: 0; }
+.mobile-contacts .contacts-management summary { display: block; }
+.mobile-contacts .contacts-management summary strong { display: list-item; margin-left: 18px; }
+.mobile-contacts .contacts-management summary span { display: block; color: #b3bddf; font-size: 13px; line-height: 1.6; margin-top: 8px; }
+
+.mobile-contacts { --ink: #eceef7; --muted: #b3bddf; --line: #35405e; --surface: #131a35; --raised: #1f2649; --recessed: #10162e; --control-line: #56617e; }
+.mobile-contacts .faction-manager { padding: 0; max-height: none; overflow: visible; }
+.mobile-contacts .faction-create { color: #eceef7; background: transparent; margin-block: 24px; }
+.mobile-contacts .faction-members-copy, .mobile-contacts .faction-member, .mobile-contacts .faction-indent { color: #b3bddf; }
+.mobile-contacts .location-editor-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+.mobile-contacts .location-catalog { max-height: 240px; border-right: 0; padding: 0; }
+
+/* Static 2D maps: redraw only on input or confirmed data changes. */
+.mobile-contacts .diagram-switches { display: flex; gap: 8px; margin: 16px 0; }
+.mobile-contacts .diagram-switches button { flex: 1; min-width: 0; padding: 8px 6px; font-size: 14px; }
+.mobile-contacts .diagram-switches button[aria-pressed=true] { color: #f0cb85; border-color: #b69c70; background: #26304b; }
+.mobile-contacts .mobile-diagram { width: min(100%, 480px); margin: 14px auto; }
+.mobile-contacts .mobile-diagram-svg { display: block; width: 100%; aspect-ratio: 1; overflow: hidden; touch-action: none; user-select: none; border: 1px solid #35405e; border-radius: 12px; background: #10162e; }
+.mobile-contacts .diagram-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.mobile-contacts .diagram-controls button { min-width: 44px; min-height: 44px; }
+.mobile-contacts .diagram-controls output { min-width: 48px; text-align: center; color: #b3bddf; font-variant-numeric: tabular-nums; }
+.mobile-contacts .diagram-controls button:last-child { margin-left: auto; }
+.mobile-contacts .diagram-help { margin: 12px 0; color: #b3bddf; font-size: 13px; line-height: 1.65; }
+.mobile-contacts .diagram-summary { color: #eceef7; font-size: 14px; margin: 16px 0 8px; }
+.mobile-contacts .diagram-links line { stroke: #7e96c4; stroke-width: 1.2; }
+.mobile-contacts .diagram-links line.is-focused { stroke: #f0cb85; stroke-width: 1.8; }
+.mobile-contacts .diagram-person, .mobile-contacts .diagram-place { cursor: pointer; outline: none; }
+.mobile-contacts .diagram-hit { fill: transparent; stroke: none; }
+.mobile-contacts .diagram-avatar-ring { fill: #273252; stroke: #879bc4; stroke-width: 1.5; }
+.mobile-contacts .diagram-person.is-selected .diagram-avatar-ring,
+.mobile-contacts .diagram-person:focus-visible .diagram-avatar-ring { stroke: #f0cb85; stroke-width: 3; }
+.mobile-contacts .diagram-initial { fill: #f0cb85; font-size: 34px; font-weight: 600; pointer-events: none; }
+.mobile-contacts .diagram-name { fill: #eceef7; font-size: 28px; font-weight: 500; pointer-events: none; }
+.mobile-contacts .diagram-person.is-selected .diagram-name { fill: #f0cb85; }
+.mobile-contacts .diagram-enclosure { fill: #141e3a; stroke: #64799f; stroke-width: 1.5; }
+.mobile-contacts .diagram-place-circle { fill: #1d2b4b; stroke: #8ba3ca; stroke-width: 1.5; }
+.mobile-contacts .diagram-place.is-hidden .diagram-place-circle,
+.mobile-contacts .diagram-enclosure.is-hidden { stroke: #c5b6e0; stroke-dasharray: 7 5; }
+.mobile-contacts .diagram-place:hover .diagram-place-circle,
+.mobile-contacts .diagram-place:focus-visible .diagram-place-circle { stroke: #f0cb85; stroke-width: 3; fill: #263756; }
+.mobile-contacts .diagram-resident-circle { fill: #263252; stroke: #879bc4; stroke-width: 1.5; }
+.mobile-contacts .diagram-person:focus-visible .diagram-resident-circle { stroke: #f0cb85; stroke-width: 3; }
+.mobile-contacts .diagram-place-name { fill: #eceef7; font-size: 31px; font-weight: 600; pointer-events: none; }
+.mobile-contacts .diagram-place-count { fill: #b3bddf; font-size: 26px; pointer-events: none; }
+.mobile-contacts .diagram-person-detail { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; border-top: 1px solid #35405e; padding-top: 16px; margin-top: 18px; }
+.mobile-contacts .diagram-person-detail > div { flex: 1; min-width: 0; }
+.mobile-contacts .diagram-person-detail small { display: block; margin-top: 6px; }
+.mobile-contacts .diagram-person-detail > button { flex: none; }
+.mobile-contacts .diagram-breadcrumbs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 18px; }
+.mobile-contacts .diagram-breadcrumbs button { padding: 8px 10px; min-width: 44px; max-width: 100%; }
+.mobile-contacts .diagram-breadcrumbs button[aria-current] { color: #f0cb85; border-color: #b69c70; }
+.mobile-contacts .diagram-pagination { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 16px 0; }
+.mobile-contacts .diagram-filter-disclosure { margin-block: 8px; }
+.mobile-contacts .diagram-filter-disclosure summary { font-size: 14px; }
+.mobile-contacts .diagram-filter-fields { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0 14px; }
+@media (min-width: 560px) { .mobile-contacts .diagram-filter-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); } } 
+
+/* Ring atlas: static Canvas2D, quiet faction arcs and native detail sheet. */
+.mobile-contacts .atlas-heading { display:flex; align-items:center; justify-content:space-between; gap:16px; margin:8px 0 20px; }
+.mobile-contacts .atlas-heading h3 { font-size:1.3rem; font-weight:650; margin:6px 0 0; letter-spacing:.01em; }
+.mobile-contacts .atlas-eyebrow { color:#b9c5df; font-size:11px; letter-spacing:.16em; }
+.mobile-contacts .atlas-heading-count { color:#d7c192; font-size:13px; white-space:nowrap; }
+.mobile-contacts .atlas-search { display:grid; grid-template-columns:minmax(0,1.3fr) minmax(0,1fr); gap:12px; }
+.mobile-contacts .atlas-search .field { display:grid; gap:7px; font-size:13px; color:#bfc9df; min-width:0; }
+.mobile-contacts .atlas-search input, .mobile-contacts .atlas-search select { font-size:14px; padding:10px; min-width:0; }
+.mobile-contacts .atlas-search-results { display:flex; flex-wrap:wrap; gap:6px; margin-top:12px; }
+.mobile-contacts .atlas-search-results button { font-size:13px; padding:6px 10px; }
+.mobile-contacts .atlas-summary { display:flex; align-items:center; justify-content:space-between; gap:8px; margin:18px 0 8px; color:#c2cce1; font-size:13px; }
+.mobile-contacts .atlas-summary button { font-size:12px; padding:6px 9px; }
+.mobile-contacts .relation-atlas { margin:0 -8px; }
+.mobile-contacts .atlas-surface { position:relative; isolation:isolate; width:100%; aspect-ratio:1; overflow:hidden; border:1px solid #35405b; border-radius:18px; background:radial-gradient(ellipse at 50% 48%,#1a2440 0%,#10172d 56%,#0c1225 100%); }
+.mobile-contacts .atlas-surface canvas { display:block; width:100%; height:100%; aspect-ratio:1; touch-action:none; user-select:none; }
+.mobile-contacts .atlas-surface canvas:focus-visible { outline:2px solid #f0cb85; outline-offset:-5px; border-radius:18px; }
+.mobile-contacts .atlas-center-note { position:absolute; pointer-events:none; top:50%; left:50%; transform:translate(-50%,-50%); text-align:center; color:#c7cce0; display:grid; gap:3px; opacity:.8; }
+.mobile-contacts .atlas-center-note > span { font-size:12px; letter-spacing:.12em; }
+.mobile-contacts .atlas-center-note strong { font-size:30px; line-height:1.2; font-weight:500; color:#e3cf9d; }
+.mobile-contacts .atlas-center-note small { font-size:11px; color:#b6c0d7; }
+.mobile-contacts .atlas-corner-label { position:absolute; bottom:12px; right:16px; pointer-events:none; color:#b0bad0; font-size:10px; letter-spacing:.08em; }
+.mobile-contacts .atlas-controls { padding:0 8px; }
+.mobile-contacts .atlas-groups { display:flex; flex-wrap:wrap; gap:7px; max-height:144px; overflow:auto; margin:14px 8px 0; }
+.mobile-contacts .atlas-groups button { display:flex; align-items:center; gap:10px; padding:7px 10px; font-size:12px; background:#141d35; border-left-width:3px; min-width:0; max-width:100%; }
+.mobile-contacts .atlas-groups button > span { overflow-wrap:anywhere; }.mobile-contacts .atlas-groups button small { font-variant-numeric:tabular-nums; }
+.mobile-contacts .relation-atlas > .diagram-help { margin:12px 8px 0; }.mobile-contacts .atlas-announcement { color:#f0d59e; font-size:13px; margin:6px 8px; min-height:1em; }
+.mobile-contacts .atlas-focus-card { display:flex; align-items:center; gap:12px; border-block:1px solid #35405b; padding:16px 0; margin-top:12px; }
+.mobile-contacts .atlas-focus-card > .contact-portrait { flex:0 0 50px; width:50px; height:50px; }
+.mobile-contacts .atlas-focus-card > div { flex:1; min-width:0; display:grid; gap:5px; overflow-wrap:anywhere; }
+.mobile-contacts .atlas-focus-card > div > span { font-size:12px; color:#c0cbe1; }.mobile-contacts .atlas-focus-card > button { font-size:13px; flex-shrink:0; padding:8px; }
+.mobile-contacts .atlas-person-list > li { display:flex; gap:8px; }.mobile-contacts .atlas-person-list > li > button:first-child { flex:1; min-width:0; display:flex; gap:12px; align-items:center; }
+.mobile-contacts .atlas-person-list > li > button:first-child > span:last-child { flex:1; min-width:0; display:grid; gap:4px; text-align:left; }
+.mobile-app dialog.relation-pair-sheet { position:fixed; inset:auto 0 0; margin:0 auto; width:100%; max-width:720px; max-height:84dvh; padding:20px 20px max(24px,env(safe-area-inset-bottom)); overflow:auto; border:1px solid #63708b; border-bottom:0; border-radius:22px 22px 0 0; background:#141d35; color:#eceef7; }
+.mobile-app dialog.relation-pair-sheet::backdrop { background:#060b1bbd; }
+.mobile-app .relation-pair-sheet > header { display:flex; justify-content:space-between; align-items:center; gap:12px; }.mobile-app .relation-pair-sheet > header > button { padding:6px 12px; background:transparent; }
+.mobile-app .atlas-pair-portraits { display:flex; align-items:center; justify-content:center; gap:26px; margin:24px 0 14px; }
+.mobile-app .atlas-pair-portraits .contact-portrait { width:76px; height:76px; font-size:28px; border:2px solid #d5bb82; }
+.mobile-app .atlas-pair-portraits > span { color:#c5b28c; font-size:28px; }
+.mobile-app .relation-pair-sheet > h3 { text-align:center; margin:12px 0; overflow-wrap:anywhere; }.mobile-app .relation-pair-sheet > h3 > span { color:#8e9bb8; padding:0 10px; font-weight:400; }
+.mobile-app .atlas-pair-state { text-align:center; color:#c3cde1; margin:12px 0; }.mobile-app .atlas-pair-state.is-known { color:#f0d59e; }
+.mobile-app .atlas-pair-origin { text-align:center; color:#c3cde1; font-size:13px; overflow-wrap:anywhere; }
+.mobile-app .atlas-pair-profiles { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:20px; margin:24px 0; border-block:1px solid #35405b; padding:4px 0 20px; }
+.mobile-app .atlas-pair-profiles h4 { margin-bottom:8px; overflow-wrap:anywhere; }.mobile-app .atlas-pair-profiles p { font-size:13px; color:#c3cde1; min-height:3em; overflow-wrap:anywhere; }
+.mobile-app .atlas-pair-profiles button { width:100%; padding:8px; font-size:13px; }
+.mobile-app .relation-pair-sheet > footer { display:flex; gap:10px; margin-top:18px; }.mobile-app .relation-pair-sheet > footer > button { flex:1; min-width:0; font-size:14px; }
+@media (max-width:360px) { .mobile-contacts .atlas-search { grid-template-columns:1fr; }.mobile-app .atlas-pair-profiles { gap:12px; }.mobile-app .atlas-pair-portraits .contact-portrait { width:64px; height:64px; } }
+@media (prefers-reduced-motion:no-preference) { .mobile-app dialog.relation-pair-sheet[open] { transition:transform 180ms ease-out,opacity 180ms ease-out; }
+@starting-style { .mobile-app dialog.relation-pair-sheet[open] { opacity:0; transform:translateY(16px); } } }
+
+.mobile-contacts .atlas-failure { border:1px solid #8f815f; border-radius:10px; padding:12px; margin:12px 0; color:#ead9b5; background:#252338; }
+.mobile-contacts .atlas-failure p { margin:0 0 8px; }.mobile-contacts .atlas-failure small { display:block; margin-top:8px; color:#c5cee1; overflow-wrap:anywhere; }

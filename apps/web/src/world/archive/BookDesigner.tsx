@@ -286,15 +286,15 @@ export function BookDesigner({ client, world, sky, face: shelfFace, onFaceReques
     {options.map(([key, text]) => <button key={key} type="button" aria-pressed={value === key} onClick={() => onPick(key)}>{text}</button>)}
   </div>;
   const image = images[imageFace];
-  return <section className={styles.designer} aria-label={`设计「${world.name}」这本书`} aria-busy={busy}
+  return <section data-book-editor className={styles.designer} aria-label={`设计「${world.name}」这本书`} aria-busy={busy}
     onKeyDown={event => {
       if ((event.target as HTMLElement).closest("input, select, textarea")) return;
       if (event.key === "Escape") { event.preventDefault(); cancel(); }
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") { event.preventDefault(); if (event.shiftKey) redo(); else undo(); }
       if ((event.key === "Delete" || event.key === "Backspace") && picked) { event.preventDefault(); removeItem(picked); }
     }}>
-    <div className={styles.dim} aria-hidden="true" />
-    <div className={styles.canvasWrap}>
+    <div data-book-part="dim" className={styles.dim} aria-hidden="true" />
+    <div data-book-part="canvasWrap" className={styles.canvasWrap}>
       <span className={styles.canvasLabel}>{FACE_LABELS[face]} · 拖动调整位置，拖右下角圆点缩放和旋转；选中后可用方向键微调</span>
       <div ref={canvas} className={styles.canvas} style={{ width: faceWidth * scale, height: BOOK_HEIGHT * scale }}
         onPointerDown={event => { if (event.target === event.currentTarget || (event.target as HTMLElement).dataset.paper !== undefined) setPicked(null); }}>
@@ -312,7 +312,7 @@ export function BookDesigner({ client, world, sky, face: shelfFace, onFaceReques
       </div>
     </div>
 
-    <div className={styles.panel}>
+    <div data-book-part="panel" className={styles.panel}>
       {error && <p className={styles.error} role="alert">{error}</p>}
       {notice && <p className={styles.notice} role="status">{notice}</p>}
       {!cover && busy ? <p role="status">正在读取这本书的设计…</p> : <>
@@ -369,7 +369,7 @@ export function BookDesigner({ client, world, sky, face: shelfFace, onFaceReques
       </>}
     </div>
 
-    <div className={styles.footer}>
+    <div data-book-part="footer" className={styles.footer}>
       <button type="button" disabled={!history.length || busy} onClick={undo}>撤销</button>
       <button type="button" disabled={!future.length || busy} onClick={redo}>重做</button>
       <button type="button" disabled={busy} onClick={() => onFaceRequest("front")}>回到正面</button>

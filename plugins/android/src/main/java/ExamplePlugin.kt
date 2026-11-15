@@ -69,7 +69,7 @@ class ExamplePlugin(private val activity: Activity): Plugin(activity) {
                     "notification_target" -> { val target = CoreRuntime.notificationTarget; CoreRuntime.notificationTarget = null; resolve(invoke, target) }
                     "create_transfer" -> {
                         val extension = JSONObject(args.payload).getString("extension")
-                        check(extension in listOf("voicecard", "dreamsave")) { "mobile_invalid" }
+                        check(extension in listOf("voicecard", "dreamsave", "json", "charx")) { "mobile_invalid" }
                         val target = File(transferDirectory(), UUID.randomUUID().toString() + "." + extension)
                         check(target.createNewFile()) { "mobile_invalid" }; resolve(invoke, target.absolutePath)
                     }
@@ -80,7 +80,8 @@ class ExamplePlugin(private val activity: Activity): Plugin(activity) {
                         if (args.operation == "discard_transfer") target.delete()
                         else {
                             val data = android.util.Base64.decode(value.getString("data"), android.util.Base64.DEFAULT)
-                            check(data.size <= 32768 && target.length() + data.size <= 16L * 1024 * 1024) { "mobile_invalid" }
+                            val limit = if (target.extension in listOf("json", "charx")) 64L * 1024 * 1024 else 16L * 1024 * 1024
+                            check(data.size <= 32768 && target.length() + data.size <= limit) { "mobile_invalid" }
                             target.appendBytes(data)
                         }
                         resolve(invoke, true)

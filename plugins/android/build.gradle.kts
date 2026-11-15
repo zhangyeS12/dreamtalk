@@ -28,6 +28,7 @@ chaquopy {
             install("pillow==11.0.0")
             install(rootProject.file("../../../../../build-tools/wheels/chaquopy_freetype-2.9.1-1-py3-none-android_24_arm64_v8a.whl").absolutePath)
             install("diskcache==5.6.3")
+            install(rootProject.file("../../../../../build-tools/wheels/numpy-2.3.2-1-cp313-cp313-android_24_arm64_v8a.whl").absolutePath)
             install(rootProject.file("../../../../../build-tools/wheels/jieba-0.42.1-py3-none-any.whl").absolutePath)
             install(rootProject.file("../../../../../build-tools/wheels/rpds_py-0.25.1-cp313-cp313-android_24_arm64_v8a.whl").absolutePath)
             install("jsonschema==4.26.0")
@@ -37,4 +38,8 @@ chaquopy {
         }
     }
 }
-dependencies { implementation(project(":tauri-android")); implementation("androidx.appcompat:appcompat:1.7.1") }
+dependencies {
+    implementation(project(":tauri-android"))
+    implementation("androidx.appcompat:appcompat:1.7.1")
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.23.2")
+}

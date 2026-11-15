@@ -932,7 +932,7 @@ dependencies = [
 
 [[package]]
 name = "dreamtalk-android"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "deepseek-recipe",
  "deepseek-recipe-encoding",
@@ -942,6 +942,7 @@ dependencies = [
  "tauri",
  "tauri-build",
  "tauri-plugin-mobile-core",
+ "tokenizers",
 ]
 
 [[package]]
@@ -1036,6 +1037,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "531e46835a22af56d1e3b66f04844bed63158bc094a628bec1d321d9b4c44bf2"
 dependencies = [
  "bit-set 0.5.3",
+ "regex-automata",
+ "regex-syntax",
+]
+
+[[package]]
+name = "fancy-regex"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "72cf461f865c862bb7dc573f643dd6a2b6842f7c30b07882b56bd148cc2761b8"
+dependencies = [
+ "bit-set 0.8.0",
  "regex-automata",
  "regex-syntax",
 ]
@@ -2041,7 +2053,7 @@ dependencies = [
  "anyhow",
  "base64 0.22.1",
  "bytecount",
- "fancy-regex",
+ "fancy-regex 0.13.0",
  "fraction",
  "getrandom 0.2.17",
  "iso8601",
@@ -4142,6 +4154,7 @@ dependencies = [
  "dary_heap",
  "derive_builder",
  "esaxx-rs",
+ "fancy-regex 0.17.0",
  "getrandom 0.3.4",
  "hf-hub",
  "indicatif 0.18.6",

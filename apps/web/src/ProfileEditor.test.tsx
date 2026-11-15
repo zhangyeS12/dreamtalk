@@ -15,7 +15,7 @@ it("saves the selected world's description with its loaded edit revision", async
   fireEvent.click(screen.getByRole("button", { name: "保存世界身份" }));
   await screen.findByText("已保存。");
   expect(saveProfile).toHaveBeenCalledWith({ name: "旅人", description: "新的身份", revision: 3 }, "world-a");
-  expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+  await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(false));
 });
 
 it("retains user input when another window has already saved a newer profile", async () => {

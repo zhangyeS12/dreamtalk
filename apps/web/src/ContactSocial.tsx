@@ -48,7 +48,8 @@ export function SocialGraph({ social, urls, selected, onSelect, onChat, canChat,
   </div>;
 }
 
-export function FactionManager({ social, selectedRoot, busy, onSelect, onCreate, onEdit, onRemove, onMembership }: {
+export function FactionManager({ social, selectedRoot, busy, onSelect, onCreate, onEdit, onRemove, onMembership, onDirtyChange }: {
+  onDirtyChange?: (dirty: boolean) => void;
   social: SocialSnapshot; selectedRoot: string | null; busy: boolean; onSelect: (root: string) => void;
   onCreate: (name: string, parent: string | null) => Promise<boolean>; onEdit: (id: string, name: string, parent: string | null) => Promise<boolean>;
   onRemove: (id: string) => void; onMembership: (id: string, root: string, enabled: boolean, cutContacts?: boolean) => Promise<boolean>;
@@ -59,6 +60,7 @@ export function FactionManager({ social, selectedRoot, busy, onSelect, onCreate,
   const [editName, setEditName] = useState("");
   const [editParent, setEditParent] = useState("");
   const [leaving, setLeaving] = useState<{ factionId: string; root: string; factionName: string; characterName: string } | null>(null);
+  useEffect(() => { onDirtyChange?.(busy || !!newName.trim() || !!newParent || !!editing || !!leaving); return () => onDirtyChange?.(false); }, [busy, newName, newParent, editing, leaving, onDirtyChange]);
   const paths = factionPaths(social);
   const memberships = new Set(social.memberships.filter(item => item.root_import_id === selectedRoot).map(item => item.faction_id));
   const hierarchy: { item: SocialSnapshot["factions"][number]; depth: number }[] = [];

@@ -14,3 +14,5 @@ apps/web/dist/
 *.p12
 *.jks
 *.dpapi
+
+plugins/android/src/main/assets/semantic-model/model_optimized.onnx

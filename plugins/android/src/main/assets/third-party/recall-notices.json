@@ -1,0 +1,22 @@
+{
+  "onnxruntime-LICENSE.txt": {
+    "source": "https://raw.githubusercontent.com/microsoft/onnxruntime/v1.23.2/LICENSE",
+    "sha256": "2f07c72751aed99790b8a4869cf2311df85a860b22ded05fa22803587a48922c"
+  },
+  "onnxruntime-ThirdPartyNotices.txt": {
+    "source": "https://raw.githubusercontent.com/microsoft/onnxruntime/v1.23.2/ThirdPartyNotices.txt",
+    "sha256": "e9e90971a8e75a9a8ac0c6412e29c1202d079998389915aa485f46c816c3b4cc"
+  },
+  "tokenizers-LICENSE.txt": {
+    "source": "https://raw.githubusercontent.com/huggingface/tokenizers/v0.23.2/LICENSE",
+    "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+  },
+  "bge-LICENSE.txt": {
+    "source": "https://raw.githubusercontent.com/FlagOpen/FlagEmbedding/master/LICENSE",
+    "sha256": "587a673933425dbc36ec61268d3b954051b2d3ef3c9b322ede357976055ffdd5"
+  },
+  "numpy-LICENSE.txt": {
+    "source": "Chaquopy NumPy 2.3.2 build 1 wheel",
+    "sha256": "a82ce698ac213f45efcd800055802b587089aa31d90eb32717ba7cb82970fe64"
+  }
+}

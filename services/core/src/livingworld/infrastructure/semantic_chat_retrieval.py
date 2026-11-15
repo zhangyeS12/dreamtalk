@@ -18,6 +18,14 @@ VECTOR_MODEL_VERSION = f"{MODEL_SHA}:2000:512"
 MAX_INDEX_REFERENCES = 8192
 PREFIX = "为这个句子生成表示以用于检索相关文章："
 _native_ready: bool | None = None
+_mobile_model_factory = None
+
+
+def configure_mobile_recall(factory):
+    """Register the native Android CPU backend before Core initializes retrieval."""
+    global _mobile_model_factory, _native_ready
+    _mobile_model_factory = factory
+    _native_ready = None
 
 
 def prepare_native_recall() -> bool:
@@ -31,7 +39,8 @@ def prepare_native_recall() -> bool:
     if _native_ready is None:
         try:
             import numpy  # noqa: F401
-            from fastembed import TextEmbedding  # noqa: F401
+            if _mobile_model_factory is None:
+                from fastembed import TextEmbedding  # noqa: F401
         except Exception:
             # A failed native runtime is optional; do not retry its imports after
             # the control pipe starts. Keyword recall and the Core still work.
@@ -229,6 +238,8 @@ class HybridChatRecallRanker(Fts5ChatRecallRanker):
     def _load_model(self):
         if self._unavailable:
             raise ValueError("semantic_model_unavailable")
+        if self._model is None and _mobile_model_factory is not None:
+            self._model = _mobile_model_factory()
         if self._model is None:
             from fastembed import TextEmbedding
 

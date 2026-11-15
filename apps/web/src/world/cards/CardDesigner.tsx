@@ -30,16 +30,16 @@ export function CardDesigner({ client, card, onSaved, onClose }: { client: CoreC
     const bounds = canvas.current!.getBoundingClientRect(); event.currentTarget.setPointerCapture(event.pointerId);
     drag.current = { id: event.pointerId, x: event.clientX, y: event.clientY, layer: item, width: bounds.width, height: bounds.height };
   };
-  return <div ref={editor} className={styles.designer} role="dialog" aria-modal="true" aria-label="设计角色卡面" onKeyDown={event => { if (crop) return; if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(); } else trapTab(event); }}>
-    <div className={styles.designView}>
+  return <div data-card-editor ref={editor} className={styles.designer} role="dialog" aria-modal="true" aria-label="设计角色卡面" onKeyDown={event => { if (crop) return; if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(); } else trapTab(event); }}>
+    <div data-card-part="designView" className={styles.designView}>
       <button type="button" aria-label="角色卡设计预览" ref={canvas} data-card-canvas className={styles.canvas} onPointerMove={event => { const current = drag.current; if (!current || current.id !== event.pointerId) return; setDesign(previous => ({ ...previous, [side]: { ...previous[side], layers: previous[side].layers.map(item => item.id === current.layer.id ? { ...item, x: clamp(current.layer.x + (event.clientX - current.x) / current.width * 100, 0, 100), y: clamp(current.layer.y + (event.clientY - current.y) / current.height * 100, 0, 100) } : item) } })); }}
         onPointerUp={event => { drag.current = null; if (event.target instanceof Element && event.target.hasPointerCapture(event.pointerId)) event.target.releasePointerCapture(event.pointerId); }} onPointerCancel={() => { drag.current = null; }}>
         <CardFace design={design} face={face} image={images[face.image_digest ?? ""]} side={side} editing selectedLayer={selected ?? undefined} onLayer={layerDown} />
       </button>
     </div>
-    <div className={styles.designIdentity}><h2>{design.display_name}</h2><p>{design.subtitle}</p></div>
-    <p className={styles.designHint}>卡片位置固定，可拖动卡面上的组件</p>
-    <aside className={styles.designPanel}><header><div><small>让每次相遇都有自己的模样</small><h2 tabIndex={-1}>角色卡设计</h2></div><button type="button" aria-label="关闭设计器" disabled={busy} onClick={close}>×</button></header>
+    <div data-card-part="designIdentity" className={styles.designIdentity}><h2>{design.display_name}</h2><p>{design.subtitle}</p></div>
+    <p data-card-part="designHint" className={styles.designHint}>卡片位置固定，可拖动卡面上的组件</p>
+    <aside data-card-part="designPanel" className={styles.designPanel}><header><div><small>让每次相遇都有自己的模样</small><h2 tabIndex={-1}>角色卡设计</h2></div><button type="button" aria-label="关闭设计器" disabled={busy} onClick={close}>×</button></header>
       <fieldset disabled={busy} className={styles.designScroll}>
         <div className={styles.faceTabs}>{(["front", "back"] as const).map(value => <button key={value} type="button" aria-pressed={side === value} onClick={() => { setSide(value); setSelected(null); }}>{value === "front" ? "正面" : "背面"}</button>)}</div>
         <div className={styles.symmetryTools}><button type="button" onClick={() => { setUndo(structuredClone(design.back)); setDesign(current => ({ ...current, back: symmetricFace(current.front) })); setSide("back"); setSelected(null); }}>对称到背面 <span aria-hidden="true">→</span></button>{undo && <button type="button" aria-label="撤销上次对称" onClick={() => { setDesign(current => ({ ...current, back: undo })); setUndo(null); setSelected(null); }}>撤销</button>}</div>

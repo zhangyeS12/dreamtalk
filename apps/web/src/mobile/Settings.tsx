@@ -14,6 +14,7 @@ import type { ChatVisualState } from "../useChatVisuals";
 import { WorldStyleEditor } from "../WorldStyleEditor";
 import { BackgroundSettings } from "./BackgroundSettings";
 import { mobileInvoke } from "./native";
+import { ArrowLeft, Bell, ChevronRight, Database, Globe2, Image, MapPin, MessageCircle, Palette, ShieldCheck, Sparkles, Sun, Volume2 } from "lucide-react";
 import { hostCall, feedback } from "./host";
 import { LocationManager, CharacterLocationEditor, useLocationDirectory } from "../LocationWorkspace";
 
@@ -22,6 +23,20 @@ export const mobileSettingsPages = [
   ["background", "后台运行与通知"], ["backups", "数据与备份"], ["time", "世界时间"], ["activities", "角色活动"],
   ["offline", "主动联系"], ["news", "世界动态"], ["about", "关于与诊断"],
 ] as const;
+const settingMeta = {
+  model: { icon: Sparkles, group: "对话与表达", hint: "API 配置、回复与聊天额度" },
+  visuals: { icon: Palette, group: "对话与表达", hint: "背景、阅读与角色素材" },
+  media: { icon: Image, group: "对话与表达", hint: "表情库与图片服务" },
+  speech: { icon: Volume2, group: "对话与表达", hint: "角色音色与语音播放" },
+  time: { icon: Sun, group: "世界与角色", hint: "运行状态与世界流速" },
+  activities: { icon: MapPin, group: "世界与角色", hint: "活动、地点与常驻倾向" },
+  offline: { icon: MessageCircle, group: "世界与角色", hint: "主动联系与等待回复" },
+  news: { icon: Globe2, group: "世界与角色", hint: "来源、规划与已知事件" },
+  background: { icon: Bell, group: "应用与数据", hint: "后台会话、通知与系统权限" },
+  backups: { icon: Database, group: "应用与数据", hint: "存档位置、导入与导出" },
+  about: { icon: ShieldCheck, group: "应用与数据", hint: "版本、连接与诊断" },
+};
+
 type Page = typeof mobileSettingsPages[number][0];
 const appPages: Page[] = ["model", "background", "backups", "about"];
 export function MobileSettings({ client, world, player, budget, onBudget, onConfigured, onDirtyChange, visuals, onNavigate, onWorldChange }: {
@@ -38,14 +53,18 @@ export function MobileSettings({ client, world, player, budget, onBudget, onConf
   useEffect(() => () => dirtyHandler.current(false), []);
   const pages = mobileSettingsPages.filter(([id]) => world || appPages.includes(id));
   return <div className="mobile-settings">
-    {page ? <div className="mobile-section-heading"><button onClick={() => setPage(null)}>‹ 设置目录</button><h2>{pages.find(([id]) => id === page)?.[1]}</h2></div> : <><h2>设置</h2><p className="mobile-muted">{world ? `世界设置仅作用于“${world.name}”。` : "先选择世界可编辑其独立设置。"}应用设置由所有世界共用。</p><ul className="mobile-list">{pages.map(([id, title]) => <li key={id}><button onClick={() => open(id)}><span><strong>{title}</strong><small>{appPages.includes(id) ? id === "model" && world ? "当前世界与全局配置" : "应用设置" : "当前世界"}{dirty.current[id] ? " · 未保存" : ""}</small></span><span aria-hidden="true">›</span></button></li>)}</ul></>}
+    {page ? <div className="mobile-settings-heading"><button type="button" className="mobile-icon-action" aria-label="返回设置目录" onClick={() => setPage(null)}><ArrowLeft size={20}/></button><h2>{pages.find(([id]) => id === page)?.[1]}</h2></div> : <>
+      {!world && <div className="mobile-section-heading"><h2>应用设置</h2></div>}
+      <div className="mobile-settings-scope"><Globe2 size={19}/><span><strong>{world ? world.name : "应用通用设置"}</strong><small>{world ? "世界设置独立生效，应用设置由所有世界共用。" : "选择世界后可编辑其独立设置。"}</small></span></div>
+      {["对话与表达", "世界与角色", "应用与数据"].map(group => { const rows = pages.filter(([id]) => settingMeta[id].group === group); return rows.length > 0 && <section className="mobile-settings-group" key={group}><h3>{group}</h3><ul className="mobile-settings-list">{rows.map(([id, title]) => { const Icon = settingMeta[id].icon; return <li key={id}><button type="button" onClick={() => open(id)}><span className="mobile-setting-icon"><Icon size={19}/></span><span><strong>{title}</strong><small>{settingMeta[id].hint}{dirty.current[id] ? " · 未保存" : ""}</small></span><ChevronRight size={16}/></button></li>; })}</ul></section>; })}
+    </>}
     {visited.map(id => <div key={id} hidden={page !== id}>
       {id === "model" && <><ModelSetup client={client} worldId={world?.world_id} nativeInvoke={mobileInvoke} onConfigured={() => void onConfigured()} onDirtyChange={report("model")} turnTokenCeiling={budget} onApplyTokenCeiling={onBudget} /><TokenBudget value={budget} onSave={onBudget} onDirtyChange={report("budget")} />{world && <WorldStyleEditor client={client} worldId={world.world_id} onDirtyChange={report("style")} />}{world && <details><summary>全局默认 API 与调度器</summary><ModelSetup client={client} nativeInvoke={mobileInvoke} onConfigured={() => void onConfigured()} onDirtyChange={report("default-model")} /></details>}</>}
       {id === "background" && <BackgroundSettings />}
       {id === "backups" && <SaveSlotsPanel mobile nativeInvoke={mobileInvoke} />}
       {id === "about" && <About client={client} world={world} />}
       {world && <>
-        {id === "visuals" && visuals && <><p className="inline-hint">图片按需加载，沿用简版布局；不启用毛玻璃和装饰动画。</p><ChatVisualSettings client={client} worldId={world.world_id} state={visuals} /></>}
+        {id === "visuals" && visuals && <><p className="inline-hint">背景按需加载，保持正文清晰；动效遵循系统的减少动态设置。</p><ChatVisualSettings client={client} worldId={world.world_id} state={visuals} /></>}
         {id === "media" && <><ChatMediaSettingsPanel client={client} worldId={world.world_id} nativeInvoke={mobileInvoke} apiOnly onDirtyChange={report("media")} /><MediaLibraries client={client} world={world} onDirtyChange={report("stickers")} /></>}
         {id === "speech" && <SpeechSettings client={client} worldId={world.world_id} nativeInvoke={mobileInvoke} apiOnly onDirtyChange={report("speech")} />}
         {id === "time" && <WorldTime client={client} world={world} onWorldChange={onWorldChange} onDirtyChange={report("time")} />}
@@ -96,7 +115,7 @@ function MobileLocations({ client, world, visible, onDirtyChange }: { client: Co
   const reportPlaces = useCallback((value: boolean) => { dirty.current.places = value; onDirtyChange(value || dirty.current.character); }, [onDirtyChange]);
   const reportCharacter = useCallback((value: boolean) => { dirty.current.character = value; onDirtyChange(value || dirty.current.places); }, [onDirtyChange]);
   const person = social?.characters.find(item => item.root_import_id === root);
-  return <details onToggle={event => { setOpened(event.currentTarget.open); if (event.currentTarget.open) setVisited(true); }}><summary>地点、初始位置与常驻倾向</summary><p>这是地点与角色位置的作者设置。移动图与关系图不在手机上加载。</p>{visited && <><LocationManager client={client} worldId={world.world_id} locations={places.locations} directory={places.directory} refresh={places.refresh} onDirtyChange={reportPlaces} /><label className="field">选择角色<select value={root} onChange={e => { if (dirty.current.character && !window.confirm("角色位置还有未保存的修改，确定切换吗？")) return; reportCharacter(false); setRoot(e.target.value); }}><option value="">选择角色</option>{social?.characters.map(item => <option key={item.root_import_id} value={item.root_import_id}>{item.name}</option>)}</select></label>{person && <CharacterLocationEditor key={root} client={client} worldId={world.world_id} person={person} activity={places.directory?.items.find(item => item.root_import_id === root)} directory={places.directory} locations={places.locations} refresh={places.refresh} onDirtyChange={reportCharacter} />}{(places.error || error) && <p role="alert">{places.error || error}</p>}</>}</details>;
+  return <details onToggle={event => { setOpened(event.currentTarget.open); if (event.currentTarget.open) setVisited(true); }}><summary>地点、初始位置与常驻倾向</summary><p>这是地点与角色位置的作者设置。地点包含图与人物关系网可在通讯录中查看。</p>{visited && <><LocationManager client={client} worldId={world.world_id} locations={places.locations} directory={places.directory} refresh={places.refresh} onDirtyChange={reportPlaces} /><label className="field">选择角色<select value={root} onChange={e => { if (dirty.current.character && !window.confirm("角色位置还有未保存的修改，确定切换吗？")) return; reportCharacter(false); setRoot(e.target.value); }}><option value="">选择角色</option>{social?.characters.map(item => <option key={item.root_import_id} value={item.root_import_id}>{item.name}</option>)}</select></label>{person && <CharacterLocationEditor key={root} client={client} worldId={world.world_id} person={person} activity={places.directory?.items.find(item => item.root_import_id === root)} directory={places.directory} locations={places.locations} refresh={places.refresh} onDirtyChange={reportCharacter} />}{(places.error || error) && <p role="alert">{places.error || error}</p>}</>}</details>;
 }
 function KnownEvents({ client, world, visible }: { client: CoreClient; world: WorldSettings; visible: boolean }) {
   const [items, setItems] = useState<KnownWorldEvent[] | null>(null), [error, setError] = useState("");

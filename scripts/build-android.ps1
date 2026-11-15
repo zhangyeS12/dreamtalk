@@ -28,6 +28,8 @@ $env:DREAMTALK_BUILD_PYTHON = 'D:\LivingWorld\.venv\Scripts\python.exe'
 $env:RUSTFLAGS = '-C link-arg=-Wl,-z,max-page-size=16384'
 $env:JAVA_TOOL_OPTIONS = '-Dfile.encoding=UTF-8'
 $env:PATH = "$env:JAVA_HOME\bin;$env:PATH"
+& $env:DREAMTALK_BUILD_PYTHON scripts/prepare-mobile-recall.py
+if ($LASTEXITCODE -ne 0) { throw 'Fixed semantic retrieval resources invalid' }
 & $env:DREAMTALK_BUILD_PYTHON scripts/build-mobile-wheel.py
 if ($LASTEXITCODE -ne 0) { throw 'Core wheel failed' }
 npm.cmd run typecheck *> artifacts/typecheck.log

@@ -1,11 +1,12 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import type { LibraryCardItem } from "@dreamtalk/api-client";
 import { CardFace } from "../CardFaces";
 import { defaultDesign, restPose } from "../cardDesign";
 import type { PackImages } from "./packDesign";
 import styles from "./Packs.module.css";
 
-export function PackSpill({ cards, images, origin, onComplete }: { cards: LibraryCardItem[]; images: PackImages; origin: { x: number; y: number }; onComplete: () => void }) {
+export function PackSpill({ cards: allCards, images, origin, onComplete, maxShown }: { maxShown?:number; cards: LibraryCardItem[]; images: PackImages; origin: { x: number; y: number }; onComplete: () => void }) {
+  const cards=useMemo(()=>allCards.slice(0,maxShown??allCards.length),[allCards,maxShown]);
   const root = useRef<HTMLDivElement>(null), done = useRef(onComplete);
   done.current = onComplete;
   useEffect(() => {

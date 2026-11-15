@@ -1,0 +1,33 @@
+import { afterEach, expect, test, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { CoreClient, type WorldContentItem } from "@dreamtalk/api-client";
+import { ContentExportButton } from "./FileExportDialog";
+import { mobileInvoke } from "./mobile/native";
+vi.mock("@tauri-apps/api/core", () => ({ isTauri: () => true, invoke: vi.fn() }));
+vi.mock("./mobile/native", () => ({ mobileInvoke: vi.fn().mockResolvedValue("已导出") }));
+Object.defineProperty(HTMLDialogElement.prototype, "showModal", { configurable: true, value() { this.setAttribute("open", ""); } });
+Object.defineProperty(HTMLDialogElement.prototype, "close", { configurable: true, value() { this.removeAttribute("open"); } });
+afterEach(() => { cleanup(); vi.clearAllMocks(); });
+test("worldbook export is available and sends the reviewed snapshot to Android save adapter", async () => {
+  const item: WorldContentItem = { import_id: "book", replaces_import_id: null, kind: "lorebook", reviewed_hash: "reviewed", characters: [], lorebooks: [{ id: "collection", name: "合成世界书", description: "" }], entries: [] };
+  const api = { contentExportInfo: vi.fn().mockResolvedValue({ filename: "synthetic.json", size: 128, digest: "digest", warnings: [] }) };
+  render(<ContentExportButton client={api as unknown as CoreClient} worldId="world" item={item} />);
+  expect(api.contentExportInfo).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "导出世界书" }));
+  await screen.findByText("synthetic.json · 0.1 KB");
+  fireEvent.click(screen.getByRole("button", { name: "另存为" }));
+  await screen.findByText("文件已保存。");
+  expect(mobileInvoke).toHaveBeenCalledWith("save_file_export", { filename: "synthetic.json", request: { kind: "content", world_id: "world", item_id: "book", format: "sillytavern_world_info", content_id: "collection", reviewed_hash: "reviewed", expected_digest: "digest", use_regex: false } });
+  expect(screen.getByText(/包括设为隐藏的条目/)).toBeTruthy();
+});
+test("a failed export snapshot cannot be saved and offers explicit reread", async () => {
+  const item = { import_id: "book", kind: "lorebook", reviewed_hash: "reviewed", characters: [], lorebooks: [], entries: [] } as unknown as WorldContentItem;
+  const api = { contentExportInfo: vi.fn().mockRejectedValue(new Error("synthetic")) };
+  render(<ContentExportButton client={api as unknown as CoreClient} worldId="world" item={item} />);
+  fireEvent.click(screen.getByRole("button", { name: "导出世界书" }));
+  await screen.findByRole("alert");
+  expect(screen.getByRole("button", { name: "另存为" })).toHaveProperty("disabled", true);
+  expect(mobileInvoke).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "重新读取" }));
+  await waitFor(() => expect(api.contentExportInfo).toHaveBeenCalledTimes(2));
+});

@@ -1,6 +1,6 @@
 import type { invoke as PlatformInvoke } from "@tauri-apps/api/core";
 import { hostCall } from "./host";
-import { CoreClient, type CoreConnection } from "@dreamtalk/api-client";
+import { CoreClient, type CoreConnection, type FileExportRequest } from "@dreamtalk/api-client";
 export const mobileInvoke: typeof PlatformInvoke = async <T>(operation: string, payload?: unknown): Promise<T> => {
   const value = (payload ?? {}) as { request?: Record<string, unknown> };
   if (operation === "operate_save_slot" && value.request?.action === "import") {
@@ -15,10 +15,11 @@ export const mobileInvoke: typeof PlatformInvoke = async <T>(operation: string, 
   }
   if (operation === "save_file_export") {
     const request = value.request as { kind: string; world_id: string; item_id: string };
-    if (request.kind !== "voice") throw new Error("mobile_invalid");
+    if (request.kind !== "voice" && request.kind !== "content" && request.kind !== "library_card") throw new Error("mobile_invalid");
     const client = new CoreClient(await hostCall<CoreConnection>("connection"));
-    const blob = await client.exportVoiceCard(request.world_id, request.item_id);
-    const path = await hostCall<string>("create_transfer", { extension: "voicecard" });
+    const blob = request.kind === "voice" ? await client.exportVoiceCard(request.world_id, request.item_id) : await client.fileExport(value.request as FileExportRequest);
+    if (blob.size > (request.kind === "voice" ? 16 : 64) * 1024 * 1024) throw new Error("mobile_export_size_limit");
+    const path = await hostCall<string>("create_transfer", { extension: request.kind === "voice" ? "voicecard" : request.kind === "library_card" ? "charx" : "json" });
     try {
       for (let offset = 0; offset < blob.size; offset += 16384) {
         const bytes = new Uint8Array(await blob.slice(offset, offset + 16384).arrayBuffer());

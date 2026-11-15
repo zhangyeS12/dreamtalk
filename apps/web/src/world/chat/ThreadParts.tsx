@@ -6,7 +6,7 @@ const tintStyle = (tint?: string) => (tint ? ({ "--tint": tint } as CSSPropertie
 
 /** Initial on the character's own colour, or their uploaded portrait. */
 export function WorldAvatar({ name, url, tint, size = "m", className = "" }: { name: string; url?: string; tint?: string; size?: "s" | "m" | "l"; className?: string }) {
-  return <span className={`${styles.avatar} ${className}`} data-size={size} style={tintStyle(tint)} aria-hidden="true">
+  return <span data-thread="avatar" className={`${styles.avatar} ${className}`} data-size={size} style={tintStyle(tint)} aria-hidden="true">
     {url ? <img src={url} alt="" /> : Array.from(name.trim())[0] ?? "?"}
   </span>;
 }
@@ -20,12 +20,12 @@ export function ThreadFrame({ label, header, tools, stage, scrollRef, children, 
   label: string; header: ReactNode; tools?: ReactNode; stage?: ReactNode; scrollRef: Ref<HTMLElement>;
   children: ReactNode; composer: ReactNode; tint?: string; staged: boolean; portrait?: boolean;
 }) {
-  return <section className={styles.frame} aria-label={label} style={tintStyle(tint)} data-staged={staged || undefined} data-portrait={portrait || undefined}>
+  return <section data-thread="frame" className={styles.frame} aria-label={label} style={tintStyle(tint)} data-staged={staged || undefined} data-portrait={portrait || undefined}>
     {stage}
     {header}
-    {tools ? <div className={styles.tools}>{tools}</div> : null}
-    <div className={styles.scroller} data-chat-scroll>
-      <div ref={scrollRef as Ref<HTMLDivElement>} className={styles.column}>{children}</div>
+    {tools ? <div data-thread="tools" className={styles.tools}>{tools}</div> : null}
+    <div data-thread="scroll" className={styles.scroller} data-chat-scroll>
+      <div ref={scrollRef as Ref<HTMLDivElement>} data-thread="column" className={styles.column}>{children}</div>
     </div>
     {composer}
   </section>;
@@ -48,22 +48,23 @@ export function ThreadHeader({ title, kind, portrait, onBack, onRefresh, onLongM
     summary.current?.focus();
     action();
   };
-  return <header className={styles.header}>
-    <button type="button" className={styles.back} onClick={onBack}>
+  return <header data-thread="header" className={styles.header}>
+    <button type="button" data-thread="back" className={styles.back} onClick={onBack}>
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" /></svg><span>返回聊天</span>
     </button>
     {portrait}
-    <div className={styles.identity}><h2>{title}</h2><span>{kind}</span></div>
-    <div className={styles.headerTools}>
-      {visualControl}
-      <button type="button" className={styles.chip} onClick={onRefresh}>
+    <div data-thread="identity" className={styles.identity}><h2>{title}</h2><span>{kind}</span></div>
+    <div data-thread="header-tools" className={styles.headerTools}>
+      <button type="button" data-thread="refresh" className={styles.chip} onClick={onRefresh}>
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 5v5h-5M4 19v-5h5M5.2 8a7.5 7.5 0 0 1 12-3L20 8M4 16l2.8 3a7.5 7.5 0 0 0 12-3" /></svg><span>刷新记录</span>
       </button>
       <details ref={tools} className={styles.menu} onKeyDown={event => {
         if (event.key === "Escape") { event.preventDefault(); if (tools.current) tools.current.open = false; summary.current?.focus(); }
       }}>
         <summary ref={summary} className={styles.chip}>会话工具<svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4" /></svg></summary>
-        <div className={styles.menuPanel}>
+        <div data-thread="menu" className={styles.menuPanel}>
+          {visualControl && <div className="thread-visual-tools">{visualControl}</div>}
+          <button type="button" onClick={() => choose(onRefresh)}>刷新会话记录</button>
           <button type="button" onClick={() => choose(onLongMemory)}>长期记忆</button>
           <button type="button" onClick={() => choose(onMemory)}>会话摘要</button>
           <button type="button" onClick={() => choose(onHistory)}>聊天回忆</button>
@@ -80,19 +81,19 @@ export function ThreadHeader({ title, kind, portrait, onBack, onRefresh, onLongM
 export function ScriptMessage({ message, own, name, tint, time, body, tools }: {
   message: ChatMessage; own: boolean; name: string; tint?: string; time: ReactNode; body: ReactNode; tools?: ReactNode;
 }) {
-  if (own) return <li data-message-id={message.message_id} className={styles.mine}>
+  if (own) return <li data-message-id={message.message_id} data-thread="mine" className={styles.mine}>
     <span className="sr-only">我</span>
-    <div className={styles.pill}>{body}</div>
-    <div className={styles.mineMeta}>{time}{tools}</div>
+    <div data-thread="pill" className={styles.pill}>{body}</div>
+    <div data-thread="mine-meta" className={styles.mineMeta}>{time}{tools}</div>
   </li>;
-  return <li data-message-id={message.message_id} className={styles.line} style={tintStyle(tint)}>
-    <div className={styles.name}><span>{name}</span>{time}</div>
-    <div className={styles.text}>{body}{tools ? <div className={styles.lineTools}>{tools}</div> : null}</div>
+  return <li data-message-id={message.message_id} data-thread="line" className={styles.line} style={tintStyle(tint)}>
+    <div data-thread="speaker" className={styles.name}><span>{name}</span>{time}</div>
+    <div data-thread="text" className={styles.text}>{body}{tools ? <div data-thread="message-tools" className={styles.lineTools}>{tools}</div> : null}</div>
   </li>;
 }
 
 export function DayDivider({ children }: { children: ReactNode }) {
-  return <li className={styles.day}>{children}</li>;
+  return <li data-thread="day" className={styles.day}>{children}</li>;
 }
 
 export function ThreadNote({ children, tone = "status" }: { children: ReactNode; tone?: "status" | "alert" | "plain" }) {
@@ -112,20 +113,20 @@ export function ComposerShell({ onSubmit, status, mentions, sticker, input, send
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   status: ReactNode; mentions?: ReactNode; sticker: ReactNode; input: ReactNode; send: ReactNode; meta: ReactNode;
 }) {
-  return <form className={styles.composer} onSubmit={onSubmit}>
-    <div className={styles.composerStatus}>{status}</div>
+  return <form data-thread="composer" className={styles.composer} onSubmit={onSubmit}>
+    <div data-thread="composer-status" className={styles.composerStatus}>{status}</div>
     {mentions}
-    <div className={styles.capsule}>
+    <div data-thread="capsule" className={styles.capsule}>
       <div className={styles.sticker}>{sticker}</div>
       {input}
       {send}
     </div>
-    <div className={styles.composerMeta}>{meta}</div>
+    <div data-thread="composer-meta" className={styles.composerMeta}>{meta}</div>
   </form>;
 }
 
 export function SendButton({ label, disabled }: { label: string; disabled: boolean }) {
-  return <button type="submit" className={styles.send} disabled={disabled}>
+  return <button type="submit" data-thread="send" className={styles.send} disabled={disabled}>
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6" /></svg>
     <span className={label === "发送" ? "sr-only" : styles.sendLabel}>{label}</span>
   </button>;

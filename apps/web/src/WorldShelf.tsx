@@ -27,10 +27,11 @@ function write(node: Node, property: string, value: string) {
  * turned all the way round. Worlds and blanks keep the original data order:
  * worlds first, then max(1, 12 - worlds) blanks.
  */
-export function WorldShelf({ worlds, appearances, selectedKey, initialWorldId, disabled, loading, onSelect, onCreate, onClose, onSettled, vacatedIndex, designing = false, faceRequest, onFace }: {
+export function WorldShelf({ worlds, appearances, selectedKey, initialWorldId, disabled, loading, onSelect, onCreate, onClose, onSettled, vacatedIndex, designing = false, faceRequest, onFace, frameScale = 1, embedded = false, onVisible }: {
   worlds: WorldSettings[]; appearances: Record<string, ShelfAppearance>; selectedKey: string | null; initialWorldId: string | null;
   disabled: boolean; loading: boolean; onSelect: (id: string) => void; onCreate: (index: number) => void;
   onClose: () => void; onSettled: (key: string | null) => void; vacatedIndex?: number | null;
+  frameScale?: number; embedded?: boolean; onVisible?: (ids: string[]) => void;
   designing?: boolean; faceRequest?: { face: ShelfFace; nonce: number }; onFace?: (face: ShelfFace) => void;
 }) {
   const books = useMemo<Book[]>(() => {
@@ -67,6 +68,8 @@ export function WorldShelf({ worlds, appearances, selectedKey, initialWorldId, d
   const widthOf = useCallback((book: Book) => thicknessOf(book) + GAP, [thicknessOf]);
 
   const viewport = useRef<HTMLDivElement>(null);
+  const [windowOffset, setWindowOffset] = useState(0);
+  const lastWindow = useRef(-Infinity), visibleSignature = useRef("");
   const nodes = useRef<Node[]>([]);
   const [width, setWidth] = useState(0);
   const [reduced, setReduced] = useState(() => window.matchMedia("(prefers-reduced-motion: reduce)").matches);
@@ -82,8 +85,8 @@ export function WorldShelf({ worlds, appearances, selectedKey, initialWorldId, d
     spin: { yaw: -68, pitch: 0, vy: 0, vp: 0, dragging: false }, settledKey: null as string | null,
     grow: new Map<string, { from: number; start: number }>(), printing: new Map<string, number>(),
   });
-  const props = useRef({ books, widthOf, selectedKey, designing, reduced, onSettled, onFace, laps });
-  props.current = { books, widthOf, selectedKey, designing, reduced, onSettled, onFace, laps };
+  const props = useRef({ books, widthOf, selectedKey, designing, reduced, onSettled, onFace, laps, frameScale, embedded, onVisible, faceRequest });
+  props.current = { books, widthOf, selectedKey, designing, reduced, onSettled, onFace, laps, frameScale, embedded, onVisible, faceRequest };
 
   /** Slot widths for this frame; a newly added blank grows into its slot. */
   const layoutAt = useCallback((now: number): RingLayout => {
@@ -117,6 +120,7 @@ export function WorldShelf({ worlds, appearances, selectedKey, initialWorldId, d
       state.spin.vy *= 0.93; state.spin.vp *= 0.9; moving = true; loop.current.reportFace();
     }
     for (const [key, start] of state.grow) if (now - start.start < 720) moving = true; else state.grow.delete(key);
+    if (props.current.embedded && Math.abs(state.offset - lastWindow.current) > 180) { lastWindow.current = state.offset; setWindowOffset(state.offset); }
     const layout = layoutAt(now), half = (viewport.current?.clientWidth ?? 1200) / 2;
     for (const node of nodes.current) {
       node.dx = ringPosition(layout, node.book.key, node.lap, count, state.offset);
@@ -145,10 +149,15 @@ export function WorldShelf({ worlds, appearances, selectedKey, initialWorldId, d
       let error = 0;
       for (const key of ["px", "py", "pz", "yaw", "pitch", "tilt"] as const) { state.pose[key] += (target[key] - state.pose[key]) * k; error += Math.abs(target[key] - state.pose[key]); }
       write(chosen, "transform", poseCss(state.pose)); write(chosen, "filter", ""); write(chosen, chosen.lap === 0 ? "opacity" : "visibility", "");
+      chosen.el.dataset.face = faceFromYaw(state.pose.yaw); chosen.el.dataset.yaw = state.pose.yaw.toFixed(2);
       write(chosen, "--shade", "0"); write(chosen, "--yaw", state.pose.yaw.toFixed(1));
       if (error > 0.6) moving = true;
       else if (state.returning) { chosen.el.classList.remove("is-chosen"); state.chosen = null; state.pose = null; state.returning = false; }
       else if (state.settledKey !== wanted && wanted === chosen.book.key) { state.settledKey = wanted; props.current.onSettled(wanted); }
+    }
+    if (props.current.onVisible) {
+      const ids = [...new Set(nodes.current.filter(node => node.book.world && Math.abs(node.dx) < half + 380).map(node => node.book.world!.world_id))].sort();
+      const signature = ids.join("|"); if (signature !== visibleSignature.current) { visibleSignature.current = signature; props.current.onVisible(ids); }
     }
     // Exactly one frame chain, even when a render positions books synchronously.
     cancelAnimationFrame(state.frame);
@@ -240,8 +249,9 @@ export function WorldShelf({ worlds, appearances, selectedKey, initialWorldId, d
       if (cancelled || props.current.selectedKey !== selectedKey) return;
       if (state.chosen && state.chosen !== node) { state.chosen.el.classList.remove("is-chosen"); }
       state.chosen = node; state.returning = false; state.pose = restPose(node.dx); state.hovered = null;
-      state.spin = { yaw: node.book.world ? -68 : -40, pitch: 0, vy: 0, vp: 0, dragging: false };
-      node.el.classList.add("is-chosen"); lastFace.current = "front"; setFace("front"); setChosenKey(selectedKey); wake();
+      const requested = props.current.faceRequest?.face;
+      state.spin = { yaw: requested ? FACE_YAW[requested] : node.book.world ? -68 : -40, pitch: 0, vy: 0, vp: 0, dragging: false };
+      node.el.classList.add("is-chosen"); lastFace.current = requested ?? "front"; setFace(requested ?? "front"); setChosenKey(selectedKey); wake();
     };
     void begin();
     // A hidden or throttled window gets no animation frames, so the book would never
@@ -267,7 +277,7 @@ export function WorldShelf({ worlds, appearances, selectedKey, initialWorldId, d
     if (node.book.world) onSelect(node.book.world.world_id); else onCreate(node.book.blankIndex!);
   };
   const pointerDown = (event: ReactPointerEvent<HTMLElement>) => {
-    if (event.button !== 0 || (event.target as Element).closest(`.${styles.controls}`)) return;
+    if (disabled || loading || event.button !== 0 || (event.target as Element).closest(`.${styles.controls}`)) return;
     const state = engine.current, node = nodeAt(event.target);
     const onChosen = !!state.chosen && !state.returning && (node === state.chosen || props.current.designing);
     down.current = { x: event.clientX, y: event.clientY, lx: event.clientX, ly: event.clientY, moved: false, node, spin: onChosen, id: event.pointerId };
@@ -283,7 +293,7 @@ export function WorldShelf({ worlds, appearances, selectedKey, initialWorldId, d
       if (node !== state.hovered) { state.hovered = node; wake(); }
       return;
     }
-    const dx = event.clientX - press.lx, dy = event.clientY - press.ly;
+    const dx = (event.clientX - press.lx) / props.current.frameScale, dy = (event.clientY - press.ly) / props.current.frameScale;
     if (!press.moved && Math.hypot(event.clientX - press.x, event.clientY - press.y) > 6) { press.moved = true; state.hovered = null; }
     if (press.moved && press.spin) {
       state.spin.dragging = true; state.spin.yaw += dx * 0.5; state.spin.pitch = Math.max(-25, Math.min(25, state.spin.pitch - dy * 0.3));
@@ -390,30 +400,37 @@ export function WorldShelf({ worlds, appearances, selectedKey, initialWorldId, d
   const copies: Array<{ book: Book; lap: number; key: string }> = [];
   for (let lap = 0; lap < laps; lap++) for (const book of books) copies.push({ book, lap, key: `${lap}:${book.key}` });
 
+  if (embedded) {
+    const viewportWidth=width||780;
+    const layout = ringLayout(books, key => widthOf(books.find(book => book.key === key)!));
+    const candidates = copies.filter(copy => copy.book.key === selectedKey || Math.abs(ringPosition(layout, copy.book.key, copy.lap, laps, windowOffset)) < viewportWidth / 2 + 380);
+    candidates.sort((a,b) => Number(b.book.key===selectedKey)-Number(a.book.key===selectedKey) || Math.abs(ringPosition(layout,a.book.key,a.lap,laps,windowOffset)) - Math.abs(ringPosition(layout,b.book.key,b.lap,laps,windowOffset)));
+    copies.splice(0,copies.length,...candidates.slice(0,25));
+  }
   // Handlers sit on the flat section: inside the ring's 3D context the ring's own plane
   // would otherwise sit in front of the books for hit testing.
-  return <section className={styles.shelf} data-designing={designing || undefined} data-chosen={chosenKey ? "" : undefined} aria-label="世界书架"
+  return <section className={styles.shelf} data-native-shelf data-designing={designing || undefined} data-chosen={chosenKey ? "" : undefined} aria-label="世界书架"
     onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerUp}
     onPointerLeave={() => { if (!down.current && engine.current.hovered) { engine.current.hovered = null; wake(); } }} onWheel={wheel}
     onDoubleClick={event => { const node = nodeAt(event.target); if (node && node === engine.current.chosen) turnTo("front"); }}>
-    <div className={styles.boardTop} aria-hidden="true" />
+    <div className={styles.boardTop} data-book-part="boardTop" aria-hidden="true" />
     <div ref={viewport} className={styles.ring} onKeyDown={navigate}>
       {copies.map(({ book, lap, key }) => <ShelfBook key={key} bookRef={register(key, book, lap)} bookKey={book.key} focusable={lap === 0}
         look={book.world ? looks.get(book.world.world_id) ?? null : null} thickness={thicknessOf(book)}
         label={book.world ? `预览世界：${book.name}` : `创建或导入一个新世界，空白书 ${book.blankIndex! + 1}`}
         disabled={disabled || loading} pressed={selectedKey === book.key} onFocus={onBookFocus} onClick={onBookClick} />)}
     </div>
-    <div className={styles.boardBottom} aria-hidden="true" />
-    <div className={styles.controls}>
+    <div className={styles.boardBottom} data-book-part="boardBottom" aria-hidden="true" />
+    <div className={styles.controls} data-book-part="controls">
       <button type="button" className={styles.arrow} data-side="left" disabled={disabled || loading} aria-label={chosenWorld ? "上一本" : "向左循环浏览书架"} onClick={() => stepWorld(-1)}>
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" /></svg></button>
       <button type="button" className={styles.arrow} data-side="right" disabled={disabled || loading} aria-label={chosenWorld ? "下一本" : "向右循环浏览书架"} onClick={() => stepWorld(1)}>
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7" /></svg></button>
-      {chosenWorld && <div className={styles.faces} role="group" aria-label="查看书的哪一面">
+      {chosenWorld && !embedded && <div className={styles.faces} data-book-part="faces" role="group" aria-label="查看书的哪一面">
         {(["front", "spine", "back", "edge"] as const).map(item => <button key={item} type="button" aria-pressed={face === item} onClick={() => turnTo(item)}>{FACE_LABELS[item]}</button>)}
       </div>}
     </div>
-    <p className={styles.hint}>{chosenKey && !chosenWorld ? "" : chosenWorld ? "按住书本拖动，可以 360 度转着看 · 双击回到正面"
+    <p className={styles.hint} data-book-part="hint">{chosenKey && !chosenWorld ? "" : chosenWorld ? "按住书本拖动，可以 360 度转着看 · 双击回到正面"
       : loading ? "正在读取世界档案…" : `${worlds.length} 个世界 · ${books.length} 个书位 · 拖动书架，书本首尾相接 · 点击空白书新建世界`}</p>
   </section>;
 }

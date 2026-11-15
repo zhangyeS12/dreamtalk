@@ -21,7 +21,10 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 import org.json.JSONObject
 
-@Keep class NativeBounds { external fun tokenUpperBound(payload: String): Long }
+@Keep class NativeBounds {
+    external fun tokenUpperBound(payload: String): Long
+    external fun recallTokens(payload: String): String
+}
 
 /** Application context only: neither Activity nor WebView owns the running Core. */
 @Keep object CoreRuntime {
@@ -44,6 +47,7 @@ import org.json.JSONObject
     fun isForeground(): Boolean = foreground
     fun isBackgroundRunning(): Boolean = serviceRunning
     fun tokenUpperBound(payload: String): Long = NativeBounds().tokenUpperBound(payload)
+    fun recallEmbed(payload: String): String = SemanticRecall.embed(context, payload)
     private fun encryptionKey(): SecretKey {
         val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
         val alias = "dreamtalk.api.v1"

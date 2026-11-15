@@ -5,4 +5,6 @@ import "./style.css";
 import "./product.css";
 import "./world/tokens.css";
 import "./mobile/mobile.css";
+import "./mobile/design.css";
+import "./mobile/archive.css";
 createRoot(document.getElementById("root")!).render(<StrictMode><MobileApp /></StrictMode>);

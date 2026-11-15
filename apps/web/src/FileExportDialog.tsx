@@ -1,12 +1,14 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { invoke, isTauri } from "@tauri-apps/api/core";
+import { isTauri } from "@tauri-apps/api/core";
 import { CoreClient, CoreRequestError, type ChatExportInfo, type ContentExportFormat, type ContentExportInfo, type FileExportRequest, type WorldContentItem } from "@dreamtalk/api-client";
+import { mobileInvoke } from "./mobile/native";
 import { useDesktopUpdateBlock } from "./DesktopUpdates";
 import "./file-exports.css";
 
 function failureMessage(failure: unknown): string {
-  const code = failure instanceof CoreRequestError ? failure.code : typeof failure === "string" ? failure : "";
+  const code = failure instanceof CoreRequestError ? failure.code : typeof failure === "string" ? failure : failure instanceof Error ? failure.message : "";
+  if (code === "mobile_export_size_limit") return "导出文件超过 64 MB，请精简资料或使用完整存档备份。";
   if (code === "export_snapshot_changed" || code === "export_content_changed" || code === "export_transcript_changed") return "资料或会话信息已有变化。请重新读取导出信息后再保存。";
   if (code === "export_write_failed") return "文件未能保存，请检查保存位置、可用空间和文件是否被其他程序占用。";
   if (code === "export_extension_invalid") return "请使用所选格式的文件扩展名（.json 或 .txt），再选择保存位置。";
@@ -31,7 +33,7 @@ function warningMessage(code: string): string {
 }
 
 async function saveExport(client: CoreClient, request: FileExportRequest, filename: string, signal: AbortSignal): Promise<string | null> {
-  if (isTauri()) return invoke<string | null>("save_file_export", { request, filename });
+  if (isTauri()) return mobileInvoke<string | null>("save_file_export", { request, filename });
   const blob = await client.fileExport(request, signal);
   if (signal.aborted) return null;
   const url = URL.createObjectURL(blob);
@@ -86,7 +88,7 @@ export function FileExportDialog({ client, worldId, item, conversationId, onClos
     saveLock.current = true; setSaving(true); setError(""); setNotice("");
     try {
       const path = await saveExport(client, request, filename, lifetime.current.signal);
-      if (!lifetime.current.signal.aborted) setNotice(path ? isTauri() ? `已保存到：${path}` : path : "已取消保存。可以重新选择位置。");
+      if (!lifetime.current.signal.aborted) setNotice(path ? isTauri() ? "文件已保存。" : path : "已取消保存。可以重新选择位置。");
     } catch (failure) { if (!lifetime.current.signal.aborted) setError(failureMessage(failure)); }
     finally { saveLock.current = false; setSaving(false); }
   };
@@ -105,7 +107,10 @@ export function FileExportDialog({ client, worldId, item, conversationId, onClos
   </dialog>, document.body);
 }
 
-// Android document-provider export is not part of this first preview.
-export function ContentExportButton(_props: {
+export function ContentExportButton({ client, worldId, item, disabled }: {
   client: CoreClient; worldId: string; item: WorldContentItem; disabled?: boolean;
-}) { return null; }
+}) {
+  const [open, setOpen] = useState(false);
+  return <><button type="button" className="text-action" disabled={disabled} onClick={() => setOpen(true)}>{item.kind === "character" ? "导出角色卡" : "导出世界书"}</button>
+    {open && <FileExportDialog client={client} worldId={worldId} item={item} onClose={() => setOpen(false)} />}</>;
+}

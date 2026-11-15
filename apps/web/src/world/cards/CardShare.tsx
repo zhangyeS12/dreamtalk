@@ -7,7 +7,7 @@ import { defaultDesign } from "./cardDesign";
 import { libraryFailure } from "./libraryFeedback";
 import styles from "./Cards.module.css";
 
-export function CardShare({ client, card, onClose }: { client: CoreClient; card: LibraryCardItem; onClose: () => void }) {
+export function CardShare({ client, card, onClose, nativeInvoke }: { client: CoreClient; card: LibraryCardItem; onClose: () => void; nativeInvoke?: typeof invoke }) {
   const [info, setInfo] = useState<ContentExportInfo | null>(null), [error, setError] = useState(""), [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false), [reading, setReading] = useState(true), [attempt, setAttempt] = useState(0);
   const lock = useRef(false), alive = useRef(true);
@@ -21,8 +21,8 @@ export function CardShare({ client, card, onClose }: { client: CoreClient; card:
     lock.current = true; setBusy(true); setError(""); setNotice("");
     const request: FileExportRequest = { kind: "library_card", item_id: card.card_id, expected_revision: Number(card.revision), expected_digest: info.digest };
     try {
-      if (isTauri()) {
-        const path = await invoke<string | null>("save_file_export", { request, filename: info.filename });
+      if (nativeInvoke || isTauri()) {
+        const path = await (nativeInvoke ?? invoke)<string | null>("save_file_export", { request, filename: info.filename });
         if (alive.current && path) setNotice("角色卡已保存，可以将这个 CHARX 文件发送给其他用户。");
       } else {
         const blob = await client.fileExport(request);

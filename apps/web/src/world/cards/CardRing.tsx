@@ -7,20 +7,23 @@ import { RemovalEffect } from "./RemovalEffect";
 import styles from "./Cards.module.css";
 
 export type Carry = { card: LibraryCardItem; x: number; y: number };
-export function CardRing({ client, cards, active, selected, onSelect, onCreate, onCarry, onDrop, onCancel, locked, faceRequest, removingId, onRemovalComplete }: {
+export function CardRing({ client, cards, active, selected, onSelect, onCreate, onCarry, onDrop, onCancel, locked, faceRequest, removingId, onRemovalComplete, embedded = false, onFace }: {
   client: CoreClient; cards: LibraryCardItem[]; active: boolean; selected: string | null; locked: boolean;
   onSelect: (id: string | null) => void; onCreate: () => void;
   onCarry: (carry: Carry) => void; onDrop: (carry: Carry) => void; onCancel: () => void;
   faceRequest?: { side: "front" | "back"; nonce: number };
+  embedded?: boolean; onFace?: (side: "front" | "back") => void;
   removingId?: string; onRemovalComplete?: () => void;
 }) {
   const slots = useMemo(() => [...cards.map(card => ({ id: card.card_id, card })), ...Array.from({ length: Math.max(2, 8 - cards.length) }, (_, i) => ({ id: `blank:${i}`, card: null }))], [cards]);
+  const [anchor,setAnchor]=useState(0);
+  const anchorRef=useRef(0),lastFace=useRef("front");
   const stage = useRef<HTMLDivElement>(null), offset = useRef(0), rotation = useRef({ yaw: 0, pitch: 0 });
-  const drag = useRef<{ pointer: number; x: number; y: number; offset: number; yaw: number; pitch: number; card: LibraryCardItem | null; moved: boolean; carry: Carry | null } | null>(null);
+  const drag = useRef<{ pointer: number; x: number; y: number; offset: number; yaw: number; pitch: number; card: LibraryCardItem | null; blank: boolean; moved: boolean; intent: "rotate" | "browse" | "carry" | null; carry: Carry | null } | null>(null);
   const suppress = useRef(false), frame = useRef(0), draw = useRef(() => {});
   const still = useWindowStill();
   const [reduced, setReduced] = useState(() => window.matchMedia("(prefers-reduced-motion: reduce)").matches);
-  const settings = useRef({ active, selected, still, reduced }); settings.current = { active, selected, still, reduced };
+  const settings = useRef({ active, selected, still, reduced, onFace }); settings.current = { active, selected, still, reduced, onFace };
   useEffect(() => { const media = window.matchMedia("(prefers-reduced-motion: reduce)"), change = () => setReduced(media.matches); media.addEventListener("change", change); return () => media.removeEventListener("change", change); }, []);
   const wake = useCallback(() => {
     if (frame.current) return;
@@ -39,6 +42,10 @@ export function CardRing({ client, cards, active, selected, onSelect, onCreate, 
       const step = cardWidth + (window.innerWidth < 680 ? 40 : 75), total = slots.length * step;
       const chosen = slots.findIndex(item => item.id === selected);
       const lap = chosen < 0 ? 0 : Math.round((offset.current - chosen * step) / total);
+      root.dataset.offset=offset.current.toFixed(4);root.dataset.step=step.toFixed(4);
+      const nextAnchor=Math.floor(offset.current / step);
+      if(embedded && nextAnchor!==anchorRef.current){anchorRef.current=nextAnchor;setAnchor(nextAnchor);}
+      const visualScale=embedded?cardWidth/410:1;
       const time = performance.now() / 1900;
       for (const node of root.querySelectorAll<HTMLElement>("[data-card-slot]")) {
         const index = Number(node.dataset.cardSlot), copy = Number(node.dataset.lap), slot = slots[index];
@@ -46,24 +53,26 @@ export function CardRing({ client, cards, active, selected, onSelect, onCreate, 
         const picked = Boolean(selected) && index === chosen && copy === lap;
         const rest = restPose(slot.id), pose = picked ? rotation.current : rest;
         const float = !selected && !still && !reduced ? Math.sin(time + rest.phase) * 7 : 0;
-        const x = picked ? 0 : dx, y = picked ? -14 : rest.y + float, z = picked ? 100 : -dx * dx / 3000 - (selected ? 100 : 0);
-        const roll = picked ? 0 : rest.roll, yaw = picked ? pose.yaw : clamp(-dx * .018 + rest.yaw, -45, 45), pitch = pose.pitch;
+        const x = picked ? 0 : dx, y = (picked ? -14 : rest.y + float)*visualScale, z = picked ? 100*visualScale : -dx * dx / (3000*visualScale) - (selected ? 100*visualScale : 0);
+        const roll = picked ? 0 : rest.roll, yaw = picked ? pose.yaw : clamp(-dx / visualScale * .018 + rest.yaw, -45, 45), pitch = pose.pitch;
         node.style.transform = `translate3d(${x}px,${y}px,${z}px) rotateZ(${roll}deg) rotateX(${pitch}deg) rotateY(${yaw}deg)`;
         node.style.opacity = selected ? picked ? "1" : ".12" : Math.abs(dx) > root.clientWidth / 2 + 330 ? "0" : String(clamp(1 - Math.abs(dx) / (root.clientWidth * 1.3), .28, 1));
         node.style.zIndex = picked ? "20" : String(Math.max(1, 10 - Math.floor(Math.abs(dx) / step)));
         node.style.pointerEvents = selected && !picked || Math.abs(dx) > root.clientWidth / 2 + 330 ? "none" : "auto";
         node.dataset.selected = String(picked);
         const front = Math.cos(yaw * Math.PI / 180) * Math.cos(pitch * Math.PI / 180) >= 0;
+        node.dataset.face=front?"front":"back";node.dataset.yaw=yaw.toFixed(2);
+        if(picked && lastFace.current!==node.dataset.face){lastFace.current=node.dataset.face;settings.current.onFace?.(front?"front":"back");}
         for (const face of node.querySelectorAll<HTMLElement>("[data-face]")) face.hidden = (face.dataset.face === "front") !== front;
       }
     };
     draw.current(); wake();
-  }, [selected, slots, still, reduced, wake]);
+  }, [selected, slots, still, reduced, wake, embedded]);
   useEffect(() => { wake(); return () => { cancelAnimationFrame(frame.current); frame.current = 0; }; }, [wake, active, selected, still, reduced]);
   useEffect(() => { if (faceRequest && settings.current.selected) { rotation.current = { yaw: faceRequest.side === "front" ? 0 : 180, pitch: 0 }; draw.current(); } }, [faceRequest]);
   useEffect(() => { const observer = new ResizeObserver(() => { draw.current(); wake(); }); if (stage.current) observer.observe(stage.current); return () => observer.disconnect(); }, [wake]);
   const cancel = useCallback(() => {
-    const current = drag.current; drag.current = null;
+    const current = drag.current; drag.current = null;stage.current?.removeAttribute("data-spinning");
     if (current && stage.current?.hasPointerCapture(current.pointer)) stage.current.releasePointerCapture(current.pointer);
     if (current?.carry) onCancel();
     if (current?.moved) suppress.current = true;
@@ -87,36 +96,47 @@ export function CardRing({ client, cards, active, selected, onSelect, onCreate, 
   const down = (event: ReactPointerEvent) => {
     if (locked || !active || event.button !== 0 || drag.current) return;
     suppress.current = false;
+    if(embedded){event.currentTarget.setPointerCapture(event.pointerId);stage.current?.setAttribute("data-spinning","");}
     const id = (event.target as Element).closest<HTMLElement>("[data-card-id]")?.dataset.cardId;
-    drag.current = { pointer: event.pointerId, x: event.clientX, y: event.clientY, offset: offset.current, ...rotation.current, card: cards.find(item => item.card_id === id) ?? null, moved: false, carry: null };
+    drag.current = { pointer: event.pointerId, x: event.clientX, y: event.clientY, offset: offset.current, ...rotation.current, card: cards.find(item => item.card_id === id) ?? null, blank: Boolean((event.target as Element).closest("[data-card-slot]")&&!id), moved: false, intent: null, carry: null };
   };
   const move = (event: ReactPointerEvent) => {
     const current = drag.current; if (!current || current.pointer !== event.pointerId) return;
     const dx = event.clientX - current.x, dy = event.clientY - current.y;
     if (!current.moved && Math.hypot(dx, dy) < 6) return;
+    if(!current.moved)current.intent=selected?"rotate":current.card&&(!embedded||Math.abs(dy)>Math.abs(dx)*1.15)?"carry":"browse";
     current.moved = true; suppress.current = true;
     if (!stage.current?.hasPointerCapture(event.pointerId)) stage.current?.setPointerCapture(event.pointerId);
     if (selected) { rotation.current = { yaw: current.yaw + dx * .65, pitch: clamp(current.pitch - dy * .4, -65, 65) }; draw.current(); }
-    else if (current.card) { current.carry = { card: current.card, x: event.clientX, y: event.clientY }; onCarry(current.carry); }
+    else if (current.card && current.intent==="carry") { current.carry = { card: current.card, x: event.clientX, y: event.clientY }; onCarry(current.carry); }
     else { offset.current = current.offset - dx; const width = parseFloat(getComputedStyle(stage.current!).getPropertyValue("--card-w")) || 410; const total = slots.length * (width + (stage.current!.clientWidth < 680 ? 40 : 75)); offset.current = ((offset.current % total) + total) % total; draw.current(); }
   };
   const up = (event: ReactPointerEvent) => {
     const current = drag.current; if (!current || current.pointer !== event.pointerId) return;
-    drag.current = null;
+    drag.current = null;stage.current?.removeAttribute("data-spinning");
     if (stage.current?.hasPointerCapture(event.pointerId)) stage.current.releasePointerCapture(event.pointerId);
     if (current.carry) onDrop({ ...current.carry, x: event.clientX, y: event.clientY });
-    window.setTimeout(() => { suppress.current = false; }, 0); wake();
+    else if(embedded && !current.moved && !locked){
+      suppress.current=true;
+      if(current.card)onSelect(current.card.card_id===selected?null:current.card.card_id);
+      else if(current.blank)onCreate();else if(selected)onSelect(null);
+    }
+    window.setTimeout(() => { suppress.current = false; }, embedded?400:0); wake();
   };
   const scroll = (direction: number) => { const root = stage.current; if (!root || selected || locked) return; const step = (parseFloat(getComputedStyle(root).getPropertyValue("--card-w")) || 410) + (root.clientWidth < 680 ? 40 : 75); offset.current = ((offset.current + direction * step) % (slots.length * step) + slots.length * step) % (slots.length * step); draw.current(); };
-  return <div className={styles.ringWrap}>
-    <div ref={stage} className={styles.ring} data-expanded={Boolean(selected)} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={cancel} onClick={event => { if (event.target === stage.current && selected && !locked && !suppress.current) onSelect(null); }}
+  const copies=embedded?Array.from({length:5},(_,i)=>{
+    const logical=anchor+i-2,index=((logical%slots.length)+slots.length)%slots.length;
+    return {lap:Math.floor(logical/slots.length),slot:slots[index],index};
+  }):[-1,0,1].flatMap(lap=>slots.map((slot,index)=>({lap,slot,index})));
+  return <div className={styles.ringWrap} data-native-card-stage={embedded||undefined}>
+    <div ref={stage} className={styles.ring} role={embedded?"group":undefined} aria-label={embedded?(selected?"旋转角色卡":"角色卡"):undefined} data-items={slots.length} data-expanded={Boolean(selected)} onClickCapture={event=>{if(embedded&&suppress.current&&event.detail>0){event.preventDefault();event.stopPropagation();}}} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={cancel} onClick={event => { if (event.target === stage.current && selected && !locked && !suppress.current) onSelect(null); }}
       onWheel={event => { if (!selected && !locked) { offset.current += event.deltaX || event.deltaY; const root = stage.current!; const total = slots.length * ((parseFloat(getComputedStyle(root).getPropertyValue("--card-w")) || 410) + (root.clientWidth < 680 ? 40 : 75)); offset.current = (offset.current % total + total) % total; draw.current(); } }}>
-      {[-1, 0, 1].flatMap(lap => slots.map((slot, index) => <button key={`${lap}:${slot.id}`} className={styles.card} data-card-slot={index} data-card-id={slot.card?.card_id} data-lap={lap}
-        aria-label={slot.card ? `查看角色卡：${slot.card.name}` : "空白角色卡"} aria-hidden={lap !== 0 || undefined} tabIndex={lap === 0 && (!selected || slot.id === selected) ? 0 : -1}
+      {copies.map(({lap,slot,index}) => <button key={`${lap}:${slot.id}`} className={styles.card} data-card-slot={index} data-card-id={slot.card?.card_id} data-lap={lap}
+        aria-label={slot.card ? `查看角色卡：${slot.card.name}` : "空白角色卡"} aria-hidden={(!embedded && lap !== 0) || undefined} tabIndex={(embedded || lap === 0) && (!selected || slot.id === selected) ? 0 : -1}
         onFocus={event => { if (!selected && event.currentTarget.matches(":focus-visible")) { const root = stage.current!; offset.current = index * ((parseFloat(getComputedStyle(root).getPropertyValue("--card-w")) || 410) + (root.clientWidth < 680 ? 40 : 75)); draw.current(); } }}
         onClick={event => { if (suppress.current && event.detail > 0 || locked) return; if (slot.card) onSelect(slot.id === selected ? null : slot.id); else onCreate(); }}>
         {slot.card ? <RenderedCard client={client} card={slot.card} /> : <span className={styles.blankCard}><b>＋</b><span>从一张空白卡开始</span><small>新建 / 导入角色</small></span>}
-      </button>))}
+      </button>)}
     </div>
     {!selected && <><button className={`${styles.arrow} ${styles.prev}`} aria-label="上一张角色卡" disabled={locked} onClick={() => scroll(-1)}>‹</button><button className={`${styles.arrow} ${styles.next}`} aria-label="下一张角色卡" disabled={locked} onClick={() => scroll(1)}>›</button></>}
     {removingId && onRemovalComplete && <RemovalEffect kind="particles" root={stage} selector={`[data-card-id="${removingId}"][data-selected="true"]`} onComplete={onRemovalComplete} />}
