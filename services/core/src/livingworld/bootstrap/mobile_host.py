@@ -109,7 +109,7 @@ def _data_root(host):
 def _diagnostics():
     return {
         "app": "dreamtalk",
-        "android_preview": "0.1.5",
+        "android_preview": "0.1.6",
         "core_running": bool(_thread and _thread.is_alive()),
         "startup": _start_diagnostic or {"phase": _start_phase},
     }
@@ -311,7 +311,7 @@ def _start():
             state = save_slots.status()
             save_slots.save(
                 _root,
-                "0.1.5",
+                "0.1.6",
                 0,
                 (state["slots"][0] or {}).get("name", "自动存档"),
                 state["revision"],

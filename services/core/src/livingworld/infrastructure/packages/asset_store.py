@@ -2,7 +2,9 @@
 
 import asyncio
 import os
+import sys
 import tempfile
+from contextlib import contextmanager
 from hashlib import sha256
 from pathlib import Path
 
@@ -15,6 +17,19 @@ def _regular_path(path: Path) -> None:
     for part in (path, *path.parents):
         if part.is_symlink() or part.is_junction():
             raise PackageError("asset_store_link_not_allowed")
+
+
+@contextmanager
+def _android_publication_lock(path: Path):
+    import fcntl
+
+    _regular_path(path)
+    descriptor = os.open(path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    try:
+        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        yield
+    finally:
+        os.close(descriptor)  # Closing releases the advisory file lock.
 
 
 class FileContentAssetStore:
@@ -47,6 +62,24 @@ class FileContentAssetStore:
         # The caller proves this immutable hash is no longer referenced in its DB transaction.
         await asyncio.to_thread(self._path(digest).unlink, missing_ok=True)
 
+    def _publish(self, staged: Path, target: Path, binding: AssetBlobBinding) -> None:
+        if not hasattr(sys, "getandroidapilevel"):
+            try:
+                os.link(staged, target)
+            except FileExistsError:
+                self._read(binding)
+            return
+
+        # Android SELinux denies hard links inside app data. Serialize every
+        # Android publisher across threads/processes, then rename the completed
+        # sibling file. Readers see only complete blobs; existing bytes stay immutable.
+        with _android_publication_lock(self._root / ".publish.lock"):
+            _regular_path(target)
+            if target.exists():
+                self._read(binding)
+            else:
+                os.rename(staged, target)
+
     def _materialize(self, blob: PackagedBlob) -> None:
         target = self._path(blob.binding.digest)
         if target.exists():
@@ -64,12 +97,7 @@ class FileContentAssetStore:
                 file.flush()
                 os.fsync(file.fileno())
             _regular_path(target)
-            try:
-                # Exclusive link publishes a completed regular file; never replaces a blob.
-                # Both locations are under the same store/filesystem. Staging link is removed.
-                os.link(staged, target)
-            except FileExistsError:
-                self._read(blob.binding)
+            self._publish(staged, target, blob.binding)
             self._read(blob.binding)
         finally:
             if staged is not None:

@@ -24,6 +24,8 @@ $env:PATH = "$env:JAVA_HOME\bin;$env:PATH"
 Write-Host 'Local Android acceptance build. No CI, GitHub, release version changes, or release signing key.'
 & $python scripts/prepare-mobile-recall.py
 if ($LASTEXITCODE -ne 0) { throw 'Fixed semantic retrieval resources invalid' }
+& $python scripts/prepare-mobile-images.py
+if ($LASTEXITCODE -ne 0) { throw 'Pinned image codec resources invalid' }
 & $python scripts/android-local.py fingerprint --output (Join-Path $output 'source-before.json')
 if ($LASTEXITCODE -ne 0) { throw 'Source fingerprint failed' }
 & $python scripts/build-mobile-wheel.py *> (Join-Path $logs 'core-wheel.log')

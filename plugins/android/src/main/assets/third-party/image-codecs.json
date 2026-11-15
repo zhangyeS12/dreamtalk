@@ -1,0 +1,44 @@
+{
+  "wheel": "dreamtalk_pillow_webp-11.0.0.1-cp313-cp313-android_24_arm64_v8a.whl",
+  "sha256": "3e0a16f7778db6fe1bab9213af10de26e82e7ebdb508b261524f4c1e903d9ea4",
+  "binary_sha256": "651b8bdee4450eefdda9e3f605f5fbd45c63c6ef0d09ad349d500dac8bfe4e1f",
+  "binary_bytes": 3102144,
+  "pillow": "11.0.0",
+  "libwebp": "1.6.0",
+  "android_api": 24,
+  "abi": "arm64-v8a",
+  "python": "3.13.16-0",
+  "python_headers_archive_sha256": "fae8cfd4d3910b6f978b22279fe820c0c6ba49d0ea20f7b106aa6130f1c8f355",
+  "sources": [
+    {
+      "name": "pillow-11.0.0",
+      "url": "https://files.pythonhosted.org/packages/source/p/pillow/pillow-11.0.0.tar.gz",
+      "sha256": "72bacbaf24ac003fea9bff9837d1eedb6088758d41e100c1552930151f677739"
+    },
+    {
+      "name": "libwebp-1.6.0",
+      "url": "https://storage.googleapis.com/downloads.webmproject.org/releases/webp/libwebp-1.6.0.tar.gz",
+      "sha256": "e4ab7009bf0629fd11982d4c2aa83964cf244cffba7347ecd39019a9e38c4564"
+    }
+  ],
+  "evidence": "cross-compiled extension, Android runtime validation is separate",
+  "licenses": {
+    "Pillow-11.0.0-LICENSE.txt": {
+      "sha256": "cf234c27a3f275f5a050f4df3946f8855704226fe4e7ca8b33928cbcecbced37",
+      "license": "HPND"
+    },
+    "libwebp-1.6.0-COPYING.txt": {
+      "sha256": "5aec868f669e384a22372a4e8a1a6cd7d44c64cd451f960ca69cc170d1e13acf",
+      "license": "BSD-3-Clause"
+    },
+    "libwebp-1.6.0-PATENTS.txt": {
+      "sha256": "cc3273e0694ea5896145e0677699b53471b03ea43021ddc50e7923fbb9f5023c",
+      "license": "patent-grant"
+    },
+    "libwebp-1.6.0-AUTHORS.txt": {
+      "sha256": "f251be89fd442bd9d701360730aea163cc8e2076ff03528f59267dc2c4f8b60a",
+      "license": "attribution"
+    }
+  },
+  "dependency_reason": "Pinned Android Pillow omits WebP; covers upload WebP and render every crop to WebP. Reuse its exact upstream extension with statically linked libwebp instead of a new image framework."
+}

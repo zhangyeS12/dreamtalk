@@ -6,7 +6,7 @@ from uuid import uuid4
 from livingworld.infrastructure import save_safety as safety
 from livingworld.infrastructure import save_slots as slots
 
-VERSION = "0.1.5"
+VERSION = "0.1.6"
 
 
 def prepare_storage(root):

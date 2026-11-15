@@ -26,6 +26,7 @@ chaquopy {
             install("uvicorn==0.34.2")
             install("httpx==0.28.1")
             install("pillow==11.0.0")
+            install(rootProject.file("../../../../../build-tools/wheels/dreamtalk_pillow_webp-11.0.0.1-cp313-cp313-android_24_arm64_v8a.whl").absolutePath)
             install(rootProject.file("../../../../../build-tools/wheels/chaquopy_freetype-2.9.1-1-py3-none-android_24_arm64_v8a.whl").absolutePath)
             install("diskcache==5.6.3")
             install(rootProject.file("../../../../../build-tools/wheels/numpy-2.3.2-1-cp313-cp313-android_24_arm64_v8a.whl").absolutePath)

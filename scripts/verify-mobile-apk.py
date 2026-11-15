@@ -59,11 +59,12 @@ with zipfile.ZipFile(apk) as z:
 from importlib import import_module
 brand=import_module("verify-android-brand").verify(apk)
 native_dependencies=import_module("verify-android-native-deps").verify(apk)
+image_codecs=import_module("verify-mobile-images").verify(apk)
 assert len(migrations)>=65,'Alembic source migrations absent'
 assert any(x.endswith('bootstrap/mobile_host.pyc') or x.endswith('bootstrap/mobile_host.py') for x in core_payload),'Mobile host absent'
 for p in (ROOT/'apps/web/dist').rglob('*.js'):
  if b'__DREAMTALK_MOBILE_TEST_HOST__' in p.read_bytes():problems.append('production test bridge present')
-report={'apk':apk.name,'bytes':apk.stat().st_size,'sha256':hashlib.sha256(apk.read_bytes()).hexdigest(),'entries_inspected':count,'native_libraries':libraries,'alembic_source_migrations':len(migrations),'privacy_findings':problems,'brand':brand,'native_dependency_closure':native_dependencies,'python_extension_linkage':python_extensions,'fixed_semantic_resources':semantic_resources,'onnxruntime_android':'1.23.2','third_party_notices_verified':len(notice_manifest),'evidence':'static APK payload, not Android runtime or user acceptance'}
+report={'apk':apk.name,'bytes':apk.stat().st_size,'sha256':hashlib.sha256(apk.read_bytes()).hexdigest(),'entries_inspected':count,'native_libraries':libraries,'alembic_source_migrations':len(migrations),'privacy_findings':problems,'brand':brand,'native_dependency_closure':native_dependencies,'python_extension_linkage':python_extensions,'image_codecs':image_codecs,'fixed_semantic_resources':semantic_resources,'onnxruntime_android':'1.23.2','third_party_notices_verified':len(notice_manifest),'evidence':'static APK payload, not Android runtime or user acceptance'}
 report_path.write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8')
 print(json.dumps({k:v for k,v in report.items() if k!='native_libraries'},ensure_ascii=False))
 if problems:raise SystemExit('APK static verification failed')
